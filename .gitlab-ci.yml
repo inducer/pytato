@@ -1,0 +1,44 @@
+Python 3 POCL:
+  script:
+  - export PY_EXE=python3
+  - export PYOPENCL_TEST=portable
+  - export EXTRA_INSTALL="pyopencl"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - ". ./build-and-test-py-project.sh"
+  tags:
+  - python3
+  - pocl
+  except:
+  - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
+
+Pylint:
+  script:
+  - export PY_EXE=python3
+  - EXTRA_INSTALL="pyopencl"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-pylint.sh
+  - ". ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py"
+  tags:
+  - python3
+  except:
+  - tags
+
+Flake8:
+  script:
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+  - ". ./prepare-and-run-flake8.sh ${CI_PROJECT_NAME} test"
+  tags:
+  - python3
+  except:
+  - tags
+
+Documentation:
+  script:
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
+  - ". ./build-docs.sh"
+  tags:
+  - python3
+  only:
+  - master
