@@ -105,7 +105,7 @@ class Array:
         Identifiers (:class:`pymbolic.Variable`) refer to
         names from :attr:`namespace`.
 
-        # FIXME: -> Issue
+        # FIXME: -> https://gitlab.tiker.net/inducer/pytato/-/issues/1
 
     .. attribute:: dtype
 
