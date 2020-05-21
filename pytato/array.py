@@ -295,7 +295,7 @@ class Placeholder(Array):
         is required, and :attr:`shape` is given as data.
     """
 
-    @Array.shape.getter
+    @property
     def shape(self):
         # Matt added this to make Pylint happy.
         # Not tied to this, open for discussion about how to implement this.
