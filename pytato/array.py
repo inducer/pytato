@@ -35,8 +35,7 @@ is referenced from :class:`DataArray`.
 import collections.abc
 import pytato.typing as ptype
 from pytools import single_valued, is_single_valued
-from typing import Optional, Union, List, Dict
-from pymbolic.primitives import Expression
+from typing import Optional, List, Dict
 
 
 class DottedName(ptype.TagInterface):
@@ -54,7 +53,7 @@ class DottedName(ptype.TagInterface):
 
     def __init__(self, name_parts: List[str]):
         assert len(name_parts) > 0
-        assert all(check_c_identifier(p) for p in name_parts)
+        assert all(ptype.check_name(p) for p in name_parts)
         self.name_parts = name_parts
 
 
