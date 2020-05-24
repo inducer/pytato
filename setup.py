@@ -35,7 +35,6 @@ setup(name="pytato",
 
       install_requires=[
           "loo.py",
-          "pycontracts",
           ],
 
       author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",

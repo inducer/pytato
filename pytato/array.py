@@ -33,13 +33,13 @@ is referenced from :class:`DataArray`.
 
 
 import collections.abc
+import pytato.typing as ptype
 from pytools import single_valued, is_single_valued
-from contracts import contract
-from pymbolic.primitives import Expression  # noqa
-from pytato.contract import c_identifier, ArrayInterface  # noqa
+from typing import Optional, Union, List, Dict
+from pymbolic.primitives import Expression
 
 
-class DottedName:
+class DottedName(ptype.TagInterface):
     """
     .. attribute:: name_parts
 
@@ -52,12 +52,13 @@ class DottedName:
     object.
     """
 
-    @contract(name_parts='list[>0](str,c_identifier)')
-    def __init__(self, name_parts):
+    def __init__(self, name_parts: List[str]):
+        assert len(name_parts) > 0
+        assert all(check_c_identifier(p) for p in name_parts)
         self.name_parts = name_parts
 
 
-class Namespace:
+class Namespace(ptype.NamespaceInterface):
     # Possible future extension: .parent attribute
     """
     .. attribute:: symbol_table
@@ -70,14 +71,14 @@ class Namespace:
     def __init__(self):
         self.symbol_table = {}
 
-    @contract(name='str,c_identifier', value=ArrayInterface)
-    def assign(self, name, value):
+    def assign(self, name: ptype.NameType, value: ptype.ArrayInterface):
+        assert ptype.check_name(name)
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
         self.symbol_table[name] = value
 
 
-class Array(ArrayInterface):
+class Array(ptype.ArrayInterface):
     """
     A base class (abstract interface +
     supplemental functionality) for lazily
@@ -156,10 +157,12 @@ class Array(ArrayInterface):
         purposefully so.
     """
 
-    @contract(namespace=Namespace,
-              name='None | (str,c_identifier)',
-              tags='None | dict($DottedName:$DottedName)')
-    def __init__(self, namespace, name, tags=None):
+    def __init__(self, namespace: Namespace,
+                 name: Optional[ptype.NameType],
+                 tags: Optional[ptype.TagsType] = None):
+        assert ptype.check_name(name)
+        assert ptype.check_tags(tags)
+
         if tags is None:
             tags = {}
 
@@ -181,9 +184,8 @@ class Array(ArrayInterface):
     def ndim(self):
         return len(self.shape)
 
-    @contract(dotted_name=DottedName,
-              args='(None | $DottedName)')
-    def with_tag(self, dotted_name, args=None):
+    def with_tag(self, dotted_name: DottedName,
+                 args: Optional[DottedName] = None):
         """
         Returns a copy of *self* tagged with *dotted_name*
         and arguments *args*
@@ -193,12 +195,11 @@ class Array(ArrayInterface):
         if args is None:
             pass
 
-    @contract(dotted_name=DottedName)
-    def without_tag(self, dotted_name):
+    def without_tag(self, dotted_name: DottedName):
         pass
 
-    @contract(name='str,c_identifier')
-    def with_name(self, name):
+    def with_name(self, name: ptype.NameType):
+        assert ptype.check_name(name)
         self.namespace.assign_name(name, self)
         return self.copy(name=name)
 
@@ -224,8 +225,8 @@ class DictOfNamedArrays(collections.abc.Mapping):
         arithmetic.
     """
 
-    @contract(data='dict((str,c_identifier):$ArrayInterface)')
-    def __init__(self, data):
+    def __init__(self, data: Dict[ptype.NameType, ptype.ArrayInterface]):
+        assert all(ptype.check_name(key) for key in data.keys())
         self._data = data
 
         if not is_single_valued(ary.namespace for ary in data.values()):
@@ -235,12 +236,12 @@ class DictOfNamedArrays(collections.abc.Mapping):
     def namespace(self):
         return single_valued(ary.namespace for ary in self._data.values())
 
-    @contract(name='str,c_identifier')
-    def __contains__(self, name):
+    def __contains__(self, name: ptype.NameType):
+        assert ptype.check_name(name)
         return name in self._data
 
-    @contract(name='str,c_identifier')
-    def __getitem__(self, name):
+    def __getitem__(self, name: ptype.NameType):
+        assert ptype.check_name(name)
         return self._data[name]
 
     def __iter__(self):
@@ -314,12 +315,11 @@ class Placeholder(Array):
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
 
-    # TODO: check for meaningfulness of the shape expressions
-    @contract(namespace=Namespace,
-              name='str,c_identifier',
-              shape='seq((int,>0) | (str,c_identifier) | $Expression)',
-              tags='None | dict($DottedName:$DottedName)')
-    def __init__(self, namespace, name, shape, tags=None):
+    def __init__(self, namespace: ptype.NamespaceInterface,
+                 name: ptype.NameType, shape: ptype.ShapeType,
+                 tags: Optional[ptype.TagsType] = None):
+        assert ptype.check_shape(shape)
+        # namespace, name and tags will be checked in super().__init__()
         super().__init__(
             namespace=namespace,
             name=name,
