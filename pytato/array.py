@@ -34,6 +34,9 @@ is referenced from :class:`DataArray`.
 
 import collections.abc
 from pytools import single_valued, is_single_valued
+from contracts import contract
+from pymbolic.primitives import Expression  # noqa
+from pytato.contract import c_identifier, ArrayInterface  # noqa
 
 
 class DottedName:
@@ -41,13 +44,15 @@ class DottedName:
     .. attribute:: name_parts
 
         A tuple of strings, each of which is a valid
-        Python identifier.
+        C identifier (non-Unicode Python identifier).
 
     The name (at least morally) exists in the
     name space defined by the Python module system.
     It need not necessarily identify an importable
     object.
     """
+
+    @contract(name_parts='list[>0](str,c_identifier)')
     def __init__(self, name_parts):
         self.name_parts = name_parts
 
@@ -65,13 +70,14 @@ class Namespace:
     def __init__(self):
         self.symbol_table = {}
 
+    @contract(name='str,c_identifier', value=ArrayInterface)
     def assign(self, name, value):
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
         self.symbol_table[name] = value
 
 
-class Array:
+class Array(ArrayInterface):
     """
     A base class (abstract interface +
     supplemental functionality) for lazily
@@ -150,6 +156,7 @@ class Array:
         purposefully so.
     """
 
+    @contract(namespace=Namespace, name='str,c_identifier')
     def __init__(self, namespace, name, tags=None):
         if tags is None:
             tags = {}
@@ -172,6 +179,7 @@ class Array:
     def ndim(self):
         return len(self.shape)
 
+    @contract(dotted_name=DottedName)
     def with_tag(self, dotted_name, args=None):
         """
         Returns a copy of *self* tagged with *dotted_name*
@@ -182,9 +190,11 @@ class Array:
         if args is None:
             pass
 
+    @contract(dotted_name=DottedName)
     def without_tag(self, dotted_name):
         pass
 
+    @contract(name='str,c_identifier')
     def with_name(self, name):
         self.namespace.assign_name(name, self)
         return self.copy(name=name)
@@ -196,7 +206,7 @@ class Array:
 
 
 class DictOfNamedArrays(collections.abc.Mapping):
-    """A container that maps valid Python identifiers
+    """A container that maps valid C identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
 
@@ -211,12 +221,10 @@ class DictOfNamedArrays(collections.abc.Mapping):
         arithmetic.
     """
 
+    @contract(data='dict((str,c_identifier):$ArrayInterface)')
     def __init__(self, data):
         self._data = data
-        # TODO: Check that keys are valid Python identifiers
 
-        if not is_single_valued(ary.target for ary in data.values()):
-            raise ValueError("arrays do not have same target")
         if not is_single_valued(ary.namespace for ary in data.values()):
             raise ValueError("arrays do not have same namespace")
 
@@ -224,9 +232,11 @@ class DictOfNamedArrays(collections.abc.Mapping):
     def namespace(self):
         return single_valued(ary.namespace for ary in self._data.values())
 
+    @contract(name='str,c_identifier')
     def __contains__(self, name):
         return name in self._data
 
+    @contract(name='str,c_identifier')
     def __getitem__(self, name):
         return self._data[name]
 
@@ -301,6 +311,9 @@ class Placeholder(Array):
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
 
+    # TODO: proper contracts for the shape
+    @contract(namespace=Namespace, name='str,c_identifier',
+              shape=tuple, tags='None | dict($DottedName:$DottedName)')
     def __init__(self, namespace, name, shape, tags=None):
         if name is None:
             raise ValueError("PlaceholderArray instances must have a name")
