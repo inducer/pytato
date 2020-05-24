@@ -156,7 +156,9 @@ class Array(ArrayInterface):
         purposefully so.
     """
 
-    @contract(namespace=Namespace, name='str,c_identifier')
+    @contract(namespace=Namespace,
+              name='None | (str,c_identifier)',
+              tags='None | dict($DottedName:$DottedName)')
     def __init__(self, namespace, name, tags=None):
         if tags is None:
             tags = {}
@@ -179,7 +181,8 @@ class Array(ArrayInterface):
     def ndim(self):
         return len(self.shape)
 
-    @contract(dotted_name=DottedName)
+    @contract(dotted_name=DottedName,
+              args='(None | $DottedName)')
     def with_tag(self, dotted_name, args=None):
         """
         Returns a copy of *self* tagged with *dotted_name*
@@ -311,12 +314,12 @@ class Placeholder(Array):
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
 
-    # TODO: proper contracts for the shape
-    @contract(namespace=Namespace, name='str,c_identifier',
-              shape=tuple, tags='None | dict($DottedName:$DottedName)')
+    # TODO: check for meaningfulness of the shape expressions
+    @contract(namespace=Namespace,
+              name='str,c_identifier',
+              shape='seq((int,>0) | (str,c_identifier) | $Expression)',
+              tags='None | dict($DottedName:$DottedName)')
     def __init__(self, namespace, name, shape, tags=None):
-        if name is None:
-            raise ValueError("PlaceholderArray instances must have a name")
         super().__init__(
             namespace=namespace,
             name=name,
