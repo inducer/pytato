@@ -58,12 +58,9 @@ class ArrayInterface(ABC):
     """
 
     @property
+    @abstractmethod
     def namespace(self) -> NamespaceInterface:
-        return self._namespace
-
-    @namespace.setter
-    def namespace(self, val: NamespaceInterface) -> None:
-        self._namespace = val
+        pass
 
     @property
     @abstractmethod

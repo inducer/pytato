@@ -172,12 +172,16 @@ class Array(ptype.ArrayInterface):
         if name is not None:
             namespace.assign(name, self)
 
-        self.namespace = namespace
+        self._namespace = namespace
         self.name = name
         self.tags = tags
 
     def copy(self, **kwargs: Any) -> "Array":
         raise NotImplementedError
+
+    @property
+    def namespace(self) -> ptype.NamespaceInterface:
+        return self._namespace
 
     @property
     def shape(self) -> ptype.ShapeType:
