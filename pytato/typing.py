@@ -32,7 +32,7 @@ contracts-like functionality.
 import re
 from pymbolic.primitives import Expression
 from abc import ABC, abstractmethod
-from typing import Optional, Union, Dict, Tuple
+from typing import Optional, Union, Dict, Tuple, Any, List
 
 # {{{ abstract classes
 
@@ -40,13 +40,18 @@ from typing import Optional, Union, Dict, Tuple
 class NamespaceInterface():
     __metaclass__ = ABC
 
+    @property
+    def symbol_table(self) -> Dict['NameType', 'ArrayInterface']:
+        return self._namespace
+
+    @symbol_table.setter
+    def symbol_table(self, val: Dict['NameType', 'ArrayInterface']) -> None:
+        self._namespace = val
+
     @abstractmethod
-    def assign(self, name, value):
+    def assign(self, name: 'NameType',
+               value: 'ArrayInterface') -> None:
         pass
-
-
-class TagInterface():
-    __metaclass__ = ABC
 
 
 class ArrayInterface():
@@ -55,37 +60,38 @@ class ArrayInterface():
     __metaclass__ = ABC
 
     @property
-    def namespace(self):
+    def namespace(self) -> NamespaceInterface:
         return self._namespace
 
     @namespace.setter
-    def namespace(self, val: NamespaceInterface):
+    def namespace(self, val: NamespaceInterface) -> None:
         self._namespace = val
 
     @property
     @abstractmethod
-    def ndim(self):
+    def ndim(self) -> Any:
         pass
 
     @property
     @abstractmethod
-    def shape(self):
+    def shape(self) -> Any:
         pass
 
     @abstractmethod
-    def copy(self, **kwargs):
+    def copy(self, **kwargs: Any) -> 'ArrayInterface':
         pass
 
     @abstractmethod
-    def with_tag(self, tag_key, tag_val):
+    def with_tag(self, tag_key: Any,
+                 tag_val: Any) -> 'ArrayInterface':
         pass
 
     @abstractmethod
-    def without_tag(self, tag_key):
+    def without_tag(self, tag_key: Any) -> 'ArrayInterface':
         pass
 
     @abstractmethod
-    def with_name(self, name):
+    def with_name(self, name: 'NameType') -> 'ArrayInterface':
         pass
 
 # }}} End abstract classes
@@ -103,18 +109,6 @@ def check_name(name: NameType) -> bool:
     return True
 
 # }}} End name type
-
-# {{{ tags type
-
-
-TagsType = Dict[TagInterface, TagInterface]
-
-
-def check_tags(tags: TagsType) -> bool:
-    # assuming TagInterface implementation gurantees correctness
-    return True
-
-# }}} End tags type
 
 # {{{ shape type
 
@@ -136,3 +130,29 @@ def check_shape(shape: ShapeType,
     return True
 
 # }}} End shape type
+
+# {{{ tags type
+
+
+class DottedName():
+    """
+    .. attribute:: name_parts
+
+        A tuple of strings, each of which is a valid
+        C identifier (non-Unicode Python identifier).
+
+    The name (at least morally) exists in the
+    name space defined by the Python module system.
+    It need not necessarily identify an importable
+    object.
+    """
+
+    def __init__(self, name_parts: List[str]):
+        assert len(name_parts) > 0
+        assert all(check_name(p) for p in name_parts)
+        self.name_parts = name_parts
+
+
+TagsType = Dict[DottedName, DottedName]
+
+# }}} End tags type

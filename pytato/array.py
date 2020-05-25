@@ -32,29 +32,9 @@ is referenced from :class:`DataArray`.
 """
 
 
-import collections.abc
 import pytato.typing as ptype
 from pytools import single_valued, is_single_valued
-from typing import Optional, List, Dict
-
-
-class DottedName(ptype.TagInterface):
-    """
-    .. attribute:: name_parts
-
-        A tuple of strings, each of which is a valid
-        C identifier (non-Unicode Python identifier).
-
-    The name (at least morally) exists in the
-    name space defined by the Python module system.
-    It need not necessarily identify an importable
-    object.
-    """
-
-    def __init__(self, name_parts: List[str]):
-        assert len(name_parts) > 0
-        assert all(ptype.check_name(p) for p in name_parts)
-        self.name_parts = name_parts
+from typing import Optional, Dict, Any, Mapping, Iterator
 
 
 class Namespace(ptype.NamespaceInterface):
@@ -67,10 +47,11 @@ class Namespace(ptype.NamespaceInterface):
         :class:`Array` interface.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.symbol_table = {}
 
-    def assign(self, name: ptype.NameType, value: ptype.ArrayInterface):
+    def assign(self, name: ptype.NameType,
+               value: ptype.ArrayInterface) -> None:
         assert ptype.check_name(name)
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
@@ -160,7 +141,6 @@ class Array(ptype.ArrayInterface):
                  name: Optional[ptype.NameType],
                  tags: Optional[ptype.TagsType] = None):
         assert (name is None) or ptype.check_name(name)
-        assert (tags is None) or ptype.check_tags(tags)
 
         if tags is None:
             tags = {}
@@ -172,19 +152,19 @@ class Array(ptype.ArrayInterface):
         self.name = name
         self.tags = tags
 
-    def copy(self, **kwargs):
+    def copy(self, **kwargs: Any) -> 'Array':
         raise NotImplementedError
 
     @property
-    def shape(self):
+    def shape(self) -> ptype.ShapeType:
         raise NotImplementedError
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return len(self.shape)
 
-    def with_tag(self, dotted_name: DottedName,
-                 args: Optional[DottedName] = None):
+    def with_tag(self, dotted_name: ptype.DottedName,
+                 args: Optional[ptype.DottedName] = None) -> 'Array':
         """
         Returns a copy of *self* tagged with *dotted_name*
         and arguments *args*
@@ -193,13 +173,14 @@ class Array(ptype.ArrayInterface):
         """
         if args is None:
             pass
+        return self.copy()
 
-    def without_tag(self, dotted_name: DottedName):
+    def without_tag(self, dotted_name: ptype.DottedName) -> 'Array':
         raise NotImplementedError
 
-    def with_name(self, name: ptype.NameType):
+    def with_name(self, name: ptype.NameType) -> 'Array':
         assert ptype.check_name(name)
-        self.namespace.assign_name(name, self)
+        self.namespace.assign(name, self)
         return self.copy(name=name)
 
     # TODO:
@@ -208,7 +189,7 @@ class Array(ptype.ArrayInterface):
     # - naming
 
 
-class DictOfNamedArrays(collections.abc.Mapping):
+class DictOfNamedArrays(Mapping[ptype.NameType, ptype.ArrayInterface]):
     """A container that maps valid C identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
@@ -232,20 +213,21 @@ class DictOfNamedArrays(collections.abc.Mapping):
             raise ValueError("arrays do not have same namespace")
 
     @property
-    def namespace(self):
-        return single_valued(ary.namespace for ary in self._data.values())
+    def namespace(self) -> ptype.NamespaceInterface:
+        return single_valued(  # type: ignore
+                ary.namespace for ary in self._data.values())
 
-    def __contains__(self, name: object):
+    def __contains__(self, name: object) -> bool:
         return name in self._data
 
-    def __getitem__(self, name: ptype.NameType):
+    def __getitem__(self, name: ptype.NameType) -> ptype.ArrayInterface:
         assert ptype.check_name(name)
         return self._data[name]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[ptype.NameType]:
         return iter(self._data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._data)
 
 
@@ -308,7 +290,7 @@ class Placeholder(Array):
     """
 
     @property
-    def shape(self):
+    def shape(self) -> ptype.ShapeType:
         # Matt added this to make Pylint happy.
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
