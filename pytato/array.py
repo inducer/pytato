@@ -24,21 +24,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+# {{{ docs
+
 __doc__ = """
+.. currentmodule:: pytato
 
-
-Expression trees based on this package are picklable
-as long as no non-picklable data
-(e.g. :class:`pyopencl.array.Array`)
-is referenced from :class:`DataWrapper`.
+.. note::
+    Expression trees based on this package are picklable
+    as long as no non-picklable data
+    (e.g. :class:`pyopencl.array.Array`)
+    is referenced from :class:`DataWrapper`.
 
 Array Interface
 ---------------
 
-.. currentmodule:: pytato
-
 .. autoclass :: Namespace
 .. autoclass :: Array
+.. autoclass :: Tag
 .. autoclass :: DictOfNamedArrays
 
 Supporting Functionality
@@ -57,35 +59,54 @@ Built-in Expression Nodes
 .. autoclass:: LoopyFunction
 """
 
+# }}}
+
 
 import collections.abc
+from dataclasses import dataclass
 from pytools import single_valued, is_single_valued
 
+
+# {{{ dotted name
 
 class DottedName:
     """
     .. attribute:: name_parts
 
         A tuple of strings, each of which is a valid
-        Python identifier.
+        Python identifier. No name part may start with
+        a double underscore.
 
     The name (at least morally) exists in the
     name space defined by the Python module system.
     It need not necessarily identify an importable
     object.
+
+    .. automethod:: from_class
     """
     def __init__(self, name_parts):
         self.name_parts = name_parts
 
+    @classmethod
+    def from_class(cls, argcls):
+        name_parts = tuple(".".split(argcls.__module__) + [argcls.__name__])
+        if not all(not npart.startswith("__") for npart in name_parts):
+            raise ValueError(f"some name parts of {'.'.join(name_parts)} "
+                    "start with double underscores")
+        return cls(name_parts)
+
+# }}}
+
+
+# {{{ namespace
 
 class Namespace:
     # Possible future extension: .parent attribute
     """
     .. attribute:: symbol_table
 
-        A mapping from strings that must be valid
-        C identifiers to objects implementing the
-        :class:`Array` interface.
+        A mapping from :term:`identifier` strings
+        to :term:`array expression`s.
     """
 
     def __init__(self):
@@ -96,6 +117,46 @@ class Namespace:
             raise ValueError(f"'{name}' is already assigned")
         self.symbol_table[name] = value
 
+# }}}
+
+
+# {{{ tag
+
+tag_dataclass = dataclass(init=True, eq=True, frozen=True)
+
+
+@tag_dataclass
+class Tag:
+    """
+    Generic metadata, applied to, among other things,
+    instances of :class:`Array`.
+
+    .. attribute:: tag_name
+
+        A fully qualified :class:`DottedName` that reflects
+        the class name of the tag.
+
+    Instances of this type must be immutable, hashable,
+    picklable, and have a reasonably concise :meth:`__repr__`
+    of the form ``dotted.name(attr1=value1, attr2=value2)``.
+    Positional arguments are not allowed.
+    """
+
+    @property
+    def tag_name(self):
+        return DottedName.from_class(type(self))
+
+
+class UniqueTag(Tag):
+    """
+    Only one instance of this type of tag may be assigned
+    to a single tagged object.
+    """
+
+# }}}
+
+
+# {{{ array inteface
 
 class Array:
     """
@@ -138,8 +199,7 @@ class Array:
     .. attribute:: tags
 
         A :class:`dict` mapping :class:`DottedName` instances
-        to an argument object, whose structure is defined
-        by the tag.
+        to instances of the :class:`Tag` interface.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -159,6 +219,10 @@ class Array:
 
            This mirrors the tagging scheme that :mod:`loopy`
            is headed towards.
+
+    .. automethod:: named
+    .. automethod:: tagged
+    .. automethod:: without_tag
 
     Derived attributes:
 
@@ -192,32 +256,79 @@ class Array:
     def shape(self):
         raise NotImplementedError
 
+    def named(self, name):
+        self.namespace.assign_name(name, self)
+        return self.copy(name=name)
+
     @property
     def ndim(self):
         return len(self.shape)
 
-    def with_tag(self, dotted_name, args=None):
+    def tagged(self, tag: Tag):
         """
-        Returns a copy of *self* tagged with *dotted_name*
-        and arguments *args*
-        If a tag *dotted_name* is already present, it is
-        replaced in the returned object.
+        Returns a copy of *self* tagged with *tag*.
+        If *tag* is a :class:`UniqueTag` and other
+        tags of this type are already present, an error
+        is raised.
         """
-        if args is None:
-            pass
+        pass
 
     def without_tag(self, dotted_name):
         pass
 
-    def with_name(self, name):
-        self.namespace.assign_name(name, self)
-        return self.copy(name=name)
-
     # TODO:
-    # - tags
     # - codegen interface
-    # - naming
 
+# }}}
+
+
+# {{{ pre-defined tag: ImplementAs
+
+@tag_dataclass
+class ImplementationStrategy(Tag):
+    pass
+
+
+@tag_dataclass
+class ImplStored(ImplementationStrategy):
+    pass
+
+
+@tag_dataclass
+class ImplInlined(ImplementationStrategy):
+    pass
+
+
+@tag_dataclass
+class ImplDefault(ImplementationStrategy):
+    pass
+
+
+@tag_dataclass
+class ImplementAs(UniqueTag):
+    """
+    .. attribute:: strategy
+    """
+
+    strategy: ImplementationStrategy
+
+# }}}
+
+
+# {{{ pre-defined tag: CountNamed
+
+@tag_dataclass
+class CountNamed(UniqueTag):
+    """
+    .. attribute:: name
+    """
+
+    name: str
+
+# }}}
+
+
+# {{{ dict of named arrays
 
 class DictOfNamedArrays(collections.abc.Mapping):
     """A container that maps valid Python identifiers
@@ -260,6 +371,10 @@ class DictOfNamedArrays(collections.abc.Mapping):
     def __len__(self):
         return len(self._data)
 
+# }}}
+
+
+# {{{ index lambda
 
 class IndexLambda(Array):
     """
@@ -285,11 +400,19 @@ class IndexLambda(Array):
         :attr:`index_expr`.
     """
 
+# }}}
+
+
+# {{{ einsum
 
 class Einsum(Array):
     """
     """
 
+# }}}
+
+
+# {{{ data wrapper
 
 class DataWrapper(Array):
     # TODO: Name?
@@ -305,6 +428,10 @@ class DataWrapper(Array):
 
     """
 
+# }}}
+
+
+# {{{ placeholder
 
 class Placeholder(Array):
     """
@@ -335,6 +462,10 @@ class Placeholder(Array):
 
         self._shape = shape
 
+# }}}
+
+
+# {{{ loopy function
 
 class LoopyFunction(DictOfNamedArrays):
     """
@@ -344,3 +475,7 @@ class LoopyFunction(DictOfNamedArrays):
         and one that's obtained by importing a dotted
         name.
     """
+
+# }}}
+
+# vim: foldmethod=marker
