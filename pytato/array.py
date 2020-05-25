@@ -89,7 +89,7 @@ class DottedName:
 
     @classmethod
     def from_class(cls, argcls):
-        name_parts = tuple(".".split(argcls.__module__) + [argcls.__name__])
+        name_parts = tuple(argcls.__module__.split(".")) + [argcls.__name__])
         if not all(not npart.startswith("__") for npart in name_parts):
             raise ValueError(f"some name parts of {'.'.join(name_parts)} "
                     "start with double underscores")
