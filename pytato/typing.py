@@ -24,9 +24,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-__doc__ = """Interface classes and type specifications.
-Each type is paired with a check_* function that, when used together, achieves
-contracts-like functionality.
+__doc__ = """
+
+
+Interface classes and type specifications.
+Some types are paired with ``check_*`` functions that,
+when used together, achieves contracts-like functionality.
+
+Abstract Classes
+----------------
+
+.. autoclass :: NamespaceInterface
+
+.. autoclass :: ArrayInterface
+
+Supporting Functionalities
+--------------------------
+
+.. autoclass :: DottedName
+
+.. autofunction :: check_shape
+
 """
 
 from pymbolic.primitives import Expression
@@ -99,6 +117,13 @@ ShapeType = Tuple[ShapeComponentType, ...]
 
 def check_shape(shape: ShapeType,
                 ns: Optional[NamespaceInterface] = None) -> bool:
+    """Checks for a shape tuple.
+
+    :param shape: the shape tuple
+
+    :param ns: if a namespace is given, extra checks are performed to
+               ensure that expressions are well-defined.
+    """
     for s in shape:
         if isinstance(s, int):
             assert s > 0, f"size parameter must be positive (got {s})"

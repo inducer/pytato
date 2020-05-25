@@ -41,11 +41,6 @@ Array Interface
 .. autoclass :: Array
 .. autoclass :: DictOfNamedArrays
 
-Supporting Functionality
-------------------------
-
-.. autoclass :: DottedName
-
 Built-in Expression Nodes
 -------------------------
 .. currentmodule:: pytato.array
@@ -78,6 +73,11 @@ class Namespace(ptype.NamespaceInterface):
 
     def assign(self, name: str,
                value: ptype.ArrayInterface) -> None:
+        """Declare a new array.
+
+        :param name: a Python identifier
+        :param value: the array object
+        """
         assert str.isidentifier(name)
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
