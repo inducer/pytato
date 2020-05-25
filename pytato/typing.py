@@ -37,8 +37,7 @@ from typing import Optional, Union, Dict, Tuple, Any, List
 # {{{ abstract classes
 
 
-class NamespaceInterface():
-    __metaclass__ = ABC
+class NamespaceInterface(ABC):
 
     @property
     def symbol_table(self) -> Dict['NameType', 'ArrayInterface']:
@@ -54,10 +53,9 @@ class NamespaceInterface():
         pass
 
 
-class ArrayInterface():
+class ArrayInterface(ABC):
     """Abstract class for types implementing the Array interface.
     """
-    __metaclass__ = ABC
 
     @property
     def namespace(self) -> NamespaceInterface:
