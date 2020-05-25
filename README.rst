@@ -13,28 +13,27 @@ Pytato: Get Descriptions of Array Computations via Lazy Evaluation
 
 * `Documentation <https://documen.tician.de/pytato>`__ (read how things work)
 
-Pytato is licensed to you under the MIT/X Consortium license:
+Example::
 
-Copyright (c) 2020 Andreas Kloeckner, Matt Wala, Xiaoyu Wei, and Contributors.
+    import pytato as pt
+    import numpy as np
 
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation
-files (the "Software"), to deal in the Software without
-restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following
-conditions:
+    ns = pt.Namespace()
+    pt.SizeParameter(ns, "n")  # -> prescribes shape=(), dtype=np.intp
+    a = pt.Placeholder(ns, "a", "n,n", dtype=np.float32)
 
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
+    # Also: pt.roll
+    # If we can: np.roll
+    a2a = a@(2*a)
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
+    aat = a@a.T
 
+    # FIXME: those names are only local...?
+    # maybe change name of DictOfNamedArrays
+    result = pt.DictOfNamedArrays({"a2a": a2a, "aat": aat})
+
+    prg = pt.generate_loopy(result)
+
+Pytato is licensed to you under the MIT/X Consortium license. See
+the `documentation <https://documen.tician.de/pytato/misc.html>`__
+for further details

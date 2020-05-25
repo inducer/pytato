@@ -25,10 +25,36 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+
+
 Expression trees based on this package are picklable
 as long as no non-picklable data
 (e.g. :class:`pyopencl.array.Array`)
-is referenced from :class:`DataArray`.
+is referenced from :class:`DataWrapper`.
+
+Array Interface
+---------------
+
+.. currentmodule:: pytato
+
+.. autoclass :: Namespace
+.. autoclass :: Array
+.. autoclass :: DictOfNamedArrays
+
+Supporting Functionality
+------------------------
+
+.. autoclass :: DottedName
+
+Built-in Expression Nodes
+-------------------------
+.. currentmodule:: pytato.array
+
+.. autoclass:: IndexLambda
+.. autoclass:: Einsum
+.. autoclass:: DataWrapper
+.. autoclass:: Placeholder
+.. autoclass:: LoopyFunction
 """
 
 
@@ -97,13 +123,11 @@ class Array:
 
     .. attribute:: shape
 
-        A tuple of integers or :mod:`pymbolic` expressions.
-        Shape may be (at most affinely) symbolic.
-        `a[::n]`
-        `a[::n]`
-        `17*(n +32*(k+76*l))`
         Identifiers (:class:`pymbolic.Variable`) refer to
         names from :attr:`namespace`.
+        A tuple of integers or :mod:`pymbolic` expressions.
+        Shape may be (at most affinely) symbolic in these
+        identifiers.
 
         # FIXME: -> https://gitlab.tiker.net/inducer/pytato/-/issues/1
 
@@ -303,7 +327,7 @@ class Placeholder(Array):
 
     def __init__(self, namespace, name, shape, tags=None):
         if name is None:
-            raise ValueError("PlaceholderArray instances must have a name")
+            raise ValueError("Placeholder instances must have a name")
         super().__init__(
             namespace=namespace,
             name=name,
