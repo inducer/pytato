@@ -40,16 +40,16 @@ from typing import Optional, Union, Dict, Tuple, Any, List
 class NamespaceInterface(ABC):
 
     @property
-    def symbol_table(self) -> Dict['NameType', 'ArrayInterface']:
+    def symbol_table(self) -> Dict["NameType", "ArrayInterface"]:
         return self._namespace
 
     @symbol_table.setter
-    def symbol_table(self, val: Dict['NameType', 'ArrayInterface']) -> None:
+    def symbol_table(self, val: Dict["NameType", "ArrayInterface"]) -> None:
         self._namespace = val
 
     @abstractmethod
-    def assign(self, name: 'NameType',
-               value: 'ArrayInterface') -> None:
+    def assign(self, name: "NameType",
+               value: "ArrayInterface") -> None:
         pass
 
 
@@ -76,20 +76,20 @@ class ArrayInterface(ABC):
         pass
 
     @abstractmethod
-    def copy(self, **kwargs: Any) -> 'ArrayInterface':
+    def copy(self, **kwargs: Any) -> "ArrayInterface":
         pass
 
     @abstractmethod
     def with_tag(self, tag_key: Any,
-                 tag_val: Any) -> 'ArrayInterface':
+                 tag_val: Any) -> "ArrayInterface":
         pass
 
     @abstractmethod
-    def without_tag(self, tag_key: Any) -> 'ArrayInterface':
+    def without_tag(self, tag_key: Any) -> "ArrayInterface":
         pass
 
     @abstractmethod
-    def with_name(self, name: 'NameType') -> 'ArrayInterface':
+    def with_name(self, name: "NameType") -> "ArrayInterface":
         pass
 
 # }}} End abstract classes
