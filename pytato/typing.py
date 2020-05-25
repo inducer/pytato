@@ -57,12 +57,9 @@ from typing import Optional, Union, Dict, Tuple, Any, List
 class NamespaceInterface(ABC):
 
     @property
+    @abstractmethod
     def symbol_table(self) -> Dict[str, "ArrayInterface"]:
-        return self._namespace
-
-    @symbol_table.setter
-    def symbol_table(self, val: Dict[str, "ArrayInterface"]) -> None:
-        self._namespace = val
+        pass
 
     @abstractmethod
     def assign(self, name: str,

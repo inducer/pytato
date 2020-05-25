@@ -69,7 +69,10 @@ class Namespace(ptype.NamespaceInterface):
     """
 
     def __init__(self) -> None:
-        self.symbol_table = {}
+        self._symbol_table = {}
+
+    def symbol_table(self) -> Dict[str, ptype.ArrayInterface]:
+        return self._symbol_table
 
     def assign(self, name: str,
                value: ptype.ArrayInterface) -> None:
