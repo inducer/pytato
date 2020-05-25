@@ -156,11 +156,11 @@ class Array(ptype.ArrayInterface):
         purposefully so.
     """
 
-    def __init__(self, namespace: Namespace,
+    def __init__(self, namespace: ptype.NamespaceInterface,
                  name: Optional[ptype.NameType],
                  tags: Optional[ptype.TagsType] = None):
-        assert ptype.check_name(name)
-        assert ptype.check_tags(tags)
+        assert (name is None) or ptype.check_name(name)
+        assert (tags is None) or ptype.check_tags(tags)
 
         if tags is None:
             tags = {}
@@ -195,7 +195,7 @@ class Array(ptype.ArrayInterface):
             pass
 
     def without_tag(self, dotted_name: DottedName):
-        pass
+        raise NotImplementedError
 
     def with_name(self, name: ptype.NameType):
         assert ptype.check_name(name)
@@ -235,8 +235,7 @@ class DictOfNamedArrays(collections.abc.Mapping):
     def namespace(self):
         return single_valued(ary.namespace for ary in self._data.values())
 
-    def __contains__(self, name: ptype.NameType):
-        assert ptype.check_name(name)
+    def __contains__(self, name: object):
         return name in self._data
 
     def __getitem__(self, name: ptype.NameType):

@@ -26,11 +26,12 @@ THE SOFTWARE.
 
 __doc__ = """Interface classes and type specifications.
 Each type is paired with a check_* function that, when used together, achieves
-contracts-like functionality."""
+contracts-like functionality.
+"""
 
 import re
 from pymbolic.primitives import Expression
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Optional, Union, Dict, Tuple
 
 # {{{ abstract classes
@@ -38,6 +39,10 @@ from typing import Optional, Union, Dict, Tuple
 
 class NamespaceInterface():
     __metaclass__ = ABC
+
+    @abstractmethod
+    def assign(self, name, value):
+        pass
 
 
 class TagInterface():
@@ -48,6 +53,40 @@ class ArrayInterface():
     """Abstract class for types implementing the Array interface.
     """
     __metaclass__ = ABC
+
+    @property
+    def namespace(self):
+        return self._namespace
+
+    @namespace.setter
+    def namespace(self, val: NamespaceInterface):
+        self._namespace = val
+
+    @property
+    @abstractmethod
+    def ndim(self):
+        pass
+
+    @property
+    @abstractmethod
+    def shape(self):
+        pass
+
+    @abstractmethod
+    def copy(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def with_tag(self, tag_key, tag_val):
+        pass
+
+    @abstractmethod
+    def without_tag(self, tag_key):
+        pass
+
+    @abstractmethod
+    def with_name(self, name):
+        pass
 
 # }}} End abstract classes
 
@@ -91,7 +130,7 @@ def check_shape(shape: ShapeType,
             assert s > 0, f"size parameter must be positive (got {s})"
         elif isinstance(s, str):
             assert check_name(s)
-        elif isinstance(Expression) and ns is not None:
+        elif isinstance(s, Expression) and ns is not None:
             # TODO: check expression in namespace
             pass
     return True
