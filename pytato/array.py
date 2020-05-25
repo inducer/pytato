@@ -69,7 +69,7 @@ class Namespace(ptype.NamespaceInterface):
     .. attribute:: symbol_table
 
         A mapping from strings that must be valid
-        C identifiers to objects implementing the
+        Python identifiers to objects implementing the
         :class:`Array` interface.
     """
 
@@ -217,7 +217,7 @@ class Array(ptype.ArrayInterface):
 
 
 class DictOfNamedArrays(Mapping[str, ptype.ArrayInterface]):
-    """A container that maps valid C identifiers
+    """A container that maps valid Python identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
 

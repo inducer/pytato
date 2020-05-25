@@ -119,7 +119,7 @@ class DottedName():
     .. attribute:: name_parts
 
         A tuple of strings, each of which is a valid
-        C identifier (non-Unicode Python identifier).
+        Python identifier (non-Unicode Python identifier).
 
     The name (at least morally) exists in the
     name space defined by the Python module system.
