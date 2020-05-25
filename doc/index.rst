@@ -2,8 +2,12 @@ Welcome to Pytato's documentation!
 ===================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: Contents:
+
+    reference
+    design
+    misc
 
 Indices and tables
 ==================

@@ -12,7 +12,7 @@ exec(compile(version_file_contents, version_file_name, 'exec'), ver_dic)
 
 setup(name="pytato",
       version=ver_dic["VERSION_TEXT"],
-      description="",
+      description="Get Descriptions of Array Computations via Lazy Evaluation",
       long_description=open("README.rst", "r").read(),
       classifiers=[
           'Development Status :: 4 - Beta',
@@ -38,7 +38,7 @@ setup(name="pytato",
           ],
 
       author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
-      url="http://gitlab.tiker.net/inducer/pytato",
+      url="http://github.com/inducer/pytato",
       author_email="inform@tiker.net",
       license="MIT",
       packages=find_packages())
