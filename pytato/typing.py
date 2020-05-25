@@ -29,7 +29,6 @@ Each type is paired with a check_* function that, when used together, achieves
 contracts-like functionality.
 """
 
-import re
 from pymbolic.primitives import Expression
 from abc import ABC, abstractmethod
 from typing import Optional, Union, Dict, Tuple, Any, List
@@ -40,15 +39,15 @@ from typing import Optional, Union, Dict, Tuple, Any, List
 class NamespaceInterface(ABC):
 
     @property
-    def symbol_table(self) -> Dict["NameType", "ArrayInterface"]:
+    def symbol_table(self) -> Dict[str, "ArrayInterface"]:
         return self._namespace
 
     @symbol_table.setter
-    def symbol_table(self, val: Dict["NameType", "ArrayInterface"]) -> None:
+    def symbol_table(self, val: Dict[str, "ArrayInterface"]) -> None:
         self._namespace = val
 
     @abstractmethod
-    def assign(self, name: "NameType",
+    def assign(self, name: str,
                value: "ArrayInterface") -> None:
         pass
 
@@ -86,24 +85,10 @@ class ArrayInterface(ABC):
         pass
 
     @abstractmethod
-    def with_name(self, name: "NameType") -> "ArrayInterface":
+    def with_name(self, name: str) -> "ArrayInterface":
         pass
 
 # }}} End abstract classes
-
-# {{{ name type
-
-
-NameType = str
-C_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-
-
-def check_name(name: NameType) -> bool:
-    assert re.match(C_IDENTIFIER, name) is not None, \
-            f"{name} is not a C identifier"
-    return True
-
-# }}} End name type
 
 # {{{ shape type
 
@@ -118,7 +103,7 @@ def check_shape(shape: ShapeType,
         if isinstance(s, int):
             assert s > 0, f"size parameter must be positive (got {s})"
         elif isinstance(s, str):
-            assert check_name(s)
+            assert str.isidentifier(s)
         elif isinstance(s, Expression) and ns is not None:
             # TODO: check expression in namespace
             pass
@@ -144,7 +129,7 @@ class DottedName():
 
     def __init__(self, name_parts: List[str]):
         assert len(name_parts) > 0
-        assert all(check_name(p) for p in name_parts)
+        assert all(str.isidentifier(p) for p in name_parts)
         self.name_parts = name_parts
 
 

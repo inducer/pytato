@@ -76,9 +76,9 @@ class Namespace(ptype.NamespaceInterface):
     def __init__(self) -> None:
         self.symbol_table = {}
 
-    def assign(self, name: ptype.NameType,
+    def assign(self, name: str,
                value: ptype.ArrayInterface) -> None:
-        assert ptype.check_name(name)
+        assert str.isidentifier(name)
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
         self.symbol_table[name] = value
@@ -162,9 +162,9 @@ class Array(ptype.ArrayInterface):
     """
 
     def __init__(self, namespace: ptype.NamespaceInterface,
-                 name: Optional[ptype.NameType],
+                 name: Optional[str],
                  tags: Optional[ptype.TagsType] = None):
-        assert (name is None) or ptype.check_name(name)
+        assert (name is None) or str.isidentifier(name)
 
         if tags is None:
             tags = {}
@@ -206,8 +206,7 @@ class Array(ptype.ArrayInterface):
     def without_tag(self, dotted_name: ptype.DottedName) -> "Array":
         raise NotImplementedError
 
-    def with_name(self, name: ptype.NameType) -> "Array":
-        assert ptype.check_name(name)
+    def with_name(self, name: str) -> "Array":
         self.namespace.assign(name, self)
         return self.copy(name=name)
 
@@ -217,7 +216,7 @@ class Array(ptype.ArrayInterface):
     # - naming
 
 
-class DictOfNamedArrays(Mapping[ptype.NameType, ptype.ArrayInterface]):
+class DictOfNamedArrays(Mapping[str, ptype.ArrayInterface]):
     """A container that maps valid C identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
@@ -233,8 +232,8 @@ class DictOfNamedArrays(Mapping[ptype.NameType, ptype.ArrayInterface]):
         arithmetic.
     """
 
-    def __init__(self, data: Dict[ptype.NameType, ptype.ArrayInterface]):
-        assert all(ptype.check_name(key) for key in data.keys())
+    def __init__(self, data: Dict[str, ptype.ArrayInterface]):
+        assert all(str.isidentifier(key) for key in data.keys())
         self._data = data
 
         if not is_single_valued(ary.namespace for ary in data.values()):
@@ -248,11 +247,10 @@ class DictOfNamedArrays(Mapping[ptype.NameType, ptype.ArrayInterface]):
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
-    def __getitem__(self, name: ptype.NameType) -> ptype.ArrayInterface:
-        assert ptype.check_name(name)
+    def __getitem__(self, name: str) -> ptype.ArrayInterface:
         return self._data[name]
 
-    def __iter__(self) -> Iterator[ptype.NameType]:
+    def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
     def __len__(self) -> int:
@@ -324,7 +322,7 @@ class Placeholder(Array):
         return self._shape
 
     def __init__(self, namespace: ptype.NamespaceInterface,
-                 name: ptype.NameType, shape: ptype.ShapeType,
+                 name: str, shape: ptype.ShapeType,
                  tags: Optional[ptype.TagsType] = None):
         assert ptype.check_shape(shape)
         # namespace, name and tags will be checked in super().__init__()
