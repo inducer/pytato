@@ -24,8 +24,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from pytato.typing import DottedName
 from pytato.array import (
-        DottedName, Namespace, Array, DictOfNamedArrays,
+        Namespace, Array, DictOfNamedArrays,
         )
 
 __all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays")
