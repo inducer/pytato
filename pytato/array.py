@@ -69,7 +69,7 @@ class Namespace(ptype.NamespaceInterface):
     """
 
     def __init__(self) -> None:
-        self._symbol_table = {}
+        self._symbol_table: Dict[str, ptype.ArrayInterface] = {}
 
     def symbol_table(self) -> Dict[str, ptype.ArrayInterface]:
         return self._symbol_table
@@ -82,9 +82,9 @@ class Namespace(ptype.NamespaceInterface):
         :param value: the array object
         """
         assert str.isidentifier(name)
-        if name in self.symbol_table:
+        if name in self._symbol_table:
             raise ValueError(f"'{name}' is already assigned")
-        self.symbol_table[name] = value
+        self._symbol_table[name] = value
 
 
 class Array(ptype.ArrayInterface):
