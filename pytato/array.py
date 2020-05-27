@@ -50,11 +50,18 @@ Built-in Expression Nodes
 .. autoclass:: DataWrapper
 .. autoclass:: Placeholder
 .. autoclass:: LoopyFunction
+
+User Interface for Making Nodes
+-------------------------------
+.. currentmodule:: pytato.array
+
+.. autofunction:: make_dict_of_named_arrays
+.. autofunction:: make_placeholder
 """
 
 
 import pytato.typing as ptype
-from pytools import single_valued, is_single_valued
+from pytools import is_single_valued
 from typing import Optional, Dict, Any, Mapping, Iterator
 
 
@@ -235,13 +242,9 @@ class DictOfNamedArrays(Mapping[str, ptype.ArrayInterface]):
     def __init__(self, data: Dict[str, ptype.ArrayInterface]):
         self._data = data
 
-        if not is_single_valued(ary.namespace for ary in data.values()):
-            raise ValueError("arrays do not have same namespace")
-
     @property
     def namespace(self) -> ptype.NamespaceInterface:
-        return single_valued(  # type: ignore
-                ary.namespace for ary in self._data.values())
+        return next(iter(self._data.values())).namespace
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
@@ -344,11 +347,30 @@ class LoopyFunction(DictOfNamedArrays):
 # {{{ end-user-facing
 
 
+def make_dict_of_named_arrays(
+        data: Dict[str, ptype.ArrayInterface]) -> DictOfNamedArrays:
+    """Make a :class:`DictOfNamedArrays` object and ensure that all arrays
+    share the same namespace.
+
+    :param data: member keys and arrays
+    """
+    if not is_single_valued(ary.namespace for ary in data.values()):
+        raise ValueError("arrays do not have same namespace")
+    return DictOfNamedArrays(data)
+
+
 def make_placeholder(namespace: ptype.NamespaceInterface,
                      name: str,
                      shape: ptype.ShapeType,
                      tags: Optional[ptype.TagsType] = None
                      ) -> Placeholder:
+    """Make a :class:`Placeholder` object.
+
+    :param namespace:  namespace of the placeholder array
+    :param name:       name of the placeholder array
+    :param shape:      shape of the placeholder array
+    :param tags:       implementation tags
+    """
     assert str.isidentifier(name)
     assert ptype.check_shape(shape, namespace)
     return Placeholder(namespace, name, shape, tags)
