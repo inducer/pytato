@@ -54,6 +54,7 @@ Built-in Expression Nodes
 
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
+.. autoclass:: Reshape
 .. autoclass:: DataWrapper
 .. autoclass:: Placeholder
 .. autoclass:: LoopyFunction
@@ -65,6 +66,7 @@ Built-in Expression Nodes
 import collections.abc
 from dataclasses import dataclass
 from pytools import single_valued, is_single_valued
+import pymbolic.primitives as prim
 
 
 # {{{ dotted name
@@ -103,26 +105,49 @@ class DottedName:
 class Namespace:
     # Possible future extension: .parent attribute
     """
-    .. attribute:: symbol_table
+    Represents a mapping from :term:`identifier` strings to :term:`array expression`s
+    or *None*, where *None* indicates that the name may not be used.
+    (:class:`Placeholder` instances register their names in this way to
+    avoid ambiguity.)
 
-        A mapping from :term:`identifier` strings
-        to :term:`array expression`s.
+    .. automethod:: assign
+    .. automethod:: ref
     """
 
     def __init__(self):
-        self.symbol_table = {}
+        self._symbol_table = {}
 
     def assign(self, name, value):
+        """
+        :returns: *name*
+        """
         if name in self.symbol_table:
             raise ValueError(f"'{name}' is already assigned")
-        self.symbol_table[name] = value
+        self._symbol_table[name] = value
+
+        return name
+
+    def ref(self, name):
+        """
+        :returns: A :term:`array expression` referring to *name*.
+        """
+
+        value = self.symbol_table[name]
+
+        v = prim.Variable(name)
+        ituple = tuple("_%d" % i for i in range(len(value.shape)))
+
+        return IndexLambda(
+                self.namespace,
+                name, index_expr=v[ituple], shape=value.shape, dtype=value.dtype)
+
 
 # }}}
 
 
 # {{{ tag
 
-tag_dataclass = dataclass(init=True, eq=True, frozen=True)
+tag_dataclass = dataclass(init=True, eq=True, frozen=True, repr=True)
 
 
 @tag_dataclass
@@ -140,6 +165,11 @@ class Tag:
     picklable, and have a reasonably concise :meth:`__repr__`
     of the form ``dotted.name(attr1=value1, attr2=value2)``.
     Positional arguments are not allowed.
+
+   .. note::
+
+       This mirrors the tagging scheme that :mod:`loopy`
+       is headed towards.
     """
 
     @property
@@ -169,13 +199,6 @@ class Array:
         The interface seeks to maximize :mod:`numpy`
         compatibility, though not at all costs.
 
-    All these are abstract:
-
-    .. attribute:: name
-
-        A name in :attr:`namespace` that has been assigned
-        to this expression. May be (and typically is) *None*.
-
     .. attribute:: namespace
 
        A (mutable) instance of :class:`Namespace` containing the
@@ -184,13 +207,18 @@ class Array:
 
     .. attribute:: shape
 
-        Identifiers (:class:`pymbolic.Variable`) refer to
-        names from :attr:`namespace`.
-        A tuple of integers or :mod:`pymbolic` expressions.
+        Identifiers (:class:`pymbolic.Variable`) refer to names from
+        :attr:`namespace`.  A tuple of integers or :mod:`pymbolic` expressions.
         Shape may be (at most affinely) symbolic in these
         identifiers.
 
-        # FIXME: -> https://gitlab.tiker.net/inducer/pytato/-/issues/1
+        .. note::
+
+            Affine-ness is mainly required by code generation for
+            :class:`IndexLambda`, but :class:`IndexLambda` is used to produce
+            references to named arrays. Since any array that needs to be
+            referenced in this way needs to obey this restriction anyway,
+            a decision was made to requir the same of *all* array expressions.
 
     .. attribute:: dtype
 
@@ -205,20 +233,6 @@ class Array:
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
-
-        For example::
-
-            # tag
-            DottedName("our_array_thing.impl_mode"):
-
-            # argument
-            DottedName(
-                "our_array_thing.loopy_target.subst_rule")
-
-       .. note::
-
-           This mirrors the tagging scheme that :mod:`loopy`
-           is headed towards.
 
     .. automethod:: named
     .. automethod:: tagged
@@ -238,15 +252,11 @@ class Array:
         purposefully so.
     """
 
-    def __init__(self, namespace, name, tags=None):
+    def __init__(self, namespace, tags=None):
         if tags is None:
             tags = {}
 
-        if name is not None:
-            namespace.assign(name, self)
-
         self.namespace = namespace
-        self.name = name
         self.tags = tags
 
     def copy(self, **kwargs):
@@ -257,8 +267,7 @@ class Array:
         raise NotImplementedError
 
     def named(self, name):
-        self.namespace.assign_name(name, self)
-        return self.copy(name=name)
+        return self.namespace.ref(self.namespace.assign(name, self))
 
     @property
     def ndim(self):
@@ -381,24 +390,52 @@ class IndexLambda(Array):
     .. attribute:: index_expr
 
         A scalar-valued :mod:`pymbolic` expression such as
-        ``a[_1] + b[_2, _1]`` depending on TODO
+        ``a[_1] + b[_2, _1]``.
 
         Identifiers in the expression are resolved, in
-        order, by lookups in :attr:`inputs`, then in
+        order, by lookups in :attr:`bindings`, then in
         :attr:`namespace`.
 
         Scalar functions in this expression must
-        be identified by a dotted name
-        (e.g. ``our_array_thing.c99.sin``).
+        be identified by a dotted name representing
+        a Python object (e.g. ``pytato.c99.sin``).
 
-    .. attribute:: binding
+    .. attribute:: bindings
 
         A :class:`dict` mapping strings that are valid
         Python identifiers to objects implementing
         the :class:`Array` interface, making array
         expressions available for use in
         :attr:`index_expr`.
+
+    .. automethod:: is_reference
     """
+    def __init__(self, namespace, name, index_expr, shape, bindings=None, tags=None):
+        if bindings is None:
+            bindings = {}
+
+        super().__init__(namespace, name, tags=tags)
+
+        self.shape = shape
+        self.index_expr = index_expr
+        self.bindings = bindings
+
+    def is_reference(self):
+        if isinstance(self.index_expr, prim.Subscript):
+            assert isinstance(self.index_expr.aggregate, prim.Variable)
+            name = self.index_expr.aggregate.name
+            index = self.index_expr.index
+        elif isinstance(self.index_expr, prim.Variable):
+            name = self.index_expr.aggregate.name
+            index = ()
+        else:
+            return False
+
+        if name not in self.namespace:
+            assert name in self.bindings
+            return False
+
+        return index == tuple("_%d" % i for i in range(len(self.shape)))
 
 # }}}
 
@@ -406,6 +443,15 @@ class IndexLambda(Array):
 # {{{ einsum
 
 class Einsum(Array):
+    """
+    """
+
+# }}}
+
+
+# {{{ reshape
+
+class Reshape(Array):
     """
     """
 
@@ -420,13 +466,30 @@ class DataWrapper(Array):
     Takes concrete array data and packages it to be compatible
     with the :class:`Array` interface.
 
-    A way
-    .. attrib
+    .. attribute:: data
 
         A concrete array (containing data), given as, for example,
         a :class:`numpy.ndarray`, or a :class:`pyopencl.array.Array`.
+        This must offer ``shape`` and ``dtype`` attributes but is
+        otherwise considered opaque. At evaluation time, its
+        type must be understood by the appropriate execution backend.
 
+        Starting with the construction of the :class:`DataWrapper`,
+        may not be updated in-place.
     """
+
+    def __init__(self, namespace, data, tags=None):
+        super().__init__(namespace, tags)
+
+        self.data = data
+
+    @property
+    def shape(self):
+        self.data.shape
+
+    @property
+    def dtype(self):
+        self.data.dtype
 
 # }}}
 
@@ -438,29 +501,36 @@ class Placeholder(Array):
     A named placeholder for an array whose concrete value
     is supplied by the user during evaluation.
 
+    .. attribute:: name
+
+        The name by which a value is supplied
+        for the placeholder once computation begins.
+
     .. note::
 
-        A symbolically represented
-    A symbolic
-    On
-        is required, and :attr:`shape` is given as data.
+        :attr:`name` is not a :term:`namespace name`. In fact,
+        it is prohibited from being one. (This has to be the case: Suppose a
+        :class:`Placeholder` is :meth:`~Array.tagged`, would the namespace name
+        refer to the tagged or the untagged version?)
     """
+
+    def __init__(self, namespace, name, shape, tags=None):
+        if name is None:
+            raise ValueError("Placeholder instances must have a name")
+
+        # Reserve the name, prevent others from using it.
+        namespace.assign(name, None)
+
+        super().__init__(namespace=namespace, tags=tags)
+
+        self.name = name
+        self._shape = shape
 
     @property
     def shape(self):
         # Matt added this to make Pylint happy.
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
-
-    def __init__(self, namespace, name, shape, tags=None):
-        if name is None:
-            raise ValueError("Placeholder instances must have a name")
-        super().__init__(
-            namespace=namespace,
-            name=name,
-            tags=tags)
-
-        self._shape = shape
 
 # }}}
 
