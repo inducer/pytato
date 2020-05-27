@@ -117,11 +117,17 @@ class Namespace:
     def __init__(self):
         self._symbol_table = {}
 
+    def __contains__(self, name):
+        return name in self._symbol_table
+
+    def __getattr__(self, name):
+        return self._symbol_table[name]
+
     def assign(self, name, value):
         """
         :returns: *name*
         """
-        if name in self.symbol_table:
+        if name in self._symbol_table:
             raise ValueError(f"'{name}' is already assigned")
         self._symbol_table[name] = value
 
@@ -132,14 +138,14 @@ class Namespace:
         :returns: A :term:`array expression` referring to *name*.
         """
 
-        value = self.symbol_table[name]
+        value = self._symbol_table[name]
 
         v = prim.Variable(name)
         ituple = tuple("_%d" % i for i in range(len(value.shape)))
 
         return IndexLambda(
-                self.namespace,
-                name, index_expr=v[ituple], shape=value.shape, dtype=value.dtype)
+                self, name, index_expr=v[ituple], shape=value.shape,
+                dtype=value.dtype)
 
 
 # }}}
@@ -410,17 +416,33 @@ class IndexLambda(Array):
 
     .. automethod:: is_reference
     """
-    def __init__(self, namespace, name, index_expr, shape, bindings=None, tags=None):
+
+    # TODO: write make_index_lambda() that does dtype inference
+
+    def __init__(self, namespace, name, index_expr, shape, dtype, bindings=None,
+            tags=None):
         if bindings is None:
             bindings = {}
 
         super().__init__(namespace, name, tags=tags)
 
-        self.shape = shape
+        self._shape = shape
+        self._dtype = dtype
         self.index_expr = index_expr
         self.bindings = bindings
 
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def dtype(self):
+        return self._dtype
+
     def is_reference(self):
+        # FIXME: Do we want a specific 'reference' node to make all this
+        # checking unnecessary?
+
         if isinstance(self.index_expr, prim.Subscript):
             assert isinstance(self.index_expr.aggregate, prim.Variable)
             name = self.index_expr.aggregate.name
@@ -431,11 +453,21 @@ class IndexLambda(Array):
         else:
             return False
 
-        if name not in self.namespace:
+        if index != tuple("_%d" % i for i in range(len(self.shape))):
+            return False
+
+        try:
+            val = self.namespace[name]
+        except KeyError:
             assert name in self.bindings
             return False
 
-        return index == tuple("_%d" % i for i in range(len(self.shape)))
+        if self.shape != val.shape:
+            return False
+        if self.dtype != val.dtype:
+            return False
+
+        return True
 
 # }}}
 
