@@ -27,6 +27,8 @@ THE SOFTWARE.
 from pytato.typing import DottedName
 from pytato.array import (
         Namespace, Array, DictOfNamedArrays,
+        Placeholder, make_placeholder,
         )
 
-__all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays")
+__all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays",
+           "Placeholder", "make_placeholder")

@@ -81,7 +81,6 @@ class Namespace(ptype.NamespaceInterface):
         :param name: a Python identifier
         :param value: the array object
         """
-        assert str.isidentifier(name)
         if name in self._symbol_table:
             raise ValueError(f"'{name}' is already assigned")
         self._symbol_table[name] = value
@@ -167,8 +166,6 @@ class Array(ptype.ArrayInterface):
     def __init__(self, namespace: ptype.NamespaceInterface,
                  name: Optional[str],
                  tags: Optional[ptype.TagsType] = None):
-        assert (name is None) or str.isidentifier(name)
-
         if tags is None:
             tags = {}
 
@@ -236,7 +233,6 @@ class DictOfNamedArrays(Mapping[str, ptype.ArrayInterface]):
     """
 
     def __init__(self, data: Dict[str, ptype.ArrayInterface]):
-        assert all(str.isidentifier(key) for key in data.keys())
         self._data = data
 
         if not is_single_valued(ary.namespace for ary in data.values()):
@@ -327,8 +323,6 @@ class Placeholder(Array):
     def __init__(self, namespace: ptype.NamespaceInterface,
                  name: str, shape: ptype.ShapeType,
                  tags: Optional[ptype.TagsType] = None):
-        assert ptype.check_shape(shape)
-        # namespace, name and tags will be checked in super().__init__()
         super().__init__(
             namespace=namespace,
             name=name,
@@ -345,3 +339,18 @@ class LoopyFunction(DictOfNamedArrays):
         and one that's obtained by importing a dotted
         name.
     """
+
+
+# {{{ end-user-facing
+
+
+def make_placeholder(namespace: ptype.NamespaceInterface,
+                     name: str,
+                     shape: ptype.ShapeType,
+                     tags: Optional[ptype.TagsType] = None
+                     ) -> Placeholder:
+    assert str.isidentifier(name)
+    assert ptype.check_shape(shape, namespace)
+    return Placeholder(namespace, name, shape, tags)
+
+# }}} End end-user-facing
