@@ -113,10 +113,10 @@ class DottedName:
 class Namespace:
     # Possible future extension: .parent attribute
     r"""
-    Represents a mapping from :term:`identifier` strings to :term:`array expression`\ s
-    or *None*, where *None* indicates that the name may not be used.
-    (:class:`Placeholder` instances register their names in this way to
-    avoid ambiguity.)
+    Represents a mapping from :term:`identifier` strings to
+    :term:`array expression`\ s or *None*, where *None* indicates that the name
+    may not be used.  (:class:`Placeholder` instances register their names in
+    this way to avoid ambiguity.)
 
     .. automethod:: __contains__
     .. automethod:: __getitem__
