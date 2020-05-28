@@ -159,7 +159,7 @@ class Namespace:
             var_ref = var_ref[tuple("_%d" % i for i in range(len(value.shape)))]
 
         return IndexLambda(
-                self, name, expr=var_ref, shape=value.shape,
+                self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
 
