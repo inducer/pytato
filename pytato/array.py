@@ -431,12 +431,12 @@ class IndexLambda(Array):
 
     # TODO: write make_index_lambda() that does dtype inference
 
-    def __init__(self, namespace, name, expr, shape, dtype, bindings=None,
+    def __init__(self, namespace, expr, shape, dtype, bindings=None,
             tags=None):
         if bindings is None:
             bindings = {}
 
-        super().__init__(namespace, name, tags=tags)
+        super().__init__(namespace, tags=tags)
 
         self._shape = shape
         self._dtype = dtype
