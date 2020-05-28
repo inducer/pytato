@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -58,12 +60,12 @@ class NamespaceInterface(ABC):
 
     @property
     @abstractmethod
-    def symbol_table(self) -> Dict[str, "ArrayInterface"]:
+    def symbol_table(self) -> Dict[str, ArrayInterface]:
         pass
 
     @abstractmethod
     def assign(self, name: str,
-               value: "ArrayInterface") -> None:
+               value: ArrayInterface) -> None:
         pass
 
 
@@ -87,20 +89,20 @@ class ArrayInterface(ABC):
         pass
 
     @abstractmethod
-    def copy(self, **kwargs: Any) -> "ArrayInterface":
+    def copy(self, **kwargs: Any) -> ArrayInterface:
         pass
 
     @abstractmethod
     def with_tag(self, tag_key: Any,
-                 tag_val: Any) -> "ArrayInterface":
+                 tag_val: Any) -> ArrayInterface:
         pass
 
     @abstractmethod
-    def without_tag(self, tag_key: Any) -> "ArrayInterface":
+    def without_tag(self, tag_key: Any) -> ArrayInterface:
         pass
 
     @abstractmethod
-    def with_name(self, name: str) -> "ArrayInterface":
+    def with_name(self, name: str) -> ArrayInterface:
         pass
 
 # }}} End abstract classes

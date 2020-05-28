@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -179,7 +181,7 @@ class Array(ptype.ArrayInterface):
         self.name = name
         self.tags = tags
 
-    def copy(self, **kwargs: Any) -> "Array":
+    def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
 
     @property
@@ -195,7 +197,7 @@ class Array(ptype.ArrayInterface):
         return len(self.shape)
 
     def with_tag(self, dotted_name: ptype.DottedName,
-                 args: Optional[ptype.DottedName] = None) -> "Array":
+                 args: Optional[ptype.DottedName] = None) -> Array:
         """
         Returns a copy of *self* tagged with *dotted_name*
         and arguments *args*
@@ -206,10 +208,10 @@ class Array(ptype.ArrayInterface):
             pass
         return self.copy()
 
-    def without_tag(self, dotted_name: ptype.DottedName) -> "Array":
+    def without_tag(self, dotted_name: ptype.DottedName) -> Array:
         raise NotImplementedError
 
-    def with_name(self, name: str) -> "Array":
+    def with_name(self, name: str) -> Array:
         self.namespace.assign(name, self)
         return self.copy(name=name)
 
