@@ -33,7 +33,7 @@ __doc__ = """
     Expression trees based on this package are picklable
     as long as no non-picklable data
     (e.g. :class:`pyopencl.array.Array`)
-    is referenced from :class:`DataWrapper`.
+    is referenced from :class:`~pytato.array.DataWrapper`.
 
 Array Interface
 ---------------
@@ -41,6 +41,7 @@ Array Interface
 .. autoclass :: Namespace
 .. autoclass :: Array
 .. autoclass :: Tag
+.. autoclass :: UniqueTag
 .. autoclass :: DictOfNamedArrays
 
 Supporting Functionality
@@ -48,9 +49,16 @@ Supporting Functionality
 
 .. autoclass :: DottedName
 
+.. currentmodule:: pytato.array
+
+Pre-Defined Tags
+----------------
+
+.. autoclass:: ImplementAs
+.. autoclass:: CountNamed
+
 Built-in Expression Nodes
 -------------------------
-.. currentmodule:: pytato.array
 
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
@@ -104,12 +112,15 @@ class DottedName:
 
 class Namespace:
     # Possible future extension: .parent attribute
-    """
-    Represents a mapping from :term:`identifier` strings to :term:`array expression`s
+    r"""
+    Represents a mapping from :term:`identifier` strings to :term:`array expression`\ s
     or *None*, where *None* indicates that the name may not be used.
     (:class:`Placeholder` instances register their names in this way to
     avoid ambiguity.)
 
+    .. automethod:: __contains__
+    .. automethod:: __getitem__
+    .. automethod:: __iter__
     .. automethod:: assign
     .. automethod:: ref
     """
@@ -120,8 +131,11 @@ class Namespace:
     def __contains__(self, name):
         return name in self._symbol_table
 
-    def __getattr__(self, name):
+    def __getitem__(self, name):
         return self._symbol_table[name]
+
+    def __iter__(self):
+        return iter(self._symbol_table)
 
     def assign(self, name, value):
         """
@@ -135,16 +149,17 @@ class Namespace:
 
     def ref(self, name):
         """
-        :returns: A :term:`array expression` referring to *name*.
+        :returns: An :term:`array expression` referring to *name*.
         """
 
         value = self._symbol_table[name]
 
-        v = prim.Variable(name)
-        ituple = tuple("_%d" % i for i in range(len(value.shape)))
+        var_ref = prim.Variable(name)
+        if value.shape:
+            var_ref = var_ref[tuple("_%d" % i for i in range(len(value.shape)))]
 
         return IndexLambda(
-                self, name, index_expr=v[ituple], shape=value.shape,
+                self, name, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
 
@@ -196,14 +211,19 @@ class UniqueTag(Tag):
 
 class Array:
     """
-    A base class (abstract interface +
-    supplemental functionality) for lazily
-    evaluating array expressions.
+    A base class (abstract interface + supplemental functionality) for lazily
+    evaluating array expressions. The interface seeks to maximize :mod:`numpy`
+    compatibility, though not at all costs.
+
+    Objects of this type are hashable and support structural equality
+    comparison (and are therefore immutable).
 
     .. note::
 
-        The interface seeks to maximize :mod:`numpy`
-        compatibility, though not at all costs.
+        Hashability and equality testing *does* break :mod:`numpy`
+        compatibility, purposefully so.
+
+    FIXME: Point out our equivalent for :mod:`numpy`'s ``==``.
 
     .. attribute:: namespace
 
@@ -248,14 +268,6 @@ class Array:
 
     .. attribute:: ndim
 
-    Objects of this type are hashable and support
-    structural equality comparison (and are therefore
-    immutable).
-
-    .. note::
-
-        This *does* break :mod:`numpy` compatibility,
-        purposefully so.
     """
 
     def __init__(self, namespace, tags=None):
@@ -393,7 +405,7 @@ class DictOfNamedArrays(collections.abc.Mapping):
 
 class IndexLambda(Array):
     """
-    .. attribute:: index_expr
+    .. attribute:: expr
 
         A scalar-valued :mod:`pymbolic` expression such as
         ``a[_1] + b[_2, _1]``.
@@ -412,14 +424,14 @@ class IndexLambda(Array):
         Python identifiers to objects implementing
         the :class:`Array` interface, making array
         expressions available for use in
-        :attr:`index_expr`.
+        :attr:`expr`.
 
     .. automethod:: is_reference
     """
 
     # TODO: write make_index_lambda() that does dtype inference
 
-    def __init__(self, namespace, name, index_expr, shape, dtype, bindings=None,
+    def __init__(self, namespace, name, expr, shape, dtype, bindings=None,
             tags=None):
         if bindings is None:
             bindings = {}
@@ -428,7 +440,7 @@ class IndexLambda(Array):
 
         self._shape = shape
         self._dtype = dtype
-        self.index_expr = index_expr
+        self.expr = expr
         self.bindings = bindings
 
     @property
@@ -443,12 +455,12 @@ class IndexLambda(Array):
         # FIXME: Do we want a specific 'reference' node to make all this
         # checking unnecessary?
 
-        if isinstance(self.index_expr, prim.Subscript):
-            assert isinstance(self.index_expr.aggregate, prim.Variable)
-            name = self.index_expr.aggregate.name
-            index = self.index_expr.index
-        elif isinstance(self.index_expr, prim.Variable):
-            name = self.index_expr.aggregate.name
+        if isinstance(self.expr, prim.Subscript):
+            assert isinstance(self.expr.aggregate, prim.Variable)
+            name = self.expr.aggregate.name
+            index = self.expr.index
+        elif isinstance(self.expr, prim.Variable):
+            name = self.expr.aggregate.name
             index = ()
         else:
             return False
@@ -507,7 +519,7 @@ class DataWrapper(Array):
         type must be understood by the appropriate execution backend.
 
         Starting with the construction of the :class:`DataWrapper`,
-        may not be updated in-place.
+        this array may not be updated in-place.
     """
 
     def __init__(self, namespace, data, tags=None):
