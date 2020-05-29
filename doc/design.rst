@@ -46,22 +46,24 @@ Computation and Results
     referenced by name from the :attr:`Array.namespace`. Such a name
     marks the boundary between eager and lazy evaluation.
 
--   :class:`IndexLambda` is used to express the following functionality:
+-   There is (deliberate) overlap in what various expression nodes can
+    express, e.g.
 
-    - Broadcasting (equivalently, outer products)
-    - Slicing
-    - Arithmetic
-    - Element-wise function application, similar :class:`numpy.ufunc`
-    - Reductions
-    - Prefix sums/scans
+    -   Array reshaping can be expressed as a :class:`pytato.array.Reshape`
+        or as an :class:`pytato.array.IndexLambda`
 
-    No new expression node types should be created for operations that
-    are well-expressed by :class:`IndexLambda`. An operation is well-expressed
-    if it is possible to (reasonably equivalently) recover the operation
-    (and its inputs and ordering with respect to other preceding/following
-    operations) by examining :attr:`IndexLambda.expr`.
+    -   Linear algebra operations can be expressed via :class:`pytato.array.Einsum`
+        or as an :class:`pytato.array.IndexLambda`
 
-    FIXME: This is not sharp. I'm not sure how to make it sharp.
+    Expression capture (the "frontend") should use the "highest-level"
+    (most abstract) node type available that captures the user-intended
+    operation. Lowering transformations (e.g. during code generation) may
+    then convert these operations to a less abstract, more uniform
+    representation.
+
+    Operations that introduce nontrivial mappings on indices (e.g. reshape,
+    strided slice, roll) are identified as potential candidates for being captured
+    in their own high-level node vs. as an :class:`pytato.array.IndexLambda`.
 
 Naming
 ------

@@ -162,7 +162,6 @@ class Namespace:
                 self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
-
 # }}}
 
 
