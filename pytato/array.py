@@ -90,10 +90,44 @@ from dataclasses import dataclass
 from pytools import is_single_valued
 from typing import Optional, Dict, Any, Mapping, Iterator, Tuple, Union
 
+# {{{ dotted name
+
+
+class DottedName():
+    """
+    .. attribute:: name_parts
+
+        A tuple of strings, each of which is a valid
+        Python identifier. No name part may start with
+        a double underscore.
+
+    The name (at least morally) exists in the
+    name space defined by the Python module system.
+    It need not necessarily identify an importable
+    object.
+
+    .. automethod:: from_class
+    """
+
+    def __init__(self, name_parts: Tuple[str, ...]):
+        self.name_parts = name_parts
+
+    @classmethod
+    def from_class(cls, argcls: Any) -> DottedName:
+        name_parts = tuple(
+                [str(part) for part in argcls.__module__.split(".")]
+                + [str(argcls.__name__)])
+        if not all(not npart.startswith("__") for npart in name_parts):
+            raise ValueError(f"some name parts of {'.'.join(name_parts)} "
+                             "start with double underscores")
+        return cls(name_parts)
+
+# }}}
+
 # {{{ namespace
 
 
-class Namespace():
+class Namespace:
     r"""
     Represents a mapping from :term:`identifier` strings to
     :term:`array expression`\ s or *None*, where *None* indicates that the name
@@ -157,36 +191,6 @@ class Namespace():
 # }}}
 
 # {{{ tag
-
-
-class DottedName():
-    """
-    .. attribute:: name_parts
-
-        A tuple of strings, each of which is a valid
-        Python identifier. No name part may start with
-        a double underscore.
-
-    The name (at least morally) exists in the
-    name space defined by the Python module system.
-    It need not necessarily identify an importable
-    object.
-
-    .. automethod:: from_class
-    """
-
-    def __init__(self, name_parts: Tuple[str, ...]):
-        self.name_parts = name_parts
-
-    @classmethod
-    def from_class(cls, argcls: Any) -> DottedName:
-        name_parts = tuple(
-                [str(part) for part in argcls.__module__.split(".")]
-                + [str(argcls.__name__)])
-        if not all(not npart.startswith("__") for npart in name_parts):
-            raise ValueError(f"some name parts of {'.'.join(name_parts)} "
-                             "start with double underscores")
-        return cls(name_parts)
 
 
 tag_dataclass = dataclass(init=True, eq=True, frozen=True, repr=True)
@@ -332,16 +336,12 @@ class Array:
         if tags is None:
             tags = {}
 
-        self._namespace = namespace
+        self.namespace = namespace
         self.tags = tags
         self.dtype: np.dtype = np.float64  # FIXME
 
     def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
-
-    @property
-    def namespace(self) -> Namespace:
-        return self._namespace
 
     @property
     def shape(self) -> ShapeType:
