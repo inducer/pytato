@@ -70,7 +70,7 @@ Naming
 
 -   There is (for now) one :class:`~Namespace` per computation "universe" that defines
     the computational "environment", by mapping :term:`identifier`\ s to :term:`array expression`\ s
-    (note: :term:`DictOfNamedArrays` instances may not be named, but their constituent
+    (note: :class:`DictOfNamedArrays` instances may not be named, but their constituent
     parts can, by using :class:`AttributeLookup`).
     Operations involving array expressions not using the same namespace are prohibited.
 
