@@ -90,10 +90,10 @@ from dataclasses import dataclass
 from pytools import is_single_valued
 from typing import Optional, Dict, Any, Mapping, Iterator, Tuple, Union
 
+
 # {{{ dotted name
 
-
-class DottedName():
+class DottedName:
     """
     .. attribute:: name_parts
 
@@ -124,10 +124,11 @@ class DottedName():
 
 # }}}
 
+
 # {{{ namespace
 
-
 class Namespace:
+    # Possible future extension: .parent attribute
     r"""
     Represents a mapping from :term:`identifier` strings to
     :term:`array expression`\ s or *None*, where *None* indicates that the name
@@ -183,15 +184,14 @@ class Namespace:
         if value.shape:
             var_ref = var_ref[tuple("_%d" % i for i in range(len(value.shape)))]
 
-        # FIXME: mypy thinks that this is Any
         return IndexLambda(
                 self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
 # }}}
 
-# {{{ tag
 
+# {{{ tag
 
 tag_dataclass = dataclass(init=True, eq=True, frozen=True, repr=True)
 
@@ -234,8 +234,8 @@ TagsType = Dict[DottedName, Tag]
 
 # }}}
 
-# {{{ shape
 
+# {{{ shape
 
 ShapeComponentType = Union[int, prim.Expression, str]
 ShapeType = Tuple[ShapeComponentType, ...]
@@ -267,8 +267,8 @@ def check_shape(shape: ShapeType,
 
 # }}}
 
-# {{{ array inteface
 
+# {{{ array inteface
 
 class Array:
     """
@@ -372,8 +372,8 @@ class Array:
 
 # }}}
 
-# {{{ pre-defined tag: ImplementAs
 
+# {{{ pre-defined tag: ImplementAs
 
 @tag_dataclass
 class ImplementationStrategy(Tag):
@@ -405,8 +405,8 @@ class ImplementAs(UniqueTag):
 
 # }}}
 
-# {{{ pre-defined tag: CountNamed
 
+# {{{ pre-defined tag: CountNamed
 
 @tag_dataclass
 class CountNamed(UniqueTag):
@@ -418,8 +418,8 @@ class CountNamed(UniqueTag):
 
 # }}}
 
-# {{{ dict of named arrays
 
+# {{{ dict of named arrays
 
 class DictOfNamedArrays(Mapping[str, Array]):
     """A container that maps valid Python identifiers
@@ -458,8 +458,8 @@ class DictOfNamedArrays(Mapping[str, Array]):
 
 # }}}
 
-# {{{ index lambda
 
+# {{{ index lambda
 
 class IndexLambda(Array):
     """
@@ -545,8 +545,8 @@ class IndexLambda(Array):
 
 # }}}
 
-# {{{ einsum
 
+# {{{ einsum
 
 class Einsum(Array):
     """
@@ -554,8 +554,8 @@ class Einsum(Array):
 
 # }}}
 
-# {{{ reshape
 
+# {{{ reshape
 
 class Reshape(Array):
     """
@@ -563,8 +563,8 @@ class Reshape(Array):
 
 # }}}
 
-# {{{ data wrapper
 
+# {{{ data wrapper
 
 class DataWrapper(Array):
     # TODO: Name?
@@ -601,8 +601,8 @@ class DataWrapper(Array):
 
 # }}}
 
-# {{{ placeholder
 
+# {{{ placeholder
 
 class Placeholder(Array):
     """
@@ -642,8 +642,8 @@ class Placeholder(Array):
 
 # }}}
 
-# {{{ loopy function
 
+# {{{ loopy function
 
 class LoopyFunction(DictOfNamedArrays):
     """
@@ -656,8 +656,8 @@ class LoopyFunction(DictOfNamedArrays):
 
 # }}}
 
-# {{{ end-user-facing
 
+# {{{ end-user-facing
 
 def make_dotted_name(name_parts: Tuple[str, ...]) -> DottedName:
     """Make a :class:`DottedName` for tagging purposes.
