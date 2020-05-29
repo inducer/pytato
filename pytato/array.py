@@ -248,12 +248,17 @@ def check_shape(shape: ShapeType,
     """
     for s in shape:
         if isinstance(s, int):
-            assert s > 0, f"size parameter must be positive (got {s})"
+            if s <= 0:
+                raise ValueError(f"size parameter must be positive (got {s})")
+
         elif isinstance(s, str):
-            assert str.isidentifier(s)
+            if not str.isidentifier(s):
+                raise ValueError(f"{s} is not a valid identifier")
+
         elif isinstance(s, prim.Expression) and ns is not None:
             # TODO: check expression in namespace
-            pass
+            raise NotImplementedError
+
     return True
 
 # }}}
@@ -655,8 +660,17 @@ class LoopyFunction(DictOfNamedArrays):
 
 
 def make_dotted_name(name_parts: Tuple[str, ...]) -> DottedName:
-    assert len(name_parts) > 0
-    assert all(str.isidentifier(p) for p in name_parts)
+    """Make a :class:`DottedName` for tagging purposes.
+
+    :param name_parts: each name part must be a valid Python identifier
+    """
+    if len(name_parts) == 0:
+        raise ValueError("empty name parts")
+
+    for p in name_parts:
+        if not str.isidentifier(p):
+            raise ValueError(f"{p} is not a Python identifier")
+
     return DottedName(name_parts)
 
 
@@ -669,6 +683,7 @@ def make_dict_of_named_arrays(
     """
     if not is_single_valued(ary.namespace for ary in data.values()):
         raise ValueError("arrays do not have same namespace")
+
     return DictOfNamedArrays(data)
 
 
@@ -684,8 +699,11 @@ def make_placeholder(namespace: Namespace,
     :param shape:      shape of the placeholder array
     :param tags:       implementation tags
     """
-    assert str.isidentifier(name)
-    assert check_shape(shape, namespace)
+    if not str.isidentifier(name):
+        raise ValueError(f"{name} is not a Python identifier")
+
+    check_shape(shape, namespace)
+
     return Placeholder(namespace, name, shape, tags)
 
 # }}} End end-user-facing
