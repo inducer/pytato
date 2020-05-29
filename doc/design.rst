@@ -17,7 +17,7 @@ TODO
 Computation and Results
 -----------------------
 
--   Results of computations are either implement the :class:`~Array`
+-   Results of computations either implement the :class:`~Array`
     interface or are a :class:`~DictOfNamedArrays`.
     The former are referred to as :term:`array expression`\ s. The union type
     of both is referred to as an :term:`array result`.
@@ -33,7 +33,7 @@ Computation and Results
     data-dependent name references in shapes are allowed. (This implies
     that the number of array axes must be statically known.)
 
-    Consider the the example of fancy indexing::
+    Consider the example of fancy indexing::
 
         A[A > 0]
 
@@ -41,34 +41,38 @@ Computation and Results
     in *A* and cannot be statically determined at code generation time.
 
     In the case of data-dependent shapes, the shape is expressed in terms of
-    scalar (i.e. an :attr:`Array.shape` of `()`) values
-    with an integral :attr:`Array.dtype` (i.e. ``dtype.kind == "i"``)
+    scalar (i.e. having a :attr:`Array.shape` of `()`) values
+    with an integral :attr:`Array.dtype` (i.e. having ``dtype.kind == "i"``)
     referenced by name from the :attr:`Array.namespace`. Such a name
     marks the boundary between eager and lazy evaluation.
 
--   :class:`IndexLambda` is used to express the following functionality:
+-   There is (deliberate) overlap in what various expression nodes can
+    express, e.g.
 
-    - Broadcasting (equivalently, outer products)
-    - Slicing
-    - Arithmetic
-    - Element-wise function application, similar :class:`numpy.ufunc`
-    - Reductions
-    - Prefix sums/scans
+    -   Array reshaping can be expressed as a :class:`pytato.array.Reshape`
+        or as an :class:`pytato.array.IndexLambda`
 
-    No new expression node types should be created for operations that
-    are well-expressed by :class:`IndexLambda`. An operation is well-expressed
-    if it is possible to (reasonably equivalently) recover the operation
-    (and its inputs and ordering with respect to other preceding/following
-    operations) by examining :attr:`IndexLambda.expr`.
+    -   Linear algebra operations can be expressed via :class:`pytato.array.Einsum`
+        or as an :class:`pytato.array.IndexLambda`
 
-    FIXME: This is not sharp. I'm not sure how to make it sharp.
+    Expression capture (the "frontend") should use the "highest-level"
+    (most abstract) node type available that captures the user-intended
+    operation. Lowering transformations (e.g. during code generation) may
+    then convert these operations to a less abstract, more uniform
+    representation.
+
+    Operations that introduce nontrivial mappings on indices (e.g. reshape,
+    strided slice, roll) are identified as potential candidates for being captured
+    in their own high-level node vs. as an :class:`pytato.array.IndexLambda`.
 
 Naming
 ------
 
--   There is one (for now) :class:`~Namespace` per computation that defines the
-    computational "environment".  Operations involving array expressions not
-    using the same namespace are prohibited.
+-   There is (for now) one :class:`~Namespace` per computation "universe" that defines
+    the computational "environment", by mapping :term:`identifier`\ s to :term:`array expression`\ s
+    (note: :class:`DictOfNamedArrays` instances may not be named, but their constituent
+    parts can, by using :class:`AttributeLookup`).
+    Operations involving array expressions not using the same namespace are prohibited.
 
 -   Names in the :class:`~Namespace` are under user control and unique. I.e.
     new names in the :class:`~Namespace` that are not a
