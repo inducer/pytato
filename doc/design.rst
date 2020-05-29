@@ -68,9 +68,11 @@ Computation and Results
 Naming
 ------
 
--   There is one (for now) :class:`~Namespace` per computation that defines the
-    computational "environment".  Operations involving array expressions not
-    using the same namespace are prohibited.
+-   There is (for now) one :class:`~Namespace` per computation "universe" that defines
+    the computational "environment", by mapping :term:`identifier`\ s to :term:`array expression`\ s
+    (note: :term:`DictOfNamedArrays` instances may not be named, but their constituent
+    parts can, by using :class:`AttributeLookup`).
+    Operations involving array expressions not using the same namespace are prohibited.
 
 -   Names in the :class:`~Namespace` are under user control and unique. I.e.
     new names in the :class:`~Namespace` that are not a
