@@ -24,11 +24,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytato.typing import DottedName
 from pytato.array import (
-        Namespace, Array, DictOfNamedArrays,
-        Placeholder, make_placeholder,
+        Namespace, Array, DictOfNamedArrays, Tag,
+        DottedName, Placeholder, make_placeholder,
         )
 
 __all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays",
-           "Placeholder", "make_placeholder")
+           "Tag", "Placeholder", "make_placeholder")
