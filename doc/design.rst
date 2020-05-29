@@ -17,7 +17,7 @@ TODO
 Computation and Results
 -----------------------
 
--   Results of computations are either implement the :class:`~Array`
+-   Results of computations either implement the :class:`~Array`
     interface or are a :class:`~DictOfNamedArrays`.
     The former are referred to as :term:`array expression`\ s. The union type
     of both is referred to as an :term:`array result`.
@@ -33,7 +33,7 @@ Computation and Results
     data-dependent name references in shapes are allowed. (This implies
     that the number of array axes must be statically known.)
 
-    Consider the the example of fancy indexing::
+    Consider the example of fancy indexing::
 
         A[A > 0]
 
@@ -41,8 +41,8 @@ Computation and Results
     in *A* and cannot be statically determined at code generation time.
 
     In the case of data-dependent shapes, the shape is expressed in terms of
-    scalar (i.e. an :attr:`Array.shape` of `()`) values
-    with an integral :attr:`Array.dtype` (i.e. ``dtype.kind == "i"``)
+    scalar (i.e. having a :attr:`Array.shape` of `()`) values
+    with an integral :attr:`Array.dtype` (i.e. having ``dtype.kind == "i"``)
     referenced by name from the :attr:`Array.namespace`. Such a name
     marks the boundary between eager and lazy evaluation.
 
