@@ -69,8 +69,13 @@ Built-in Expression Nodes
 .. autoclass:: Placeholder
 .. autoclass:: LoopyFunction
 
-User Interface for Making Nodes
--------------------------------
+User-Facing Node Creation
+-------------------------
+
+Node constructors such as :class:`Placeholder.__init__` and
+:class:`DictOfNamedArrays.__init__` offer limited input validation
+(in favor of faster execution). Node creation from outside
+:mod:`pytato` should use the following interfaces:
 
 .. autofunction:: make_dict_of_named_arrays
 .. autofunction:: make_placeholder
