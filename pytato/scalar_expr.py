@@ -25,9 +25,16 @@ THE SOFTWARE.
 """
 
 from pymbolic.mapper import WalkMapper as WalkMapperBase
+import pymbolic.primitives as prim
+
+from numbers import Number
+from typing import Union
 
 
-def parse(s):
+ScalarExpression = Union[Number, prim.Expression]
+
+
+def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
     return Parser()(s)
 

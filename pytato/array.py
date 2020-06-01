@@ -88,6 +88,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 import numpy as np
 import pymbolic.primitives as prim
 import pytato.scalar_expr as scalar_expr
+from pytato.scalar_expr import ScalarExpression
 
 from dataclasses import dataclass
 from pytools import is_single_valued
@@ -247,16 +248,15 @@ TagsType = FrozenSet[Tag]
 
 # {{{ shape
 
-ShapeComponentType = Union[int, prim.Expression]
-ShapeType = Tuple[ShapeComponentType, ...]
+ShapeType = Tuple[ScalarExpression, ...]
 ConvertibleToShapeComponent = Union[int, prim.Expression, str]
 ConvertibleToShape = Union[
         str,
-        prim.Expression,
+        ScalarExpression,
         Tuple[ConvertibleToShapeComponent, ...]]
 
 
-def _check_identifier(s, ns: Optional[Namespace] = None):
+def _check_identifier(s: str, ns: Optional[Namespace] = None) -> bool:
     if not str.isidentifier(s):
         raise ValueError(f"'{s}' is not a valid identifier")
 
@@ -270,8 +270,9 @@ def _check_identifier(s, ns: Optional[Namespace] = None):
 class _ShapeChecker(scalar_expr.WalkMapper):
     def __init__(self, ns: Optional[Namespace] = None):
         super().__init__()
+        self.ns = ns
 
-    def map_variable(self, expr):
+    def map_variable(self, expr: prim.Variable) -> None:
         _check_identifier(expr.name, self.ns)
         super().map_variable(expr)
 
@@ -286,7 +287,8 @@ def normalize_shape(
     """
     from pytato.scalar_expr import parse
 
-    def nnormalize_shape_component(s):
+    def normalize_shape_component(
+            s: ConvertibleToShapeComponent) -> ScalarExpression:
         if isinstance(s, str):
             s = parse(s)
 
@@ -303,10 +305,11 @@ def normalize_shape(
     if isinstance(shape, str):
         shape = parse(shape)
 
-    if isinstance(shape, (int, prim.Expression)):
+    from numbers import Number
+    if isinstance(shape, (Number, prim.Expression)):
         shape = (shape,)
 
-    return tuple(nnormalize_shape_component(s) for s in shape)
+    return tuple(normalize_shape_component(s) for s in shape)
 
 # }}}
 
