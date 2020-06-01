@@ -77,6 +77,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 (in favor of faster execution). Node creation from outside
 :mod:`pytato` should use the following interfaces:
 
+.. class:: ConvertibleToShape
+
 .. autofunction:: make_dict_of_named_arrays
 .. autofunction:: make_placeholder
 """
@@ -85,6 +87,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 
 import numpy as np
 import pymbolic.primitives as prim
+import pytato.scalar_expr as scalar_expr
 
 from dataclasses import dataclass
 from pytools import is_single_valued
@@ -237,33 +240,66 @@ TagsType = Dict[DottedName, Tag]
 
 # {{{ shape
 
-ShapeComponentType = Union[int, prim.Expression, str]
+ShapeComponentType = Union[int, prim.Expression]
 ShapeType = Tuple[ShapeComponentType, ...]
+ConvertibleToShapeComponent = Union[int, prim.Expression, str]
+ConvertibleToShape = Union[
+        str,
+        prim.Expression,
+        Tuple[ConvertibleToShapeComponent, ...]]
 
 
-def check_shape(shape: ShapeType,
-                ns: Optional[Namespace] = None) -> bool:
-    """Checks for a shape tuple.
+def _check_identifier(s, ns: Optional[Namespace] = None):
+    if not str.isidentifier(s):
+        raise ValueError(f"'{s}' is not a valid identifier")
 
-    :param shape: the shape tuple
+    if ns is not None:
+        if s not in ns:
+            raise ValueError(f"'{s}' is not known in the namespace")
 
+    return True
+
+
+class _ShapeChecker(scalar_expr.WalkMapper):
+    def __init__(self, ns: Optional[Namespace] = None):
+        super().__init__()
+
+    def map_variable(self, expr):
+        _check_identifier(expr.name, self.ns)
+        super().map_variable(expr)
+
+
+def normalize_shape(
+        shape: ConvertibleToShape,
+        ns: Optional[Namespace] = None
+        ) -> ShapeType:
+    """
     :param ns: if a namespace is given, extra checks are performed to
                ensure that expressions are well-defined.
     """
-    for s in shape:
+    from pytato.scalar_expr import parse
+
+    def nnormalize_shape_component(s):
+        if isinstance(s, str):
+            s = parse(s)
+
         if isinstance(s, int):
- 	    if s < 0:
- 	        raise ValueError(f"size parameter must be nonnegative (got {s})")
+            if s < 0:
+                raise ValueError(f"size parameter must be nonnegative (got '{s}')")
 
-        elif isinstance(s, str):
-            if not str.isidentifier(s):
-                raise ValueError(f"{s} is not a valid identifier")
+        elif isinstance(s, prim.Expression):
+            # TODO: check expression affine-ness
+            _ShapeChecker()(s)
 
-        elif isinstance(s, prim.Expression) and ns is not None:
-            # TODO: check expression in namespace
-            raise NotImplementedError
+        return s
 
-    return True
+    if isinstance(shape, str):
+        shape = parse(shape)
+
+    if isinstance(shape, (int, prim.Expression)):
+        shape = (shape,)
+
+    return tuple(nnormalize_shape_component(s) for s in shape)
 
 # }}}
 
@@ -689,23 +725,22 @@ def make_dict_of_named_arrays(
 
 def make_placeholder(namespace: Namespace,
                      name: str,
-                     shape: ShapeType,
+                     shape: ConvertibleToShape,
                      tags: Optional[TagsType] = None
                      ) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
-    :param namespace:  namespace of the placeholder array
-    :param name:       name of the placeholder array
-    :param shape:      shape of the placeholder array
-    :param tags:       implementation tags
+    :param namespace: namespace of the placeholder array
+    :param shape: shape of the placeholder array
+    :param tags: implementation tags
     """
     if not str.isidentifier(name):
         raise ValueError(f"{name} is not a Python identifier")
 
-    check_shape(shape, namespace)
+    shape = normalize_shape(shape, namespace)
 
     return Placeholder(namespace, name, shape, tags)
 
-# }}} End end-user-facing
+# }}}
 
 # vim: foldmethod=marker
