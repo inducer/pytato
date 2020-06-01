@@ -113,6 +113,13 @@ class DottedName:
     """
 
     def __init__(self, name_parts: Tuple[str, ...]):
+        if len(name_parts) == 0:
+            raise ValueError("empty name parts")
+
+        for p in name_parts:
+            if not str.isidentifier(p):
+                raise ValueError(f"{p} is not a Python identifier")
+
         self.name_parts = name_parts
 
     @classmethod
@@ -694,21 +701,6 @@ class LoopyFunction(DictOfNamedArrays):
 
 
 # {{{ end-user-facing
-
-def make_dotted_name(name_parts: Tuple[str, ...]) -> DottedName:
-    """Make a :class:`DottedName` for tagging purposes.
-
-    :param name_parts: each name part must be a valid Python identifier
-    """
-    if len(name_parts) == 0:
-        raise ValueError("empty name parts")
-
-    for p in name_parts:
-        if not str.isidentifier(p):
-            raise ValueError(f"{p} is not a Python identifier")
-
-    return DottedName(name_parts)
-
 
 def make_dict_of_named_arrays(
         data: Dict[str, Array]) -> DictOfNamedArrays:
