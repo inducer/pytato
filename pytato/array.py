@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -66,15 +68,31 @@ Built-in Expression Nodes
 .. autoclass:: DataWrapper
 .. autoclass:: Placeholder
 .. autoclass:: LoopyFunction
+
+User-Facing Node Creation
+-------------------------
+
+Node constructors such as :class:`Placeholder.__init__` and
+:class:`DictOfNamedArrays.__init__` offer limited input validation
+(in favor of faster execution). Node creation from outside
+:mod:`pytato` should use the following interfaces:
+
+.. class:: ConvertibleToShape
+
+.. autofunction:: make_dict_of_named_arrays
+.. autofunction:: make_placeholder
 """
 
 # }}}
 
-
-import collections.abc
-from dataclasses import dataclass
-from pytools import single_valued, is_single_valued
+import numpy as np
 import pymbolic.primitives as prim
+import pytato.scalar_expr as scalar_expr
+from pytato.scalar_expr import ScalarExpression
+
+from dataclasses import dataclass
+from pytools import is_single_valued
+from typing import Optional, Dict, Any, Mapping, Iterator, Tuple, Union, FrozenSet
 
 
 # {{{ dotted name
@@ -94,15 +112,25 @@ class DottedName:
 
     .. automethod:: from_class
     """
-    def __init__(self, name_parts):
+
+    def __init__(self, name_parts: Tuple[str, ...]):
+        if len(name_parts) == 0:
+            raise ValueError("empty name parts")
+
+        for p in name_parts:
+            if not str.isidentifier(p):
+                raise ValueError(f"{p} is not a Python identifier")
+
         self.name_parts = name_parts
 
     @classmethod
-    def from_class(cls, argcls):
-        name_parts = tuple(argcls.__module__.split(".") + [argcls.__name__])
+    def from_class(cls, argcls: Any) -> DottedName:
+        name_parts = tuple(
+                [str(part) for part in argcls.__module__.split(".")]
+                + [str(argcls.__name__)])
         if not all(not npart.startswith("__") for npart in name_parts):
             raise ValueError(f"some name parts of {'.'.join(name_parts)} "
-                    "start with double underscores")
+                             "start with double underscores")
         return cls(name_parts)
 
 # }}}
@@ -125,20 +153,29 @@ class Namespace:
     .. automethod:: ref
     """
 
-    def __init__(self):
-        self._symbol_table = {}
+    def __init__(self) -> None:
+        self._symbol_table: Dict[str, Optional[Array]] = {}
 
-    def __contains__(self, name):
+    def __contains__(self, name: str) -> bool:
         return name in self._symbol_table
 
-    def __getitem__(self, name):
-        return self._symbol_table[name]
+    def __getitem__(self, name: str) -> Array:
+        item = self._symbol_table[name]
+        if item is None:
+            raise ValueError("cannot access a reserved name")
+        return item
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self._symbol_table)
 
-    def assign(self, name, value):
-        """
+    def assign(self, name: str,
+               value: Optional[Array]) -> str:
+        """Declare a new array.
+
+        :param name: a Python identifier
+        :param value: the array object, or None if the assignment is to
+                      just reserve a name
+
         :returns: *name*
         """
         if name in self._symbol_table:
@@ -147,12 +184,12 @@ class Namespace:
 
         return name
 
-    def ref(self, name):
+    def ref(self, name: str) -> Array:
         """
         :returns: An :term:`array expression` referring to *name*.
         """
 
-        value = self._symbol_table[name]
+        value = self[name]
 
         var_ref = prim.Variable(name)
         if value.shape:
@@ -193,7 +230,7 @@ class Tag:
     """
 
     @property
-    def tag_name(self):
+    def tag_name(self) -> DottedName:
         return DottedName.from_class(type(self))
 
 
@@ -202,6 +239,77 @@ class UniqueTag(Tag):
     Only one instance of this type of tag may be assigned
     to a single tagged object.
     """
+
+
+TagsType = FrozenSet[Tag]
+
+# }}}
+
+
+# {{{ shape
+
+ShapeType = Tuple[ScalarExpression, ...]
+ConvertibleToShapeComponent = Union[int, prim.Expression, str]
+ConvertibleToShape = Union[
+        str,
+        ScalarExpression,
+        Tuple[ConvertibleToShapeComponent, ...]]
+
+
+def _check_identifier(s: str, ns: Optional[Namespace] = None) -> bool:
+    if not str.isidentifier(s):
+        raise ValueError(f"'{s}' is not a valid identifier")
+
+    if ns is not None:
+        if s not in ns:
+            raise ValueError(f"'{s}' is not known in the namespace")
+
+    return True
+
+
+class _ShapeChecker(scalar_expr.WalkMapper):
+    def __init__(self, ns: Optional[Namespace] = None):
+        super().__init__()
+        self.ns = ns
+
+    def map_variable(self, expr: prim.Variable) -> None:
+        _check_identifier(expr.name, self.ns)
+        super().map_variable(expr)
+
+
+def normalize_shape(
+        shape: ConvertibleToShape,
+        ns: Optional[Namespace] = None
+        ) -> ShapeType:
+    """
+    :param ns: if a namespace is given, extra checks are performed to
+               ensure that expressions are well-defined.
+    """
+    from pytato.scalar_expr import parse
+
+    def normalize_shape_component(
+            s: ConvertibleToShapeComponent) -> ScalarExpression:
+        if isinstance(s, str):
+            s = parse(s)
+
+        if isinstance(s, int):
+            if s < 0:
+                raise ValueError(f"size parameter must be nonnegative (got '{s}')")
+
+        elif isinstance(s, prim.Expression):
+            # TODO: check expression affine-ness
+            _ShapeChecker()(s)
+
+        return s
+
+    if isinstance(shape, str):
+        shape = parse(shape)
+
+    from numbers import Number
+    if isinstance(shape, (Number, prim.Expression)):
+        shape = (shape,)
+
+    return tuple(normalize_shape_component(s) for s in shape)
 
 # }}}
 
@@ -251,8 +359,7 @@ class Array:
 
     .. attribute:: tags
 
-        A :class:`dict` mapping :class:`DottedName` instances
-        to instances of the :class:`Tag` interface.
+        A :class:`tuple` of :class:`Tag` instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -269,38 +376,47 @@ class Array:
 
     """
 
-    def __init__(self, namespace, tags=None):
+    def __init__(self, namespace: Namespace,
+                 tags: Optional[TagsType] = None):
         if tags is None:
-            tags = {}
+            tags = frozenset()
 
         self.namespace = namespace
         self.tags = tags
+        self.dtype: np.dtype = np.float64  # FIXME
 
-    def copy(self, **kwargs):
+    def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
 
     @property
-    def shape(self):
+    def shape(self) -> ShapeType:
         raise NotImplementedError
 
-    def named(self, name):
+    def named(self, name: str) -> Array:
         return self.namespace.ref(self.namespace.assign(name, self))
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return len(self.shape)
 
-    def tagged(self, tag: Tag):
+    def tagged(self, tag: Tag) -> Array:
         """
         Returns a copy of *self* tagged with *tag*.
         If *tag* is a :class:`UniqueTag` and other
         tags of this type are already present, an error
         is raised.
         """
-        pass
+        return self.copy(tags=self.tags | frozenset([tag]))
 
-    def without_tag(self, dotted_name):
-        pass
+    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
+        new_tags = tuple(
+                t for t in self.tags
+                if t != tag)
+
+        if verify_existence and len(new_tags) == len(self.tags):
+            raise ValueError(f"tag '{tag}' was not present")
+
+        return self.copy(tags=new_tags)
 
     # TODO:
     # - codegen interface
@@ -356,7 +472,7 @@ class CountNamed(UniqueTag):
 
 # {{{ dict of named arrays
 
-class DictOfNamedArrays(collections.abc.Mapping):
+class DictOfNamedArrays(Mapping[str, Array]):
     """A container that maps valid Python identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
@@ -372,29 +488,23 @@ class DictOfNamedArrays(collections.abc.Mapping):
         arithmetic.
     """
 
-    def __init__(self, data):
+    def __init__(self, data: Dict[str, Array]):
         self._data = data
-        # TODO: Check that keys are valid Python identifiers
-
-        if not is_single_valued(ary.target for ary in data.values()):
-            raise ValueError("arrays do not have same target")
-        if not is_single_valued(ary.namespace for ary in data.values()):
-            raise ValueError("arrays do not have same namespace")
 
     @property
-    def namespace(self):
-        return single_valued(ary.namespace for ary in self._data.values())
+    def namespace(self) -> Namespace:
+        return next(iter(self._data.values())).namespace
 
-    def __contains__(self, name):
+    def __contains__(self, name: object) -> bool:
         return name in self._data
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> Array:
         return self._data[name]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._data)
 
 # }}}
@@ -430,8 +540,12 @@ class IndexLambda(Array):
 
     # TODO: write make_index_lambda() that does dtype inference
 
-    def __init__(self, namespace, expr, shape, dtype, bindings=None,
-            tags=None):
+    def __init__(
+            self, namespace: Namespace, expr: prim.Expression,
+            shape: ShapeType, dtype: np.dtype,
+            bindings: Optional[Dict[str, Array]] = None,
+            tags: Optional[TagsType] = None):
+
         if bindings is None:
             bindings = {}
 
@@ -443,14 +557,14 @@ class IndexLambda(Array):
         self.bindings = bindings
 
     @property
-    def shape(self):
+    def shape(self) -> ShapeType:
         return self._shape
 
     @property
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self._dtype
 
-    def is_reference(self):
+    def is_reference(self) -> bool:
         # FIXME: Do we want a specific 'reference' node to make all this
         # checking unnecessary?
 
@@ -521,18 +635,20 @@ class DataWrapper(Array):
         this array may not be updated in-place.
     """
 
-    def __init__(self, namespace, data, tags=None):
+    # TODO: not really Any data
+    def __init__(self, namespace: Namespace, data: Any,
+                 tags: Optional[TagsType] = None):
         super().__init__(namespace, tags)
 
         self.data = data
 
     @property
-    def shape(self):
-        self.data.shape
+    def shape(self) -> Any:  # FIXME
+        return self.data.shape
 
     @property
-    def dtype(self):
-        self.data.dtype
+    def dtype(self) -> np.dtype:
+        return self.data.dtype
 
 # }}}
 
@@ -557,9 +673,9 @@ class Placeholder(Array):
         refer to the tagged or the untagged version?)
     """
 
-    def __init__(self, namespace, name, shape, tags=None):
-        if name is None:
-            raise ValueError("Placeholder instances must have a name")
+    def __init__(self, namespace: Namespace,
+                 name: str, shape: ShapeType,
+                 tags: Optional[TagsType] = None):
 
         # Reserve the name, prevent others from using it.
         namespace.assign(name, None)
@@ -570,7 +686,7 @@ class Placeholder(Array):
         self._shape = shape
 
     @property
-    def shape(self):
+    def shape(self) -> ShapeType:
         # Matt added this to make Pylint happy.
         # Not tied to this, open for discussion about how to implement this.
         return self._shape
@@ -588,6 +704,42 @@ class LoopyFunction(DictOfNamedArrays):
         and one that's obtained by importing a dotted
         name.
     """
+
+# }}}
+
+
+# {{{ end-user-facing
+
+def make_dict_of_named_arrays(
+        data: Dict[str, Array]) -> DictOfNamedArrays:
+    """Make a :class:`DictOfNamedArrays` object and ensure that all arrays
+    share the same namespace.
+
+    :param data: member keys and arrays
+    """
+    if not is_single_valued(ary.namespace for ary in data.values()):
+        raise ValueError("arrays do not have same namespace")
+
+    return DictOfNamedArrays(data)
+
+
+def make_placeholder(namespace: Namespace,
+                     name: str,
+                     shape: ConvertibleToShape,
+                     tags: Optional[TagsType] = None
+                     ) -> Placeholder:
+    """Make a :class:`Placeholder` object.
+
+    :param namespace: namespace of the placeholder array
+    :param shape: shape of the placeholder array
+    :param tags: implementation tags
+    """
+    if not str.isidentifier(name):
+        raise ValueError(f"{name} is not a Python identifier")
+
+    shape = normalize_shape(shape, namespace)
+
+    return Placeholder(namespace, name, shape, tags)
 
 # }}}
 

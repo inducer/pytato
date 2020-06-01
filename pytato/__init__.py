@@ -25,8 +25,9 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        DottedName, Namespace, Array, DictOfNamedArrays, Tag
+        Namespace, Array, DictOfNamedArrays, Tag,
+        DottedName, Placeholder, make_placeholder,
         )
 
 __all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays",
-        "Tag")
+           "Tag", "Placeholder", "make_placeholder")

@@ -1,7 +1,7 @@
+from __future__ import annotations
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
-Copyright (C) 2020 Matt Wala
-Copyright (C) 2020 Xiaoyu Wei
 """
 
 __license__ = """
@@ -23,36 +23,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-# definition of an Infix operator class
-# this recipe also works in jython
-# calling sequence for the infix is either:
-#  x |op| y
-# or:
-# x <<op>> y
+
+from pymbolic.mapper import WalkMapper as WalkMapperBase
+import pymbolic.primitives as prim
+
+from numbers import Number
+from typing import Union
 
 
-class Infix:
-
-    def __init__(self, function):
-        self.function = function
-
-    def __ror__(self, other):
-        return Infix(lambda x, self=self, other=other: self.function(other, x))
-
-    def __or__(self, other):
-        return self.function(other)
-
-    def __rlshift__(self, other):
-        return Infix(lambda x, self=self, other=other: self.function(other, x))
-
-    def __rshift__(self, other):
-        return self.function(other)
-
-    def __call__(self, value1, value2):
-        return self.function(value1, value2)
+ScalarExpression = Union[Number, prim.Expression]
 
 
-# Examples
-eq = Infix(lambda x, y: x == y)  # may be x.eq(y) for arrays
-print(2 |eq| 4)  # noqa
-print(4 |eq| 4)  # noqa
+def parse(s: str) -> ScalarExpression:
+    from pymbolic.parser import Parser
+    return Parser()(s)
+
+
+class WalkMapper(WalkMapperBase):
+    pass
+
+
+# vim: foldmethod=marker

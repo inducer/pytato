@@ -24,6 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Any
+
 
 class Mapper:
     pass
@@ -45,10 +47,10 @@ class ToLoopyMapper:
 
     # {{{
 
-    def _stringify(self):
+    def _stringify(self) -> str:
         pass
 
-    def _generate_code(self):
+    def _generate_code(self) -> Any:
         pass
 
     # }}}

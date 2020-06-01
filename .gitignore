@@ -16,3 +16,5 @@ distribute*tar.gz
 .ipynb_checkpoints
 
 doc/_build
+
+.mypy_cache
