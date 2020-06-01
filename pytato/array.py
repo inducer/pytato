@@ -252,8 +252,8 @@ def check_shape(shape: ShapeType,
     """
     for s in shape:
         if isinstance(s, int):
-            if s <= 0:
-                raise ValueError(f"size parameter must be positive (got {s})")
+ 	    if s < 0:
+ 	        raise ValueError(f"size parameter must be nonnegative (got {s})")
 
         elif isinstance(s, str):
             if not str.isidentifier(s):
