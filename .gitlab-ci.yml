@@ -14,6 +14,7 @@ Python 3 POCL:
     reports:
       junit: test/pytest.xml
 
+
 Pylint:
   script:
   - export PY_EXE=python3
@@ -25,6 +26,7 @@ Pylint:
   except:
   - tags
 
+
 Flake8:
   script:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
@@ -34,6 +36,7 @@ Flake8:
   except:
   - tags
 
+
 Mypy:
   script:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-mypy.sh
@@ -42,6 +45,7 @@ Mypy:
   - python3
   except:
   - tags
+
 
 Documentation:
   script:
