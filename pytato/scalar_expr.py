@@ -57,16 +57,14 @@ Symbolic Infrastructure
 
 ScalarExpression = Union[Number, prim.Expression]
 
-
 def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
     return Parser()(s)
 
-
 # }}}
 
-# {{{ mapper classes
 
+# {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
     pass
@@ -83,11 +81,10 @@ class SubstitutionMapper(SubstitutionMapperBase):
 class DependencyMapper(DependencyMapperBase):
     pass
 
-
 # }}}
 
-# {{{ mapper frontends
 
+# {{{ mapper frontends
 
 def get_dependencies(expression: Any) -> FrozenSet[str]:
     """Return the set of variable names in an expression.
@@ -106,7 +103,6 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     """
     from pymbolic.mapper.substitutor import make_subst_func
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
-
 
 # }}}
 
