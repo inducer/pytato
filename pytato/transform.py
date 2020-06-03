@@ -31,10 +31,10 @@ from pymbolic.mapper import Mapper as MapperBase
 from pytato.array import Array, IndexLambda, Namespace, Output, Placeholder
 
 __doc__ = """
-.. currentmodule:: pytato.array_expr
+.. currentmodule:: pytato.transform
 
-Tools for Array Expressions
----------------------------
+Transforming Computations
+-------------------------
 
 .. autoclass:: CopyMapper
 .. autofunction:: copy_namespace
