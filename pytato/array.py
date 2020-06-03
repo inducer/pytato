@@ -87,8 +87,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 
 import numpy as np
 import pymbolic.primitives as prim
-import pytato.scalar_expr as scalar_expr
-from pytato.scalar_expr import ScalarExpression
+import pytato.symbolic as scalar_expr
+from pytato.symbolic import ScalarExpression
 
 from dataclasses import dataclass
 from pytools import is_single_valued
