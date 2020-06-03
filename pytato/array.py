@@ -87,8 +87,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 
 import numpy as np
 import pymbolic.primitives as prim
-import pytato.symbolic as sym
-from pytato.symbolic import ScalarExpression
+import pytato.scalar_expr as scalar_expr
+from pytato.scalar_expr import ScalarExpression
 
 from dataclasses import dataclass
 from pytools import is_single_valued
@@ -267,7 +267,7 @@ def _check_identifier(s: str, ns: Optional[Namespace] = None) -> bool:
     return True
 
 
-class _ShapeChecker(sym.WalkMapper):
+class _ShapeChecker(scalar_expr.WalkMapper):
     def __init__(self, ns: Optional[Namespace] = None):
         super().__init__()
         self.ns = ns
@@ -288,7 +288,7 @@ def normalize_shape(
     def normalize_shape_component(
             s: ConvertibleToShapeComponent) -> ScalarExpression:
         if isinstance(s, str):
-            s = sym.parse(s)
+            s = scalar_expr.parse(s)
 
         if isinstance(s, int):
             if s < 0:
@@ -301,7 +301,7 @@ def normalize_shape(
         return s
 
     if isinstance(shape, str):
-        shape = sym.parse(shape)
+        shape = scalar_expr.parse(shape)
 
     from numbers import Number
     if isinstance(shape, (Number, prim.Expression)):

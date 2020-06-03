@@ -3,4 +3,4 @@ Reference
 
 .. automodule:: pytato.array
 .. automodule:: pytato.program
-.. automodule:: pytato.symbolic
+.. automodule:: pytato.scalar_expr
