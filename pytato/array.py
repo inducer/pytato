@@ -334,9 +334,9 @@ class Array:
 
     .. attribute:: namespace
 
-       A (mutable) instance of :class:`Namespace` containing the
-       names used in the computation. All arrays in a
-       computation share the same namespace.
+        A (mutable) instance of :class:`Namespace` containing the
+        names used in the computation. All arrays in a
+        computation share the same namespace.
 
     .. attribute:: shape
 
