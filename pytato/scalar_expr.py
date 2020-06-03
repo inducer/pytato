@@ -114,8 +114,8 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
 # }}}
 
 
-def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression,
-        ...]) -> isl.BasicSet:
+def domain_for_shape(dim_names: Tuple[str, ...],
+        shape: Tuple[ScalarExpression, ...]) -> isl.BasicSet:
     """Create a :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape*.
 
@@ -154,6 +154,5 @@ def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression,
     dom, = dom.get_basic_sets()
 
     return dom
-
 
 # vim: foldmethod=marker
