@@ -113,7 +113,7 @@ class BoundProgram:
 
 @dataclass(init=True, repr=False, eq=False)
 class BoundPyOpenCLProgram(BoundProgram):
-    """A wrapper around a :mod:`loopy` kernel for execution with :mod`pyopencl`.
+    """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
 
     .. attribute:: queue
 
