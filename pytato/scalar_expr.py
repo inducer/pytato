@@ -47,7 +47,8 @@ Scalar Expressions
     A :class:`type` for scalar-valued symbolic expressions. Expressions are
     composable and manipulable via :mod:`pymbolic`.
 
-    Concretely, this is an alias for ``Union[Number, pymbolic.primitives.Expression]``.
+    Concretely, this is an alias for
+    ``Union[Number, pymbolic.primitives.Expression]``.
 
 .. autofunction:: parse
 .. autofunction:: get_dependencies
