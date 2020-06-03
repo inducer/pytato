@@ -37,7 +37,7 @@ from pymbolic.mapper.dependency import (DependencyMapper as
 import pymbolic.primitives as prim
 
 __doc__ = """
-.. currentmodule:: pytato.symbolic
+.. currentmodule:: pytato.scalar_expr
 
 Scalar Expressions
 ------------------
