@@ -92,7 +92,10 @@ class GeneratedResult(object):
 
 
 class ArrayResult(GeneratedResult):
-    """An array expression generated as a :mod:`loopy` array."""
+    """An array expression generated as a :mod:`loopy` array.
+
+    See also: :class:`pytato.array.ImplStored`.
+    """
     def __init__(self, name: str, shape: ShapeType, dtype: np.dtype):
         super().__init__(shape, dtype)
         self.name = name
@@ -107,7 +110,10 @@ class ArrayResult(GeneratedResult):
 
 
 class LoopyExpressionResult(GeneratedResult):
-    """An array expression generated as a :mod:`loopy` expression."""
+    """An array expression generated as a :mod:`loopy` expression.
+
+    See also: :class:`pytato.array.ImplInlined`.
+    """
     def __init__(
             self, expr: ScalarExpression, shape: ShapeType, dtype: np.dtype):
         super().__init__(shape, dtype)
