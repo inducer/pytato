@@ -51,7 +51,12 @@ if typing.TYPE_CHECKING:
 
 
 class Target:
-    """An abstract code generation target."""
+    """An abstract code generation target.
+
+    .. automethod:: get_loopy_target
+    .. automethod:: bind_program
+    """
+
     def get_loopy_target(self) -> "lp.TargetBase":
         """Return the corresponding :mod:`loopy` target."""
         raise NotImplementedError
@@ -60,14 +65,20 @@ class Target:
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """Create a :class:`BoundProgram` for this code generation target.
 
-        :arg program: the :mod:`loopy` kernel
-        :arg bound_arguments: a mapping from argument names to outputs
+        :param program: the :mod:`loopy` kernel
+        :param bound_arguments: a mapping from argument names to outputs
         """
         raise NotImplementedError
 
 
 class PyOpenCLTarget(Target):
-    """A :mod:`pyopencl` code generation target."""
+    """A :mod:`pyopencl` code generation target.
+
+    .. attribute:: queue
+
+        The :mod:`pyopencl` command queue, or *None*.
+    """
+
     def __init__(self, queue: Optional["cl.CommandQueue"] = None):
         self.queue = queue
 
@@ -101,6 +112,8 @@ class BoundProgram:
     .. attribute:: bound_arguments
 
         A map from names to pre-bound kernel arguments.
+
+    .. automethod:: __call__
     """
 
     program: "lp.LoopKernel"
@@ -118,6 +131,8 @@ class BoundPyOpenCLProgram(BoundProgram):
     .. attribute:: queue
 
         A :mod:`pyopencl` command queue.
+
+    .. automethod:: __call__
     """
     queue: Optional["cl.CommandQueue"]
 

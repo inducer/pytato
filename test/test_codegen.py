@@ -1,8 +1,6 @@
-__copyright__ = """
-Copyright (C) 2020 Andreas Kloeckner
-Copyright (C) 2020 Matt Wala
-Copyright (C) 2020 Xiaoyu Wei
-"""
+#!/usr/bin/env python
+
+__copyright__ = "Copyright (C) 2020 Andreas Kloeckner"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,18 +22,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytato.array import (
-        Namespace, Array, DictOfNamedArrays, Tag, UniqueTag,
-        DottedName, Placeholder, make_placeholder,
-        )
+import sys
 
-from pytato.codegen import generate_loopy
-from pytato.program import Target, PyOpenCLTarget
+import numpy as np
+import pyopencl as cl
+import pyopencl.array as cl_array  # noqa
+import pyopencl.cltypes as cltypes  # noqa
+import pyopencl.tools as cl_tools  # noqa
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+import pytest  # noqa
 
-__all__ = (
-        "DottedName", "Namespace", "Array", "DictOfNamedArrays",
-        "Tag", "UniqueTag", "Placeholder", "make_placeholder",
+import pytato as pt
 
-        "generate_loopy",
-        "Target", "PyOpenCLTarget",
-)
+
+def test_basic_codegen(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    namespace = pt.Namespace()
+    x = pt.Placeholder(namespace, "x", (5,), np.int)
+    prog = pt.generate_loopy(x * x, target=pt.PyOpenCLTarget(queue))
+    x_in = np.array([1, 2, 3, 4, 5])
+    _, (out,) = prog(x=x_in)
+    assert (out == x_in * x_in).all()
+
+
+if __name__ == "__main__":
+    # make sure that import failures get reported, instead of skipping the
+    # tests.
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
+
+# vim: filetype=pyopencl:fdm=marker
