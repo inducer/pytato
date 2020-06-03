@@ -28,15 +28,13 @@ from numbers import Number
 from typing import Any, Union, Mapping, FrozenSet, Set, Tuple
 
 import islpy as isl
-from pymbolic.mapper import (
-        WalkMapper as WalkMapperBase,
-        IdentityMapper as IdentityMapperBase)
-from pymbolic.mapper.substitutor import (
-        SubstitutionMapper as SubstitutionMapperBase)
-from pymbolic.mapper.dependency import (
-        DependencyMapper as DependencyMapperBase)
+from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
+        IdentityMapperBase)
+from pymbolic.mapper.substitutor import (SubstitutionMapper as
+        SubstitutionMapperBase)
+from pymbolic.mapper.dependency import (DependencyMapper as
+        DependencyMapperBase)
 import pymbolic.primitives as prim
-
 
 __doc__ = """
 .. currentmodule:: pytato.symbolic
@@ -55,7 +53,6 @@ Symbolic Infrastructure
 
 """
 
-
 # {{{ scalar expressions
 
 ScalarExpression = Union[Number, prim.Expression]
@@ -65,10 +62,11 @@ def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
     return Parser()(s)
 
+
 # }}}
 
-
 # {{{ mapper classes
+
 
 class WalkMapper(WalkMapperBase):
     pass
@@ -85,10 +83,11 @@ class SubstitutionMapper(SubstitutionMapperBase):
 class DependencyMapper(DependencyMapperBase):
     pass
 
+
 # }}}
 
-
 # {{{ mapper frontends
+
 
 def get_dependencies(expression: Any) -> FrozenSet[str]:
     """Return the set of variable names in an expression.
@@ -108,10 +107,12 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     from pymbolic.mapper.substitutor import make_subst_func
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
+
 # }}}
 
 
-def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression, ...]) -> isl.BasicSet:
+def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression,
+        ...]) -> isl.BasicSet:
     """Create a :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape*.
 
@@ -124,7 +125,7 @@ def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression, 
         *dim_names*.
     """
     assert len(dim_names) == len(shape)
-    
+
     # Collect parameters.
     param_names_set: Set[str] = set()
     for sdep in map(get_dependencies, shape):
@@ -135,10 +136,9 @@ def domain_for_shape(dim_names: Tuple[str, ...], shape: Tuple[ScalarExpression, 
 
     # Build domain.
     dom = isl.BasicSet.universe(
-            isl.Space.create_from_names(
-                isl.DEFAULT_CONTEXT,
-                set=set_names,
-                params=param_names))
+            isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
+            set=set_names,
+            params=param_names))
 
     # Add constraints.
     from loopy.symbolic import aff_from_expr
