@@ -91,8 +91,8 @@ class CopyMapper(Mapper):
 def copy_namespace(namespace: Namespace, copy_mapper: CopyMapper) -> Namespace:
     """Copy the elements of *namespace* into a new namespace.
 
-    :param namespace: The original namespace
-    :param mapper: A mapper that performs copies into a new namespace
+    :param namespace: The source namespace
+    :param copy_mapper: A mapper that performs copies into a new namespace
     :returns: The new namespace
     """
     for name, val in namespace.items():
