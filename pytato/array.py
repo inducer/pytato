@@ -682,16 +682,14 @@ class Einsum(Array):
     """
     """
 
-
 # }}}
 
-# {{{ reshape
 
+# {{{ reshape
 
 class Reshape(Array):
     """
     """
-
 
 # }}}
 
