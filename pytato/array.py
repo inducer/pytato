@@ -285,10 +285,12 @@ def normalize_shape(
     :param ns: if a namespace is given, extra checks are performed to
                ensure that expressions are well-defined.
     """
+    from pytato.scalar_expr import parse
+
     def normalize_shape_component(
             s: ConvertibleToShapeComponent) -> ScalarExpression:
         if isinstance(s, str):
-            s = scalar_expr.parse(s)
+            s = parse(s)
 
         if isinstance(s, int):
             if s < 0:
@@ -301,7 +303,7 @@ def normalize_shape(
         return s
 
     if isinstance(shape, str):
-        shape = scalar_expr.parse(shape)
+        shape = parse(shape)
 
     from numbers import Number
     if isinstance(shape, (Number, prim.Expression)):
@@ -332,9 +334,9 @@ class Array:
 
     .. attribute:: namespace
 
-       A (mutable) instance of :class:`Namespace` containing the
-       names used in the computation. All arrays in a
-       computation share the same namespace.
+        A (mutable) instance of :class:`Namespace` containing the
+        names used in the computation. All arrays in a
+        computation share the same namespace.
 
     .. attribute:: shape
 
