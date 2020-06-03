@@ -39,12 +39,15 @@ import pymbolic.primitives as prim
 __doc__ = """
 .. currentmodule:: pytato.symbolic
 
-Symbolic Infrastructure
------------------------
+Scalar Expressions
+------------------
 
 .. data:: ScalarExpression
 
-    A type alias for ``Union[Number, pymbolic.primitives.Expression]``.
+    A :class:`type` for scalar-valued symbolic expressions. Expressions are
+    composable and manipulable via :mod:`pymbolic`.
+
+    Concretely, this is an alias for ``Union[Number, pymbolic.primitives.Expression]``.
 
 .. autofunction:: parse
 .. autofunction:: get_dependencies
@@ -56,6 +59,7 @@ Symbolic Infrastructure
 # {{{ scalar expressions
 
 ScalarExpression = Union[Number, prim.Expression]
+
 
 def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
@@ -89,7 +93,8 @@ class DependencyMapper(DependencyMapperBase):
 def get_dependencies(expression: Any) -> FrozenSet[str]:
     """Return the set of variable names in an expression.
 
-    :param expression: A :mod:`pymbolic` expression
+    :param expression: A scalar expression, or an expression derived from such
+        (e.g., a tuple of scalar expressions)
     """
     mapper = DependencyMapper(composite_leaves=False)
     return frozenset(dep.name for dep in mapper(expression))
@@ -98,7 +103,8 @@ def get_dependencies(expression: Any) -> FrozenSet[str]:
 def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     """Perform variable substitution in an expression.
 
-    :param expression: A :mod:`pymbolic` expression
+    :param expression: A scalar expression, or an expression derived from such
+        (e.g., a tuple of scalar expressions)
     :param variable_assigments: A mapping from variable names to substitutions
     """
     from pymbolic.mapper.substitutor import make_subst_func
