@@ -386,8 +386,10 @@ class Array:
     .. attribute:: ndim
 
     """
-
-    def __init__(self, namespace: Namespace, shape: ShapeType, dtype: np.dtype,
+    def __init__(self,
+            namespace: Namespace,
+            shape: ShapeType,
+            dtype: np.dtype,
             tags: Optional[TagsType] = None):
         if tags is None:
             tags = frozenset()
@@ -425,9 +427,7 @@ class Array:
         return self.copy(tags=self.tags | frozenset([tag]))
 
     def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
-        new_tags = tuple(
-                t for t in self.tags
-                if t != tag)
+        new_tags = tuple(t for t in self.tags if t != tag)
 
         if verify_existence and len(new_tags) == len(self.tags):
             raise ValueError(f"tag '{tag}' was not present")
@@ -450,9 +450,10 @@ class Array:
             result = (np.empty(0, dtype=result) + np.empty(0, dtype=arg)).dtype
         return result
 
-    def _binary_op(self, op: Any,
-                   other: Union[Array, Number],
-                   reverse: bool = False) -> Array:
+    def _binary_op(self,
+            op: Any,
+            other: Union[Array, Number],
+            reverse: bool = False) -> Array:
         if isinstance(other, Number):
             # TODO
             raise NotImplementedError
@@ -467,7 +468,8 @@ class Array:
             if self.shape == ():
                 expr = op(prim.Variable("_in0"), prim.Variable("_in1"))
             else:
-                indices = tuple(prim.Variable(f"_{i}") for i in range(self.ndim))
+                indices = tuple(
+                        prim.Variable(f"_{i}") for i in range(self.ndim))
                 expr = op(
                         prim.Variable("_in0")[indices],
                         prim.Variable("_in1")[indices])
@@ -478,12 +480,15 @@ class Array:
 
             bindings = dict(_in0=first, _in1=second)
 
-            return IndexLambda(
-                    self.namespace, expr,
-                    shape=self.shape, dtype=dtype, bindings=bindings)
+            return IndexLambda(self.namespace,
+                    expr,
+                    shape=self.shape,
+                    dtype=dtype,
+                    bindings=bindings)
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
+
 
 # }}}
 
@@ -604,8 +609,7 @@ class IndexLambda(Array):
 
     mapper_method = "map_index_lambda"
 
-    def __init__(
-            self,
+    def __init__(self,
             namespace: Namespace,
             expr: prim.Expression,
             shape: ShapeType,
@@ -654,25 +658,20 @@ class IndexLambda(Array):
 
     @memoize_method
     def __hash__(self) -> int:
-        return hash((
-                    self.expr,
-                    self.shape,
-                    self.dtype,
-                    frozenset(self.bindings.items()),
-                    self.tags))
+        return hash((self.expr, self.shape, self.dtype,
+                frozenset(self.bindings.items()), self.tags))
 
     def __eq__(self, other: object) -> bool:
         if self is other:
             return True
 
-        return (
-                 isinstance(other, IndexLambda)
-                 and self.namespace is other.namespace
-                 and self.expr == other.expr
-                 and self.shape == other.shape
-                 and self.dtype == other.dtype
-                 and self.bindings == other.bindings
-                 and self.tags == other.tags)
+        return (isinstance(other, IndexLambda)
+                and self.namespace is other.namespace
+                and self.expr == other.expr
+                and self.shape == other.shape
+                and self.dtype == other.dtype
+                and self.bindings == other.bindings
+                and self.tags == other.tags)
 
 # }}}
 
@@ -683,14 +682,16 @@ class Einsum(Array):
     """
     """
 
+
 # }}}
 
-
 # {{{ reshape
+
 
 class Reshape(Array):
     """
     """
+
 
 # }}}
 
@@ -716,9 +717,14 @@ class DataWrapper(Array):
     """
 
     # TODO: not really Any data
-    def __init__(self, namespace: Namespace, data: Any,
-                 tags: Optional[TagsType] = None):
-        super().__init__(namespace, shape=data.shape, dtype=data.dtype, tags=tags)
+    def __init__(self,
+            namespace: Namespace,
+            data: Any,
+            tags: Optional[TagsType] = None):
+        super().__init__(namespace,
+                shape=data.shape,
+                dtype=data.dtype,
+                tags=tags)
         self.data = data
 
 # }}}
@@ -727,34 +733,34 @@ class DataWrapper(Array):
 # {{{ placeholder
 
 class _ArgLike(Array):
-
     def __init__(self,
-                 namespace: Namespace,
-                 name: str,
-                 shape: ShapeType,
-                 dtype: np.dtype,
-                 tags: Optional[TagsType] = None):
+            namespace: Namespace,
+            name: str,
+            shape: ShapeType,
+            dtype: np.dtype,
+            tags: Optional[TagsType] = None):
         if name is None:
             raise ValueError("Must have explicit name")
 
         # Reserve the name, prevent others from using it.
         namespace.assign(name, self)
 
-        super().__init__(
-                namespace=namespace, shape=shape, dtype=dtype, tags=tags)
+        super().__init__(namespace=namespace,
+                shape=shape,
+                dtype=dtype,
+                tags=tags)
 
         self.name = name
 
     @memoize_method
     def __hash__(self) -> int:
-        return hash((self.name,))
+        return hash((self.name, ))
 
     def __eq__(self, other: object) -> bool:
         if self is other:
             return True
         # Uniquely identified by name.
-        return (
-                isinstance(other, _ArgLike)
+        return (isinstance(other, _ArgLike)
                 and self.namespace is other.namespace
                 and self.name == other.name)
 
@@ -832,13 +838,13 @@ class LoopyFunction(DictOfNamedArrays):
         name.
     """
 
+
 # }}}
 
 
 # {{{ end-user-facing
 
-def make_dict_of_named_arrays(
-        data: Dict[str, Array]) -> DictOfNamedArrays:
+def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object and ensure that all arrays
     share the same namespace.
 
@@ -851,11 +857,10 @@ def make_dict_of_named_arrays(
 
 
 def make_placeholder(namespace: Namespace,
-                     name: str,
-                     shape: ConvertibleToShape,
-                     dtype: np.dtype,
-                     tags: Optional[TagsType] = None
-                     ) -> Placeholder:
+        name: str,
+        shape: ConvertibleToShape,
+        dtype: np.dtype,
+        tags: Optional[TagsType] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param namespace:  namespace of the placeholder array
