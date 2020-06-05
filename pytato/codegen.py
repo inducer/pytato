@@ -262,7 +262,7 @@ class LoopyExpressionContext(object):
 
         The :class:`CodeGenState`.
 
-    .. attribute:: _depends_on
+    .. attribute:: depends_on
 
         The set of dependencies associated with the expression.
 
