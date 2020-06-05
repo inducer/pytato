@@ -23,11 +23,12 @@ THE SOFTWARE.
 """
 
 import collections
+import contextlib
 import dataclasses
 from typing import Any, Union, Optional, Mapping, Iterator, Dict, Tuple, FrozenSet
 import typing
 
-import contextlib
+import islpy as isl
 import loopy as lp
 import numpy as np
 import pymbolic.primitives as prim
@@ -63,6 +64,8 @@ Code Generation Internals
 
 .. autoclass:: LoopyExpressionContext
 .. autoclass:: LoopyExpressionGenMapper
+
+.. autofunction:: domain_for_shape
 
 """
 
@@ -361,6 +364,52 @@ class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
                 context.namespace[expr.name],
                 context.state)
         return result.to_loopy_expression((), context)
+
+# }}}
+
+
+# {{{ utils
+
+def domain_for_shape(
+        dim_names: Tuple[str, ...], shape: ShapeType) -> isl.BasicSet:
+    """Create a :class:`islpy.BasicSet` that expresses an appropriate index domain
+    for an array of (potentially symbolic) shape *shape*.
+
+    :param dim_names: A tuple of strings, the names of the axes. These become set
+        dimensions in the returned domain.
+
+    :param shape: A tuple of constant or quasi-affine :mod:`pymbolic`
+        expressions. The variables in these expressions become parameter
+        dimensions in the returned set.  Must have the same length as
+        *dim_names*.
+    """
+    assert len(dim_names) == len(shape)
+
+    # Collect parameters.
+    param_names_set: Set[str] = set()
+    for sdep in map(get_dependencies, shape):
+        param_names_set |= sdep
+
+    set_names = sorted(dim_names)
+    param_names = sorted(param_names_set)
+
+    # Build domain.
+    dom = isl.BasicSet.universe(
+            isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
+            set=set_names,
+            params=param_names))
+
+    # Add constraints.
+    from loopy.symbolic import aff_from_expr
+    affs = isl.affs_from_space(dom.space)
+
+    for iname, dim in zip(dim_names, shape):
+        dom &= affs[0].le_set(affs[iname])
+        dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
+
+    dom, = dom.get_basic_sets()
+
+    return dom
 
 # }}}
 
