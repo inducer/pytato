@@ -25,9 +25,8 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Tuple
+from typing import Any, Union, Mapping, FrozenSet
 
-import islpy as isl
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as

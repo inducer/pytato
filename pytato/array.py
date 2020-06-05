@@ -743,7 +743,7 @@ class Placeholder(Array):
     """
     mapper_method = "map_placeholder"
     fields = Array.fields + ("name",)
-    
+
     def __init__(self,
             namespace: Namespace,
             name: str,

@@ -34,7 +34,6 @@ import islpy as isl
 import loopy as lp
 import numpy as np
 import pymbolic.primitives as prim
-import pytools
 
 from pytato.array import (
         Array, DictOfNamedArrays, Placeholder, Namespace, ShapeType,
@@ -382,7 +381,7 @@ def add_output(name: str, expr: Array, state: CodeGenState,
 
     inames = tuple(
             state.var_name_gen(f"{name}_dim{d}")
-                for d in range(expr.ndim))
+            for d in range(expr.ndim))
     domain = domain_for_shape(inames, expr.shape)
 
     arg = lp.GlobalArg(name,
