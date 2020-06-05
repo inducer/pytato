@@ -388,6 +388,9 @@ class Array:
 
     """
     mapper_method: ClassVar[str]
+    # A tuple of field names. Fields must be equality comparable and
+    # hashable. Dicts of hashable keys and values are also permitted.
+    fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
     def __init__(self,
             namespace: Namespace,
@@ -439,10 +442,23 @@ class Array:
 
     @memoize_method
     def __hash__(self) -> int:
-        raise NotImplementedError
+        attrs = []
+        for field in self.fields:
+            attr = getattr(self, field)
+            if isinstance(attr, dict):
+                attr = frozenset(attr.items())
+            attrs.append(attr)
+        return hash(tuple(attrs))
 
     def __eq__(self, other: Any) -> bool:
-        raise NotImplementedError
+        if self is other:
+            return True
+        return (
+                isinstance(other, type(self))
+                and self.namespace is other.namespace
+                and all(
+                    getattr(self, field) == getattr(other, field)
+                    for field in self.fields))
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -603,7 +619,7 @@ class IndexLambda(Array):
 
     .. automethod:: is_reference
     """
-
+    fields = Array.fields + ("expr", "bindings")
     mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -652,23 +668,6 @@ class IndexLambda(Array):
             return False
 
         return True
-
-    @memoize_method
-    def __hash__(self) -> int:
-        return hash((self.expr, self.shape, self.dtype,
-                frozenset(self.bindings.items()), self.tags))
-
-    def __eq__(self, other: object) -> bool:
-        if self is other:
-            return True
-
-        return (isinstance(other, IndexLambda)
-                and self.namespace is other.namespace
-                and self.expr == other.expr
-                and self.shape == other.shape
-                and self.dtype == other.dtype
-                and self.bindings == other.bindings
-                and self.tags == other.tags)
 
 # }}}
 
@@ -743,7 +742,8 @@ class Placeholder(Array):
         creation.
     """
     mapper_method = "map_placeholder"
-
+    fields = Array.fields + ("name",)
+    
     def __init__(self,
             namespace: Namespace,
             name: str,
@@ -762,18 +762,6 @@ class Placeholder(Array):
                 tags=tags)
 
         self.name = name
-
-    @memoize_method
-    def __hash__(self) -> int:
-        return hash((self.name, ))
-
-    def __eq__(self, other: object) -> bool:
-        if self is other:
-            return True
-        # Uniquely identified by name.
-        return (isinstance(other, _ArgLike)
-                and self.namespace is other.namespace
-                and self.name == other.name)
 
     def tagged(self, tag: Tag) -> Array:
         raise ValueError("Cannot modify tags")
