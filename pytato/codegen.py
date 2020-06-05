@@ -240,7 +240,7 @@ class CodeGenMapper(pytato.transform.Mapper):
         inames = tuple(
                 state.var_name_gen(f"{expr.name}_dim{d}")
                 for d in range(expr.ndim))
-        domain = scalar_expr.domain_for_shape(inames, expr.shape)
+        domain = domain_for_shape(inames, expr.shape)
 
         arg = lp.GlobalArg(expr.name,
                 shape=expr.shape,
@@ -387,7 +387,7 @@ def domain_for_shape(
 
     # Collect parameters.
     param_names_set: Set[str] = set()
-    for sdep in map(get_dependencies, shape):
+    for sdep in map(scalar_expr.get_dependencies, shape):
         param_names_set |= sdep
 
     set_names = sorted(dim_names)
