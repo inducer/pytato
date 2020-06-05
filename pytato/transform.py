@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, no_type_check
+from typing import Any, Callable, Dict
 
 from pytato.array import Array, IndexLambda, Namespace, Output, Placeholder
 
@@ -38,6 +38,7 @@ Transforming Computations
 .. autofunction:: copy_namespace
 
 """
+
 
 # {{{ mapper classes
 
