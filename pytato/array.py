@@ -444,12 +444,6 @@ class Array:
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
-    def _join_dtypes(self, *args: np.dtype) -> np.dtype:
-        result = args[0]
-        for arg in args[1:]:
-            result = (np.empty(0, dtype=result) + np.empty(0, dtype=arg)).dtype
-        return result
-
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
@@ -461,7 +455,7 @@ class Array:
             if self.shape != other.shape:
                 raise ValueError("shapes do not match for binary operator")
 
-            dtype = self._join_dtypes(self.dtype, other.dtype)
+            dtype = np.result_type(self.dtype, other.dtype)
 
             # FIXME: If either *self* or *other* is an IndexLambda, its expression
             # could be folded into the output, producing a fused result.
