@@ -90,7 +90,9 @@ from functools import partialmethod
 from numbers import Number
 import operator
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Mapping, Iterator, Tuple, Union, FrozenSet
+from typing import (
+        Optional, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
+        FrozenSet)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -386,6 +388,8 @@ class Array:
     .. attribute:: ndim
 
     """
+    mapper_method: ClassVar[str]
+
     def __init__(self,
             namespace: Namespace,
             shape: ShapeType,

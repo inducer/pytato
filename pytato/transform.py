@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict, no_type_check
 
 from pytato.array import Array, IndexLambda, Namespace, Output, Placeholder
 
@@ -59,7 +59,9 @@ class Mapper:
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
+    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+        method: Callable[..., Array]
+
         try:
             method = getattr(self, expr.mapper_method)
         except AttributeError:
@@ -76,18 +78,19 @@ class Mapper:
 class CopyMapper(Mapper):
     namespace: Namespace
 
-    def __init__(self, namespace):
+    def __init__(self, namespace: Namespace):
         self.namespace = namespace
-        self.cache = {}
+        self.cache: Dict[Array, Array] = {}
 
-    def rec(self, expr: Array) -> Array:
+    def rec(self, expr: Array) -> Array:  # type: ignore[override]
         if expr in self.cache:
             return self.cache[expr]
         result: Array = super().rec(expr)
         self.cache[expr] = result
         return result
 
-    __call__ = rec
+    def __call__(self, expr: Array) -> Array:  # type: ignore[override]
+        return self.rec(expr)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings = {
