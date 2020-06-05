@@ -25,7 +25,9 @@ THE SOFTWARE.
 import collections
 import contextlib
 import dataclasses
-from typing import Any, Union, Optional, Mapping, Iterator, Dict, Tuple, FrozenSet
+from typing import (
+        Any, Union, Optional, Mapping, Iterator, Dict, Tuple, FrozenSet,
+        Set)
 import typing
 
 import islpy as isl
@@ -440,7 +442,7 @@ def generate_loopy(
         namespace = outputs.namespace
     else:
         assert isinstance(result_or_namespace, Namespace)
-        outputs = DictOfNamedArrays()
+        outputs = DictOfNamedArrays({})
         namespace = result_or_namespace
 
     del result_or_namespace
