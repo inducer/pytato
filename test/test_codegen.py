@@ -49,8 +49,6 @@ def test_basic_codegen(ctx_factory):
 
 
 if __name__ == "__main__":
-    # make sure that import failures get reported, instead of skipping the
-    # tests.
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
