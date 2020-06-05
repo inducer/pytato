@@ -24,9 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Dict
-
-from pymbolic.mapper import Mapper as MapperBase
+from typing import Any, Dict
 
 from pytato.array import Array, IndexLambda, Namespace, Output, Placeholder
 
@@ -41,22 +39,46 @@ Transforming Computations
 
 """
 
-
 # {{{ mapper classes
 
-class Mapper(MapperBase):
+class UnsupportedArrayError(ValueError):
     pass
+
+
+class Mapper:
+    def handle_unsupported_array(self, expr: Array, *args: Any,
+            **kwargs: Any) -> Any:
+        """Mapper method that is invoked for
+        :class:`pytato.Array` subclasses for which a mapper
+        method does not exist in this mapper.
+        """
+        raise UnsupportedArrayError("%s cannot handle expressions of type %s"
+                % (type(self).__name__, type(expr)))
+
+    def map_foreign(self, expr: Any, *args: Any, **kwargs: Any) -> Any:
+        raise ValueError("%s encountered invalid foreign object: %s"
+                % (type(self).__name__, repr(expr)))
+
+    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
+        try:
+            method = getattr(self, expr.mapper_method)
+        except AttributeError:
+            if isinstance(expr, Array):
+                return self.handle_unsupported_array(expr, *args, **kwargs)
+            else:
+                return self.map_foreign(expr, *args, **kwargs)
+
+        return method(expr, *args, **kwargs)
+
+    rec = __call__
 
 
 class CopyMapper(Mapper):
     namespace: Namespace
 
-    def __init__(self, new_namespace: Namespace):
-        self.namespace = new_namespace
-        self.cache: Dict[Array, Array] = {}
-
-    def __call__(self, expr: Array) -> Array:
-        return self.rec(expr)
+    def __init__(self, namespace):
+        self.namespace = namespace
+        self.cache = {}
 
     def rec(self, expr: Array) -> Array:
         if expr in self.cache:
@@ -64,6 +86,8 @@ class CopyMapper(Mapper):
         result: Array = super().rec(expr)
         self.cache[expr] = result
         return result
+
+    __call__ = rec
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings = {
