@@ -35,7 +35,7 @@ import pymbolic.primitives as prim
 import pytools
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, Output, Namespace, ShapeType,
+        Array, DictOfNamedArrays, Placeholder, Namespace, ShapeType,
         IndexLambda)
 from pytato.program import BoundProgram, Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -66,6 +66,7 @@ Code Generation Internals
 .. autoclass:: LoopyExpressionGenMapper
 
 .. autofunction:: domain_for_shape
+.. autofunction:: add_output
 
 """
 
@@ -228,51 +229,6 @@ class CodeGenMapper(pytato.transform.Mapper):
         state.results[expr] = result
         return result
 
-    def map_output(self, expr: Output, state: CodeGenState) -> GeneratedResult:
-        if expr in state.results:
-            return state.results[expr]
-
-        # FIXE: Scalar outputs are not supported yet.
-        assert expr.shape != ()
-
-        inner_result = self.rec(expr.array, state)
-
-        inames = tuple(
-                state.var_name_gen(f"{expr.name}_dim{d}")
-                for d in range(expr.ndim))
-        domain = domain_for_shape(inames, expr.shape)
-
-        arg = lp.GlobalArg(expr.name,
-                shape=expr.shape,
-                dtype=expr.dtype,
-                order="C",
-                is_output_only=True)
-
-        indices = tuple(prim.Variable(iname) for iname in inames)
-        context = state.make_expression_context()
-        copy_expr = inner_result.to_loopy_expression(indices, context)
-
-        # TODO: Contextual data not supported yet.
-        assert not context.reduction_bounds
-        assert not context.depends_on
-
-        from loopy.kernel.instruction import make_assignment
-        insn = make_assignment((prim.Variable(expr.name)[indices], ),
-                copy_expr,
-                id=state.insn_id_gen(f"{expr.name}_copy"),
-                within_inames=frozenset(inames),
-                depends_on=context.depends_on)
-
-        kernel = state.kernel
-        kernel = kernel.copy(args=kernel.args + [arg],
-                instructions=kernel.instructions + [insn],
-                domains=kernel.domains + [domain])
-        state.update_kernel(kernel)
-
-        result = ArrayResult(expr.name, expr.dtype, expr.shape)
-        state.results[expr] = result
-        return result
-
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> GeneratedResult:
         if expr in state.results:
@@ -411,19 +367,50 @@ def domain_for_shape(
 
     return dom
 
+
+def add_output(name: str, expr: Array, state: CodeGenState,
+        mapper: CodeGenMapper) -> None:
+    """Add an output argument to the kernel.
+    """
+    # FIXE: Scalar outputs are not supported yet.
+    assert expr.shape != ()
+
+    result = mapper(expr, state)
+    name = state.var_name_gen(name)
+
+    inames = tuple(
+            state.var_name_gen(f"{name}_dim{d}")
+                for d in range(expr.ndim))
+    domain = domain_for_shape(inames, expr.shape)
+
+    arg = lp.GlobalArg(name,
+            shape=expr.shape,
+            dtype=expr.dtype,
+            order="C",
+            is_output_only=True)
+
+    indices = tuple(prim.Variable(iname) for iname in inames)
+    context = state.make_expression_context()
+    copy_expr = result.to_loopy_expression(indices, context)
+
+    # TODO: Contextual data not supported yet.
+    assert not context.reduction_bounds
+    assert not context.depends_on
+
+    from loopy.kernel.instruction import make_assignment
+    insn = make_assignment((prim.Variable(name)[indices],),
+            copy_expr,
+            id=state.insn_id_gen(f"{name}_copy"),
+            within_inames=frozenset(inames),
+            depends_on=context.depends_on)
+
+    kernel = state.kernel
+    kernel = kernel.copy(args=kernel.args + [arg],
+            instructions=kernel.instructions + [insn],
+            domains=kernel.domains + [domain])
+    state.update_kernel(kernel)
+
 # }}}
-
-
-def _promote_named_arrays_to_outputs(arrays: DictOfNamedArrays) -> Namespace:
-    # Turns named arrays into Output nodes, returning a new namespace.
-    copy_mapper = pytato.transform.CopyMapper(Namespace())
-    result = pytato.transform.copy_namespace(arrays.namespace, copy_mapper)
-
-    name_gen = pytools.UniqueNameGenerator(set(result))
-    for name, val in arrays.items():
-        Output(result, name_gen(name), copy_mapper(val))
-
-    return result
 
 
 def generate_loopy(
@@ -440,17 +427,22 @@ def generate_loopy(
 
     :returns: A wrapped generated :mod:`loopy` kernel
     """
-    # {{{ get namespace
+    # {{{ get namespace and outputs
+
+    outputs: DictOfNamedArrays
+    namespace: Namespace
 
     if isinstance(result_or_namespace, Array):
-        result_or_namespace = DictOfNamedArrays({"out": result_or_namespace})
+        outputs = DictOfNamedArrays({"out": result_or_namespace})
+        namespace = outputs.namespace
+    elif isinstance(result_or_namespace, DictOfNamedArrays):
+        outputs = result_or_namespace
+        namespace = outputs.namespace
+    else:
+        assert isinstance(result_or_namespace, Namespace)
+        outputs = DictOfNamedArrays()
+        namespace = result_or_namespace
 
-    if isinstance(result_or_namespace, DictOfNamedArrays):
-        result_or_namespace = _promote_named_arrays_to_outputs(
-                result_or_namespace)
-
-    assert isinstance(result_or_namespace, Namespace)
-    namespace = result_or_namespace
     del result_or_namespace
 
     # }}}
@@ -471,5 +463,9 @@ def generate_loopy(
     mapper = CodeGenMapper()
     for name, val in namespace.items():
         _ = mapper(val, state)
+
+    # Generate code for outputs.
+    for name, expr in outputs.items():
+        add_output(name, expr, state, mapper)
 
     return target.bind_program(program=state.kernel, bound_arguments=dict())

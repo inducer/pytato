@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from typing import Any, Callable, Dict
 
-from pytato.array import Array, IndexLambda, Namespace, Output, Placeholder
+from pytato.array import Array, IndexLambda, Namespace, Placeholder
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -105,10 +105,6 @@ class CopyMapper(Mapper):
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         return Placeholder(self.namespace, expr.name, expr.shape, expr.dtype,
-                expr.tags)
-
-    def map_output(self, expr: Output) -> Array:
-        return Output(self.namespace, expr.name, self.rec(expr.array),
                 expr.tags)
 
 # }}}

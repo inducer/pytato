@@ -67,7 +67,6 @@ Built-in Expression Nodes
 .. autoclass:: Reshape
 .. autoclass:: DataWrapper
 .. autoclass:: Placeholder
-.. autoclass:: Output
 .. autoclass:: LoopyFunction
 
 User-Facing Node Creation
@@ -728,7 +727,23 @@ class DataWrapper(Array):
 
 # {{{ placeholder
 
-class _ArgLike(Array):
+class Placeholder(Array):
+    """
+    A named placeholder for an array whose concrete value
+    is supplied by the user during evaluation.
+
+    .. attribute:: name
+
+        The name by which a value is supplied
+        for the placeholder once computation begins.
+
+    .. note::
+
+        Modifying :class:`Placeholder` tags is not supported after
+        creation.
+    """
+    mapper_method = "map_placeholder"
+
     def __init__(self,
             namespace: Namespace,
             name: str,
@@ -765,60 +780,6 @@ class _ArgLike(Array):
 
     def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
         raise ValueError("Cannot modify tags")
-
-
-class Placeholder(_ArgLike):
-    """
-    A named placeholder for an array whose concrete value
-    is supplied by the user during evaluation.
-
-    .. attribute:: name
-
-        The name by which a value is supplied
-        for the placeholder once computation begins.
-
-    .. note::
-
-        Modifying :class:`Placeholder` tags is not supported after
-        creation.
-    """
-
-    mapper_method = "map_placeholder"
-
-# }}}
-
-
-# {{{ output
-
-class Output(_ArgLike):
-    """A named output of the computation.
-
-    .. attribute:: name
-
-        The name of the output array.
-
-    .. attribute:: array
-
-        The :class:`Array` value that is output.
-
-    .. note::
-
-        Modifying :class:`Output` tags is not supported after creation.
-    """
-
-    mapper_method = "map_output"
-
-    def __init__(self,
-                 namespace: Namespace,
-                 name: str,
-                 array: Array,
-                 tags: Optional[TagsType] = None):
-        super().__init__(namespace=namespace,
-                         name=name,
-                         shape=array.shape,
-                         dtype=array.dtype,
-                         tags=tags)
-        self.array = array
 
 # }}}
 
