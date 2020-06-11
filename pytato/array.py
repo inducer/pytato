@@ -735,6 +735,8 @@ class Placeholder(Array):
 
         The name by which a value is supplied
         for the placeholder once computation begins.
+        The name is also implicitly :meth:`~Namespace.assign`\ ed
+        in the :class:`Namespace`.
 
     .. note::
 
