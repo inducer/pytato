@@ -442,6 +442,7 @@ class Array:
 
     @memoize_method
     def __hash__(self) -> int:
+        # TODO Cache computed hash value
         attrs = []
         for field in self.fields:
             attr = getattr(self, field)
