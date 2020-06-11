@@ -755,7 +755,7 @@ class Placeholder(Array):
         if name is None:
             raise ValueError("Must have explicit name")
 
-        # Reserve the name, prevent others from using it.
+        # Publish our name to the namespace
         namespace.assign(name, self)
 
         super().__init__(namespace=namespace,
