@@ -91,7 +91,7 @@ import operator
 from dataclasses import dataclass
 from typing import (
         Optional, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        FrozenSet)
+        FrozenSet, Protocol)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -394,27 +394,23 @@ class Array:
 
     def __init__(self,
             namespace: Namespace,
-            shape: ShapeType,
-            dtype: np.dtype,
             tags: Optional[TagsType] = None):
         if tags is None:
             tags = frozenset()
 
         self.namespace = namespace
         self.tags = tags
-        self._shape = shape
-        self._dtype = dtype
 
     def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
 
     @property
     def shape(self) -> ShapeType:
-        return self._shape
+        raise NotImplementedError
 
     @property
     def dtype(self) -> np.dtype:
-        return self._dtype
+        raise NotImplementedError
 
     def named(self, name: str) -> Array:
         return self.namespace.ref(self.namespace.assign(name, self))
@@ -503,6 +499,29 @@ class Array:
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
 
+
+class _SuppliedShapeAndDtypeMixin(object):
+    """A mixin class for when an array must store its own *shape* and *dtype*,
+    rather than when it can derive them easily from inputs.
+    """
+
+    def __init__(self,
+            namespace: Namespace,
+            shape: ShapeType,
+            dtype: np.dtype,
+            **kwargs: Any):
+        # https://github.com/python/mypy/issues/5887
+        super().__init__(namespace, **kwargs)  # type: ignore
+        self._shape = shape
+        self._dtype = dtype
+
+    @property
+    def shape(self) -> ShapeType:
+        return self._shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self._dtype
 
 # }}}
 
@@ -595,7 +614,7 @@ class DictOfNamedArrays(Mapping[str, Array]):
 
 # {{{ index lambda
 
-class IndexLambda(Array):
+class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     """
     .. attribute:: expr
 
@@ -693,6 +712,11 @@ class Reshape(Array):
 
 # {{{ data wrapper
 
+class DataInterface(Protocol):
+    shape: ShapeType
+    dtype: np.dtype
+
+
 class DataWrapper(Array):
     # TODO: Name?
     """
@@ -711,23 +735,27 @@ class DataWrapper(Array):
         this array may not be updated in-place.
     """
 
-    # TODO: not really Any data
     def __init__(self,
             namespace: Namespace,
-            data: Any,
+            data: DataInterface,
             tags: Optional[TagsType] = None):
-        super().__init__(namespace,
-                shape=data.shape,
-                dtype=data.dtype,
-                tags=tags)
+        super().__init__(namespace, tags=tags)
         self.data = data
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.data.shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.data.dtype
 
 # }}}
 
 
 # {{{ placeholder
 
-class Placeholder(Array):
+class Placeholder(_SuppliedShapeAndDtypeMixin, Array):
     r"""
     A named placeholder for an array whose concrete value
     is supplied by the user during evaluation.
