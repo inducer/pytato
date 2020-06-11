@@ -728,7 +728,7 @@ class DataWrapper(Array):
 # {{{ placeholder
 
 class Placeholder(Array):
-    """
+    r"""
     A named placeholder for an array whose concrete value
     is supplied by the user during evaluation.
 
