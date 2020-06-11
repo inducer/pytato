@@ -472,7 +472,7 @@ class Array:
             raise NotImplementedError
         else:
             if self.shape != other.shape:
-                raise ValueError("shapes do not match for binary operator")
+                raise NotImplementedError("broadcasting")
 
             dtype = np.result_type(self.dtype, other.dtype)
 
