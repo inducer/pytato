@@ -24,9 +24,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
-from pytato.array import Array, IndexLambda, Namespace, Placeholder
+from pytato.array import Array
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -34,8 +34,7 @@ __doc__ = """
 Transforming Computations
 -------------------------
 
-.. autoclass:: CopyMapper
-.. autofunction:: copy_namespace
+.. autoclass:: Mapper
 
 """
 
@@ -75,56 +74,7 @@ class Mapper:
 
     rec = __call__
 
-
-class CopyMapper(Mapper):
-    namespace: Namespace
-
-    def __init__(self, namespace: Namespace):
-        self.namespace = namespace
-        self.cache: Dict[Array, Array] = {}
-
-    def rec(self, expr: Array) -> Array:  # type: ignore[override]
-        if expr in self.cache:
-            return self.cache[expr]
-        result: Array = super().rec(expr)
-        self.cache[expr] = result
-        return result
-
-    def __call__(self, expr: Array) -> Array:  # type: ignore[override]
-        return self.rec(expr)
-
-    def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings = {
-                name: self.rec(subexpr)
-                for name, subexpr in expr.bindings.items()}
-        return IndexLambda(self.namespace,
-                expr=expr.expr,
-                shape=expr.shape,
-                dtype=expr.dtype,
-                bindings=bindings)
-
-    def map_placeholder(self, expr: Placeholder) -> Array:
-        return Placeholder(self.namespace, expr.name, expr.shape, expr.dtype,
-                expr.tags)
-
 # }}}
 
-
-# {{{ mapper frontends
-
-def copy_namespace(namespace: Namespace, copy_mapper: CopyMapper) -> Namespace:
-    """Copy the elements of *namespace* into a new namespace.
-
-    :param namespace: The source namespace
-    :param copy_mapper: A mapper that performs copies into a new namespace
-    :returns: The new namespace
-    """
-    for name, val in namespace.items():
-        mapped_val = copy_mapper(val)
-        if name not in copy_mapper.namespace:
-            copy_mapper.namespace.assign(name, mapped_val)
-    return copy_mapper.namespace
-
-# }}}
 
 # vim: foldmethod=marker
