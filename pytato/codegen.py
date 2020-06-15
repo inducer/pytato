@@ -54,16 +54,16 @@ Code Generation Internals
 
 .. currentmodule:: pytato.codegen
 
-.. autoclass:: GeneratedResult
-.. autoclass:: ArrayResult
-.. autoclass:: LoopyExpressionResult
+.. autoclass:: LoopyExpressionContext
+.. autoclass:: ImplementedResult
+.. autoclass:: StoredResult
+.. autoclass:: InlinedResult
 .. autoclass:: SubstitutionRuleResult
 
 .. autoclass:: CodeGenState
 .. autoclass:: CodeGenMapper
 
-.. autoclass:: LoopyExpressionContext
-.. autoclass:: LoopyExpressionGenMapper
+.. autoclass:: InlinedExpressionGenMapper
 
 .. autofunction:: domain_for_shape
 .. autofunction:: add_output
@@ -73,11 +73,49 @@ Code Generation Internals
 
 # {{{ generated array expressions
 
-# These are semantically distinct but identical at the type level.
+# SymbolicIndex and ShapeType are semantically distinct but identical at the
+# type level.
 SymbolicIndex = ShapeType
+ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 
 
-class GeneratedResult(object):
+@dataclasses.dataclass(init=True, repr=False, eq=False)
+class LoopyExpressionContext(object):
+    """Contextual data for generating :mod:`loopy` expressions.
+
+    This data is passed through :class:`LoopyExpressionGenMapper`
+    via arguments.
+
+    .. attribute:: state
+
+        The :class:`CodeGenState`.
+
+    .. attribute:: depends_on
+
+        The set of statement IDs that need to be included in
+        :attr:`loopy.kernel.data.instruction.InstructionBase.depends_on`.
+
+    .. attribute:: reduction_bounds
+
+        A mapping from inames to reduction bounds in the expression.
+    """
+    state: CodeGenState
+    _depends_on: FrozenSet[str]
+    reduction_bounds: ReductionBounds
+
+    @property
+    def namespace(self) -> typing.ChainMap[str, Array]:
+        return self.state.namespace
+
+    @property
+    def depends_on(self) -> FrozenSet[str]:
+        return self._depends_on
+
+    def update_depends_on(self, other: FrozenSet[str]) -> None:
+        self._depends_on = self._depends_on | other
+
+
+class ImplementedResult(object):
     """Generated code for a node in the computation graph (i.e., an array
     expression).
 
@@ -94,7 +132,7 @@ class GeneratedResult(object):
         raise NotImplementedError
 
 
-class ArrayResult(GeneratedResult):
+class StoredResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` array.
 
     See also: :class:`pytato.array.ImplStored`.
@@ -112,8 +150,9 @@ class ArrayResult(GeneratedResult):
             return prim.Variable(self.name)[indices]
 
 
-class LoopyExpressionResult(GeneratedResult):
-    """An array expression generated as a :mod:`loopy` expression.
+class InlinedResult(ImplementedResult):
+    """An array expression generated as :mod:`loopy` expression that can be inlined
+    within other expressions.
 
     See also: :class:`pytato.array.ImplInlined`.
     """
@@ -129,7 +168,7 @@ class LoopyExpressionResult(GeneratedResult):
                 {f"_{d}": i for d, i in zip(range(self.array.ndim), indices)})
 
 
-class SubstitutionRuleResult(GeneratedResult):
+class SubstitutionRuleResult(ImplementedResult):
     # TODO: implement
     pass
 
@@ -153,7 +192,7 @@ class CodeGenState:
     .. attribute:: results
 
         A mapping from :class:`pytato.array.Array` instances to
-        instances of :class:`GeneratedResult`.
+        instances of :class:`ImplementedResult`.
 
     .. attribute:: var_name_gen
     .. attribute:: insn_id_gen
@@ -164,7 +203,7 @@ class CodeGenState:
     """
     namespace: typing.ChainMap[str, Array]
     _kernel: lp.LoopKernel
-    results: Dict[Array, GeneratedResult]
+    results: Dict[Array, ImplementedResult]
 
     # Both of these have type Callable[[str], str], but mypy's support for that
     # is broken (https://github.com/python/mypy/issues/6910)
@@ -207,13 +246,13 @@ class CodeGenState:
 class CodeGenMapper(pytato.transform.Mapper):
     """A mapper for generating code for nodes in the computation graph.
     """
-    exprgen_mapper: LoopyExpressionGenMapper
+    exprgen_mapper: InlinedExpressionGenMapper
 
     def __init__(self) -> None:
-        self.exprgen_mapper = LoopyExpressionGenMapper(self)
+        self.exprgen_mapper = InlinedExpressionGenMapper(self)
 
     def map_placeholder(self, expr: Placeholder,
-            state: CodeGenState) -> GeneratedResult:
+            state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
 
@@ -224,12 +263,12 @@ class CodeGenMapper(pytato.transform.Mapper):
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
 
-        result = ArrayResult(expr.name, expr)
+        result = StoredResult(expr.name, expr)
         state.results[expr] = result
         return result
 
     def map_index_lambda(self, expr: IndexLambda,
-            state: CodeGenState) -> GeneratedResult:
+            state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
 
@@ -239,55 +278,16 @@ class CodeGenMapper(pytato.transform.Mapper):
             expr_context = chained_state.make_expression_context()
             loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
 
-        result = LoopyExpressionResult(loopy_expr, expr)
+        result = InlinedResult(loopy_expr, expr)
         state.results[expr] = result
         return result
 
 # }}}
 
 
-# {{{ loopy expression gen mapper
+# {{{ inlined expression gen mapper
 
-ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
-
-
-@dataclasses.dataclass(init=True, repr=False, eq=False)
-class LoopyExpressionContext(object):
-    """Contextual data for generating :mod:`loopy` expressions.
-
-    This data is passed through :class:`LoopyExpressionGenMapper`
-    via arguments.
-
-    .. attribute:: state
-
-        The :class:`CodeGenState`.
-
-    .. attribute:: depends_on
-
-        The set of statement IDs that need to be included in
-        :attr:`loopy.kernel.data.instruction.InstructionBase.depends_on`.
-
-    .. attribute:: reduction_bounds
-
-        A mapping from inames to reduction bounds in the expression.
-    """
-    state: CodeGenState
-    _depends_on: FrozenSet[str]
-    reduction_bounds: ReductionBounds
-
-    @property
-    def namespace(self) -> typing.ChainMap[str, Array]:
-        return self.state.namespace
-
-    @property
-    def depends_on(self) -> FrozenSet[str]:
-        return self._depends_on
-
-    def update_depends_on(self, other: FrozenSet[str]) -> None:
-        self._depends_on = self._depends_on | other
-
-
-class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
+class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     """A mapper for generating :mod:`loopy` expressions.
 
     The inputs to this mapper are scalar expression as found in
@@ -295,7 +295,7 @@ class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
     expressions).
 
     The outputs of this mapper are scalar expressions suitable for wrapping in
-    :class:`LoopyExpressionResult`.
+    :class:`InlinedResult`.
     """
     codegen_mapper: CodeGenMapper
 
@@ -309,7 +309,7 @@ class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
     def map_subscript(self, expr: prim.Subscript,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
-        result: GeneratedResult = self.codegen_mapper(
+        result: ImplementedResult = self.codegen_mapper(
                 expr_context.namespace[expr.aggregate.name], expr_context.state)
         return result.to_loopy_expression(expr.index, expr_context)
 
@@ -317,7 +317,7 @@ class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
 
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        result: GeneratedResult = self.codegen_mapper(
+        result: ImplementedResult = self.codegen_mapper(
                 expr_context.namespace[expr.name],
                 expr_context.state)
         return result.to_loopy_expression((), expr_context)
