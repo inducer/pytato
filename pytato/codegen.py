@@ -143,7 +143,7 @@ class SubstitutionRuleResult(GeneratedResult):
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class CodeGenState:
-    """Data threaded through :class:`CodeGenMapper`.
+    """A container for data kept by :class:`CodeGenMapper`.
 
     .. attribute:: namespace
 
@@ -151,11 +151,12 @@ class CodeGenState:
 
     .. attribute:: kernel
 
-        The partial kernel
+        The partial :class:`loopy.LoopKernel` being built.
 
     .. attribute:: results
 
-        A mapping from arrays to code generation results
+        A mapping from :class:`pytato.array.Array` instances to
+        instances of :class:`GeneratedResult`.
 
     .. attribute:: var_name_gen
     .. attribute:: insn_id_gen
@@ -257,7 +258,8 @@ ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 class LoopyExpressionContext(object):
     """Contextual data for generating :mod:`loopy` expressions.
 
-    This data is threaded through :class:`LoopyExpressionGenMapper`.
+    This data is passed through :class:`LoopyExpressionGenMapper`
+    via arguments.
 
     .. attribute:: state
 
@@ -265,7 +267,8 @@ class LoopyExpressionContext(object):
 
     .. attribute:: depends_on
 
-        The set of dependencies associated with the expression.
+        The set of statement IDs that need to be included in
+        :attr:`loopy.kernel.data.instruction.InstructionBase.depends_on`.
 
     .. attribute:: reduction_bounds
 
@@ -417,14 +420,10 @@ def add_output(name: str, expr: Array, state: CodeGenState,
 def generate_loopy(
         result_or_namespace: Union[Namespace, Array, DictOfNamedArrays],
         target: Optional[Target] = None) -> BoundProgram:
-    """Code generation entry point.
+    r"""Code generation entry point.
 
-    :param result_or_namespace: Either a :class:`pytato.Namespace`, a single
-        :class:`pytato.Array`, or a :class:`pytato.DictOfNamedArrays`.  In the
-        latter two cases, code generation treats the node(s)  as outputs of the
-        computation.
-
-    :param target: The target for code generation
+    :param result_or_namespace: For :term:`array result`\ s, code generation treats
+        the node(s) as outputs of the computation.
 
     :returns: A wrapped generated :mod:`loopy` kernel
     """
