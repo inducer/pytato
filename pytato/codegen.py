@@ -129,7 +129,7 @@ class LoopyExpressionResult(GeneratedResult):
             context: LoopyExpressionContext) -> ScalarExpression:
         return scalar_expr.substitute(
                 self.expr,
-                dict(zip((f"_{d}" for d in range(self.ndim)), indices)))
+                {f"_{d}": i for d, i in zip(range(self.ndim), indices)})
 
 
 class SubstitutionRuleResult(GeneratedResult):
