@@ -151,8 +151,8 @@ class StoredResult(ImplementedResult):
 
 
 class InlinedResult(ImplementedResult):
-    """An array expression generated as :mod:`loopy` expression that can be inlined
-    within other expressions.
+    """An array expression generated as a :mod:`loopy` expression containing inlined
+    sub-expressions.
 
     See also: :class:`pytato.array.ImplInlined`.
     """
@@ -288,7 +288,8 @@ class CodeGenMapper(pytato.transform.Mapper):
 # {{{ inlined expression gen mapper
 
 class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
-    """A mapper for generating :mod:`loopy` expressions.
+    """A mapper for generating :mod:`loopy` expressions with inlined
+    sub-expressions.
 
     The inputs to this mapper are scalar expression as found in
     :class:`pytato.IndexLambda`, or expressions that are compatible (e.g., shape
