@@ -91,7 +91,7 @@ class GeneratedResult(object):
         return len(self.shape)
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            context: LoopyExpressionContext) -> ScalarExpression:
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
         """Return a :mod:`loopy` expression for this result."""
         raise NotImplementedError
 
@@ -107,7 +107,7 @@ class ArrayResult(GeneratedResult):
 
     # TODO: Handle dependencies.
     def to_loopy_expression(self, indices: SymbolicIndex,
-            context: LoopyExpressionContext) -> ScalarExpression:
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
         if indices == ():
             return prim.Variable(self.name)
         else:
@@ -126,7 +126,7 @@ class LoopyExpressionResult(GeneratedResult):
 
     # TODO: Handle dependencies and reduction domains.
     def to_loopy_expression(self, indices: SymbolicIndex,
-            context: LoopyExpressionContext) -> ScalarExpression:
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
         return scalar_expr.substitute(
                 self.expr,
                 {f"_{d}": i for d, i in zip(range(self.ndim), indices)})
@@ -306,24 +306,24 @@ class LoopyExpressionGenMapper(scalar_expr.IdentityMapper):
         self.codegen_mapper = codegen_mapper
 
     def __call__(self, expr: ScalarExpression,
-            context: LoopyExpressionContext) -> ScalarExpression:
-        return self.rec(expr, context)
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
+        return self.rec(expr, expr_context)
 
     def map_subscript(self, expr: prim.Subscript,
-            context: LoopyExpressionContext) -> ScalarExpression:
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
         result: GeneratedResult = self.codegen_mapper(
-                context.namespace[expr.aggregate.name], context.state)
-        return result.to_loopy_expression(expr.index, context)
+                expr_context.namespace[expr.aggregate.name], expr_context.state)
+        return result.to_loopy_expression(expr.index, expr_context)
 
     # TODO: map_reduction()
 
     def map_variable(self, expr: prim.Variable,
-            context: LoopyExpressionContext) -> ScalarExpression:
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
         result: GeneratedResult = self.codegen_mapper(
-                context.namespace[expr.name],
-                context.state)
-        return result.to_loopy_expression((), context)
+                expr_context.namespace[expr.name],
+                expr_context.state)
+        return result.to_loopy_expression((), expr_context)
 
 # }}}
 
@@ -394,19 +394,19 @@ def add_output(name: str, expr: Array, state: CodeGenState,
             is_output_only=True)
 
     indices = tuple(prim.Variable(iname) for iname in inames)
-    context = state.make_expression_context()
-    copy_expr = result.to_loopy_expression(indices, context)
+    expr_context = state.make_expression_context()
+    copy_expr = result.to_loopy_expression(indices, expr_context)
 
     # TODO: Contextual data not supported yet.
-    assert not context.reduction_bounds
-    assert not context.depends_on
+    assert not expr_context.reduction_bounds
+    assert not expr_context.depends_on
 
     from loopy.kernel.instruction import make_assignment
     insn = make_assignment((prim.Variable(name)[indices],),
             copy_expr,
             id=state.insn_id_gen(f"{name}_copy"),
             within_inames=frozenset(inames),
-            depends_on=context.depends_on)
+            depends_on=expr_context.depends_on)
 
     kernel = state.kernel
     kernel = kernel.copy(args=kernel.args + [arg],
