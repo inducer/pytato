@@ -175,7 +175,7 @@ class CodeGenState:
 
     def __post_init__(self) -> None:
         self.var_name_gen = self._kernel.get_var_name_generator()
-        self.insn_id_gen = self._kernel.get_var_name_generator()
+        self.insn_id_gen = self._kernel.get_instruction_id_generator()
 
     @property
     def kernel(self) -> lp.LoopKernel:
