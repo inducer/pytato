@@ -418,33 +418,26 @@ def add_output(name: str, expr: Array, state: CodeGenState,
 # }}}
 
 
-def generate_loopy(
-        result_or_namespace: Union[Namespace, Array, DictOfNamedArrays],
+def generate_loopy(result: Union[Array, DictOfNamedArrays],
         target: Optional[Target] = None) -> BoundProgram:
     r"""Code generation entry point.
 
-    :param result_or_namespace: For :term:`array result`\ s, code generation treats
-        the node(s) as outputs of the computation.
-
+    :param result: Outputs of the computation.
     :returns: A wrapped generated :mod:`loopy` kernel
     """
     # {{{ get namespace and outputs
 
     outputs: DictOfNamedArrays
-    namespace: Namespace
 
-    if isinstance(result_or_namespace, Array):
-        outputs = DictOfNamedArrays({"out": result_or_namespace})
-        namespace = outputs.namespace
-    elif isinstance(result_or_namespace, DictOfNamedArrays):
-        outputs = result_or_namespace
+    if isinstance(result, Array):
+        outputs = DictOfNamedArrays({"out": result})
         namespace = outputs.namespace
     else:
-        assert isinstance(result_or_namespace, Namespace)
-        outputs = DictOfNamedArrays({})
-        namespace = result_or_namespace
+        assert isinstance(result, DictOfNamedArrays)
+        outputs = result
 
-    del result_or_namespace
+    namespace = outputs.namespace
+    del result
 
     # }}}
 
