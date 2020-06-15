@@ -83,8 +83,9 @@ ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 class LoopyExpressionContext(object):
     """Contextual data for generating :mod:`loopy` expressions.
 
-    This data is passed through :class:`LoopyExpressionGenMapper`
-    via arguments.
+    This data is passed through :class:`LoopyExpressionGenMapper` via arguments,
+    and is also used by :meth:`ImplementedResult.to_loopy_expression` to
+    retrieve contextual data.
 
     .. attribute:: state
 
@@ -122,6 +123,8 @@ class ImplementedResult(object):
     .. attribute:: array
 
         The :class:`pytato.Array` associated with this code.
+
+    .. automethod:: to_loopy_expression
     """
     def __init__(self, array: Array):
         self.array = array
