@@ -32,7 +32,6 @@ import typing
 
 import islpy as isl
 import loopy as lp
-import numpy as np
 import pymbolic.primitives as prim
 
 from pytato.array import (
@@ -81,14 +80,13 @@ SymbolicIndex = ShapeType
 class GeneratedResult(object):
     """Generated code for a node in the computation graph (i.e., an array
     expression).
-    """
-    def __init__(self, shape: ShapeType, dtype: np.dtype):
-        self.shape = shape
-        self.dtype = dtype
 
-    @property
-    def ndim(self) -> int:
-        return len(self.shape)
+    .. attribute:: array
+
+        The :class:`pytato.Array` associated with this code.
+    """
+    def __init__(self, array: Array):
+        self.array = array
 
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
@@ -101,8 +99,8 @@ class ArrayResult(GeneratedResult):
 
     See also: :class:`pytato.array.ImplStored`.
     """
-    def __init__(self, name: str, shape: ShapeType, dtype: np.dtype):
-        super().__init__(shape, dtype)
+    def __init__(self, name: str, array: Array):
+        super().__init__(array)
         self.name = name
 
     # TODO: Handle dependencies.
@@ -119,9 +117,8 @@ class LoopyExpressionResult(GeneratedResult):
 
     See also: :class:`pytato.array.ImplInlined`.
     """
-    def __init__(
-            self, expr: ScalarExpression, shape: ShapeType, dtype: np.dtype):
-        super().__init__(shape, dtype)
+    def __init__(self, expr: ScalarExpression, array: Array):
+        super().__init__(array)
         self.expr = expr
 
     # TODO: Handle dependencies and reduction domains.
@@ -129,7 +126,7 @@ class LoopyExpressionResult(GeneratedResult):
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         return scalar_expr.substitute(
                 self.expr,
-                {f"_{d}": i for d, i in zip(range(self.ndim), indices)})
+                {f"_{d}": i for d, i in zip(range(self.array.ndim), indices)})
 
 
 class SubstitutionRuleResult(GeneratedResult):
@@ -227,7 +224,7 @@ class CodeGenMapper(pytato.transform.Mapper):
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
 
-        result = ArrayResult(expr.name, expr.dtype, expr.shape)
+        result = ArrayResult(expr.name, expr)
         state.results[expr] = result
         return result
 
@@ -242,7 +239,7 @@ class CodeGenMapper(pytato.transform.Mapper):
             expr_context = chained_state.make_expression_context()
             loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
 
-        result = LoopyExpressionResult(loopy_expr, expr.shape, expr.dtype)
+        result = LoopyExpressionResult(loopy_expr, expr)
         state.results[expr] = result
         return result
 
