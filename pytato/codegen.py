@@ -35,8 +35,7 @@ import loopy as lp
 import pymbolic.primitives as prim
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, Namespace, ShapeType,
-        IndexLambda)
+        Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda)
 from pytato.program import BoundProgram, Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
