@@ -6,7 +6,6 @@ Welcome to Pytato's documentation!
     :caption: Contents:
 
     reference
-    codegen
     design
     misc
 

@@ -23,7 +23,6 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-
 .. currentmodule:: pytato.program
 
 Code Generation Targets

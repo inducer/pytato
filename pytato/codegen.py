@@ -44,6 +44,8 @@ import pytato.transform
 
 
 __doc__ = """
+Generating Code
+---------------
 
 .. currentmodule:: pytato
 
