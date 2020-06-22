@@ -229,7 +229,9 @@ class CodeGenState:
     def chain_namespaces(
             self,
             local_namespace: Mapping[str, Array]) -> Iterator[CodeGenState]:
-        """A context manager for overriding with a local scope."""
+        """A context manager for (locally) adding an overlaid name mapping
+        to this code generation state.
+        """
         self.namespace.maps.insert(0, local_namespace)
         yield self
         self.namespace.maps.pop(0)
