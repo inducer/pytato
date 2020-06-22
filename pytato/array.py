@@ -767,8 +767,8 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, Array):
 
     .. note::
 
-        Modifying :class:`Placeholder` tags is not supported after
-        creation.
+        Creating multiple instances of a :class:`Placeholder` with the same name
+        and within the same :class:`Namespace` is not allowed.
     """
     mapper_method = "map_placeholder"
     fields = Array.fields + ("name",)
