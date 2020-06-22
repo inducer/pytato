@@ -203,7 +203,7 @@ class CodeGenState:
     .. attribute:: insn_id_gen
 
     .. automethod:: update_kernel
-    .. automethod:: chain_namespaces
+    .. automethod:: chained_namespaces
     .. automethod:: make_expression_context
     """
     namespace: typing.ChainMap[str, Array]
@@ -281,7 +281,7 @@ class CodeGenMapper(pytato.transform.Mapper):
 
         # TODO: Respect tags.
 
-        with state.chain_namespaces(expr.bindings) as chained_state:
+        with state.chained_namespaces(expr.bindings) as chained_state:
             expr_context = chained_state.make_expression_context()
             loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
 
