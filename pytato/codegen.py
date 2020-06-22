@@ -226,7 +226,7 @@ class CodeGenState:
         self._kernel = kernel
 
     @contextlib.contextmanager
-    def chain_namespaces(
+    def chained_namespaces(
             self,
             local_namespace: Mapping[str, Array]) -> Iterator[CodeGenState]:
         """A context manager for (locally) adding an overlaid name mapping
