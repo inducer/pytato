@@ -25,12 +25,6 @@ THE SOFTWARE.
 __doc__ = """
 .. currentmodule:: pytato.program
 
-Code Generation Targets
------------------------
-
-.. autoclass:: Target
-.. autoclass:: PyOpenCLTarget
-
 Generated Executable Programs
 -----------------------------
 
@@ -42,58 +36,14 @@ from dataclasses import dataclass
 import typing
 from typing import Any, Mapping, Optional
 
+
 if typing.TYPE_CHECKING:
-    # Skip imports for efficiency.  FIXME: Neither of these work as type stubs
-    # are not present. Types are here only as documentation.
-    import pyopencl as cl
-    import loopy as lp
-
-
-class Target:
-    """An abstract code generation target.
-
-    .. automethod:: get_loopy_target
-    .. automethod:: bind_program
-    """
-
-    def get_loopy_target(self) -> "lp.TargetBase":
-        """Return the corresponding :mod:`loopy` target."""
-        raise NotImplementedError
-
-    def bind_program(self, program: "lp.LoopKernel",
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
-        """Create a :class:`BoundProgram` for this code generation target.
-
-        :param program: the :mod:`loopy` kernel
-        :param bound_arguments: a mapping from argument names to outputs
-        """
-        raise NotImplementedError
-
-
-class PyOpenCLTarget(Target):
-    """A :mod:`pyopencl` code generation target.
-
-    .. attribute:: queue
-
-        The :mod:`pyopencl` command queue, or *None*.
-    """
-
-    def __init__(self, queue: Optional["cl.CommandQueue"] = None):
-        self.queue = queue
-
-    def get_loopy_target(self) -> "lp.PyOpenCLTarget":
-        import loopy as lp
-        device = None
-        if self.queue is not None:
-            device = self.queue.device
-        return lp.PyOpenCLTarget(device)
-
-    def bind_program(self, program: "lp.LoopKernel",
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
-        return BoundPyOpenCLProgram(program=program,
-                queue=self.queue,
-                bound_arguments=bound_arguments,
-                target=self)
+    # Imports skipped for efficiency.  FIXME: Neither of these work as type
+    # stubs are not present. Types are here only as documentation.
+    import pyopencl
+    import loopy
+    # Imports skipped to avoid circular dependencies.
+    import pytato.target
 
 
 @dataclass(init=True, repr=False, eq=False)
@@ -115,9 +65,9 @@ class BoundProgram:
     .. automethod:: __call__
     """
 
-    program: "lp.LoopKernel"
+    program: "loopy.LoopKernel"
     bound_arguments: Mapping[str, Any]
-    target: Target
+    target: "pytato.target.Target"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -133,7 +83,7 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     .. automethod:: __call__
     """
-    queue: Optional["cl.CommandQueue"]
+    queue: Optional["pyopencl.CommandQueue"]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""

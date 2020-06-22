@@ -30,7 +30,7 @@ from pytato.array import (
         )
 
 from pytato.codegen import generate_loopy
-from pytato.program import Target, PyOpenCLTarget
+from pytato.target import Target, PyOpenCLTarget
 
 __all__ = (
         "DottedName", "Namespace", "Array", "DictOfNamedArrays",
