@@ -82,7 +82,8 @@ ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class LoopyExpressionContext(object):
-    """Contextual data for generating :mod:`loopy` expressions.
+    """Mutable state used while generating :mod:`loopy` expressions.
+    Wraps :class:`CodeGenState` with more expression-specific information.
 
     This data is passed through :class:`LoopyExpressionGenMapper` via arguments,
     and is also used by :meth:`ImplementedResult.to_loopy_expression` to
