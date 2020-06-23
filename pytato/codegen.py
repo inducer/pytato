@@ -23,12 +23,9 @@ THE SOFTWARE.
 """
 
 import collections
-import contextlib
 import dataclasses
 from typing import (
-        Any, Union, Optional, Mapping, Iterator, Dict, Tuple, FrozenSet,
-        Set)
-import typing
+        Any, Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
 
 import islpy as isl
 import loopy as lp
@@ -94,6 +91,11 @@ class LoopyExpressionContext(object):
 
         The :class:`CodeGenState`.
 
+    .. attribute:: local_namespace
+
+        A (read-only) local name mapping used for name lookup when generating
+        code.
+
     .. attribute:: depends_on
 
         The set of statement IDs that need to be included in
@@ -102,14 +104,24 @@ class LoopyExpressionContext(object):
     .. attribute:: reduction_bounds
 
         A mapping from inames to reduction bounds in the expression.
+
+    .. automethod:: update_depends_on
+    .. automethod:: lookup
+
     """
     state: CodeGenState
-    _depends_on: FrozenSet[str]
-    reduction_bounds: ReductionBounds
+    _depends_on: FrozenSet[str] = \
+            dataclasses.field(default_factory=frozenset)
+    local_namespace: Mapping[str, Array] = \
+            dataclasses.field(default_factory=dict)
+    reduction_bounds: ReductionBounds = \
+            dataclasses.field(default_factory=dict)
 
-    @property
-    def namespace(self) -> typing.ChainMap[str, Array]:
-        return self.state.namespace
+    def lookup(self, name: str) -> Array:
+        try:
+            return self.local_namespace[name]
+        except KeyError:
+            return self.state.namespace[name]
 
     @property
     def depends_on(self) -> FrozenSet[str]:
@@ -189,7 +201,7 @@ class CodeGenState:
 
     .. attribute:: namespace
 
-        The namespace
+        The (global) namespace
 
     .. attribute:: kernel
 
@@ -204,10 +216,9 @@ class CodeGenState:
     .. attribute:: insn_id_gen
 
     .. automethod:: update_kernel
-    .. automethod:: chained_namespaces
     .. automethod:: make_expression_context
     """
-    namespace: typing.ChainMap[str, Array]
+    namespace: Mapping[str, Array]
     _kernel: lp.LoopKernel
     results: Dict[Array, ImplementedResult]
 
@@ -226,17 +237,6 @@ class CodeGenState:
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
         self._kernel = kernel
-
-    @contextlib.contextmanager
-    def chained_namespaces(
-            self,
-            local_namespace: Mapping[str, Array]) -> Iterator[CodeGenState]:
-        """A context manager for (locally) adding an overlaid name mapping
-        to this code generation state.
-        """
-        self.namespace.maps.insert(0, local_namespace)
-        yield self
-        self.namespace.maps.pop(0)
 
     def make_expression_context(
             self,
@@ -282,9 +282,9 @@ class CodeGenMapper(pytato.transform.Mapper):
 
         # TODO: Respect tags.
 
-        with state.chained_namespaces(expr.bindings) as chained_state:
-            expr_context = chained_state.make_expression_context()
-            loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
+        expr_context = LoopyExpressionContext(state,
+                local_namespace=expr.bindings)
+        loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
 
         result = InlinedResult(loopy_expr, expr)
         state.results[expr] = result
@@ -319,7 +319,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
         result: ImplementedResult = self.codegen_mapper(
-                expr_context.namespace[expr.aggregate.name], expr_context.state)
+                expr_context.lookup(expr.aggregate.name), expr_context.state)
         return result.to_loopy_expression(expr.index, expr_context)
 
     # TODO: map_reduction()
@@ -327,7 +327,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         result: ImplementedResult = self.codegen_mapper(
-                expr_context.namespace[expr.name],
+                expr_context.lookup(expr.name),
                 expr_context.state)
         return result.to_loopy_expression((), expr_context)
 
@@ -400,7 +400,7 @@ def add_output(name: str, expr: Array, state: CodeGenState,
             is_output_only=True)
 
     indices = tuple(prim.Variable(iname) for iname in inames)
-    expr_context = state.make_expression_context()
+    expr_context = LoopyExpressionContext(state)
     copy_expr = result.to_loopy_expression(indices, expr_context)
 
     # TODO: Contextual data not supported yet.
