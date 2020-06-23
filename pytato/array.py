@@ -40,18 +40,22 @@ __doc__ = """
 Array Interface
 ---------------
 
-.. autoclass :: Namespace
-.. autoclass :: Array
-.. autoclass :: Tag
-.. autoclass :: UniqueTag
-.. autoclass :: DictOfNamedArrays
+.. autoclass:: Namespace
+.. autoclass:: Array
+.. autoclass:: Tag
+.. autoclass:: UniqueTag
+.. autoclass:: DictOfNamedArrays
 
 Supporting Functionality
 ------------------------
 
-.. autoclass :: DottedName
+.. autoclass:: DottedName
 
 .. currentmodule:: pytato.array
+
+Concrete Array Data
+-------------------
+.. autoclass:: DataInterface
 
 Pre-Defined Tags
 ----------------
@@ -711,6 +715,17 @@ class Reshape(Array):
 # {{{ data wrapper
 
 class DataInterface(Protocol):
+    """A protocol specifying the minimal interface requirements for concrete
+    array data supported by :class:`DataWrapper`.
+
+    See :class:`typing.Protocol` for more information about protocols.
+
+    Code generation targets may impose additional restrictions on the kinds of
+    concrete array data they support.
+
+    .. attribute:: shape
+    .. attribute:: dtype
+    """
     shape: ShapeType
     dtype: np.dtype
 
