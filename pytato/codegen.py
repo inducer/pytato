@@ -216,7 +216,6 @@ class CodeGenState:
     .. attribute:: insn_id_gen
 
     .. automethod:: update_kernel
-    .. automethod:: make_expression_context
     """
     namespace: Mapping[str, Array]
     _kernel: lp.LoopKernel
@@ -237,18 +236,6 @@ class CodeGenState:
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
         self._kernel = kernel
-
-    def make_expression_context(
-            self,
-            depends_on: FrozenSet[str] = frozenset(),
-            reduction_bounds: Optional[ReductionBounds] = None
-            ) -> LoopyExpressionContext:
-        """Get a new :class:`LoopyExpressionContext`."""
-        if reduction_bounds is None:
-            reduction_bounds = {}
-        return LoopyExpressionContext(self,
-                _depends_on=depends_on,
-                reduction_bounds=reduction_bounds)
 
 
 class CodeGenMapper(pytato.transform.Mapper):
