@@ -49,7 +49,7 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
-def test_DictOfNamedArrays_output(ctx_factory):  # noqa
+def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
