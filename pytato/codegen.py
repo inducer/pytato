@@ -23,8 +23,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import (
-        Any, Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
+from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
 
 import islpy as isl
 import loopy as lp
