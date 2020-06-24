@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 import sys
 
+import loopy as lp
 import numpy as np
 import pyopencl as cl
 import pyopencl.array as cl_array  # noqa
@@ -46,6 +47,34 @@ def test_basic_codegen(ctx_factory):
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(x=x_in)
     assert (out == x_in * x_in).all()
+
+
+def test_DictOfNamedArrays_output(ctx_factory):  # noqa
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    namespace = pt.Namespace()
+    x = pt.Placeholder(namespace, "x", (5,), np.int)
+    y = pt.Placeholder(namespace, "y", (5,), np.int)
+    x_in = np.array([1, 2, 3, 4, 5])
+    y_in = np.array([6, 7, 8, 9, 10])
+
+    result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
+
+    # Without return_dict.
+    prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
+    _, (x_out, y_out) = prog(x=x_in, y=y_in)
+    assert (x_out == x_in).all()
+    assert (y_out == y_in).all()
+
+    # With return_dict.
+    prog = pt.generate_loopy(result,
+            target=pt.PyOpenCLTarget(queue),
+            options=lp.Options(return_dict=True))
+
+    _, outputs = prog(x=x_in, y=y_in)
+    assert (outputs["x_out"] == x_in).all()
+    assert (outputs["y_out"] == y_in).all()
 
 
 if __name__ == "__main__":

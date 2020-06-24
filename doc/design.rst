@@ -119,6 +119,8 @@ Reserved Identifiers
     -   ``_pt_shp``: Used to automatically generate identifiers used
         in data-dependent shapes.
 
+    -   ``_pt_out``: The default name of an unnamed output argument
+
 -   Identifiers used in index lambdas are also reserved. These include:
 
     -   Identifiers matching the regular expression ``_[0-9]+``. They are used

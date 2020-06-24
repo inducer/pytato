@@ -29,6 +29,7 @@ from typing import (
 import islpy as isl
 import loopy as lp
 import pymbolic.primitives as prim
+import pytools
 
 from pytato.array import (
         Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda)
@@ -220,10 +221,8 @@ class CodeGenState:
     _kernel: lp.LoopKernel
     results: Dict[Array, ImplementedResult]
 
-    # Both of these have type Callable[[str], str], but mypy's support for that
-    # is broken (https://github.com/python/mypy/issues/6910)
-    var_name_gen: Any = dataclasses.field(init=False)
-    insn_id_gen: Any = dataclasses.field(init=False)
+    var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
+    insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
         self.var_name_gen = self._kernel.get_var_name_generator()
@@ -372,7 +371,6 @@ def add_output(name: str, expr: Array, state: CodeGenState,
     assert expr.shape != ()
 
     result = mapper(expr, state)
-    name = state.var_name_gen(name)
 
     inames = tuple(
             state.var_name_gen(f"{name}_dim{d}")
@@ -410,10 +408,13 @@ def add_output(name: str, expr: Array, state: CodeGenState,
 
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays],
-        target: Optional[Target] = None) -> BoundProgram:
+        target: Optional[Target] = None,
+        options: Optional[lp.Options] = None) -> BoundProgram:
     r"""Code generation entry point.
 
     :param result: Outputs of the computation.
+    :param target: Code generation target.
+    :param options: Code generation options for the kernel.
     :returns: A wrapped generated :mod:`loopy` kernel
     """
     # {{{ get namespace and outputs
@@ -421,7 +422,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     outputs: DictOfNamedArrays
 
     if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"out": result})
+        outputs = DictOfNamedArrays({"_pt_out": result})
         namespace = outputs.namespace
     else:
         assert isinstance(result, DictOfNamedArrays)
@@ -438,11 +439,18 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     # Set up codegen state.
     kernel = lp.make_kernel("{:}", [],
             target=target.get_loopy_target(),
+            options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
     state = CodeGenState(namespace=namespace,
             _kernel=kernel,
             results=dict())
+
+    # Reserve names of input and output arguments.
+    for val in namespace.values():
+        if isinstance(val, Placeholder):
+            state.var_name_gen.add_name(val.name)
+    state.var_name_gen.add_names(outputs)
 
     # Generate code for graph nodes.
     mapper = CodeGenMapper()
