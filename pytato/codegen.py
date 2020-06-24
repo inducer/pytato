@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import collections
 import dataclasses
 from typing import (
         Any, Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
@@ -441,7 +440,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
             target=target.get_loopy_target(),
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    state = CodeGenState(namespace=collections.ChainMap(namespace),
+    state = CodeGenState(namespace=namespace,
             _kernel=kernel,
             results=dict())
 
