@@ -62,6 +62,9 @@ Pre-Defined Tags
 
 .. autoclass:: ImplementAs
 .. autoclass:: CountNamed
+.. autoclass:: ImplStored
+.. autoclass:: ImplInlined
+.. autoclass:: ImplDefault
 
 Built-in Expression Nodes
 -------------------------

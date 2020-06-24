@@ -82,7 +82,7 @@ class LoopyExpressionContext(object):
     """Mutable state used while generating :mod:`loopy` expressions.
     Wraps :class:`CodeGenState` with more expression-specific information.
 
-    This data is passed through :class:`LoopyExpressionGenMapper` via arguments,
+    This data is passed through :class:`InlinedExpressionGenMapper` via arguments,
     and is also used by :meth:`ImplementedResult.to_loopy_expression` to
     retrieve contextual data.
 
@@ -98,7 +98,7 @@ class LoopyExpressionContext(object):
     .. attribute:: depends_on
 
         The set of statement IDs that need to be included in
-        :attr:`loopy.kernel.data.instruction.InstructionBase.depends_on`.
+        :attr:`loopy.InstructionBase.depends_on`.
 
     .. attribute:: reduction_bounds
 
@@ -208,7 +208,7 @@ class CodeGenState:
 
     .. attribute:: results
 
-        A mapping from :class:`pytato.array.Array` instances to
+        A mapping from :class:`pytato.Array` instances to
         instances of :class:`ImplementedResult`.
 
     .. attribute:: var_name_gen
@@ -284,8 +284,8 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     sub-expressions.
 
     The inputs to this mapper are scalar expression as found in
-    :class:`pytato.IndexLambda`, or expressions that are compatible (e.g., shape
-    expressions).
+    :class:`pytato.array.IndexLambda`, or expressions that are
+    compatible (e.g., shape expressions).
 
     The outputs of this mapper are scalar expressions suitable for wrapping in
     :class:`InlinedResult`.
@@ -322,7 +322,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
 def domain_for_shape(
         dim_names: Tuple[str, ...], shape: ShapeType) -> isl.BasicSet:
-    """Create a :class:`islpy.BasicSet` that expresses an appropriate index domain
+    """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape*.
 
     :param dim_names: A tuple of strings, the names of the axes. These become set
