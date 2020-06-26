@@ -29,5 +29,13 @@ from pytato.array import (
         DottedName, Placeholder, make_placeholder,
         )
 
-__all__ = ("DottedName", "Namespace", "Array", "DictOfNamedArrays",
-           "Tag", "UniqueTag", "Placeholder", "make_placeholder")
+from pytato.codegen import generate_loopy
+from pytato.target import Target, PyOpenCLTarget
+
+__all__ = (
+        "DottedName", "Namespace", "Array", "DictOfNamedArrays",
+        "Tag", "UniqueTag", "Placeholder", "make_placeholder",
+
+        "generate_loopy",
+        "Target", "PyOpenCLTarget",
+)

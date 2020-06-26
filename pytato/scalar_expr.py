@@ -24,12 +24,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pymbolic.mapper import WalkMapper as WalkMapperBase
+from numbers import Number
+from typing import Any, Union, Mapping, FrozenSet
+
+from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
+        IdentityMapperBase)
+from pymbolic.mapper.substitutor import (SubstitutionMapper as
+        SubstitutionMapperBase)
+from pymbolic.mapper.dependency import (DependencyMapper as
+        DependencyMapperBase)
 import pymbolic.primitives as prim
 
-from numbers import Number
-from typing import Union
+__doc__ = """
+.. currentmodule:: pytato.scalar_expr
 
+Scalar Expressions
+------------------
+
+.. data:: ScalarExpression
+
+    A :class:`type` for scalar-valued symbolic expressions. Expressions are
+    composable and manipulable via :mod:`pymbolic`.
+
+    Concretely, this is an alias for
+    ``Union[Number, pymbolic.primitives.Expression]``.
+
+.. autofunction:: parse
+.. autofunction:: get_dependencies
+.. autofunction:: substitute
+
+"""
+
+# {{{ scalar expressions
 
 ScalarExpression = Union[Number, prim.Expression]
 
@@ -38,9 +64,52 @@ def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
     return Parser()(s)
 
+# }}}
+
+
+# {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
     pass
+
+
+class IdentityMapper(IdentityMapperBase):
+    pass
+
+
+class SubstitutionMapper(SubstitutionMapperBase):
+    pass
+
+
+class DependencyMapper(DependencyMapperBase):
+    pass
+
+# }}}
+
+
+# {{{ mapper frontends
+
+def get_dependencies(expression: Any) -> FrozenSet[str]:
+    """Return the set of variable names in an expression.
+
+    :param expression: A scalar expression, or an expression derived from such
+        (e.g., a tuple of scalar expressions)
+    """
+    mapper = DependencyMapper(composite_leaves=False)
+    return frozenset(dep.name for dep in mapper(expression))
+
+
+def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
+    """Perform variable substitution in an expression.
+
+    :param expression: A scalar expression, or an expression derived from such
+        (e.g., a tuple of scalar expressions)
+    :param variable_assigments: A mapping from variable names to substitutions
+    """
+    from pymbolic.mapper.substitutor import make_subst_func
+    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+
+# }}}
 
 
 # vim: foldmethod=marker

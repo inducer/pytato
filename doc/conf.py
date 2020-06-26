@@ -65,4 +65,5 @@ intersphinx_mapping = {
     'http://documen.tician.de/pymbolic/': None,
     'http://documen.tician.de/loopy/': None,
     'http://documen.tician.de/sumpy/': None,
+    'http://documen.tician.de/islpy/': None,
     }
