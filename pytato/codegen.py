@@ -366,9 +366,6 @@ def add_output(name: str, expr: Array, state: CodeGenState,
         mapper: CodeGenMapper) -> None:
     """Add an output argument to the kernel.
     """
-    # FIXE: Scalar outputs are not supported yet.
-    assert expr.shape != ()
-
     result = mapper(expr, state)
 
     inames = tuple(
@@ -391,7 +388,13 @@ def add_output(name: str, expr: Array, state: CodeGenState,
     assert not expr_context.depends_on
 
     from loopy.kernel.instruction import make_assignment
-    insn = make_assignment((prim.Variable(name)[indices],),
+
+    if indices:
+        assignee = prim.Variable(name)[indices]
+    else:
+        assignee = prim.Variable(name)
+
+    insn = make_assignment((assignee,),
             copy_expr,
             id=state.insn_id_gen(f"{name}_copy"),
             within_inames=frozenset(inames),

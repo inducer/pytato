@@ -49,6 +49,18 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
+def test_scalar_output(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    namespace = pt.Namespace()
+    x = pt.Placeholder(namespace, "x", (), np.int)
+    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    x_in = np.array(1)
+    _, (x_out,) = prog(x=x_in)
+    assert x_out == x_in
+
+
 def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
