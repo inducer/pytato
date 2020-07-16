@@ -1,0 +1,11 @@
+def test_symbolic_shape(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    namespace = pt.Namespace()
+    n = pt.make_size_param(namespace, "n")
+    x = pt.Placeholder(namespace, "x", "(n,)", np.int)
+    prog = pt.generate_loopy(n, target=pt.PyOpenCLTarget(queue))
+    x_in = np.array([1, 2, 3, 4, 5])
+    _, (n_out,) = prog(x=x_in)
+    assert n_out == 5

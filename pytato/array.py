@@ -72,9 +72,15 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: Reshape
+.. autoclass:: LoopyFunction
+
+Input Arguments
+^^^^^^^^^^^^^^^
+
+.. autoclass:: InputArgumentBase
 .. autoclass:: DataWrapper
 .. autoclass:: Placeholder
-.. autoclass:: LoopyFunction
+.. autoclass:: SizeParam
 
 User-Facing Node Creation
 -------------------------
@@ -88,6 +94,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 
 .. autofunction:: make_dict_of_named_arrays
 .. autofunction:: make_placeholder
+.. autofunction:: make_size_param
+.. autofunction:: make_data_wrapper
 """
 
 # }}}
@@ -102,7 +110,7 @@ from typing import (
 
 import numpy as np
 import pymbolic.primitives as prim
-from pytools import is_single_valued, memoize_method
+from pytools import is_single_valued, memoize_method, UniqueNameGenerator
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
@@ -131,7 +139,7 @@ class DottedName:
             raise ValueError("empty name parts")
 
         for p in name_parts:
-            if not str.isidentifier(p):
+            if not p.isidentifier():
                 raise ValueError(f"{p} is not a Python identifier")
 
         self.name_parts = name_parts
@@ -159,6 +167,7 @@ class Namespace(Mapping[str, "Array"]):
     may not be used.  (:class:`Placeholder` instances register their names in
     this way to avoid ambiguity.)
 
+    .. attribute:: name_gen
     .. automethod:: __contains__
     .. automethod:: __getitem__
     .. automethod:: __iter__
@@ -167,17 +176,17 @@ class Namespace(Mapping[str, "Array"]):
     .. automethod:: copy
     .. automethod:: ref
     """
+    name_gen: UniqueNameGenerator
 
     def __init__(self) -> None:
         self._symbol_table: Dict[str, Array] = {}
+        self.name_gen = UniqueNameGenerator()
 
     def __contains__(self, name: object) -> bool:
         return name in self._symbol_table
 
     def __getitem__(self, name: str) -> Array:
         item = self._symbol_table[name]
-        if item is None:
-            raise ValueError("cannot access a reserved name")
         return item
 
     def __iter__(self) -> Iterator[str]:
@@ -199,6 +208,8 @@ class Namespace(Mapping[str, "Array"]):
         """
         if name in self._symbol_table:
             raise ValueError(f"'{name}' is already assigned")
+        if not self.name_gen.is_name_conflicting(name):
+            self.name_gen.add_name(name)
         self._symbol_table[name] = value
 
         return name
@@ -277,7 +288,7 @@ ConvertibleToShape = Union[
 
 
 def _check_identifier(s: str, ns: Optional[Namespace] = None) -> bool:
-    if not str.isidentifier(s):
+    if not s.isidentifier():
         raise ValueError(f"'{s}' is not a valid identifier")
 
     if ns is not None:
@@ -504,6 +515,10 @@ class Array:
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
 
+# }}}
+
+
+# {{{ mixins
 
 class _SuppliedShapeAndDtypeMixin(object):
     """A mixin class for when an array must store its own *shape* and *dtype*,
@@ -644,6 +659,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
     .. automethod:: is_reference
     """
+
     fields = Array.fields + ("expr", "bindings")
     mapper_method = "map_index_lambda"
 
@@ -715,6 +731,49 @@ class Reshape(Array):
 # }}}
 
 
+# {{{ base class for arguments
+
+class InputArgumentBase(Array):
+    r"""Base class for input arguments.
+
+    .. attribute:: name
+
+        The name by which a value is supplied for the argument once computation
+        begins.
+
+        The name is also implicitly :meth:`~Namespace.assign`\ ed in the
+        :class:`Namespace`.
+
+    .. note::
+
+        and within the same :class:`Namespace` is not allowed.
+    """
+
+    # The name uniquely identifies this object in the namespace.
+    fields = ("name",)
+
+    def __init__(self,
+            namespace: Namespace,
+            name: str,
+            tags: Optional[TagsType] = None):
+        if name is None:
+            raise ValueError("Must have explicit name")
+
+        # Publish our name to the namespace
+        namespace.assign(name, self)
+
+        super().__init__(namespace=namespace, tags=tags)
+        self.name = name
+
+    def tagged(self, tag: Tag) -> Array:
+        raise ValueError("Cannot modify tags")
+
+    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
+        raise ValueError("Cannot modify tags")
+
+# }}}
+
+
 # {{{ data wrapper
 
 class DataInterface(Protocol):
@@ -729,15 +788,14 @@ class DataInterface(Protocol):
     .. attribute:: shape
     .. attribute:: dtype
     """
+
     shape: ShapeType
     dtype: np.dtype
 
 
-class DataWrapper(Array):
-    # TODO: Name?
-    """
-    Takes concrete array data and packages it to be compatible
-    with the :class:`Array` interface.
+class DataWrapper(InputArgumentBase):
+    """Takes concrete array data and packages it to be compatible with the
+    :class:`Array` interface.
 
     .. attribute:: data
 
@@ -751,16 +809,22 @@ class DataWrapper(Array):
         this array may not be updated in-place.
     """
 
+    mapper_method = "map_data_wrapper"
+
     def __init__(self,
             namespace: Namespace,
+            name: str,
             data: DataInterface,
+            shape: ShapeType,
             tags: Optional[TagsType] = None):
-        super().__init__(namespace, tags=tags)
+        super().__init__(namespace, name, tags=tags)
+
         self.data = data
+        self._shape = shape
 
     @property
     def shape(self) -> ShapeType:
-        return self.data.shape
+        return self._shape
 
     @property
     def dtype(self) -> np.dtype:
@@ -771,25 +835,12 @@ class DataWrapper(Array):
 
 # {{{ placeholder
 
-class Placeholder(_SuppliedShapeAndDtypeMixin, Array):
-    r"""
-    A named placeholder for an array whose concrete value
-    is supplied by the user during evaluation.
-
-    .. attribute:: name
-
-        The name by which a value is supplied
-        for the placeholder once computation begins.
-        The name is also implicitly :meth:`~Namespace.assign`\ ed
-        in the :class:`Namespace`.
-
-    .. note::
-
-        Creating multiple instances of a :class:`Placeholder` with the same name
-        and within the same :class:`Namespace` is not allowed.
+class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
+    r"""A named placeholder for an array whose concrete value is supplied by the
+    user during evaluation.
     """
+
     mapper_method = "map_placeholder"
-    fields = Array.fields + ("name",)
 
     def __init__(self,
             namespace: Namespace,
@@ -797,24 +848,32 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, Array):
             shape: ShapeType,
             dtype: np.dtype,
             tags: Optional[TagsType] = None):
-        if name is None:
-            raise ValueError("Must have explicit name")
-
-        # Publish our name to the namespace
-        namespace.assign(name, self)
-
-        super().__init__(namespace=namespace,
+        super().__init__(
+                namespace,
                 shape=shape,
                 dtype=dtype,
+                name=name,
                 tags=tags)
 
-        self.name = name
+# }}}
 
-    def tagged(self, tag: Tag) -> Array:
-        raise ValueError("Cannot modify tags")
 
-    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
-        raise ValueError("Cannot modify tags")
+# {{{ size parameter
+
+class SizeParam(InputArgumentBase):
+    r"""A named placeholder for a scalar that may be used as a variable in symbolic
+    expressions for array sizes.
+    """
+
+    mapper_method = "map_size_param"
+
+    @property
+    def shape(self) -> ShapeType:
+        return ()
+
+    @property
+    def dtype(self) -> np.dtype:
+        return np.intp
 
 # }}}
 
@@ -829,7 +888,6 @@ class LoopyFunction(DictOfNamedArrays):
         and one that's obtained by importing a dotted
         name.
     """
-
 
 # }}}
 
@@ -864,13 +922,62 @@ def make_placeholder(namespace: Namespace,
     if name is None:
         raise ValueError("Placeholder instances must have a name")
 
-    if not str.isidentifier(name):
+    if not name.isidentifier():
         raise ValueError(f"'{name}' is not a Python identifier")
 
     shape = normalize_shape(shape, namespace)
 
     return Placeholder(namespace, name, shape, dtype, tags)
 
+
+def make_size_param(namespace: Namespace,
+        name: str,
+        tags: Optional[TagsType] = None) -> SizeParam:
+    """Make a :class:`SizeParam`.
+
+    Size parameters may be used as variables in symbolic expressions for array
+    sizes.
+
+    :param namespace:  namespace
+    :param name:       name
+    :param tags:       implementation tags
+    """
+    if name is None:
+        raise ValueError("SizeParam instances must have a name")
+
+    if not name.isidentifier():
+        raise ValueError(f"'{name}' is not a Python identifier")
+
+    return SizeParam(namespace, name, tags=tags)
+
+
+def make_data_wrapper(namespace: Namespace,
+        data: DataInterface,
+        name: Optional[str] = None,
+        shape: Optional[ConvertibleToShape] = None,
+        tags: Optional[TagsType] = None) -> DataWrapper:
+    """Make a :class:`DataWrapper`.
+
+    :param namespace:  namespace
+    :param data:       an instance obeying the :class:`DataInterface`
+    :param name:       an optional name, generated automatically if not given
+    :param shape:      optional shape of the array, inferred from *data* if not given
+    :param tags:       implementation tags
+    """
+    if name is None:
+        name = namespace.name_gen("_pt_data")
+
+    if not name.isidentifier():
+        raise ValueError(f"'{name}' is not a Python identifier")
+
+    if shape is None:
+        shape = data.shape
+
+    shape = normalize_shape(shape, namespace)
+
+    return DataWrapper(namespace, name, data, shape, tags)
+
 # }}}
+
 
 # vim: foldmethod=marker

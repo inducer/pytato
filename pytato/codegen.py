@@ -31,7 +31,8 @@ import pymbolic.primitives as prim
 import pytools
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda)
+        Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda,
+        SizeParam, DataWrapper, InputArgumentBase)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -243,13 +244,34 @@ class CodeGenMapper(pytato.transform.Mapper):
     def __init__(self) -> None:
         self.exprgen_mapper = InlinedExpressionGenMapper(self)
 
-    def map_placeholder(self, expr: Placeholder,
+    def map_size_param(self, expr: SizeParam,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
 
+        arg = lp.ValueArg(expr.name, dtype=expr.dtype)
+        kernel = state.kernel.copy(args=state.kernel.args + [arg])
+        state.update_kernel(kernel)
+
+        result = StoredResult(expr.name, expr)
+        state.results[expr] = result
+        return result
+
+    def handle_array_input_argument(self, expr: Union[Placeholder, DataWrapper],
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        shape_context = LoopyExpressionContext(state)
+        shape = []
+        for component in expr.shape:
+            shape.append(self.exprgen_mapper(component, shape_context))
+            # Not supported yet.
+            assert not shape_context.depends_on
+            assert not shape_context.reduction_bounds
+
         arg = lp.GlobalArg(expr.name,
-                shape=expr.shape,
+                shape=tuple(shape),
                 dtype=expr.dtype,
                 order="C")
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
@@ -258,6 +280,9 @@ class CodeGenMapper(pytato.transform.Mapper):
         result = StoredResult(expr.name, expr)
         state.results[expr] = result
         return result
+
+    map_placeholder = handle_array_input_argument
+    map_data_wrapper = handle_array_input_argument
 
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> ImplementedResult:
@@ -450,7 +475,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
 
     # Reserve names of input and output arguments.
     for val in namespace.values():
-        if isinstance(val, Placeholder):
+        if isinstance(val, InputArgumentBase):
             state.var_name_gen.add_name(val.name)
     state.var_name_gen.add_names(outputs)
 
@@ -463,4 +488,12 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     for name, expr in outputs.items():
         add_output(name, expr, state, mapper)
 
-    return target.bind_program(program=state.kernel, bound_arguments=dict())
+    # Collect bound arguments.
+    bound_arguments = {}
+    for name, val in namespace.items():
+        if isinstance(val, DataWrapper):
+            bound_arguments[name] = val.data
+
+    return target.bind_program(
+            program=state.kernel,
+            bound_arguments=bound_arguments)

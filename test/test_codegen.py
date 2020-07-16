@@ -49,7 +49,7 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
-def test_scalar_output(ctx_factory):
+def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -59,6 +59,41 @@ def test_scalar_output(ctx_factory):
     x_in = np.array(1)
     _, (x_out,) = prog(x=x_in)
     assert x_out == x_in
+
+
+def test_size_param(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    namespace = pt.Namespace()
+    n = pt.make_size_param(namespace, "n")
+    pt.make_placeholder(namespace, "x", "(n,)", np.int)
+    prog = pt.generate_loopy(n, target=pt.PyOpenCLTarget(queue))
+    x_in = np.array([1, 2, 3, 4, 5])
+    _, (n_out,) = prog(x=x_in)
+    assert n_out == 5
+
+
+def test_data_wrapper(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # Without name/shape
+    namespace = pt.Namespace()
+    x_in = np.array([1, 2, 3, 4, 5])
+    x = pt.make_data_wrapper(namespace, x_in)
+    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    _, (x_out,) = prog()
+    assert (x_out == x_in).all()
+
+    # With name/shape
+    namespace = pt.Namespace()
+    x_in = np.array([[1, 2], [3, 4], [5, 6]])
+    pt.make_size_param(namespace, "n")
+    x = pt.make_data_wrapper(namespace, x_in, name="x", shape="(n, 2)")
+    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    _, (x_out,) = prog()
+    assert (x_out == x_in).all()
 
 
 def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
