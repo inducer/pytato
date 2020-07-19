@@ -35,6 +35,7 @@ from pyopencl.tools import (  # noqa
 import pytest  # noqa
 
 import pytato as pt
+from pytato.array import Placeholder
 
 
 def test_basic_codegen(ctx_factory):
@@ -42,7 +43,7 @@ def test_basic_codegen(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     namespace = pt.Namespace()
-    x = pt.Placeholder(namespace, "x", (5,), np.int)
+    x = Placeholder(namespace, "x", (5,), np.int)
     prog = pt.generate_loopy(x * x, target=pt.PyOpenCLTarget(queue))
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(x=x_in)
@@ -54,7 +55,7 @@ def test_scalar_placeholder(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     namespace = pt.Namespace()
-    x = pt.Placeholder(namespace, "x", (), np.int)
+    x = Placeholder(namespace, "x", (), np.int)
     prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
     x_in = np.array(1)
     _, (x_out,) = prog(x=x_in)
@@ -72,6 +73,28 @@ def test_size_param(ctx_factory):
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(x=x_in)
     assert n_out == 5
+
+
+@pytest.mark.parametrize("x1_ndim", (1, 2))
+@pytest.mark.parametrize("x2_ndim", (1, 2))
+def test_matmul(ctx_factory, x1_ndim, x2_ndim):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    def get_array(ndim):
+        arr = np.array([[1, 2], [3, 4]])
+        return arr[(0,) * (arr.ndim - ndim)]
+
+    x1_in = get_array(x1_ndim)
+    x2_in = get_array(x2_ndim)
+
+    namespace = pt.Namespace()
+    x1 = pt.make_data_wrapper(namespace, x1_in)
+    x2 = pt.make_data_wrapper(namespace, x2_in)
+    prog = pt.generate_loopy(x1 @ x2, target=pt.PyOpenCLTarget(queue))
+    _, (out,) = prog()
+
+    assert (out == x1_in @ x2_in).all()
 
 
 def test_data_wrapper(ctx_factory):
@@ -101,8 +124,8 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     queue = cl.CommandQueue(ctx)
 
     namespace = pt.Namespace()
-    x = pt.Placeholder(namespace, "x", (5,), np.int)
-    y = pt.Placeholder(namespace, "y", (5,), np.int)
+    x = Placeholder(namespace, "x", (5,), np.int)
+    y = Placeholder(namespace, "y", (5,), np.int)
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 

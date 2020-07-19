@@ -26,9 +26,11 @@ THE SOFTWARE.
 
 from pytato.array import (
         Namespace, Array, DictOfNamedArrays, Tag, UniqueTag,
-        DottedName, Placeholder,
+        DottedName,
 
         make_placeholder, make_size_param, make_data_wrapper,
+
+        matmul
         )
 
 from pytato.codegen import generate_loopy
@@ -36,10 +38,13 @@ from pytato.target import Target, PyOpenCLTarget
 
 __all__ = (
         "DottedName", "Namespace", "Array", "DictOfNamedArrays",
-        "Tag", "UniqueTag", "Placeholder",
+        "Tag", "UniqueTag",
 
         "make_placeholder", "make_size_param", "make_data_wrapper",
 
+        "matmul",
+
         "generate_loopy",
+
         "Target", "PyOpenCLTarget",
 )

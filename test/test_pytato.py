@@ -23,17 +23,32 @@ THE SOFTWARE.
 """
 
 import sys
-import pytest  # noqa
+
+import numpy as np
+import pytest
+
+import pytato as pt
 
 
-def test_being_very_lazy():
-    # Placeholder to make CI pass. Remove after tests are added.
-    pass
+def test_matmul_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    b = pt.make_placeholder(namespace, "b", (20, 10), np.float)
+
+    with pytest.raises(ValueError):
+        a @ b
+
+    c = pt.make_placeholder(namespace, "c", (), np.float)
+    with pytest.raises(ValueError):
+        c @ c
+
+    n = pt.make_size_param(namespace, "n")
+    d = pt.make_placeholder(namespace, "d", "(n, n)", np.float)
+    d @ d
 
 
 if __name__ == "__main__":
-    # make sure that import failures get reported, instead of skipping the
-    # tests.
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:

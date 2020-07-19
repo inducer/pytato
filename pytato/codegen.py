@@ -28,11 +28,12 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
 import islpy as isl
 import loopy as lp
 import pymbolic.primitives as prim
+from pymbolic import var
 import pytools
 
 from pytato.array import (
         Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda,
-        SizeParam, DataWrapper, InputArgumentBase)
+        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -75,7 +76,7 @@ Code Generation Internals
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
 # type level.
 SymbolicIndex = ShapeType
-ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
+ReductionBounds = Dict[int, Tuple[ScalarExpression, ScalarExpression]]
 
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
@@ -103,7 +104,8 @@ class LoopyExpressionContext(object):
 
     .. attribute:: reduction_bounds
 
-        A mapping from inames to reduction bounds in the expression.
+        A mapping from reduction iname number (for reduction inames ``_r0``,
+        ``_r1``, ...) to reduction bounds in the expression.
 
     .. automethod:: update_depends_on
     .. automethod:: lookup
@@ -146,7 +148,20 @@ class ImplementedResult(object):
 
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        """Return a :mod:`loopy` expression for this result."""
+        """Return a :mod:`loopy` expression for this result.
+
+        :param indices: symbolic expressions for the indices of the array
+        :param expr_context: the associated expression context. The fields are
+            treated as follows:
+
+               - *depends_on* is populated with any dependencies needed for the
+                 generated expression.
+
+               - *reduction_bounds* is populated with reduction bounds for the
+                 reduction inames in the returned expression. If
+                 *reduction_bounds* is nonempty, then the returned inames are
+                 ensured to be disjoint from those present.
+        """
         raise NotImplementedError
 
 
@@ -174,16 +189,30 @@ class InlinedResult(ImplementedResult):
 
     See also: :class:`pytato.array.ImplInlined`.
     """
-    def __init__(self, expr: ScalarExpression, array: Array):
+    def __init__(self, expr: ScalarExpression, array: Array,
+            reduction_bounds: ReductionBounds, depends_on: FrozenSet[str]):
         super().__init__(array)
         self.expr = expr
+        self.reduction_bounds = dict(reduction_bounds)
+        self.depends_on = depends_on
 
-    # TODO: Handle dependencies and reduction domains.
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        return scalar_expr.substitute(
-                self.expr,
-                {f"_{d}": i for d, i in zip(range(self.array.ndim), indices)})
+        assert len(indices) == self.array.ndim
+        substitutions = {f"_{d}": i for d, i in enumerate(indices)}
+
+        reduction_start = 0
+        if expr_context.reduction_bounds:
+            reduction_start = 1 + max(expr_context.reduction_bounds)
+
+        for i, bounds in self.reduction_bounds.items():
+            j = i + reduction_start
+            substitutions[f"_r{i}"] = var(f"_r{j}")
+            expr_context.reduction_bounds[j] = bounds
+
+        expr_context.update_depends_on(self.depends_on)
+
+        return scalar_expr.substitute(self.expr, substitutions)
 
 
 class SubstitutionRuleResult(ImplementedResult):
@@ -284,6 +313,53 @@ class CodeGenMapper(pytato.transform.Mapper):
     map_placeholder = handle_array_input_argument
     map_data_wrapper = handle_array_input_argument
 
+    def map_matrix_product(self, expr: MatrixProduct,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        x1_result = self.rec(expr.x1, state)
+        x2_result = self.rec(expr.x2, state)
+
+        expr_context = LoopyExpressionContext(state)
+        expr_context.reduction_bounds[0] = (0, expr.x2.shape[0])
+
+        # Figure out inames.
+        x1_inames = []
+        for i in range(expr.x1.ndim):
+            if i == expr.x1.ndim - 1:
+                x1_inames.append(var("_r0"))
+            else:
+                x1_inames.append(var(f"_{i}"))
+        x2_inames = []
+        for i in range(expr.x2.ndim):
+            if i == 0:
+                x2_inames.append(var("_r0"))
+            else:
+                offset = i + len(x1_inames) - 2
+                x2_inames.append(var(f"_{offset}"))
+
+        inner_expr = x1_result.to_loopy_expression(
+                tuple(x1_inames), expr_context)
+        inner_expr *= x2_result.to_loopy_expression(
+                tuple(x2_inames), expr_context)
+
+        import loopy.library.reduction as red
+        result_expr = lp.Reduction(
+                operation=red.parse_reduction_op("sum"),
+                inames=("_r0",),
+                expr=inner_expr,
+                allow_simultaneous=False)
+
+        result = InlinedResult(result_expr,
+                expr,
+                expr_context.reduction_bounds,
+                expr_context.depends_on)
+
+        state.results[expr] = result
+        return result
+
+
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
@@ -295,7 +371,7 @@ class CodeGenMapper(pytato.transform.Mapper):
                 local_namespace=expr.bindings)
         loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
 
-        result = InlinedResult(loopy_expr, expr)
+        result = InlinedResult(loopy_expr, expr, {}, frozenset())
         state.results[expr] = result
         return result
 
@@ -345,10 +421,13 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
 # {{{ utils
 
-def domain_for_shape(
-        dim_names: Tuple[str, ...], shape: ShapeType) -> isl.BasicSet:
+def domain_for_shape(dim_names: Tuple[str, ...],
+         shape: ShapeType,
+         reductions: Dict[str, Tuple[ScalarExpression, ScalarExpression]],
+         ) -> isl.BasicSet:
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
-    for an array of (potentially symbolic) shape *shape*.
+    for an array of (potentially symbolic) shape *shape* having reduction
+    dimensions *reductions*.
 
     :param dim_names: A tuple of strings, the names of the axes. These become set
         dimensions in the returned domain.
@@ -357,6 +436,10 @@ def domain_for_shape(
         expressions. The variables in these expressions become parameter
         dimensions in the returned set.  Must have the same length as
         *dim_names*.
+
+    :arg reductions: A map from reduction inames to (lower, upper) bounds
+        (as half-open integer ranges). The variables in the bounds become
+        parameter dimensions in the returned set.
     """
     assert len(dim_names) == len(shape)
 
@@ -365,7 +448,12 @@ def domain_for_shape(
     for sdep in map(scalar_expr.get_dependencies, shape):
         param_names_set |= sdep
 
-    set_names = sorted(dim_names)
+    for bounds in reductions.values():
+        for sdep in map(scalar_expr.get_dependencies, bounds):
+            # FIXME: Assumes that reduction bounds are not data-dependent.
+            param_names_set |= sdep
+
+    set_names = sorted(tuple(dim_names) + tuple(reductions))
     param_names = sorted(param_names_set)
 
     # Build domain.
@@ -382,6 +470,10 @@ def domain_for_shape(
         dom &= affs[0].le_set(affs[iname])
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
 
+    for iname, (left, right) in reductions.items():
+        dom &= aff_from_expr(dom.space, left).le_set(affs[iname])
+        dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))
+
     dom, = dom.get_basic_sets()
 
     return dom
@@ -393,38 +485,49 @@ def add_output(name: str, expr: Array, state: CodeGenState,
     """
     result = mapper(expr, state)
 
+    # Get expression.
     inames = tuple(
             state.var_name_gen(f"{name}_dim{d}")
             for d in range(expr.ndim))
-    domain = domain_for_shape(inames, expr.shape)
-
-    arg = lp.GlobalArg(name,
-            shape=expr.shape,
-            dtype=expr.dtype,
-            order="C",
-            is_output_only=True)
-
     indices = tuple(prim.Variable(iname) for iname in inames)
     expr_context = LoopyExpressionContext(state)
     copy_expr = result.to_loopy_expression(indices, expr_context)
 
-    # TODO: Contextual data not supported yet.
-    assert not expr_context.reduction_bounds
-    assert not expr_context.depends_on
+    # Make the reduction inames/substitute them into expression.
+    reduction_inames = tuple(
+            state.var_name_gen(f"{name}_red{i}")
+            for i in range(len(expr_context.reduction_bounds)))
+    substitutions = {
+            f"_r{i}": var(reduction_inames[i])
+            for i in expr_context.reduction_bounds}
+    copy_expr = scalar_expr.substitute(copy_expr, substitutions)
 
+    # Make the instruction
     from loopy.kernel.instruction import make_assignment
-
     if indices:
         assignee = prim.Variable(name)[indices]
     else:
         assignee = prim.Variable(name)
-
     insn = make_assignment((assignee,),
             copy_expr,
             id=state.insn_id_gen(f"{name}_copy"),
             within_inames=frozenset(inames),
             depends_on=expr_context.depends_on)
 
+    # Get the domain.
+    reduction_bounds = {
+            reduction_inames[i]: bounds
+            for i, bounds in expr_context.reduction_bounds.items()}
+    domain = domain_for_shape(inames, expr.shape, reduction_bounds)
+
+    # Get the argument.
+    arg = lp.GlobalArg(name,
+            shape=expr.shape,
+            dtype=expr.dtype,
+            order="C",
+            is_output_only=True)
+
+    # Update the kernel.
     kernel = state.kernel
     kernel = kernel.copy(args=kernel.args + [arg],
             instructions=kernel.instructions + [insn],

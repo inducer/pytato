@@ -46,6 +46,11 @@ Array Interface
 .. autoclass:: UniqueTag
 .. autoclass:: DictOfNamedArrays
 
+NumPy-Like Interface
+--------------------
+
+.. autofunction:: matmul
+
 Supporting Functionality
 ------------------------
 
@@ -55,6 +60,7 @@ Supporting Functionality
 
 Concrete Array Data
 -------------------
+
 .. autoclass:: DataInterface
 
 Pre-Defined Tags
@@ -71,6 +77,7 @@ Built-in Expression Nodes
 
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
+.. autoclass:: MatrixProduct
 .. autoclass:: Reshape
 .. autoclass:: LoopyFunction
 
@@ -363,7 +370,7 @@ class Array:
 
     .. attribute:: namespace
 
-        A (mutable) instance of :class:`Namespace` containing the
+        A (mutable) instance of :class:`~pytato.Namespace` containing the
         names used in the computation. All arrays in a
         computation share the same namespace.
 
@@ -475,6 +482,9 @@ class Array:
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
+
+    def __matmul__(self, other: Array) -> Array:
+        return matmul(self, other)
 
     def _binary_op(self,
             op: Any,
@@ -722,6 +732,56 @@ class Einsum(Array):
 # }}}
 
 
+# {{{ matrix product
+
+class MatrixProduct(Array):
+    """A product of two matrices, or a matrix and a vector.
+
+    The semantics of this operation follow PEP 459 [pep459]_.
+
+    .. attribute:: x1
+    .. attribute:: x2
+
+    .. [pep459] https://www.python.org/dev/peps/pep-0459/
+
+    """
+    fields = Array.fields + ("x1", "x2")
+
+    mapper_method = "map_matrix_product"
+
+    def __init__(self,
+            namespace: Namespace,
+            x1: Array,
+            x2: Array,
+            tags: Optional[TagsType] = None):
+        super().__init__(namespace, tags)
+        self.x1 = x1
+        self.x2 = x2
+
+    @property
+    def shape(self) -> ShapeType:
+        # FIXME: Broadcasting currently unsupported.
+        assert 0 < self.x1.ndim <= 2
+        assert 0 < self.x2.ndim <= 2
+
+        if self.x1.ndim == 1 and self.x2.ndim == 1:
+            return ()
+        elif self.x1.ndim == 1 and self.x2.ndim == 2:
+            return (self.x2.shape[1],)
+        elif self.x1.ndim == 2 and self.x2.ndim == 1:
+            return (self.x1.shape[0],)
+        elif self.x1.ndim == 2 and self.x2.ndim == 2:
+            return (self.x1.shape[0], self.x2.shape[1])
+
+        assert False
+
+    @property
+    def dtype(self) -> np.dtype:
+        return np.result_type(self.x1.dtype, self.x2.dtype)
+
+# }}}
+
+
 # {{{ reshape
 
 class Reshape(Array):
@@ -741,12 +801,13 @@ class InputArgumentBase(Array):
         The name by which a value is supplied for the argument once computation
         begins.
 
-        The name is also implicitly :meth:`~Namespace.assign`\ ed in the
-        :class:`Namespace`.
+        The name is also implicitly :meth:`~pytato.Namespace.assign`\ ed in the
+        :class:`~pytato.Namespace`.
 
     .. note::
 
-        and within the same :class:`Namespace` is not allowed.
+        Creating multiple instances of any input argument with the same name
+        and within the same :class:`~pytato.Namespace` is not allowed.
     """
 
     # The name uniquely identifies this object in the namespace.
@@ -888,6 +949,29 @@ class LoopyFunction(DictOfNamedArrays):
         and one that's obtained by importing a dotted
         name.
     """
+
+# }}}
+
+
+# {{{ numpy interface
+
+def matmul(x1: Array, x2: Array) -> Array:
+    """Matrix multiplication."""
+    if x1.namespace is not x2.namespace:
+        raise ValueError("namespace mismatch")
+
+    if (
+            isinstance(x1, Number) or x1.shape == ()
+            or isinstance(x2, Number) or x2.shape == ()):
+        raise ValueError("scalars not allowed as arguments to matmul")
+
+    if len(x1.shape) > 2 or len(x2.shape) > 2:
+        raise NotImplementedError("broadcasting not supported")
+
+    if x1.shape[-1] != x2.shape[0]:
+        raise ValueError("dimension mismatch")
+
+    return MatrixProduct(x1.namespace, x1, x2)
 
 # }}}
 

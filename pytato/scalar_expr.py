@@ -25,8 +25,9 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet
+from typing import Any, Union, Mapping, FrozenSet, Set
 
+from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
@@ -70,19 +71,60 @@ def parse(s: str) -> ScalarExpression:
 # {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
-    pass
+
+    def map_reduction(self, expr: Reduction, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
+            return
+
+        self.rec(expr.expr, *args, **kwargs)
 
 
 class IdentityMapper(IdentityMapperBase):
-    pass
+
+    def map_reduction(self, expr: Reduction,
+            *args: Any, **kwargs: Any) -> Reduction:
+        new_inames = []
+        for iname in expr.inames:
+            new_iname = self.rec(prim.Variable(iname), *args, **kwargs)
+            if not isinstance(new_iname, prim.Variable):
+                raise ValueError(
+                        f"reduction iname {iname} can only be renamed"
+                        " to another iname")
+            new_inames.append(new_iname.name)
+
+        return Reduction(expr.operation,
+                tuple(new_inames),
+                self.rec(expr.expr, *args, **kwargs),
+                allow_simultaneous=expr.allow_simultaneous)
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
-    pass
+
+    def map_reduction(self, expr: Reduction) -> Reduction:
+        new_inames = []
+        for iname in expr.inames:
+            new_iname = self.subst_func(iname)
+            if new_iname is None:
+                new_iname = prim.Variable(iname)
+            else:
+                if not isinstance(new_iname, prim.Variable):
+                    raise ValueError(
+                            f"reduction iname {iname} can only be renamed"
+                            " to another iname")
+            new_inames.append(new_iname.name)
+
+        return Reduction(expr.operation,
+                tuple(new_inames),
+                self.rec(expr.expr),
+                allow_simultaneous=expr.allow_simultaneous)
 
 
 class DependencyMapper(DependencyMapperBase):
-    pass
+
+    def map_reduction(self, expr: Reduction,
+            *args: Any, **kwargs: Any) -> Set[prim.Variable]:
+        deps: Set[prim.Variable] = self.rec(expr.expr, *args, **kwargs)
+        return deps - set(prim.Variable(iname) for iname in expr.inames)
 
 # }}}
 
