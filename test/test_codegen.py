@@ -168,6 +168,49 @@ def test_roll(ctx_factory, shift, axis):
     assert (x_out == np.roll(x_in, shift=shift, axis=axis)).all()
 
 
+@pytest.mark.parametrize("axes", (
+    (), (0, 1), (1, 0),
+    (0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)))
+def test_axis_permutation(ctx_factory, axes):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    ndim = len(axes)
+    shape = (3, 4, 5)[:ndim]
+
+    from numpy.random import default_rng
+    rng = default_rng()
+
+    x_in = rng.random(size=shape)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    prog = pt.generate_loopy(
+            pt.transpose(x, axes),
+            target=pt.PyOpenCLTarget(queue))
+
+    _, (x_out,) = prog()
+    assert (x_out == np.transpose(x_in, axes)).all()
+
+
+def test_transpose(ctx_factory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    shape = (2, 8)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=shape)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    prog = pt.generate_loopy(x.T, target=pt.PyOpenCLTarget(queue))
+
+    _, (x_out,) = prog()
+    assert (x_out == x_in.T).all()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

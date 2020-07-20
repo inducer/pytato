@@ -51,6 +51,7 @@ NumPy-Like Interface
 
 .. autofunction:: matmul
 .. autofunction:: roll
+.. autofunction:: transpose
 
 Supporting Functionality
 ------------------------
@@ -80,6 +81,7 @@ Built-in Expression Nodes
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
 .. autoclass:: Roll
+.. autoclass:: AxisPermutation
 .. autoclass:: Reshape
 .. autoclass:: LoopyFunction
 
@@ -115,7 +117,7 @@ import operator
 from dataclasses import dataclass
 from typing import (
         Optional, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        FrozenSet, Protocol)
+        FrozenSet, Protocol, Sequence)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -446,6 +448,10 @@ class Array:
     @property
     def ndim(self) -> int:
         return len(self.shape)
+
+    @property
+    def T(self) -> Array:
+        return AxisPermutation(self, tuple(range(self.ndim)[::-1]))
 
     def tagged(self, tag: Tag) -> Array:
         """
@@ -839,6 +845,41 @@ class Roll(Array):
 # }}}
 
 
+# {{{ axis permutation
+
+class AxisPermutation(Array):
+    r"""Permute the axes of an array."""
+
+    fields = Array.fields + ("array", "axes")
+    mapper_method = "map_axis_permutation"
+
+    def __init__(self,
+            array: Array,
+            axes: Tuple[int, ...],
+            tags: Optional[TagsType] = None):
+        super().__init__(tags)
+        self.array = array
+        self.axes = axes
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.array.namespace
+
+    @property
+    def shape(self) -> ShapeType:
+        result = []
+        base_shape = self.array.shape
+        for index in self.axes:
+            result.append(base_shape[index])
+        return tuple(result)
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.array.dtype
+
+# }}}
+
+
 # {{{ reshape
 
 class Reshape(Array):
@@ -1017,7 +1058,11 @@ class LoopyFunction(DictOfNamedArrays):
 # {{{ numpy interface
 
 def matmul(x1: Array, x2: Array) -> Array:
-    """Matrix multiplication."""
+    """Matrix multiplication.
+
+    :param x1: First argument
+    :param x2: Second argument
+    """
     if x1.namespace is not x2.namespace:
         raise ValueError("namespace mismatch")
 
@@ -1061,6 +1106,25 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
         return a
 
     return Roll(a, shift, axis)
+
+
+def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
+    """Reverse or permute the axes of an array.
+
+    :param a: Input array
+    :param axes: If specified, a permutation of ``[0, 1, ..., a.ndim-1]``. Defaults
+        to ``range(a.ndim)[::-1]``.
+    """
+    if axes is None:
+        axes = range(a.ndim)[::-1]
+
+    if len(axes) != a.ndim:
+        raise ValueError("axes have incorrect length")
+
+    if set(axes) != set(range(a.ndim)):
+        raise ValueError("invalid axes were given")
+
+    return AxisPermutation(a, tuple(axes))
 
 # }}}
 

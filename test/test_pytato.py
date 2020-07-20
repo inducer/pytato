@@ -61,6 +61,22 @@ def test_roll_validation():
         pt.roll(a, 1, axis=-1)
 
 
+def test_transpose_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    pt.transpose(a)
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (2, 0, 1))
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (1, 1))
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (0,))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

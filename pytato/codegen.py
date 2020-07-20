@@ -33,7 +33,8 @@ import pytools
 
 from pytato.array import (
         Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda,
-        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll)
+        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll,
+        AxisPermutation)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -367,6 +368,28 @@ class CodeGenMapper(pytato.transform.Mapper):
         indices = [var(f"_{d}") for d in range(expr.ndim)]
         indices[expr.axis] = (
                 indices[expr.axis] + expr.shift) % expr.shape[expr.axis]
+
+        expr_context = LoopyExpressionContext(state)
+        loopy_expr = (
+                self.rec(expr.array, state)
+                .to_loopy_expression(tuple(indices), expr_context))
+
+        result = InlinedResult(loopy_expr,
+                expr,
+                expr_context.reduction_bounds,
+                expr_context.depends_on)
+
+        state.results[expr] = result
+        return result
+
+    def map_axis_permutation(self, expr: AxisPermutation,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        indices = [None] * expr.ndim
+        for from_index, to_index in enumerate(expr.axes):
+            indices[to_index] = var(f"_{from_index}")
 
         expr_context = LoopyExpressionContext(state)
         loopy_expr = (
