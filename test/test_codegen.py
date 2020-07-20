@@ -147,6 +147,27 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     assert (outputs["y_out"] == y_in).all()
 
 
+@pytest.mark.parametrize("shift", (-1, 1, -20, 20))
+@pytest.mark.parametrize("axis", (0, 1))
+def test_roll(ctx_factory, shift, axis):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    namespace = pt.Namespace()
+    pt.make_size_param(namespace, "n")
+    x = pt.make_placeholder(namespace, "x", shape=("n", "n"), dtype=np.float)
+
+    prog = pt.generate_loopy(
+            pt.roll(x, shift=shift, axis=axis),
+            target=pt.PyOpenCLTarget(queue))
+
+    x_in = np.array([[1., 2.], [3., 4.]])
+
+    _, (x_out,) = prog(x=x_in)
+
+    assert (x_out == np.roll(x_in, shift=shift, axis=axis)).all()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

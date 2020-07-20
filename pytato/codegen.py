@@ -33,7 +33,7 @@ import pytools
 
 from pytato.array import (
         Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda,
-        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct)
+        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -359,6 +359,27 @@ class CodeGenMapper(pytato.transform.Mapper):
         state.results[expr] = result
         return result
 
+    def map_roll(self, expr: Roll,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        indices = [var(f"_{d}") for d in range(expr.ndim)]
+        indices[expr.axis] = (
+                indices[expr.axis] + expr.shift) % expr.shape[expr.axis]
+
+        expr_context = LoopyExpressionContext(state)
+        loopy_expr = (
+                self.rec(expr.array, state)
+                .to_loopy_expression(tuple(indices), expr_context))
+
+        result = InlinedResult(loopy_expr,
+                expr,
+                expr_context.reduction_bounds,
+                expr_context.depends_on)
+
+        state.results[expr] = result
+        return result
 
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> ImplementedResult:
@@ -424,7 +445,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 def domain_for_shape(dim_names: Tuple[str, ...],
          shape: ShapeType,
          reductions: Dict[str, Tuple[ScalarExpression, ScalarExpression]],
-         ) -> isl.BasicSet:
+         ) -> isl.BasicSet:  # noqa
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape* having reduction
     dimensions *reductions*.

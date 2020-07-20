@@ -50,6 +50,7 @@ NumPy-Like Interface
 --------------------
 
 .. autofunction:: matmul
+.. autofunction:: roll
 
 Supporting Functionality
 ------------------------
@@ -78,6 +79,7 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
+.. autoclass:: Roll
 .. autoclass:: Reshape
 .. autoclass:: LoopyFunction
 
@@ -782,6 +784,49 @@ class MatrixProduct(Array):
 # }}}
 
 
+# {{{ roll
+
+class Roll(Array):
+    """Roll an array along an axis.
+
+    .. attribute:: array
+
+        The input :class:`~pytato.Array`.
+
+    .. attribute:: shift
+
+        Shift amount.
+
+    .. attribute:: axis
+
+        Shift axis.
+    """
+
+    fields = Array.fields + ("array", "shift", "axis")
+    mapper_method = "map_roll"
+
+    def __init__(self,
+            namespace: Namespace,
+            array: Array,
+            shift: int,
+            axis: int,
+            tags: Optional[TagsType] = None):
+        super().__init__(namespace, tags)
+        self.array = array
+        self.shift = shift
+        self.axis = axis
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.array.shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.array.dtype
+
+# }}}
+
+
 # {{{ reshape
 
 class Reshape(Array):
@@ -974,6 +1019,32 @@ def matmul(x1: Array, x2: Array) -> Array:
         raise ValueError("dimension mismatch")
 
     return MatrixProduct(x1.namespace, x1, x2)
+
+
+def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
+    """Roll array elements along a given axis.
+
+    :param a: Input array
+    :param shift: The number of places by which elements are shifted
+    :param axis: Axis along which the array is shifted
+    """
+    if a.ndim == 0:
+        return a
+
+    if axis is None:
+        if a.ndim > 1:
+            raise NotImplementedError(
+                    "shifing along more than one dimension is unsupported")
+        else:
+            axis = 0
+
+    if not (0 <= axis < a.ndim):
+        raise ValueError("invalid axis")
+
+    if shift == 0:
+        return a
+
+    return Roll(a.namespace, a, shift, axis)
 
 # }}}
 

@@ -48,6 +48,19 @@ def test_matmul_validation():
     d @ d
 
 
+def test_roll_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    pt.roll(a, 1, axis=0)
+
+    with pytest.raises(ValueError):
+        pt.roll(a, 1, axis=2)
+
+    with pytest.raises(ValueError):
+        pt.roll(a, 1, axis=-1)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
