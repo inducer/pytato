@@ -121,6 +121,7 @@ from typing import (
 
 import numpy as np
 import pymbolic.primitives as prim
+from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
 
 import pytato.scalar_expr as scalar_expr
@@ -500,40 +501,73 @@ class Array:
             op: Any,
             other: Union[Array, Number],
             reverse: bool = False) -> Array:
-        if isinstance(other, Number):
-            # TODO
-            raise NotImplementedError
-        else:
-            if self.shape != other.shape:
-                raise NotImplementedError("broadcasting")
 
-            dtype = np.result_type(self.dtype, other.dtype)
-
-            # FIXME: If either *self* or *other* is an IndexLambda, its expression
-            # could be folded into the output, producing a fused result.
-            if self.shape == ():
-                expr = op(prim.Variable("_in0"), prim.Variable("_in1"))
+        def add_indices(val):
+            if self.ndim == 0:
+                return val
             else:
-                indices = tuple(
-                        prim.Variable(f"_{i}") for i in range(self.ndim))
-                expr = op(
-                        prim.Variable("_in0")[indices],
-                        prim.Variable("_in1")[indices])
+                indices = tuple(var(f"_{i}") for i in range(self.ndim))
+                return val[indices]
 
-            first, second = self, other
-            if reverse:
-                first, second = second, first
+        if isinstance(other, Number):
+            first = add_indices(var("_in0"))
+            second = other
+            bindings = dict(_in0=self)
+            other = np.array(other)
+        elif isinstance(other, Array):
+            if self.shape != other.shape:
+                raise NotImplementedError("broadcasting not supported")
+            first = add_indices(var("_in0"))
+            second = add_indices(var("_in1"))
+            bindings = dict(_in0=self, _in1=other)
+        else:
+            raise ValueError("unknown argument")
 
-            bindings = dict(_in0=first, _in1=second)
+        if reverse:
+            first, second = second, first
+            if len(bindings) == 2:
+                bindings["_in1"], bindings["_in0"] = \
+                        bindings["_in0"], bindings["_in1"]
 
-            return IndexLambda(self.namespace,
-                    expr,
-                    shape=self.shape,
-                    dtype=dtype,
-                    bindings=bindings)
+        dtype = np.result_type(self.dtype, other.dtype)
+        expr = op(first, second)
+
+        return IndexLambda(self.namespace,
+                expr,
+                shape=self.shape,
+                dtype=dtype,
+                bindings=bindings)
+
+    def _unary_op(self, op: Any) -> Array:
+        if self.ndim == 0:
+            expr = op(var("_in0"))
+        else:
+            indices = tuple(var(f"_{i}") for i in range(self.ndim))
+            expr = op(var("_in0")[indices])
+
+        bindings = dict(_in0=self)
+        return IndexLambda(self.namespace,
+                expr,
+                shape=self.shape,
+                dtype=self.dtype,
+                bindings=bindings)
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
+
+    __add__ = partialmethod(_binary_op, operator.add)
+    __radd__ = partialmethod(_binary_op, operator.add, reverse=True)
+
+    __sub__ = partialmethod(_binary_op, operator.sub)
+    __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
+
+    __truediv__ = partialmethod(_binary_op, operator.truediv)
+    __rtruediv__ = partialmethod(_binary_op, operator.truediv, reverse=True)
+
+    __neg__ = partialmethod(_unary_op, operator.neg)
+
+    def __pos__(self) -> Array:
+        return self
 
 # }}}
 

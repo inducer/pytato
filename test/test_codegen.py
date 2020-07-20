@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import operator
 import sys
 
 import loopy as lp
@@ -209,6 +210,70 @@ def test_transpose(ctx_factory):
 
     _, (x_out,) = prog()
     assert (x_out == x_in.T).all()
+
+
+def reverse_args(f):
+    def wrapper(*args):
+        return f(*reversed(args))
+    return wrapper
+
+
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
+@pytest.mark.parametrize("reverse", (False, True))
+def test_scalar_array_binary_arith(ctx_factory, which, reverse):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    op = getattr(operator, which)
+    if reverse:
+        op = reverse_args(op)
+
+    arg = 2
+
+    x_in = np.array([1., 2., 3., 4., 5.])
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    prog = pt.generate_loopy(op(arg, x), target=pt.PyOpenCLTarget(queue))
+
+    _, (x_out,) = prog()
+    assert (x_out == op(arg, x_in)).all()
+
+
+@pytest.mark.parametrize("which", ("neg", "pos"))
+def test_unary_arith(ctx_factory, which):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    op = getattr(operator, which)
+
+    x_in = np.array([1., 2., 3., 4., 5.])
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    prog = pt.generate_loopy(op(x), target=pt.PyOpenCLTarget(queue))
+
+    _, (x_out,) = prog()
+    assert (x_out == op(x_in)).all()
+
+
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
+@pytest.mark.parametrize("reverse", (False, True))
+def test_array_array_binary_arith(ctx_factory, which, reverse):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    op = getattr(operator, which)
+    if reverse:
+        op = reverse_args(op)
+
+    x_in = np.array([1., 2., 3., 4., 5.])
+    y_in = np.array([6., 7., 8., 9., 10.])
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    y = pt.make_data_wrapper(namespace, y_in)
+    prog = pt.generate_loopy(op(x, y), target=pt.PyOpenCLTarget(queue))
+
+    _, (out,) = prog()
+    assert (out == op(x_in, y_in)).all()
 
 
 if __name__ == "__main__":
