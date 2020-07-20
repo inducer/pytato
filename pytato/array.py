@@ -961,8 +961,10 @@ def matmul(x1: Array, x2: Array) -> Array:
         raise ValueError("namespace mismatch")
 
     if (
-            isinstance(x1, Number) or x1.shape == ()
-            or isinstance(x2, Number) or x2.shape == ()):
+            isinstance(x1, Number)
+            or x1.shape == ()
+            or isinstance(x2, Number)
+            or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
 
     if len(x1.shape) > 2 or len(x2.shape) > 2:
