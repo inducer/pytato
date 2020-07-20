@@ -419,15 +419,17 @@ class Array:
     fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
     def __init__(self,
-            namespace: Namespace,
             tags: Optional[TagsType] = None):
         if tags is None:
             tags = frozenset()
 
-        self.namespace = namespace
         self.tags = tags
 
     def copy(self, **kwargs: Any) -> Array:
+        raise NotImplementedError
+
+    @property
+    def namespace(self) -> Namespace:
         raise NotImplementedError
 
     @property
@@ -538,12 +540,11 @@ class _SuppliedShapeAndDtypeMixin(object):
     """
 
     def __init__(self,
-            namespace: Namespace,
             shape: ShapeType,
             dtype: np.dtype,
             **kwargs: Any):
         # https://github.com/python/mypy/issues/5887
-        super().__init__(namespace, **kwargs)  # type: ignore
+        super().__init__(**kwargs)  # type: ignore
         self._shape = shape
         self._dtype = dtype
 
@@ -686,10 +687,15 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
         if bindings is None:
             bindings = {}
 
-        super().__init__(namespace, shape=shape, dtype=dtype, tags=tags)
+        super().__init__(shape=shape, dtype=dtype, tags=tags)
 
+        self._namespace = namespace
         self.expr = expr
         self.bindings = bindings
+
+    @property
+    def namespace(self) -> Namespace:
+        return self._namespace
 
     @memoize_method
     def is_reference(self) -> bool:
@@ -752,13 +758,16 @@ class MatrixProduct(Array):
     mapper_method = "map_matrix_product"
 
     def __init__(self,
-            namespace: Namespace,
             x1: Array,
             x2: Array,
             tags: Optional[TagsType] = None):
-        super().__init__(namespace, tags)
+        super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.x1.namespace
 
     @property
     def shape(self) -> ShapeType:
@@ -806,15 +815,18 @@ class Roll(Array):
     mapper_method = "map_roll"
 
     def __init__(self,
-            namespace: Namespace,
             array: Array,
             shift: int,
             axis: int,
             tags: Optional[TagsType] = None):
-        super().__init__(namespace, tags)
+        super().__init__(tags)
         self.array = array
         self.shift = shift
         self.axis = axis
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.array.namespace
 
     @property
     def shape(self) -> ShapeType:
@@ -865,11 +877,16 @@ class InputArgumentBase(Array):
         if name is None:
             raise ValueError("Must have explicit name")
 
-        # Publish our name to the namespace
+        # Publish our name to the namespace.
         namespace.assign(name, self)
 
-        super().__init__(namespace=namespace, tags=tags)
+        self._namespace = namespace
+        super().__init__(tags=tags)
         self.name = name
+
+    @property
+    def namespace(self) -> Namespace:
+        return self._namespace
 
     def tagged(self, tag: Tag) -> Array:
         raise ValueError("Cannot modify tags")
@@ -954,10 +971,9 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             shape: ShapeType,
             dtype: np.dtype,
             tags: Optional[TagsType] = None):
-        super().__init__(
-                namespace,
-                shape=shape,
+        super().__init__(shape=shape,
                 dtype=dtype,
+                namespace=namespace,
                 name=name,
                 tags=tags)
 
@@ -1018,7 +1034,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if x1.shape[-1] != x2.shape[0]:
         raise ValueError("dimension mismatch")
 
-    return MatrixProduct(x1.namespace, x1, x2)
+    return MatrixProduct(x1, x2)
 
 
 def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
@@ -1044,7 +1060,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     if shift == 0:
         return a
 
-    return Roll(a.namespace, a, shift, axis)
+    return Roll(a, shift, axis)
 
 # }}}
 
