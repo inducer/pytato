@@ -28,6 +28,7 @@ from pytato.array import (
         Namespace, Array, DictOfNamedArrays, Tag, UniqueTag,
         DottedName,
 
+        make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
 
         matmul, roll, transpose,
@@ -40,7 +41,7 @@ __all__ = (
         "DottedName", "Namespace", "Array", "DictOfNamedArrays",
         "Tag", "UniqueTag",
 
-        "make_placeholder", "make_size_param", "make_data_wrapper",
+        "make_dict_of_named_arrays", "make_placeholder", "make_size_param", "make_data_wrapper",
 
         "matmul", "roll", "transpose",
 

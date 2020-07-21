@@ -23,7 +23,8 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
+from functools import partialmethod
+from typing import (Any, Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
 
 import islpy as isl
 import loopy as lp
@@ -32,9 +33,9 @@ from pymbolic import var
 import pytools
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda,
+        Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll,
-        AxisPermutation)
+        AxisPermutation, Slice, IndexRemappingBase)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -197,6 +198,16 @@ class InlinedResult(ImplementedResult):
         self.reduction_bounds = dict(reduction_bounds)
         self.depends_on = depends_on
 
+    @classmethod
+    def from_loopy_expression(cls,
+            loopy_expr: ScalarExpression,
+            loopy_expr_context: LoopyExpressionContext,
+            array: Array):
+        return cls(loopy_expr,
+                array,
+                loopy_expr_context.reduction_bounds,
+                loopy_expr_context.depends_on)
+
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         assert len(indices) == self.array.ndim
@@ -287,7 +298,7 @@ class CodeGenMapper(pytato.transform.Mapper):
         state.results[expr] = result
         return result
 
-    def handle_array_input_argument(self, expr: Union[Placeholder, DataWrapper],
+    def handle_array_input_argument(self, expr: InputArgumentBase,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
@@ -322,8 +333,8 @@ class CodeGenMapper(pytato.transform.Mapper):
         x1_result = self.rec(expr.x1, state)
         x2_result = self.rec(expr.x2, state)
 
-        expr_context = LoopyExpressionContext(state)
-        expr_context.reduction_bounds[0] = (0, expr.x2.shape[0])
+        loopy_expr_context = LoopyExpressionContext(state)
+        loopy_expr_context.reduction_bounds[0] = (0, expr.x2.shape[0])
 
         # Figure out inames.
         x1_inames = []
@@ -341,68 +352,62 @@ class CodeGenMapper(pytato.transform.Mapper):
                 x2_inames.append(var(f"_{offset}"))
 
         inner_expr = x1_result.to_loopy_expression(
-                tuple(x1_inames), expr_context)
+                tuple(x1_inames), loopy_expr_context)
         inner_expr *= x2_result.to_loopy_expression(
-                tuple(x2_inames), expr_context)
+                tuple(x2_inames), loopy_expr_context)
 
         import loopy.library.reduction as red
-        result_expr = lp.Reduction(
+        loopy_expr = lp.Reduction(
                 operation=red.parse_reduction_op("sum"),
                 inames=("_r0",),
                 expr=inner_expr,
                 allow_simultaneous=False)
 
-        result = InlinedResult(result_expr,
-                expr,
-                expr_context.reduction_bounds,
-                expr_context.depends_on)
+        result = InlinedResult.from_loopy_expression(
+                loopy_expr, loopy_expr_context, expr)
 
         state.results[expr] = result
         return result
 
-    def map_roll(self, expr: Roll,
+    def handle_index_remapping(self,
+            indices_getter: Any,
+            expr: IndexRemappingBase,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
 
-        indices = [var(f"_{d}") for d in range(expr.ndim)]
-        indices[expr.axis] = (
-                indices[expr.axis] + expr.shift) % expr.shape[expr.axis]
+        indices = indices_getter(self, expr)
 
-        expr_context = LoopyExpressionContext(state)
+        loopy_expr_context = LoopyExpressionContext(state)
         loopy_expr = (
                 self.rec(expr.array, state)
-                .to_loopy_expression(tuple(indices), expr_context))
+                .to_loopy_expression(indices, loopy_expr_context))
 
-        result = InlinedResult(loopy_expr,
-                expr,
-                expr_context.reduction_bounds,
-                expr_context.depends_on)
+        result = InlinedResult.from_loopy_expression(
+                loopy_expr, loopy_expr_context, expr)
 
         state.results[expr] = result
         return result
 
-    def map_axis_permutation(self, expr: AxisPermutation,
-            state: CodeGenState) -> ImplementedResult:
-        if expr in state.results:
-            return state.results[expr]
+    def _indices_for_roll(self, expr: Roll) -> SymbolicIndex:
+        indices = [var(f"_{d}") for d in range(expr.ndim)]
+        axis = expr.axis
+        indices[axis] = (indices[axis] + expr.shift) % expr.shape[axis]
+        return tuple(indices)
 
+    def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
         indices = [None] * expr.ndim
         for from_index, to_index in enumerate(expr.axes):
             indices[to_index] = var(f"_{from_index}")
+        return tuple(indices)
 
-        expr_context = LoopyExpressionContext(state)
-        loopy_expr = (
-                self.rec(expr.array, state)
-                .to_loopy_expression(tuple(indices), expr_context))
+    def _indices_for_slice(self, expr: Slice) -> SymbolicIndex:
+        return tuple(var(f"_{d}") + expr.begin[d] for d in range(expr.ndim))
 
-        result = InlinedResult(loopy_expr,
-                expr,
-                expr_context.reduction_bounds,
-                expr_context.depends_on)
-
-        state.results[expr] = result
-        return result
+    map_roll = partialmethod(handle_index_remapping, _indices_for_roll)
+    map_axis_permutation = (
+            partialmethod(handle_index_remapping, _indices_for_axis_permutation))
+    map_slice = partialmethod(handle_index_remapping, _indices_for_slice)
 
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> ImplementedResult:

@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import itertools
 import operator
 import sys
 
@@ -274,6 +275,54 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
 
     _, (out,) = prog()
     assert (out == op(x_in, y_in)).all()
+
+
+def generate_test_slices_for_dim(dim_bound):
+    # Include scalars to test indexing.
+    for i in range(dim_bound):
+        yield i
+
+    for i in range(0, dim_bound):
+        for j in range(i + 1, 1 + dim_bound):
+            yield slice(i, j, None)
+
+
+def generate_test_slices(shape):
+    yield from itertools.product(*map(generate_test_slices_for_dim, shape))
+
+
+@pytest.mark.parametrize("shape", [(3,), (2, 2), (1, 2, 1)])
+def test_slice(ctx_factory, shape):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+
+    x_in = rng.random(size=shape)
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+
+    outputs = {}
+    ref_outputs = {}
+
+    i = 0
+    for slice_ in generate_test_slices(shape):
+        outputs[f"out_{i}"] = x[slice_]
+        ref_outputs[f"out_{i}"] = x_in[slice_]
+        i += 1
+
+    prog = pt.generate_loopy(
+            pt.make_dict_of_named_arrays(outputs),
+            target=pt.PyOpenCLTarget(queue),
+            options=lp.Options(return_dict=True))
+
+    _, outputs = prog()
+
+    for output in outputs:
+        x_out = outputs[output]
+        x_ref = ref_outputs[output]
+        assert (x_out == x_ref).all()
 
 
 if __name__ == "__main__":

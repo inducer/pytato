@@ -83,6 +83,7 @@ Built-in Expression Nodes
 .. autoclass:: Roll
 .. autoclass:: AxisPermutation
 .. autoclass:: Reshape
+.. autoclass:: Slice
 .. autoclass:: LoopyFunction
 
 Input Arguments
@@ -107,6 +108,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
+.. autofunction:: make_slice
 """
 
 # }}}
@@ -355,6 +357,9 @@ def normalize_shape(
 # }}}
 
 
+SliceItem = Union[int, slice, type(Ellipsis), None]
+
+
 # {{{ array inteface
 
 class Array:
@@ -421,8 +426,7 @@ class Array:
     # hashable. Dicts of hashable keys and values are also permitted.
     fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
-    def __init__(self,
-            tags: Optional[TagsType] = None):
+    def __init__(self, tags: Optional[TagsType] = None):
         if tags is None:
             tags = frozenset()
 
@@ -445,6 +449,87 @@ class Array:
 
     def named(self, name: str) -> Array:
         return self.namespace.ref(self.namespace.assign(name, self))
+
+    def __getitem__(self,
+            slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
+        if not isinstance(slice_spec, tuple):
+            slice_spec = (slice_spec,)
+
+        # FIXME: This doesn't support all NumPy basic indexing constructs,
+        # including:
+        #
+        # - newaxis
+        # - Ellipsis
+        # - slices with nontrivial strides
+        # - slices with bounds that exceed array dimensions
+        # - slices with negative indices
+        # - slices that yield an array with a zero dimension (lacks codegen support)
+        #
+        # Symbolic expression support is also limited.
+
+        starts = []
+        sizes = []
+        kept_dims = []
+
+        slice_spec_expanded = []
+
+        for elem in slice_spec:
+            if elem is Ellipsis:
+                raise NotImplementedError("'...' is unsupported")
+            elif elem is None:
+                raise NotImplementedError("newaxis is unsupported")
+            else:
+                slice_spec_expanded.append(elem)
+
+        slice_spec_expanded.extend(
+                [slice(None, None, None)] * (self.ndim - len(slice_spec)))
+
+        if len(slice_spec_expanded) > self.ndim:
+            raise ValueError("too many dimensions in index")
+
+        for i, elem in enumerate(slice_spec_expanded):
+            if isinstance(elem, slice):
+                start = elem.start
+                if start is None:
+                    start = 0
+                stop = elem.stop
+                if stop is None:
+                    stop = self.shape[i]
+                stride = elem.step
+                if stride is not None and stride != 1:
+                    raise ValueError("non-trivial strides unsupported")
+                starts.append(start)
+                sizes.append(stop - start)
+                kept_dims.append(i)
+
+            elif isinstance(elem, int):
+                starts.append(elem)
+                sizes.append(1)
+
+            else:
+                raise ValueError("unknown index along dimension")
+
+        slice_ = make_slice(self, starts, sizes)
+
+        if len(kept_dims) != self.ndim:
+            # Return an IndexLambda that elides the indexed-into dimensions
+            # (as opposed to the ones that were sliced).
+            indices = [0] * self.ndim
+            shape = []
+            for i, dim in enumerate(kept_dims):
+                indices[dim] = var(f"_{i}")
+                shape.append(slice_.shape[dim])
+            expr = var("_in0")
+            if indices:
+                expr = expr[tuple(indices)]
+
+            return IndexLambda(self.namespace,
+                    expr,
+                    shape=tuple(shape),
+                    dtype=self.dtype,
+                    bindings=dict(_in0=slice_))
+        else:
+            return slice_
 
     @property
     def ndim(self) -> int:
@@ -833,14 +918,42 @@ class MatrixProduct(Array):
 # }}}
 
 
-# {{{ roll
+# {{{ index remapping
 
-class Roll(Array):
-    """Roll an array along an axis.
+class IndexRemappingBase(Array):
+    """Base class for operations that remap the indices of an array.
+
+    Note that index remappings can also be expressed via
+    :class:`~pytato.IndexLambda`.
 
     .. attribute:: array
 
-        The input :class:`~pytato.Array`.
+        The input :class:`~pytato.Array`
+
+    """
+    fields = Array.fields + ("array",)
+
+    def __init__(self,
+            array: Array,
+            tags: Optional[TagsType] = None):
+        super().__init__(tags)
+        self.array = array
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.array.dtype
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.array.namespace
+
+# }}}
+
+
+# {{{ roll
+
+class Roll(IndexRemappingBase):
+    """Roll an array along an axis.
 
     .. attribute:: shift
 
@@ -851,7 +964,7 @@ class Roll(Array):
         Shift axis.
     """
 
-    fields = Array.fields + ("array", "shift", "axis")
+    fields = IndexRemappingBase.fields + ("shift", "axis")
     mapper_method = "map_roll"
 
     def __init__(self,
@@ -859,45 +972,32 @@ class Roll(Array):
             shift: int,
             axis: int,
             tags: Optional[TagsType] = None):
-        super().__init__(tags)
-        self.array = array
+        super().__init__(array, tags)
         self.shift = shift
         self.axis = axis
 
     @property
-    def namespace(self) -> Namespace:
-        return self.array.namespace
-
-    @property
     def shape(self) -> ShapeType:
         return self.array.shape
-
-    @property
-    def dtype(self) -> np.dtype:
-        return self.array.dtype
 
 # }}}
 
 
 # {{{ axis permutation
 
-class AxisPermutation(Array):
+class AxisPermutation(IndexRemappingBase):
     r"""Permute the axes of an array."""
 
-    fields = Array.fields + ("array", "axes")
+    fields = IndexRemappingBase.fields + ("axes",)
     mapper_method = "map_axis_permutation"
 
     def __init__(self,
             array: Array,
             axes: Tuple[int, ...],
             tags: Optional[TagsType] = None):
-        super().__init__(tags)
+        super().__init__(array, tags)
         self.array = array
         self.axes = axes
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.array.namespace
 
     @property
     def shape(self) -> ShapeType:
@@ -907,18 +1007,43 @@ class AxisPermutation(Array):
             result.append(base_shape[index])
         return tuple(result)
 
-    @property
-    def dtype(self) -> np.dtype:
-        return self.array.dtype
-
 # }}}
 
 
 # {{{ reshape
 
-class Reshape(Array):
+class Reshape(IndexRemappingBase):
     """
     """
+
+# }}}
+
+
+# {{{ slice
+
+class Slice(IndexRemappingBase):
+    """Extracts a slice of constant size from an array.
+
+    .. attribute:: begin
+    .. attribute:: size
+    """
+
+    fields = Array.fields + ("begin", "size")
+    mapper_method = "map_slice"
+
+    def __init__(self,
+            array: Array,
+            begin: Tuple[int, ...],
+            size: Tuple[int, ...],
+            tags: Optional[TagsType] = None):
+        super().__init__(array, tags)
+
+        self.begin = begin
+        self.size = size
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.size
 
 # }}}
 
@@ -942,7 +1067,8 @@ class InputArgumentBase(Array):
         and within the same :class:`~pytato.Namespace` is not allowed.
     """
 
-    # The name uniquely identifies this object in the namespace.
+    # The name uniquely identifies this object in the namespace. Therefore,
+    # subclasses don't have to update *fields*.
     fields = ("name",)
 
     def __init__(self,
@@ -1089,7 +1215,7 @@ class LoopyFunction(DictOfNamedArrays):
 # }}}
 
 
-# {{{ numpy interface
+# {{{ end-user facing
 
 def matmul(x1: Array, x2: Array) -> Array:
     """Matrix multiplication.
@@ -1147,7 +1273,8 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
 
     :param a: Input array
     :param axes: If specified, a permutation of ``[0, 1, ..., a.ndim-1]``. Defaults
-        to ``range(a.ndim)[::-1]``.
+        to ``range(a.ndim)[::-1]``. The returned axis at index *i* corresponds to
+        the input axis *axes[i]*.
     """
     if axes is None:
         axes = range(a.ndim)[::-1]
@@ -1156,14 +1283,52 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
         raise ValueError("axes have incorrect length")
 
     if set(axes) != set(range(a.ndim)):
-        raise ValueError("invalid axes were given")
+        raise ValueError("repeated or out-of-bounds axes detected")
 
     return AxisPermutation(a, tuple(axes))
 
-# }}}
+
+def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
+    """Join a sequence of arrays along a new axis.
+
+    :param arrays: a finite sequence, each of whose elements is an
+        :class:`Array` of the same shape
+    :param axis: the position of the new axis, which will have length
+        *len(arrays)*
+    """
+
+    if not arrays:
+        raise ValueError("need at least one array to stack")
 
 
-# {{{ end-user-facing
+def make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array:
+    """Extract a constant-sized slice from an array with constant offsets.
+    """
+    if array.ndim != len(begin):
+        raise ValueError("'begin' and 'array' do not match in dimensions")
+
+    if len(begin) != len(size):
+        raise ValueError("'begin' and 'size' do not match in dimensions")
+
+    for i, (bval, sval) in enumerate(zip(begin, size)):
+        symbolic_index = not (
+                isinstance(array.shape[i], int)
+                and isinstance(bval, int)
+                and isinstance(sval, int))
+
+        if symbolic_index:
+            if not (0 == bval and sval == array.shape[i]):
+                raise ValueError("symbolic indexing is unsupported")
+            continue
+
+        if not (0 <= bval < array.shape[i]):
+            raise ValueError("index '%d' of 'begin' out of bounds" % i)
+
+        if sval < 0 or not (0 <= bval + sval <= array.shape[i]):
+            raise ValueError("index '%d' of 'size' out of bounds" % i)
+
+    return Slice(array, tuple(begin), tuple(size))
+
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object and ensure that all arrays

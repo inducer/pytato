@@ -30,7 +30,7 @@ import pytest
 import pytato as pt
 
 
-def test_matmul_validation():
+def test_matmul_input_validation():
     namespace = pt.Namespace()
 
     a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
@@ -43,12 +43,12 @@ def test_matmul_validation():
     with pytest.raises(ValueError):
         c @ c
 
-    n = pt.make_size_param(namespace, "n")
+    pt.make_size_param(namespace, "n")
     d = pt.make_placeholder(namespace, "d", "(n, n)", np.float)
     d @ d
 
 
-def test_roll_validation():
+def test_roll_input_validation():
     namespace = pt.Namespace()
 
     a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
@@ -61,7 +61,7 @@ def test_roll_validation():
         pt.roll(a, 1, axis=-1)
 
 
-def test_transpose_validation():
+def test_transpose_input_validation():
     namespace = pt.Namespace()
 
     a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
@@ -75,6 +75,22 @@ def test_transpose_validation():
 
     with pytest.raises(ValueError):
         pt.transpose(a, (0,))
+
+
+def test_slice_input_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10, 10), np.float)
+
+    a[0]
+    a[0, 0]
+    a[0, 0, 0]
+
+    with pytest.raises(ValueError):
+        a[0, 0, 0, 0]
+
+    with pytest.raises(ValueError):
+        a[10]
 
 
 if __name__ == "__main__":
