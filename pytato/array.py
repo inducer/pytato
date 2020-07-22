@@ -145,8 +145,10 @@ from pytato.scalar_expr import ScalarExpression
 # https://github.com/python/typing/issues/684#issuecomment-548203158
 if TYPE_CHECKING:
     from enum import Enum
+
     class EllipsisType(Enum):
         Ellipsis = "..."
+
     Ellipsis = EllipsisType.Ellipsis
 else:
     EllipsisType = type(Ellipsis)
