@@ -345,7 +345,6 @@ def test_stack(ctx_factory, input_dims):
         prog = pt.generate_loopy(
                 pt.stack((x, y), axis=axis),
                 target=pt.PyOpenCLTarget(queue))
-        print(prog.program)
 
         _, (out,) = prog()
         assert (out == np.stack((x_in, y_in), axis=axis)).all()
