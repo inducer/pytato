@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import numpy as np
 import pytest
 import functools
@@ -135,7 +136,7 @@ def test_advection_convergence(order, flux_type):
     errors = []
     hs = []
 
-    import arrayzy as az
+    import pytato as pt
     import pyopencl as cl
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -143,15 +144,21 @@ def test_advection_convergence(order, flux_type):
     for nelements in (8, 12, 16, 20):
         discr = DGDiscr1D(0, 2*np.pi, nelements=nelements, nnodes=order)
         u_initial = np.sin(discr.nodes())
-        with az.Context(queue) as cb:
-            u = cb.argument("u", shape="(nelements, nnodes)", dtype=np.float64)
-            op = AdvectionOperator(
-                    discr, c=1, flux_type=flux_type, dg_ops=DGOps1D(discr, cb))
-            cb.output(op.apply(u))
-        prog = cb.build()
+
+        ns = pt.Namespace()
+        pt.make_size_param(ns, "nelements")
+        pt.make_size_param(ns, "nnodes")
+        u = pt.make_placeholder(ns,
+                "u", shape="(nelements, nnodes)", dtype=np.float64)
+        op = AdvectionOperator(discr, c=1, flux_type=flux_type,
+                dg_ops=DGOps1D(discr, ns))
+        result = op.apply(u)
+
+        prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
+
         u = rk4(lambda t, y: prog(
-            u=y.reshape(nelements, order))[1][0].reshape(-1),
-            u_initial, t_initial=0, t_final=np.pi, dt=0.01)
+                u=y.reshape(nelements, order))[1][0].reshape(-1),
+                u_initial, t_initial=0, t_final=np.pi, dt=0.01)
         u_ref = -u_initial
         hs.append(discr.h)
         errors.append(integrate(discr, (u - u_ref)**2)**0.5)
@@ -161,7 +168,7 @@ def test_advection_convergence(order, flux_type):
 
 
 def main():
-    import arrayzy as az
+    import pytato as pt
     import pyopencl as cl
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -171,17 +178,22 @@ def main():
 
     discr = DGDiscr1D(0, 2*np.pi, nelements=nelements, nnodes=nnodes)
 
-    with az.Context(queue) as cb:
-        u = cb.argument("u", shape="(nelements, nnodes)", dtype=np.float64)
-        op = AdvectionOperator(
-                discr, c=1, flux_type="central", dg_ops=DGOps1D(discr, cb))
-        cb.output(op.apply(u))
+    ns = pt.Namespace()
+    pt.make_size_param(ns, "nelements")
+    pt.make_size_param(ns, "nnodes")
+    u = pt.make_placeholder(ns,
+            "u", shape="(nelements, nnodes)", dtype=np.float64)
+    op = AdvectionOperator(discr, c=1, flux_type="central",
+            dg_ops=DGOps1D(discr, ns))
+    result = op.apply(u)
 
-    prog = cb.build()
-    u = np.sin(discr.nodes())
+    prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
     print(prog.program)
+
+    u = np.sin(discr.nodes())
     print(prog(u=u.reshape(nelements, nnodes))[1][0])
 
 
 if __name__ == "__main__":
+    pytest.main([__file__])
     main()

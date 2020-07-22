@@ -13,6 +13,8 @@ Notation convention for operator shapes
 
 import functools
 
+import pytato as pt
+
 
 memoized = functools.lru_cache(maxsize=None)
 
@@ -370,9 +372,8 @@ class DGOps1DRef(AbstractDGOps1D):
 def matrix_getter(name, shape):
 
     def getter(self):
-        mat = self.ctx.argument(name, shape, np.float64)
-        self.ctx.bind(mat, getattr(self.discr, name))
-        return mat
+        data = getattr(self.discr, name)
+        return pt.make_data_wrapper(self.namespace, data, name=name, shape=shape)
 
     return property(memoized(getter))
 
@@ -381,11 +382,11 @@ class DGOps1D(AbstractDGOps1D):
 
     @AbstractDGOps1D.array_ops.getter
     def array_ops(self):
-        return self.ctx
+        return pt
 
-    def __init__(self, discr, ctx):
+    def __init__(self, discr, namespace):
         self.discr = discr
-        self.ctx = ctx
+        self.namespace = namespace
 
     _normals = matrix_getter("normals", "(nelements, 2)")
     _interp_mat = matrix_getter("interp", "(2, nnodes)")
@@ -398,23 +399,20 @@ class DGOps1D(AbstractDGOps1D):
         return self._normals
 
     def interp(self, vec):
-        return self.ctx.matmul(self._interp_mat, vec.T, name="_interp").T
+        return pt.matmul(self._interp_mat, vec.T).T
 
     def inv_mass(self, vec):
-        return self.ctx.matmul(self._inv_mass_mat, vec.T, name="_inv_mass").T
+        return pt.matmul(self._inv_mass_mat, vec.T).T
 
     def stiffness(self, vec):
-        return self.ctx.matmul(self._stiffness_mat, vec.T, name="_stiffness").T
+        return pt.matmul(self._stiffness_mat, vec.T).T
 
     def face_mass(self, vec):
-        return self.ctx.matmul(self._face_mass_mat, vec.T, name="_face_mass").T
+        return pt.matmul(self._face_mass_mat, vec.T).T
 
     def face_swap(self, vec):
-        return self.ctx.stack(
+        return pt.stack(
                 (
-                    self.ctx.roll(vec[:, 1], +1),
-                    self.ctx.roll(vec[:, 0], -1)),
-                axis=1,
-                name="_face_swap")
-
-
+                    pt.roll(vec[:, 1], +1),
+                    pt.roll(vec[:, 0], -1)),
+                axis=1)
