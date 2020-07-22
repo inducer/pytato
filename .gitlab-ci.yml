@@ -15,6 +15,21 @@ Python 3 POCL:
       junit: test/pytest.xml
 
 
+Python 3 POCL Examples:
+  script:
+  - export PY_EXE=python3
+  - export PYOPENCL_TEST=portable:pthread
+  - export EXTRA_INSTALL="pyopencl"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-py-project-and-run-examples.sh
+  - ". ./build-py-project-and-run-examples.sh"
+  tags:
+  - python3
+  - pocl
+  - large-node
+  except:
+  - tags
+
+
 Pylint:
   script:
   - export PY_EXE=python3
