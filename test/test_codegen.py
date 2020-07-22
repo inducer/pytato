@@ -163,7 +163,7 @@ def test_roll(ctx_factory, shift, axis):
             pt.roll(x, shift=shift, axis=axis),
             target=pt.PyOpenCLTarget(queue))
 
-    x_in = np.array([[1., 2.], [3., 4.]])
+    x_in = np.arange(1., 10.).reshape(3, 3)
 
     _, (x_out,) = prog(x=x_in)
 
@@ -323,6 +323,32 @@ def test_slice(ctx_factory, shape):
         x_out = outputs[output]
         x_ref = ref_outputs[output]
         assert (x_out == x_ref).all()
+
+
+@pytest.mark.parametrize("input_dims", (1, 2, 3))
+def test_stack(ctx_factory, input_dims):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    shape = (2, 2, 2)[:input_dims]
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=shape)
+    y_in = rng.random(size=shape)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    y = pt.make_data_wrapper(namespace, y_in)
+
+    for axis in range(0, 1 + input_dims):
+        prog = pt.generate_loopy(
+                pt.stack((x, y), axis=axis),
+                target=pt.PyOpenCLTarget(queue))
+        print(prog.program)
+
+        _, (out,) = prog()
+        assert (out == np.stack((x_in, y_in), axis=axis)).all()
 
 
 if __name__ == "__main__":

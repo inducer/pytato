@@ -93,6 +93,27 @@ def test_slice_input_validation():
         a[10]
 
 
+def test_stack_input_validation():
+    namespace = pt.Namespace()
+
+    x = pt.make_placeholder(namespace, "x", (10, 10), np.float)
+    y = pt.make_placeholder(namespace, "y", (1, 10), np.float)
+
+    assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
+
+    pt.stack((x,), axis=0)
+    pt.stack((x,), axis=1)
+
+    with pytest.raises(ValueError):
+        pt.stack(())
+
+    with pytest.raises(ValueError):
+        pt.stack((x, y))
+
+    with pytest.raises(ValueError):
+        pt.stack((x, x), axis=3)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
