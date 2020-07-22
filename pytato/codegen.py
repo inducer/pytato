@@ -377,7 +377,7 @@ class CodeGenMapper(pytato.transform.Mapper):
         out = lp.TemporaryVariable(out_name,
                 dtype=expr.dtype,
                 shape=expr.shape,
-                address_space=lp.AddressSpace.GLOBAL)
+                address_space=lp.auto)
 
         inames = []
         for j in range(expr.ndim - 1):
@@ -641,7 +641,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
         tvar = lp.TemporaryVariable(name,
                 dtype=expr.dtype,
                 shape=expr.shape,
-                address_space=lp.AddressSpace.GLOBAL)
+                address_space=lp.auto)
         temporary_variables = kernel.temporary_variables.copy()
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
