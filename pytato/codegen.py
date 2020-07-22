@@ -69,6 +69,7 @@ Code Generation Internals
 .. autoclass:: InlinedExpressionGenMapper
 
 .. autofunction:: domain_for_shape
+.. autofunction:: get_loopy_temporary
 .. autofunction:: add_store
 .. autofunction:: rename_reductions
 
@@ -373,11 +374,7 @@ class CodeGenMapper(pytato.transform.Mapper):
             return state.results[expr]
 
         out_name = state.var_name_gen("stack")
-
-        out = lp.TemporaryVariable(out_name,
-                dtype=expr.dtype,
-                shape=expr.shape,
-                address_space=lp.auto)
+        out = get_loopy_temporary(out_name, expr)
 
         inames = []
         for j in range(expr.ndim - 1):
@@ -638,10 +635,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     kernel = state.kernel
 
     if output_to_temporary:
-        tvar = lp.TemporaryVariable(name,
-                dtype=expr.dtype,
-                shape=expr.shape,
-                address_space=lp.auto)
+        tvar = get_loopy_temporary(name, expr)
         temporary_variables = kernel.temporary_variables.copy()
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
@@ -659,6 +653,16 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
     state.update_kernel(kernel)
     return insn_id
+
+
+def get_loopy_temporary(name: str, expr: Array) -> lp.TemporaryVariable:
+    is_shape_symbolic = not all(isinstance(dim, int) for dim in expr.shape)
+    # Only global variables can have symbolic shape.
+    address_space = lp.AddressSpace.GLOBAL if is_shape_symbolic else lp.auto
+    return lp.TemporaryVariable(name,
+            dtype=expr.dtype,
+            shape=expr.shape,
+            address_space=address_space)
 
 
 def rename_reductions(
