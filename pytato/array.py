@@ -50,8 +50,7 @@ NumPy-Like Interface
 --------------------
 
 These functions generally follow the interface of the corresponding functions in
-:mod:`numpy`, with the notable exception of the addition of an optional *tags*
-argument for implementation tags. Not all NumPy features may be supported.
+:mod:`numpy`, but not all NumPy features may be supported.
 
 .. autofunction:: matmul
 .. autofunction:: roll
@@ -1302,12 +1301,11 @@ class LoopyFunction(DictOfNamedArrays):
 
 # {{{ end-user facing
 
-def matmul(x1: Array, x2: Array, tags: Optional[TagsType] = None) -> Array:
+def matmul(x1: Array, x2: Array) -> Array:
     """Matrix multiplication.
 
     :param x1: first argument
     :param x2: second argument
-    :param tags: implementation tags
     """
     if x1.namespace is not x2.namespace:
         raise ValueError("namespace mismatch")
@@ -1325,17 +1323,15 @@ def matmul(x1: Array, x2: Array, tags: Optional[TagsType] = None) -> Array:
     if x1.shape[-1] != x2.shape[0]:
         raise ValueError("dimension mismatch")
 
-    return MatrixProduct(x1, x2, tags)
+    return MatrixProduct(x1, x2)
 
 
-def roll(a: Array, shift: int, axis: Optional[int] = None,
-        tags: Optional[TagsType] = None) -> Array:
+def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     """Roll array elements along a given axis.
 
     :param a: input array
     :param shift: the number of places by which elements are shifted
     :param axis: axis along which the array is shifted
-    :param tags: implementation tags
     """
     if a.ndim == 0:
         return a
@@ -1356,15 +1352,13 @@ def roll(a: Array, shift: int, axis: Optional[int] = None,
     return Roll(a, shift, axis)
 
 
-def transpose(a: Array, axes: Optional[Sequence[int]] = None,
-        tags: Optional[TagsType] = None) -> Array:
+def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
     """Reverse or permute the axes of an array.
 
     :param a: input array
     :param axes: if specified, a permutation of ``[0, 1, ..., a.ndim-1]``. Defaults
         to ``range(a.ndim)[::-1]``. The returned axis at index *i* corresponds to
         the input axis *axes[i]*.
-    :param tags: implementation tags
     """
     if axes is None:
         axes = range(a.ndim)[::-1]
@@ -1378,8 +1372,7 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None,
     return AxisPermutation(a, tuple(axes))
 
 
-def stack(arrays: Sequence[Array], axis: int = 0,
-        tags: Optional[TagsType] = None) -> Array:
+def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     """Join a sequence of arrays along a new axis.
 
     The *axis* parameter specifies the position of the new axis in the result.
@@ -1394,8 +1387,6 @@ def stack(arrays: Sequence[Array], axis: int = 0,
         :class:`Array` of the same shape
     :param axis: the position of the new axis, which will have length
         *len(arrays)*
-    :param tags: implementation tags
-
     """
 
     if not arrays:
