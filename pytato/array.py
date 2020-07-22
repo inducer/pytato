@@ -141,15 +141,15 @@ import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
 
 
-# Support ellipsis as a type.
+# Get a type variable that represents the type of '...'
 # https://github.com/python/typing/issues/684#issuecomment-548203158
 if TYPE_CHECKING:
     from enum import Enum
-    class ellipsis(Enum):
+    class EllipsisType(Enum):
         Ellipsis = "..."
-    Ellipsis = ellipsis.Ellipsis
+    Ellipsis = EllipsisType.Ellipsis
 else:
-    ellipsis = type(Ellipsis)
+    EllipsisType = type(Ellipsis)
 
 
 # {{{ dotted name
@@ -379,7 +379,7 @@ def normalize_shape(
 # }}}
 
 
-SliceItem = Union[int, slice, None, ellipsis]
+SliceItem = Union[int, slice, None, EllipsisType]
 
 
 # {{{ array inteface
