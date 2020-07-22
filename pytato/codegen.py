@@ -108,8 +108,7 @@ class LoopyExpressionContext(object):
 
     .. attribute:: reduction_bounds
 
-        A mapping from reduction iname number (for reduction inames ``_r0``,
-        ``_r1``, ...) to reduction bounds in the expression.
+        A mapping from inames to reduction bounds in the expression.
 
     .. automethod:: update_depends_on
     .. automethod:: lookup
@@ -209,11 +208,10 @@ class InlinedResult(ImplementedResult):
         reduction_start = len(expr_context.reduction_bounds)
 
         # Rename reductions in expression not to conflict with those in expr_context.
-        for i, (prev_name, bounds) in enumerate(self.reduction_bounds.items()):
-            j = i + reduction_start
-            new_name = f"_r{j}"
+        for i, (old_name, bounds) in enumerate(self.reduction_bounds.items()):
+            new_name = f"_r{i + reduction_start}"
             assert new_name not in expr_context.reduction_bounds
-            substitutions[prev_name] = var(new_name)
+            substitutions[old_name] = var(new_name)
             expr_context.reduction_bounds[new_name] = bounds
 
         expr_context.update_depends_on(self.depends_on)
