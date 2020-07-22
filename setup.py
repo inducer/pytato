@@ -32,7 +32,7 @@ setup(name="pytato",
           'Topic :: Software Development :: Libraries',
           ],
 
-      python_requires="~=3.6",
+      python_requires="~=3.8",
       install_requires=[
           "loo.py",
           ],
