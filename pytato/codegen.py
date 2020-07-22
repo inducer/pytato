@@ -152,13 +152,13 @@ class ImplementedResult(object):
         :param expr_context: the associated expression context. The fields are
             treated as follows:
 
-               - *depends_on* is populated with any dependencies needed for the
-                 generated expression.
+            - *depends_on* is populated with any dependencies needed for the
+              generated expression.
 
-               - *reduction_bounds* is populated with reduction bounds for the
-                 reduction inames in the returned expression. If
-                 *reduction_bounds* is nonempty, then the returned inames are
-                 ensured to be disjoint from those present.
+            - *reduction_bounds* is populated with reduction bounds for the
+              reduction inames in the returned expression. If
+              *reduction_bounds* is nonempty, then the returned inames are
+              ensured to be disjoint from those present.
         """
         raise NotImplementedError
 
