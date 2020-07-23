@@ -61,7 +61,7 @@ def test_scalar_placeholder(ctx_factory):
     prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
     x_in = np.array(1)
     _, (x_out,) = prog(x=x_in)
-    assert x_out == x_in
+    assert np.array_equal(x_out, x_in)
 
 
 def test_size_param(ctx_factory):
