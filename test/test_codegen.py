@@ -213,6 +213,10 @@ def test_transpose(ctx_factory):
     assert (x_out == x_in.T).all()
 
 
+# Doesn't include: ? (boolean), g (float128), G (complex256)
+ARITH_DTYPES = "bhilqpBHILQPfdFD"
+
+
 def reverse_args(f):
     def wrapper(*args):
         return f(*reversed(args))
@@ -229,15 +233,76 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     if reverse:
         op = reverse_args(op)
 
-    arg = 2
+    x_orig = 7
+    y_orig = np.array([1, 2, 3, 4, 5])
 
-    x_in = np.array([1., 2., 3., 4., 5.])
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
-    prog = pt.generate_loopy(op(arg, x), target=pt.PyOpenCLTarget(queue))
+    for first_dtype in (int, float, complex):
+        namespace = pt.Namespace()
+        x_in = first_dtype(x_orig)
 
-    _, (x_out,) = prog()
-    assert (x_out == op(arg, x_in)).all()
+        exprs = {}
+        for dtype in ARITH_DTYPES:
+            y = pt.make_data_wrapper(namespace,
+                    y_orig.astype(dtype), name=f"y{dtype}")
+            exprs[dtype] = op(x_in, y)
+
+        prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
+                target=pt.PyOpenCLTarget(queue),
+                options=lp.Options(return_dict=True))
+
+        _, outputs = prog()
+
+        for dtype in exprs:
+            out = outputs[dtype]
+            out_ref = op(x_in, y_orig.astype(dtype))
+
+            assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+            # truediv in some cases is done in float32 on loopy but float64 in
+            # numpy, hence the reason for allclose.
+            assert np.allclose(out, out_ref), (out, out_ref)
+
+
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
+@pytest.mark.parametrize("reverse", (False, True))
+def test_array_array_binary_arith(ctx_factory, which, reverse):
+    if which == "sub":
+        pytest.skip("https://github.com/inducer/loopy/issues/131")
+
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    op = getattr(operator, which)
+    if reverse:
+        op = reverse_args(op)
+
+    x_orig = np.array([1, 2, 3, 4, 5])
+    y_orig = np.array([5, 4, 3, 2, 1])
+
+    for first_dtype in ARITH_DTYPES:
+        namespace = pt.Namespace()
+        x_in = x_orig.astype(first_dtype)
+        x = pt.make_data_wrapper(namespace, x_in, name="x")
+
+        exprs = {}
+        for dtype in ARITH_DTYPES:
+            y = pt.make_data_wrapper(namespace,
+                    y_orig.astype(dtype), name=f"y{dtype}")
+            exprs[dtype] = op(x, y)
+
+        prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
+                target=pt.PyOpenCLTarget(queue),
+                options=lp.Options(return_dict=True))
+
+        _, outputs = prog()
+
+        for dtype in ARITH_DTYPES:
+            out = outputs[dtype]
+            out_ref = op(x_in, y_orig.astype(dtype))
+
+            assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+            # truediv in some cases is done in float32 on loopy but float64 in
+            # numpy, hence the reason for allclose.
+            assert np.allclose(out, out_ref), (out, out_ref)
 
 
 @pytest.mark.parametrize("which", ("neg", "pos"))
@@ -247,34 +312,26 @@ def test_unary_arith(ctx_factory, which):
 
     op = getattr(operator, which)
 
-    x_in = np.array([1., 2., 3., 4., 5.])
+    x_orig = np.array([1, 2, 3, 4, 5])
     namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
-    prog = pt.generate_loopy(op(x), target=pt.PyOpenCLTarget(queue))
 
-    _, (x_out,) = prog()
-    assert (x_out == op(x_in)).all()
+    exprs = {}
+    for dtype in ARITH_DTYPES:
+        exprs[dtype] = op(
+                pt.make_data_wrapper(namespace, x_orig.astype(dtype)))
 
+    prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
+            target=pt.PyOpenCLTarget(queue),
+            options=lp.Options(return_dict=True))
 
-@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
-@pytest.mark.parametrize("reverse", (False, True))
-def test_array_array_binary_arith(ctx_factory, which, reverse):
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
+    _, outputs = prog()
 
-    op = getattr(operator, which)
-    if reverse:
-        op = reverse_args(op)
+    for dtype in ARITH_DTYPES:
+        out = outputs[dtype]
+        out_ref = op(x_orig.astype(dtype))
 
-    x_in = np.array([1., 2., 3., 4., 5.])
-    y_in = np.array([6., 7., 8., 9., 10.])
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
-    y = pt.make_data_wrapper(namespace, y_in)
-    prog = pt.generate_loopy(op(x, y), target=pt.PyOpenCLTarget(queue))
-
-    _, (out,) = prog()
-    assert (out == op(x_in, y_in)).all()
+        assert out.dtype == out_ref.dtype
+        assert np.array_equal(out, out_ref)
 
 
 def generate_test_slices_for_dim(dim_bound):

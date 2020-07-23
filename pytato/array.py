@@ -128,7 +128,7 @@ from numbers import Number
 import operator
 from dataclasses import dataclass
 from typing import (
-        Optional, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
+        Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
         FrozenSet, Protocol, Sequence, cast, TYPE_CHECKING)
 
 import numpy as np
@@ -380,10 +380,18 @@ def normalize_shape(
 # }}}
 
 
+# {{{ array inteface
+
 SliceItem = Union[int, slice, None, EllipsisType]
 
 
-# {{{ array inteface
+def _truediv_result_type(arg1: Any, arg2: Any) -> np.dtype:
+    dtype = np.result_type(arg1, arg2)
+    if dtype.char in "bhilqBHILQ":
+        return np.float64
+    else:
+        return dtype
+
 
 class Array:
     """
@@ -623,6 +631,7 @@ class Array:
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
+            result_type: Callable[[Any, Any], np.dtype] = np.result_type,
             reverse: bool = False) -> Array:
 
         def add_indices(val: prim.Expression) -> prim.Expression:
@@ -636,14 +645,14 @@ class Array:
             first = add_indices(var("_in0"))
             second = other
             bindings = dict(_in0=self)
-            other_dtype = np.array(other).dtype
+            dtype = result_type(other, self.dtype)
         elif isinstance(other, Array):
             if self.shape != other.shape:
                 raise NotImplementedError("broadcasting not supported")
             first = add_indices(var("_in0"))
             second = add_indices(var("_in1"))
             bindings = dict(_in0=self, _in1=other)
-            other_dtype = other.dtype
+            dtype = result_type(other.dtype, self.dtype)
         else:
             raise ValueError("unknown argument")
 
@@ -653,7 +662,6 @@ class Array:
                 bindings["_in1"], bindings["_in0"] = \
                         bindings["_in0"], bindings["_in1"]
 
-        dtype = np.result_type(self.dtype, other_dtype)
         expr = op(first, second)
 
         return IndexLambda(self.namespace,
@@ -685,8 +693,10 @@ class Array:
     __sub__ = partialmethod(_binary_op, operator.sub)
     __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
 
-    __truediv__ = partialmethod(_binary_op, operator.truediv)
-    __rtruediv__ = partialmethod(_binary_op, operator.truediv, reverse=True)
+    __truediv__ = partialmethod(_binary_op, operator.truediv,
+            result_type=_truediv_result_type)
+    __rtruediv__ = partialmethod(_binary_op, operator.truediv,
+            result_type=_truediv_result_type, reverse=True)
 
     __neg__ = partialmethod(_unary_op, operator.neg)
 
