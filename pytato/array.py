@@ -625,8 +625,14 @@ class Array:
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
-    def __matmul__(self, other: Array) -> Array:
-        return matmul(self, other)
+    def __matmul__(self, other: Array, reverse: bool = False) -> Array:
+        first = self
+        second = other
+        if reverse:
+            first, second = second, first
+        return matmul(first, second)
+
+    __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
     def _binary_op(self,
             op: Any,
@@ -1317,15 +1323,15 @@ def matmul(x1: Array, x2: Array) -> Array:
     :param x1: first argument
     :param x2: second argument
     """
-    if x1.namespace is not x2.namespace:
-        raise ValueError("namespace mismatch")
-
     if (
             isinstance(x1, Number)
             or x1.shape == ()
             or isinstance(x2, Number)
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
+
+    if x1.namespace is not x2.namespace:
+        raise ValueError("namespace mismatch")
 
     if len(x1.shape) > 2 or len(x2.shape) > 2:
         raise NotImplementedError("broadcasting not supported")
