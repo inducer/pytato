@@ -257,8 +257,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             out_ref = op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # truediv in some cases is done in float32 on loopy but float64 in
-            # numpy, hence the reason for allclose.
+            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
@@ -276,7 +275,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
         op = reverse_args(op)
 
     x_orig = np.array([1, 2, 3, 4, 5])
-    y_orig = np.array([5, 4, 3, 2, 1])
+    y_orig = np.array([10, 9, 8, 7, 6])
 
     for first_dtype in ARITH_DTYPES:
         namespace = pt.Namespace()
@@ -300,8 +299,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             out_ref = op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # truediv in some cases is done in float32 on loopy but float64 in
-            # numpy, hence the reason for allclose.
+            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
