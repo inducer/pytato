@@ -149,7 +149,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     assert (outputs["y_out"] == y_in).all()
 
 
-@pytest.mark.parametrize("shift", (-1, 1, -20, 20))
+@pytest.mark.parametrize("shift", (-1, 1, 0, -20, 20))
 @pytest.mark.parametrize("axis", (0, 1))
 def test_roll(ctx_factory, shift, axis):
     cl_ctx = ctx_factory()
