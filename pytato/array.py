@@ -1296,7 +1296,7 @@ class SizeParam(InputArgumentBase):
 
     @property
     def dtype(self) -> np.dtype:
-        return np.intp
+        return np.dtype(np.intp)
 
 # }}}
 
@@ -1476,7 +1476,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 def make_placeholder(namespace: Namespace,
         name: str,
         shape: ConvertibleToShape,
-        dtype: np.dtype,
+        dtype: Any,
         tags: Optional[TagsType] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -1484,6 +1484,7 @@ def make_placeholder(namespace: Namespace,
     :param name:       name of the placeholder array
     :param shape:      shape of the placeholder array
     :param dtype:      dtype of the placeholder array
+                       (must be convertible to :class:`numpy.dtype`)
     :param tags:       implementation tags
     """
     if name is None:
@@ -1493,6 +1494,7 @@ def make_placeholder(namespace: Namespace,
         raise ValueError(f"'{name}' is not a Python identifier")
 
     shape = normalize_shape(shape, namespace)
+    dtype = np.dtype(dtype)
 
     return Placeholder(namespace, name, shape, dtype, tags)
 
