@@ -1166,7 +1166,10 @@ class InputArgumentBase(Array):
         Creating multiple instances of any input argument with the same name
         and within the same :class:`~pytato.Namespace` is not allowed.
     """
-    fields = Array.fields + ("name",)
+
+    # The name uniquely identifies this object in the namespace. Therefore,
+    # subclasses don't have to update *fields*.
+    fields = ("name",)
 
     def __init__(self,
             namespace: Namespace,
@@ -1229,8 +1232,6 @@ class DataWrapper(InputArgumentBase):
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
     """
-    # Not in fields as it may not be hashable.
-    data: DataInterface
 
     mapper_method = "map_data_wrapper"
 
