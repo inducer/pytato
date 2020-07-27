@@ -1128,7 +1128,7 @@ class Slice(IndexRemappingBase):
     .. attribute:: begin
     .. attribute:: size
     """
-    fields = Array.fields + ("begin", "size")
+    fields = IndexRemappingBase.fields + ("begin", "size")
     mapper_method = "map_slice"
 
     def __init__(self,
