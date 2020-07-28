@@ -383,9 +383,10 @@ def normalize_shape(
 # {{{ array inteface
 
 SliceItem = Union[int, slice, None, EllipsisType]
+DtypeOrScalar = Union[np.dtype, Number]
 
 
-def _truediv_result_type(arg1: Any, arg2: Any) -> np.dtype:
+def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype:
     dtype = np.result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     if dtype.kind in "iu":
@@ -639,7 +640,7 @@ class Array:
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
-            get_result_type: Callable[[Any, Any], np.dtype] = np.result_type,
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
         def add_indices(val: prim.Expression) -> prim.Expression:
