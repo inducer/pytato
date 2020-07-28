@@ -927,7 +927,8 @@ class Einsum(Array):
 class MatrixProduct(Array):
     """A product of two matrices, or a matrix and a vector.
 
-    The semantics of this operation follow PEP 465 [pep465]_.
+    The semantics of this operation follow PEP 465 [pep465]_, i.e., the Python
+    matmul (@) operator.
 
     .. attribute:: x1
     .. attribute:: x2
