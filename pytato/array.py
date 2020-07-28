@@ -451,7 +451,8 @@ class Array:
     Array interface:
 
     .. automethod:: __getitem__
-    .. automethod:: T
+    .. attribute:: T
+
     .. method:: __mul__
     .. method:: __rmul__
     .. method:: __add__
