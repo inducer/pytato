@@ -29,7 +29,7 @@ import contextlib
 import dataclasses
 import html
 import itertools
-from typing import Callable, Dict, Union, Iterator, List, Mapping, Union
+from typing import Callable, Dict, Union, Iterator, List, Mapping
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase

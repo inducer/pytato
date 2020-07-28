@@ -705,7 +705,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays]) -> DictOfNamedArr
     if isinstance(result, Array):
         outputs = DictOfNamedArrays({"_pt_out": result})
     else:
-        assert isinstance(outputs, DictOfNamedArrays)
+        assert isinstance(result, DictOfNamedArrays)
         outputs = result
 
     return outputs
