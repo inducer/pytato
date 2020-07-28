@@ -25,8 +25,7 @@ def main():
     ns.assign("stack", stack)
     result = stack @ stack.T
 
-    from pytato.visualization import get_dot_graph
-    dot_code = get_dot_graph(result)
+    dot_code = pt.get_dot_graph(result)
 
     with open(GRAPH_DOT, "w") as outf:
         outf.write(dot_code)
