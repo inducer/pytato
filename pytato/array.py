@@ -701,9 +701,9 @@ class Array:
     __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
 
     __truediv__ = partialmethod(_binary_op, operator.truediv,
-            result_type=_truediv_result_type)
+            get_result_type=_truediv_result_type)
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
-            result_type=_truediv_result_type, reverse=True)
+            get_result_type=_truediv_result_type, reverse=True)
 
     __neg__ = partialmethod(_unary_op, operator.neg)
 
