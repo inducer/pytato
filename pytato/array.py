@@ -639,7 +639,7 @@ class Array:
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
-            result_type: Callable[[Any, Any], np.dtype] = np.result_type,
+            get_result_type: Callable[[Any, Any], np.dtype] = np.result_type,
             reverse: bool = False) -> Array:
 
         def add_indices(val: prim.Expression) -> prim.Expression:
