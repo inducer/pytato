@@ -388,7 +388,7 @@ SliceItem = Union[int, slice, None, EllipsisType]
 def _truediv_result_type(arg1: Any, arg2: Any) -> np.dtype:
     dtype = np.result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
-    if dtype.char in "bhilqBHILQ":
+    if dtype.kind in "iu":
         return np.float64
     else:
         return dtype
