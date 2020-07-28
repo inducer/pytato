@@ -650,27 +650,29 @@ class Array:
                 return val[indices]
 
         if isinstance(other, Number):
-            first = add_indices(var("_in0"))
+            first = self
             second = other
+            first_expr = add_indices(var("_in0"))
+            second_expr = other
             bindings = dict(_in0=self)
-            dtype = get_result_type(other, self.dtype)
+
         elif isinstance(other, Array):
             if self.shape != other.shape:
                 raise NotImplementedError("broadcasting not supported")
-            first = add_indices(var("_in0"))
-            second = add_indices(var("_in1"))
+            first = self
+            second = other
+            first_expr = add_indices(var("_in0"))
+            second_expr = add_indices(var("_in1"))
             bindings = dict(_in0=self, _in1=other)
-            dtype = get_result_type(other.dtype, self.dtype)
         else:
             raise ValueError("unknown argument")
 
         if reverse:
             first, second = second, first
-            if len(bindings) == 2:
-                bindings["_in1"], bindings["_in0"] = \
-                        bindings["_in0"], bindings["_in1"]
+            first_expr, second_expr = second_expr, first_expr
 
-        expr = op(first, second)
+        dtype = get_result_type(first, second)
+        expr = op(first_expr, second_expr)
 
         return IndexLambda(self.namespace,
                 expr,
