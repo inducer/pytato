@@ -3,6 +3,7 @@
 
 import logging
 import numpy as np
+import shutil
 import subprocess
 
 import pytato as pt
@@ -31,8 +32,12 @@ def main():
         outf.write(dot_code)
     logger.info("wrote '%s'", GRAPH_DOT)
 
-    subprocess.run(["dot", "-Tsvg", GRAPH_DOT, "-o", GRAPH_SVG], check=True)
-    logger.info("wrote '%s'", GRAPH_SVG)
+    dot_path = shutil.which("dot")
+    if dot_path is not None:
+        subprocess.run([dot_path, "-Tsvg", GRAPH_DOT, "-o", GRAPH_SVG], check=True)
+        logger.info("wrote '%s'", GRAPH_SVG)
+    else:
+        logger.info("'dot' executable not found; cannot convert to SVG")
 
 
 if __name__ == "__main__":
