@@ -72,6 +72,7 @@ Code Generation Internals
 .. autofunction:: get_loopy_temporary
 .. autofunction:: add_store
 .. autofunction:: rename_reductions
+.. autofunction:: normalize_outputs
 
 """
 
@@ -689,6 +690,26 @@ def rename_reductions(
     loopy_expr_context.reduction_bounds = new_reduction_bounds
     return result
 
+
+def normalize_outputs(result: Union[Array, DictOfNamedArrays]) -> DictOfNamedArrays:
+    """Convert outputs of a computation to the canonical form.
+
+    Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
+
+    :param result: Outputs of the computation.
+    """
+    if not isinstance(result, (Array, DictOfNamedArrays)):
+        raise TypeError("outputs of the computation should be "
+                "either an Array or a DictOfNamedArrays")
+
+    if isinstance(result, Array):
+        outputs = DictOfNamedArrays({"_pt_out": result})
+    else:
+        assert isinstance(outputs, DictOfNamedArrays)
+        outputs = result
+
+    return outputs
+
 # }}}
 
 
@@ -702,21 +723,9 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     :param options: Code generation options for the kernel.
     :returns: A wrapped generated :mod:`loopy` kernel
     """
-    # {{{ get namespace and outputs
-
-    outputs: DictOfNamedArrays
-
-    if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"_pt_out": result})
-        namespace = outputs.namespace
-    else:
-        assert isinstance(result, DictOfNamedArrays)
-        outputs = result
-
-    namespace = outputs.namespace
+    outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
-
-    # }}}
+    namespace = outputs.namespace
 
     if target is None:
         target = PyOpenCLTarget()

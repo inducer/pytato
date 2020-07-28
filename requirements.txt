@@ -1,2 +1,2 @@
-git+https://github.com/inducer/pytools.git
+git+https://github.com/mattwala/pytools.git@code-generator
 git+https://github.com/inducer/loopy.git

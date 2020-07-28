@@ -7,3 +7,4 @@ Reference
 .. automodule:: pytato.program
 .. automodule:: pytato.target
 .. automodule:: pytato.codegen
+.. automodule:: pytato.visualization
