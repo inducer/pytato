@@ -1435,10 +1435,10 @@ def make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array
         expressions are unsupported.
     """
     if array.ndim != len(begin):
-        raise ValueError("'begin' and 'array' do not match in dimensions")
+        raise ValueError("'begin' and 'array' do not match in number of dimensions")
 
     if len(begin) != len(size):
-        raise ValueError("'begin' and 'size' do not match in dimensions")
+        raise ValueError("'begin' and 'size' do not match in number of dimensions")
 
     for i, (bval, sval) in enumerate(zip(begin, size)):
         symbolic_index = not (
