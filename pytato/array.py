@@ -927,12 +927,12 @@ class Einsum(Array):
 class MatrixProduct(Array):
     """A product of two matrices, or a matrix and a vector.
 
-    The semantics of this operation follow PEP 459 [pep459]_.
+    The semantics of this operation follow PEP 465 [pep465]_.
 
     .. attribute:: x1
     .. attribute:: x2
 
-    .. [pep459] https://www.python.org/dev/peps/pep-0459/
+    .. [pep465] https://www.python.org/dev/peps/pep-0465/
 
     """
     fields = Array.fields + ("x1", "x2")
