@@ -241,8 +241,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
         _emit_name_cluster(emit, outputs, array_to_id, id_gen, label="Outputs")
         _emit_name_cluster(emit, namespace, array_to_id, id_gen, label="Namespace")
 
-    output: str = emit.get()
-    return output
+    return emit.get()
 
 
 def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
