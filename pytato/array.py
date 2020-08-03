@@ -233,7 +233,8 @@ class Namespace(Mapping[str, "Array"]):
         return len(self._symbol_table)
 
     def copy(self) -> Namespace:
-        raise NotImplementedError
+        from pytato.transform import CopyMapper, copy_namespace
+        return copy_namespace(self, CopyMapper(Namespace()))
 
     def assign(self, name: str, value: Array) -> str:
         """Declare a new array.
