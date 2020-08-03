@@ -233,7 +233,8 @@ class Namespace(Mapping[str, "Array"]):
         return len(self._symbol_table)
 
     def copy(self) -> Namespace:
-        raise NotImplementedError
+        from pytato.transform import CopyMapper, copy_namespace
+        return copy_namespace(self, CopyMapper(Namespace()))
 
     def assign(self, name: str, value: Array) -> str:
         """Declare a new array.
@@ -383,11 +384,13 @@ def normalize_shape(
 # {{{ array inteface
 
 SliceItem = Union[int, slice, None, EllipsisType]
+DtypeOrScalar = Union[np.dtype, Number]
 
 
-def _truediv_result_type(arg1: Any, arg2: Any) -> np.dtype:
+def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype:
     dtype = np.result_type(arg1, arg2)
-    if dtype.char in "bhilqBHILQ":
+    # See: test_true_divide in numpy/core/tests/test_ufunc.py
+    if dtype.kind in "iu":
         return np.float64
     else:
         return dtype
@@ -450,7 +453,8 @@ class Array:
     Array interface:
 
     .. automethod:: __getitem__
-    .. automethod:: T
+    .. attribute:: T
+
     .. method:: __mul__
     .. method:: __rmul__
     .. method:: __add__
@@ -637,7 +641,7 @@ class Array:
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
-            result_type: Callable[[Any, Any], np.dtype] = np.result_type,
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
         def add_indices(val: prim.Expression) -> prim.Expression:
@@ -648,27 +652,26 @@ class Array:
                 return val[indices]
 
         if isinstance(other, Number):
-            first = add_indices(var("_in0"))
-            second = other
+            first_expr = add_indices(var("_in0"))
+            second_expr = other
             bindings = dict(_in0=self)
-            dtype = result_type(other, self.dtype)
+            dtype = get_result_type(self.dtype, other)
+
         elif isinstance(other, Array):
             if self.shape != other.shape:
                 raise NotImplementedError("broadcasting not supported")
-            first = add_indices(var("_in0"))
-            second = add_indices(var("_in1"))
+            first_expr = add_indices(var("_in0"))
+            second_expr = add_indices(var("_in1"))
             bindings = dict(_in0=self, _in1=other)
-            dtype = result_type(other.dtype, self.dtype)
+            dtype = get_result_type(self.dtype, other.dtype)
+
         else:
             raise ValueError("unknown argument")
 
         if reverse:
-            first, second = second, first
-            if len(bindings) == 2:
-                bindings["_in1"], bindings["_in0"] = \
-                        bindings["_in0"], bindings["_in1"]
+            first_expr, second_expr = second_expr, first_expr
 
-        expr = op(first, second)
+        expr = op(first_expr, second_expr)
 
         return IndexLambda(self.namespace,
                 expr,
@@ -700,9 +703,9 @@ class Array:
     __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
 
     __truediv__ = partialmethod(_binary_op, operator.truediv,
-            result_type=_truediv_result_type)
+            get_result_type=_truediv_result_type)
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
-            result_type=_truediv_result_type, reverse=True)
+            get_result_type=_truediv_result_type, reverse=True)
 
     __neg__ = partialmethod(_unary_op, operator.neg)
 
@@ -925,12 +928,13 @@ class Einsum(Array):
 class MatrixProduct(Array):
     """A product of two matrices, or a matrix and a vector.
 
-    The semantics of this operation follow PEP 459 [pep459]_.
+    The semantics of this operation follow PEP 465 [pep465]_, i.e., the Python
+    matmul (@) operator.
 
     .. attribute:: x1
     .. attribute:: x2
 
-    .. [pep459] https://www.python.org/dev/peps/pep-0459/
+    .. [pep465] https://www.python.org/dev/peps/pep-0465/
 
     """
     fields = Array.fields + ("x1", "x2")
@@ -1434,10 +1438,10 @@ def make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array
         expressions are unsupported.
     """
     if array.ndim != len(begin):
-        raise ValueError("'begin' and 'array' do not match in dimensions")
+        raise ValueError("'begin' and 'array' do not match in number of dimensions")
 
     if len(begin) != len(size):
-        raise ValueError("'begin' and 'size' do not match in dimensions")
+        raise ValueError("'begin' and 'size' do not match in number of dimensions")
 
     for i, (bval, sval) in enumerate(zip(begin, size)):
         symbolic_index = not (
