@@ -795,9 +795,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     :param options: Code generation options for the kernel.
     :returns: A wrapped generated :mod:`loopy` kernel
     """
-    outputs: DictOfNamedArrays = normalize_outputs(result)
+    orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
-    namespace = outputs.namespace
 
     if target is None:
         target = PyOpenCLTarget()
