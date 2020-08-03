@@ -187,10 +187,10 @@ class CodeGenPreprocessor(CopyMapper):
         return tuple(var(f"_{d}") + expr.begin[d] for d in range(expr.ndim))
 
     # https://github.com/python/mypy/issues/8619
-    map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # noqa type: ignore
+    map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # type: ignore  # noqa
     map_axis_permutation = (
-            partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # noqa type: ignore
-    map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # noqa type: ignore
+            partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
+    map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
 
     # }}}
 
