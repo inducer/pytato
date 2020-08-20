@@ -473,7 +473,7 @@ class Array:
     _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
-    fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
+    _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
     def __init__(self, tags: Optional[TagsType] = None):
         if tags is None:
@@ -608,7 +608,7 @@ class Array:
     @memoize_method
     def __hash__(self) -> int:
         attrs = []
-        for field in self.fields:
+        for field in self._fields:
             attr = getattr(self, field)
             if isinstance(attr, dict):
                 attr = frozenset(attr.items())
@@ -623,7 +623,7 @@ class Array:
                 and self.namespace is other.namespace
                 and all(
                     getattr(self, field) == getattr(other, field)
-                    for field in self.fields))
+                    for field in self._fields))
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -855,7 +855,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     .. automethod:: is_reference
     """
 
-    fields = Array.fields + ("expr", "bindings")
+    _fields = Array._fields + ("expr", "bindings")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -936,7 +936,7 @@ class MatrixProduct(Array):
     .. [pep465] https://www.python.org/dev/peps/pep-0465/
 
     """
-    fields = Array.fields + ("x1", "x2")
+    _fields = Array._fields + ("x1", "x2")
 
     _mapper_method = "map_matrix_product"
 
@@ -991,7 +991,7 @@ class Stack(Array):
 
     """
 
-    fields = Array.fields + ("arrays", "axis")
+    _fields = Array._fields + ("arrays", "axis")
     _mapper_method = "map_stack"
 
     def __init__(self,
@@ -1032,7 +1032,7 @@ class IndexRemappingBase(Array):
         The input :class:`~pytato.Array`
 
     """
-    fields = Array.fields + ("array",)
+    _fields = Array._fields + ("array",)
 
     def __init__(self,
             array: Array,
@@ -1064,7 +1064,7 @@ class Roll(IndexRemappingBase):
 
         Shift axis.
     """
-    fields = IndexRemappingBase.fields + ("shift", "axis")
+    _fields = IndexRemappingBase._fields + ("shift", "axis")
     _mapper_method = "map_roll"
 
     def __init__(self,
@@ -1092,7 +1092,7 @@ class AxisPermutation(IndexRemappingBase):
 
         A permutation of the input axes.
     """
-    fields = IndexRemappingBase.fields + ("axes",)
+    _fields = IndexRemappingBase._fields + ("axes",)
     _mapper_method = "map_axis_permutation"
 
     def __init__(self,
@@ -1131,7 +1131,7 @@ class Slice(IndexRemappingBase):
     .. attribute:: begin
     .. attribute:: size
     """
-    fields = IndexRemappingBase.fields + ("begin", "size")
+    _fields = IndexRemappingBase._fields + ("begin", "size")
     _mapper_method = "map_slice"
 
     def __init__(self,
@@ -1171,8 +1171,8 @@ class InputArgumentBase(Array):
     """
 
     # The name uniquely identifies this object in the namespace. Therefore,
-    # subclasses don't have to update *fields*.
-    fields = ("name",)
+    # subclasses don't have to update *_fields*.
+    _fields = ("name",)
 
     def __init__(self,
             namespace: Namespace,
