@@ -36,6 +36,7 @@ from pytato.array import (
 
 from pytato.codegen import generate_loopy
 from pytato.target import Target, PyOpenCLTarget
+from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
         "DottedName", "Namespace", "Array", "DictOfNamedArrays",
@@ -49,4 +50,6 @@ __all__ = (
         "generate_loopy",
 
         "Target", "PyOpenCLTarget",
+
+        "get_dot_graph", "show_dot_graph",
 )
