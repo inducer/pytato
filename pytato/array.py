@@ -470,7 +470,7 @@ class Array:
     .. attribute:: ndim
 
     """
-    mapper_method: ClassVar[str]
+    _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
     fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
@@ -856,7 +856,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     """
 
     fields = Array.fields + ("expr", "bindings")
-    mapper_method = "map_index_lambda"
+    _mapper_method = "map_index_lambda"
 
     def __init__(self,
             namespace: Namespace,
@@ -938,7 +938,7 @@ class MatrixProduct(Array):
     """
     fields = Array.fields + ("x1", "x2")
 
-    mapper_method = "map_matrix_product"
+    _mapper_method = "map_matrix_product"
 
     def __init__(self,
             x1: Array,
@@ -992,7 +992,7 @@ class Stack(Array):
     """
 
     fields = Array.fields + ("arrays", "axis")
-    mapper_method = "map_stack"
+    _mapper_method = "map_stack"
 
     def __init__(self,
             arrays: Tuple[Array, ...],
@@ -1065,7 +1065,7 @@ class Roll(IndexRemappingBase):
         Shift axis.
     """
     fields = IndexRemappingBase.fields + ("shift", "axis")
-    mapper_method = "map_roll"
+    _mapper_method = "map_roll"
 
     def __init__(self,
             array: Array,
@@ -1093,7 +1093,7 @@ class AxisPermutation(IndexRemappingBase):
         A permutation of the input axes.
     """
     fields = IndexRemappingBase.fields + ("axes",)
-    mapper_method = "map_axis_permutation"
+    _mapper_method = "map_axis_permutation"
 
     def __init__(self,
             array: Array,
@@ -1132,7 +1132,7 @@ class Slice(IndexRemappingBase):
     .. attribute:: size
     """
     fields = IndexRemappingBase.fields + ("begin", "size")
-    mapper_method = "map_slice"
+    _mapper_method = "map_slice"
 
     def __init__(self,
             array: Array,
@@ -1236,7 +1236,7 @@ class DataWrapper(InputArgumentBase):
         this array may not be updated in-place.
     """
 
-    mapper_method = "map_data_wrapper"
+    _mapper_method = "map_data_wrapper"
 
     def __init__(self,
             namespace: Namespace,
@@ -1267,7 +1267,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     user during evaluation.
     """
 
-    mapper_method = "map_placeholder"
+    _mapper_method = "map_placeholder"
 
     def __init__(self,
             namespace: Namespace,
@@ -1291,7 +1291,7 @@ class SizeParam(InputArgumentBase):
     expressions for array sizes.
     """
 
-    mapper_method = "map_size_param"
+    _mapper_method = "map_size_param"
 
     @property
     def shape(self) -> ShapeType:

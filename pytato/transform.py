@@ -67,7 +67,7 @@ class Mapper:
         method: Callable[..., Array]
 
         try:
-            method = getattr(self, expr.mapper_method)
+            method = getattr(self, expr._mapper_method)
         except AttributeError:
             if isinstance(expr, Array):
                 return self.handle_unsupported_array(expr, *args, **kwargs)
