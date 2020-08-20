@@ -118,7 +118,6 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
-.. autofunction:: make_slice
 """
 
 # }}}
@@ -559,7 +558,7 @@ class Array:
             else:
                 raise ValueError("unknown index along dimension")
 
-        slice_ = make_slice(self, starts, sizes)
+        slice_ = _make_slice(self, starts, sizes)
 
         if len(kept_dims) != self.ndim:
             # Return an IndexLambda that elides the indexed-into dimensions
@@ -1422,7 +1421,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     return Stack(tuple(arrays), axis)
 
 
-def make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array:
+def _make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array:
     """Extract a constant-sized slice from an array with constant offsets.
 
     :param array: input array
