@@ -23,17 +23,98 @@ THE SOFTWARE.
 """
 
 import sys
-import pytest  # noqa
+
+import numpy as np
+import pytest
+
+import pytato as pt
 
 
-def test_being_very_lazy():
-    # Placeholder to make CI pass. Remove after tests are added.
-    pass
+def test_matmul_input_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    b = pt.make_placeholder(namespace, "b", (20, 10), np.float)
+
+    with pytest.raises(ValueError):
+        a @ b
+
+    c = pt.make_placeholder(namespace, "c", (), np.float)
+    with pytest.raises(ValueError):
+        c @ c
+
+    pt.make_size_param(namespace, "n")
+    d = pt.make_placeholder(namespace, "d", "(n, n)", np.float)
+    d @ d
+
+
+def test_roll_input_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    pt.roll(a, 1, axis=0)
+
+    with pytest.raises(ValueError):
+        pt.roll(a, 1, axis=2)
+
+    with pytest.raises(ValueError):
+        pt.roll(a, 1, axis=-1)
+
+
+def test_transpose_input_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    pt.transpose(a)
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (2, 0, 1))
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (1, 1))
+
+    with pytest.raises(ValueError):
+        pt.transpose(a, (0,))
+
+
+def test_slice_input_validation():
+    namespace = pt.Namespace()
+
+    a = pt.make_placeholder(namespace, "a", (10, 10, 10), np.float)
+
+    a[0]
+    a[0, 0]
+    a[0, 0, 0]
+
+    with pytest.raises(ValueError):
+        a[0, 0, 0, 0]
+
+    with pytest.raises(ValueError):
+        a[10]
+
+
+def test_stack_input_validation():
+    namespace = pt.Namespace()
+
+    x = pt.make_placeholder(namespace, "x", (10, 10), np.float)
+    y = pt.make_placeholder(namespace, "y", (1, 10), np.float)
+
+    assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
+
+    pt.stack((x,), axis=0)
+    pt.stack((x,), axis=1)
+
+    with pytest.raises(ValueError):
+        pt.stack(())
+
+    with pytest.raises(ValueError):
+        pt.stack((x, y))
+
+    with pytest.raises(ValueError):
+        pt.stack((x, x), axis=3)
 
 
 if __name__ == "__main__":
-    # make sure that import failures get reported, instead of skipping the
-    # tests.
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:

@@ -23,20 +23,27 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set)
+from functools import partialmethod
+import re
+from typing import (
+        Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable)
 
 import islpy as isl
 import loopy as lp
 import pymbolic.primitives as prim
+from pymbolic import var
 import pytools
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, ShapeType, IndexLambda)
+        Array, DictOfNamedArrays, ShapeType, IndexLambda,
+        SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll,
+        AxisPermutation, Slice, IndexRemappingBase, Stack, Placeholder,
+        Namespace, DataInterface)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
-import pytato.transform
+from pytato.transform import Mapper, CopyMapper
 
 
 __doc__ = """
@@ -52,6 +59,8 @@ Code Generation Internals
 
 .. currentmodule:: pytato.codegen
 
+.. autoclass:: CodeGenPreprocessor
+
 .. autoclass:: LoopyExpressionContext
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult
@@ -64,9 +73,127 @@ Code Generation Internals
 .. autoclass:: InlinedExpressionGenMapper
 
 .. autofunction:: domain_for_shape
-.. autofunction:: add_output
+.. autofunction:: get_loopy_temporary
+.. autofunction:: add_store
+.. autofunction:: rename_reductions
+.. autofunction:: get_initial_codegen_state
+.. autofunction:: preprocess
 
 """
+
+
+# {{{ preprocessing for codegen
+
+class CodeGenPreprocessor(CopyMapper):
+    """A mapper that preprocesses graphs to simplify code generation.
+
+    The following node simplifications are performed:
+
+    ======================================  =====================================
+    Source Node Type                        Target Node Type
+    ======================================  =====================================
+    :class:`~pytato.array.DataWrapper`      :class:`~pytato.array.Placeholder`
+    :class:`~pytato.array.Roll`             :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.AxisPermutation`  :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Slice`            :class:`~pytato.array.IndexLambda`
+    ======================================  =====================================
+    """
+
+    # TODO:
+    # Stack -> IndexLambda
+    # MatrixProduct -> Einsum
+
+    def __init__(self, namespace: Namespace):
+        super().__init__(namespace)
+        self.bound_arguments: Dict[str, DataInterface] = {}
+
+    def map_data_wrapper(self, expr: DataWrapper) -> Array:
+        self.bound_arguments[expr.name] = expr.data
+        return Placeholder(namespace=self.namespace,
+                name=expr.name,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_stack(self, expr: Stack) -> Array:
+
+        def get_subscript(array_index: int) -> SymbolicIndex:
+            result = []
+            for i in range(expr.ndim):
+                if i != expr.axis:
+                    result.append(var(f"_{i}"))
+            return tuple(result)
+
+        # I = axis index
+        #
+        # => If(_I == 0,
+        #        _in0[_0, _1, ...],
+        #        If(_I == 1,
+        #            _in1[_0, _1, ...],
+        #            ...
+        #                _inNm1[_0, _1, ...] ...))
+        for i in range(len(expr.arrays) - 1, -1, -1):
+            subarray_expr = var(f"_in{i}")[get_subscript(i)]
+            if i == len(expr.arrays) - 1:
+                stack_expr = subarray_expr
+            else:
+                from pymbolic.primitives import If, Comparison
+                stack_expr = If(Comparison(var(f"_{expr.axis}"), "==", i),
+                        subarray_expr,
+                        stack_expr)
+
+        bindings = {f"_in{i}": self.rec(array)
+                for i, array in enumerate(expr.arrays)}
+
+        return IndexLambda(namespace=self.namespace,
+                expr=stack_expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=bindings)
+
+    # {{{ index remapping (roll, axis permutation, slice)
+
+    def handle_index_remapping(self,
+            indices_getter: Callable[[CodeGenPreprocessor, Array], SymbolicIndex],
+            expr: IndexRemappingBase) -> Array:
+        indices = indices_getter(self, expr)
+
+        index_expr = var("_in0")
+        if indices:
+            index_expr = index_expr[indices]
+
+        array = self.rec(expr.array)
+
+        return IndexLambda(namespace=self.namespace,
+                expr=index_expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=dict(_in0=array))
+
+    def _indices_for_roll(self, expr: Roll) -> SymbolicIndex:
+        indices = [var(f"_{d}") for d in range(expr.ndim)]
+        axis = expr.axis
+        indices[axis] = (indices[axis] - expr.shift) % expr.shape[axis]
+        return tuple(indices)
+
+    def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
+        indices = [None] * expr.ndim
+        for from_index, to_index in enumerate(expr.axes):
+            indices[to_index] = var(f"_{from_index}")
+        return tuple(indices)
+
+    def _indices_for_slice(self, expr: Slice) -> SymbolicIndex:
+        return tuple(var(f"_{d}") + expr.begin[d] for d in range(expr.ndim))
+
+    # https://github.com/python/mypy/issues/8619
+    map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # type: ignore  # noqa
+    map_axis_permutation = (
+            partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
+    map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
+
+    # }}}
+
+# }}}
 
 
 # {{{ generated array expressions
@@ -95,6 +222,11 @@ class LoopyExpressionContext(object):
         A (read-only) local name mapping used for name lookup when generating
         code.
 
+    .. attribute:: num_indices
+
+        The number of indices of the form ``_0``, ``_1``, allowed in the
+        expression.
+
     .. attribute:: depends_on
 
         The set of statement IDs that need to be included in
@@ -109,6 +241,7 @@ class LoopyExpressionContext(object):
 
     """
     state: CodeGenState
+    num_indices: int
     _depends_on: FrozenSet[str] = \
             dataclasses.field(default_factory=frozenset)
     local_namespace: Mapping[str, Array] = \
@@ -134,18 +267,25 @@ class ImplementedResult(object):
     """Generated code for a node in the computation graph (i.e., an array
     expression).
 
-    .. attribute:: array
-
-        The :class:`pytato.Array` associated with this code.
-
     .. automethod:: to_loopy_expression
     """
-    def __init__(self, array: Array):
-        self.array = array
 
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        """Return a :mod:`loopy` expression for this result."""
+        """Return a :mod:`loopy` expression for this result.
+
+        :param indices: symbolic expressions for the indices of the array
+        :param expr_context: the associated expression context. The fields are
+            treated as follows:
+
+            - *depends_on* is populated with any dependencies needed for the
+              generated expression.
+
+            - *reduction_bounds* is populated with reduction bounds for the
+              reduction inames in the returned expression. If
+              *reduction_bounds* is nonempty, then the returned inames are
+              ensured to be disjoint from those present.
+        """
         raise NotImplementedError
 
 
@@ -154,13 +294,15 @@ class StoredResult(ImplementedResult):
 
     See also: :class:`pytato.array.ImplStored`.
     """
-    def __init__(self, name: str, array: Array):
-        super().__init__(array)
+    def __init__(self, name: str, num_indices: int, depends_on: FrozenSet[str]):
         self.name = name
+        self.num_indices = num_indices
+        self.depends_on = depends_on
 
-    # TODO: Handle dependencies.
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
+        assert len(indices) == self.num_indices
+        expr_context.update_depends_on(self.depends_on)
         if indices == ():
             return prim.Variable(self.name)
         else:
@@ -173,16 +315,41 @@ class InlinedResult(ImplementedResult):
 
     See also: :class:`pytato.array.ImplInlined`.
     """
-    def __init__(self, expr: ScalarExpression, array: Array):
-        super().__init__(array)
+    def __init__(self, expr: ScalarExpression,
+            num_indices: int,
+            reduction_bounds: ReductionBounds,
+            depends_on: FrozenSet[str]):
         self.expr = expr
+        self.num_indices = num_indices
+        self.reduction_bounds = dict(reduction_bounds)
+        self.depends_on = depends_on
 
-    # TODO: Handle dependencies and reduction domains.
+    @staticmethod
+    def from_loopy_expression(
+            loopy_expr: ScalarExpression,
+            loopy_expr_context: LoopyExpressionContext) -> InlinedResult:
+        return InlinedResult(loopy_expr,
+                loopy_expr_context.num_indices,
+                loopy_expr_context.reduction_bounds,
+                loopy_expr_context.depends_on)
+
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        return scalar_expr.substitute(
-                self.expr,
-                {f"_{d}": i for d, i in zip(range(self.array.ndim), indices)})
+        assert len(indices) == self.num_indices
+        substitutions = {f"_{d}": i for d, i in enumerate(indices)}
+
+        reduction_start = len(expr_context.reduction_bounds)
+
+        # Rename reductions in expression not to conflict with those in expr_context.
+        for i, (old_name, bounds) in enumerate(self.reduction_bounds.items()):
+            new_name = f"_r{i + reduction_start}"
+            assert new_name not in expr_context.reduction_bounds
+            substitutions[old_name] = var(new_name)
+            expr_context.reduction_bounds[new_name] = bounds
+
+        expr_context.update_depends_on(self.depends_on)
+
+        return scalar_expr.substitute(self.expr, substitutions)
 
 
 class SubstitutionRuleResult(ImplementedResult):
@@ -235,7 +402,7 @@ class CodeGenState:
         self._kernel = kernel
 
 
-class CodeGenMapper(pytato.transform.Mapper):
+class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
@@ -243,19 +410,92 @@ class CodeGenMapper(pytato.transform.Mapper):
     def __init__(self) -> None:
         self.exprgen_mapper = InlinedExpressionGenMapper(self)
 
+    def map_size_param(self, expr: SizeParam,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        arg = lp.ValueArg(expr.name, dtype=expr.dtype)
+        kernel = state.kernel.copy(args=state.kernel.args + [arg])
+        state.update_kernel(kernel)
+
+        result = StoredResult(expr.name, expr.ndim, frozenset())
+        state.results[expr] = result
+        return result
+
     def map_placeholder(self, expr: Placeholder,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
             return state.results[expr]
 
+        shape_context = LoopyExpressionContext(state, num_indices=0)
+        shape = []
+        for component in expr.shape:
+            shape.append(self.exprgen_mapper(component, shape_context))
+            # Data-dependent shape: Not supported yet.
+            assert not shape_context.depends_on
+            assert not shape_context.reduction_bounds
+
         arg = lp.GlobalArg(expr.name,
-                shape=expr.shape,
+                shape=tuple(shape),
                 dtype=expr.dtype,
                 order="C")
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
 
-        result = StoredResult(expr.name, expr)
+        result = StoredResult(expr.name, expr.ndim, frozenset())
+        state.results[expr] = result
+        return result
+
+    def map_matrix_product(self, expr: MatrixProduct,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        x1_result = self.rec(expr.x1, state)
+        x2_result = self.rec(expr.x2, state)
+
+        loopy_expr_context = LoopyExpressionContext(state,
+                num_indices=expr.ndim)
+        loopy_expr_context.reduction_bounds["_r0"] = (0, expr.x2.shape[0])
+
+        # Figure out inames.
+        x1_inames = []
+        for i in range(expr.x1.ndim):
+            if i == expr.x1.ndim - 1:
+                x1_inames.append(var("_r0"))
+            else:
+                x1_inames.append(var(f"_{i}"))
+        x2_inames = []
+        for i in range(expr.x2.ndim):
+            if i == 0:
+                x2_inames.append(var("_r0"))
+            else:
+                offset = i + len(x1_inames) - 2
+                x2_inames.append(var(f"_{offset}"))
+
+        inner_expr = x1_result.to_loopy_expression(
+                tuple(x1_inames), loopy_expr_context)
+        inner_expr *= x2_result.to_loopy_expression(
+                tuple(x2_inames), loopy_expr_context)
+
+        import loopy.library.reduction as red
+        loopy_expr = lp.Reduction(
+                operation=red.parse_reduction_op("sum"),
+                inames=("_r0",),
+                expr=inner_expr,
+                allow_simultaneous=False)
+
+        inlined_result = InlinedResult.from_loopy_expression(loopy_expr,
+                loopy_expr_context)
+
+        output_name = state.var_name_gen("matmul")
+
+        insn_id = add_store(output_name, expr, inlined_result, state,
+                output_to_temporary=True)
+
+        result = StoredResult(output_name, expr.ndim, frozenset([insn_id]))
+
         state.results[expr] = result
         return result
 
@@ -266,11 +506,13 @@ class CodeGenMapper(pytato.transform.Mapper):
 
         # TODO: Respect tags.
 
-        expr_context = LoopyExpressionContext(state,
-                local_namespace=expr.bindings)
-        loopy_expr = self.exprgen_mapper(expr.expr, expr_context)
+        loopy_expr_context = LoopyExpressionContext(state,
+                local_namespace=expr.bindings,
+                num_indices=expr.ndim)
+        loopy_expr = self.exprgen_mapper(expr.expr, loopy_expr_context)
 
-        result = InlinedResult(loopy_expr, expr)
+        result = InlinedResult.from_loopy_expression(loopy_expr,
+                loopy_expr_context)
         state.results[expr] = result
         return result
 
@@ -278,6 +520,9 @@ class CodeGenMapper(pytato.transform.Mapper):
 
 
 # {{{ inlined expression gen mapper
+
+INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
+
 
 class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     """A mapper for generating :mod:`loopy` expressions with inlined
@@ -310,20 +555,31 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        result: ImplementedResult = self.codegen_mapper(
-                expr_context.lookup(expr.name),
-                expr_context.state)
-        return result.to_loopy_expression((), expr_context)
+        match = INDEX_RE.fullmatch(expr.name)
+        if match:
+            # Found an index of the form _0, _1, ...
+            index = int(match.group(1))
+            if not (0 <= index < expr_context.num_indices):
+                raise ValueError(f"invalid index encountered: _{index}")
+            return expr
+        else:
+            array = expr_context.lookup(expr.name)
+            impl_result: ImplementedResult = self.codegen_mapper(array,
+                    expr_context.state)
+            return impl_result.to_loopy_expression((), expr_context)
 
 # }}}
 
 
 # {{{ utils
 
-def domain_for_shape(
-        dim_names: Tuple[str, ...], shape: ShapeType) -> isl.BasicSet:
+def domain_for_shape(dim_names: Tuple[str, ...],
+         shape: ShapeType,
+         reductions: Dict[str, Tuple[ScalarExpression, ScalarExpression]],
+         ) -> isl.BasicSet:  # noqa
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
-    for an array of (potentially symbolic) shape *shape*.
+    for an array of (potentially symbolic) shape *shape* having reduction
+    dimensions *reductions*.
 
     :param dim_names: A tuple of strings, the names of the axes. These become set
         dimensions in the returned domain.
@@ -332,6 +588,10 @@ def domain_for_shape(
         expressions. The variables in these expressions become parameter
         dimensions in the returned set.  Must have the same length as
         *dim_names*.
+
+    :arg reductions: A map from reduction inames to (lower, upper) bounds
+        (as half-open integer ranges). The variables in the bounds become
+        parameter dimensions in the returned set.
     """
     assert len(dim_names) == len(shape)
 
@@ -340,7 +600,12 @@ def domain_for_shape(
     for sdep in map(scalar_expr.get_dependencies, shape):
         param_names_set |= sdep
 
-    set_names = sorted(dim_names)
+    for bounds in reductions.values():
+        for sdep in map(scalar_expr.get_dependencies, bounds):
+            # FIXME: Assumes that reduction bounds are not data-dependent.
+            param_names_set |= sdep
+
+    set_names = sorted(tuple(dim_names) + tuple(reductions))
     param_names = sorted(param_names_set)
 
     # Build domain.
@@ -357,51 +622,144 @@ def domain_for_shape(
         dom &= affs[0].le_set(affs[iname])
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
 
+    for iname, (left, right) in reductions.items():
+        dom &= aff_from_expr(dom.space, left).le_set(affs[iname])
+        dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))
+
     dom, = dom.get_basic_sets()
 
     return dom
 
 
-def add_output(name: str, expr: Array, state: CodeGenState,
-        mapper: CodeGenMapper) -> None:
-    """Add an output argument to the kernel.
+def add_store(name: str, expr: Array, result: ImplementedResult,
+       state: CodeGenState, output_to_temporary: bool = False) -> str:
+    """Add an instruction that stores to a variable in the kernel.
+
+    :param name: name of the output array, which is created
+    :param expr: the :class:`~pytato.Array` to store
+    :param result: the corresponding :class:`ImplementedResult`
+    :param state: code generation state
+    :param output_to_temporary: whether to generate an output argument (default)
+        or a temporary variable
+
+    :returns: the id of the generated instruction
     """
-    # FIXE: Scalar outputs are not supported yet.
-    assert expr.shape != ()
-
-    result = mapper(expr, state)
-
+    # Get expression.
     inames = tuple(
             state.var_name_gen(f"{name}_dim{d}")
             for d in range(expr.ndim))
-    domain = domain_for_shape(inames, expr.shape)
-
-    arg = lp.GlobalArg(name,
-            shape=expr.shape,
-            dtype=expr.dtype,
-            order="C",
-            is_output_only=True)
-
     indices = tuple(prim.Variable(iname) for iname in inames)
-    expr_context = LoopyExpressionContext(state)
-    copy_expr = result.to_loopy_expression(indices, expr_context)
+    loopy_expr_context = LoopyExpressionContext(state, num_indices=0)
+    loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
 
-    # TODO: Contextual data not supported yet.
-    assert not expr_context.reduction_bounds
-    assert not expr_context.depends_on
+    # Rename reduction variables to names suitable as inames.
+    loopy_expr = rename_reductions(
+            loopy_expr, loopy_expr_context,
+            lambda old_name: state.var_name_gen(f"{name}{old_name}"))
 
+    # Make the instruction
     from loopy.kernel.instruction import make_assignment
-    insn = make_assignment((prim.Variable(name)[indices],),
-            copy_expr,
-            id=state.insn_id_gen(f"{name}_copy"),
+    if indices:
+        assignee = prim.Variable(name)[indices]
+    else:
+        assignee = prim.Variable(name)
+    insn_id = state.insn_id_gen(f"{name}_store")
+    insn = make_assignment((assignee,),
+            loopy_expr,
+            id=insn_id,
             within_inames=frozenset(inames),
-            depends_on=expr_context.depends_on)
+            depends_on=loopy_expr_context.depends_on)
 
+    # Get the domain.
+    domain = domain_for_shape(inames, expr.shape,
+            loopy_expr_context.reduction_bounds)
+
+    # Update the kernel.
     kernel = state.kernel
-    kernel = kernel.copy(args=kernel.args + [arg],
-            instructions=kernel.instructions + [insn],
-            domains=kernel.domains + [domain])
+
+    if output_to_temporary:
+        tvar = get_loopy_temporary(name, expr)
+        temporary_variables = kernel.temporary_variables.copy()
+        temporary_variables[name] = tvar
+        kernel = kernel.copy(temporary_variables=temporary_variables,
+                domains=kernel.domains + [domain],
+                instructions=kernel.instructions + [insn])
+    else:
+        arg = lp.GlobalArg(name,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                order="C",
+                is_output_only=True)
+        kernel = kernel.copy(args=kernel.args + [arg],
+                domains=kernel.domains + [domain],
+                instructions=kernel.instructions + [insn])
+
     state.update_kernel(kernel)
+    return insn_id
+
+
+def get_loopy_temporary(name: str, expr: Array) -> lp.TemporaryVariable:
+    is_shape_symbolic = not all(isinstance(dim, int) for dim in expr.shape)
+    # Only global variables can have symbolic shape.
+    address_space = lp.AddressSpace.GLOBAL if is_shape_symbolic else lp.auto
+    return lp.TemporaryVariable(name,
+            dtype=expr.dtype,
+            shape=expr.shape,
+            address_space=address_space)
+
+
+def rename_reductions(
+        loopy_expr: ScalarExpression,
+        loopy_expr_context: LoopyExpressionContext,
+        var_name_gen: Callable[[str], str]) -> ScalarExpression:
+    """Rename the reduction variables in *loopy_expr* and *loopy_expr_context*
+    using the callable *var_name_gen.*
+    """
+    new_reduction_inames = tuple(
+            var_name_gen(old_iname)
+            for old_iname in loopy_expr_context.reduction_bounds)
+
+    substitutions = dict(zip(
+            loopy_expr_context.reduction_bounds,
+            map(var, new_reduction_inames)))
+
+    result = scalar_expr.substitute(loopy_expr, substitutions)
+
+    new_reduction_bounds = {
+            substitutions[old_iname].name: bounds
+            for old_iname, bounds in loopy_expr_context.reduction_bounds.items()}
+
+    loopy_expr_context.reduction_bounds = new_reduction_bounds
+    return result
+
+
+def get_initial_codegen_state(namespace: Namespace, target: Target,
+        options: Optional[lp.Options]) -> CodeGenState:
+    kernel = lp.make_kernel("{:}", [],
+            target=target.get_loopy_target(),
+            options=options,
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
+
+    return CodeGenState(namespace=namespace,
+            _kernel=kernel,
+            results=dict())
+
+
+@dataclasses.dataclass(init=True, repr=False, eq=False)
+class PreprocessResult:
+    outputs: DictOfNamedArrays
+    bound_arguments: Dict[str, DataInterface]
+
+
+def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
+    """Preprocess a computation for code generation."""
+    mapper = CodeGenPreprocessor(Namespace())
+
+    from pytato.transform import copy_dict_of_named_arrays
+    new_outputs = copy_dict_of_named_arrays(outputs, mapper)
+
+    return PreprocessResult(outputs=new_outputs,
+            bound_arguments=mapper.bound_arguments)
 
 # }}}
 
@@ -418,16 +776,14 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     """
     # {{{ get namespace and outputs
 
-    outputs: DictOfNamedArrays
+    orig_outputs: DictOfNamedArrays
 
     if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"_pt_out": result})
-        namespace = outputs.namespace
+        orig_outputs = DictOfNamedArrays({"_pt_out": result})
     else:
         assert isinstance(result, DictOfNamedArrays)
-        outputs = result
+        orig_outputs = result
 
-    namespace = outputs.namespace
     del result
 
     # }}}
@@ -435,29 +791,27 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
     if target is None:
         target = PyOpenCLTarget()
 
-    # Set up codegen state.
-    kernel = lp.make_kernel("{:}", [],
-            target=target.get_loopy_target(),
-            options=options,
-            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
+    preproc_result = preprocess(orig_outputs)
+    outputs = preproc_result.outputs
+    namespace = outputs.namespace
 
-    state = CodeGenState(namespace=namespace,
-            _kernel=kernel,
-            results=dict())
+    state = get_initial_codegen_state(namespace, target, options)
 
     # Reserve names of input and output arguments.
     for val in namespace.values():
-        if isinstance(val, Placeholder):
+        if isinstance(val, InputArgumentBase):
             state.var_name_gen.add_name(val.name)
     state.var_name_gen.add_names(outputs)
 
     # Generate code for graph nodes.
-    mapper = CodeGenMapper()
+    cg_mapper = CodeGenMapper()
     for name, val in namespace.items():
-        _ = mapper(val, state)
+        _ = cg_mapper(val, state)
 
     # Generate code for outputs.
     for name, expr in outputs.items():
-        add_output(name, expr, state, mapper)
+        add_store(name, expr, cg_mapper(expr, state), state)
 
-    return target.bind_program(program=state.kernel, bound_arguments=dict())
+    return target.bind_program(
+            program=state.kernel,
+            bound_arguments=preproc_result.bound_arguments)

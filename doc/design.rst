@@ -121,6 +121,10 @@ Reserved Identifiers
 
     -   ``_pt_out``: The default name of an unnamed output argument
 
+    -   ``_pt_data``: Used to automatically generate identifiers for
+        names of :class:`~pytato.array.DataWrapper` arguments that are
+        not supplied by the user.
+
 -   Identifiers used in index lambdas are also reserved. These include:
 
     -   Identifiers matching the regular expression ``_[0-9]+``. They are used
