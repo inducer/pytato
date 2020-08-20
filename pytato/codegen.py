@@ -432,7 +432,7 @@ class CodeGenMapper(Mapper):
         shape = []
         for component in expr.shape:
             shape.append(self.exprgen_mapper(component, shape_context))
-            # Not supported yet.
+            # Data-dependent shape: Not supported yet.
             assert not shape_context.depends_on
             assert not shape_context.reduction_bounds
 
@@ -652,7 +652,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     loopy_expr_context = LoopyExpressionContext(state, num_indices=0)
     loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
 
-    # Rename reductions to names suitable as inames.
+    # Rename reduction variables to names suitable as inames.
     loopy_expr = rename_reductions(
             loopy_expr, loopy_expr_context,
             lambda old_name: state.var_name_gen(f"{name}{old_name}"))
@@ -712,8 +712,8 @@ def rename_reductions(
         loopy_expr: ScalarExpression,
         loopy_expr_context: LoopyExpressionContext,
         var_name_gen: Callable[[str], str]) -> ScalarExpression:
-    """Rename the reductions in *loopy_expr* and *loopy_expr_context* using the
-    callable *var_name_gen.*
+    """Rename the reduction variables in *loopy_expr* and *loopy_expr_context*
+    using the callable *var_name_gen.*
     """
     new_reduction_inames = tuple(
             var_name_gen(old_iname)
