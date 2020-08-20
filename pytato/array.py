@@ -528,6 +528,7 @@ class Array:
             elif elem is None:
                 raise NotImplementedError("newaxis is unsupported")
             else:
+                assert isinstance(elem, (int, slice))
                 slice_spec_expanded.append(elem)
 
         slice_spec_expanded.extend(
@@ -572,6 +573,7 @@ class Array:
             if indices:
                 expr = expr[tuple(indices)]
 
+            # FIXME: Flatten into a single IndexLambda
             return IndexLambda(self.namespace,
                     expr,
                     shape=tuple(shape),
@@ -1461,6 +1463,7 @@ def _make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Arra
         if sval < 0 or not (0 <= bval + sval <= ubound):
             raise ValueError("index '%d' of 'size' out of bounds" % i)
 
+    # FIXME: Generate IndexLambda when possible
     return Slice(array, tuple(begin), tuple(size))
 
 
