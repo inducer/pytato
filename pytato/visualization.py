@@ -92,7 +92,7 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
             return
         info = self.get_common_dot_info(expr)
 
-        for field in expr.fields:
+        for field in expr._fields:
             if field in info.fields:
                 continue
             attr = getattr(expr, field)
