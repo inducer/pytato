@@ -78,6 +78,8 @@ Code Generation Internals
 .. autofunction:: rename_reductions
 .. autofunction:: normalize_outputs
 .. autofunction:: get_initial_codegen_state
+
+.. autoclass:: PreprocessResult
 .. autofunction:: preprocess
 
 """

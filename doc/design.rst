@@ -71,7 +71,7 @@ Naming
 -   There is (for now) one :class:`~Namespace` per computation "universe" that defines
     the computational "environment", by mapping :term:`identifier`\ s to :term:`array expression`\ s
     (note: :class:`DictOfNamedArrays` instances may not be named, but their constituent
-    parts can, by using :class:`AttributeLookup`).
+    parts can, by using :class:`pytato.array.AttributeLookup`).
     Operations involving array expressions not using the same namespace are prohibited.
 
 -   Names in the :class:`~Namespace` are under user control and unique. I.e.
@@ -95,7 +95,7 @@ Naming
 
         A[(A > 0).tagged(CountNamed("mycount"))]
 
--   :class:`Placeholder` expressions, like all array expressions,
+-   :class:`pytato.array.Placeholder` expressions, like all array expressions,
     are considered read-only. When computation begins, the same
     actual memory may be supplied for multiple :term:`placeholder name`\ s,
     i.e. those arrays may alias.
@@ -135,7 +135,7 @@ Reserved Identifiers
 
     -   Identifiers matching the regular expression ``_in[0-9]+``. They are used
         as automatically generated names (if required) in
-        :attr:`IndexLambda.bindings`.
+        :attr:`pytato.array.IndexLambda.bindings`.
 
 Glossary
 ========
@@ -158,6 +158,6 @@ Glossary
         in a :class:`Namespace`.
 
     placeholder name
-        See :attr:`Placeholder.name`.
+        See :attr:`pytato.array.Placeholder.name`.
 
 .. vim: shiftwidth=4
