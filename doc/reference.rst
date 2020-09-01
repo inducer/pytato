@@ -1,6 +1,8 @@
 Reference
 =========
 
+.. module:: pytato
+
 .. automodule:: pytato.array
 .. automodule:: pytato.scalar_expr
 .. automodule:: pytato.transform

@@ -26,3 +26,33 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+Cross-References for Other Documentation
+========================================
+.. class:: ellipsis
+
+    The type of the Python-builtin :data:`Ellipsis` object. (not otherwise
+    documented)
+
+.. currentmodule:: loopy.kernel
+
+.. class:: LoopKernel
+
+   See :class:`loopy.LoopKernel`.
+
+.. currentmodule:: loopy.options
+
+.. class:: Options
+
+   See :class:`loopy.Options`.
+
+.. currentmodule:: loopy.kernel.data
+
+.. class:: TemporaryVariable
+
+   See :class:`loopy.TemporaryVariable`.
+
+.. currentmodule:: islpy._isl
+
+.. class:: BasicSet
+
+   See :class:`islpy.BasicSet`.

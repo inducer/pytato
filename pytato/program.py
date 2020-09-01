@@ -40,8 +40,8 @@ from typing import Any, Mapping, Optional
 if typing.TYPE_CHECKING:
     # Imports skipped for efficiency.  FIXME: Neither of these work as type
     # stubs are not present. Types are here only as documentation.
-    import pyopencl as cl
-    import loopy as lp
+    import pyopencl
+    import loopy
     # Imports skipped to avoid circular dependencies.
     import pytato.target
 
@@ -65,7 +65,7 @@ class BoundProgram:
     .. automethod:: __call__
     """
 
-    program: "lp.LoopKernel"
+    program: "loopy.LoopKernel"
     bound_arguments: Mapping[str, Any]
     target: "pytato.target.Target"
 
@@ -83,7 +83,7 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     .. automethod:: __call__
     """
-    queue: Optional["cl.CommandQueue"]
+    queue: Optional["pyopencl.CommandQueue"]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""

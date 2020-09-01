@@ -47,6 +47,17 @@ from pytato.transform import Mapper, CopyMapper
 
 
 __doc__ = """
+References
+----------
+
+.. class:: DictOfNamedArrays
+
+    Should be referenced as :class:`pytato.DictOfNamedArrays`.
+
+.. class:: DataInterface
+
+    Should be referenced as :class:`pytato.array.DataInterface`.
+
 Generating Code
 ---------------
 
@@ -78,8 +89,9 @@ Code Generation Internals
 .. autofunction:: rename_reductions
 .. autofunction:: normalize_outputs
 .. autofunction:: get_initial_codegen_state
-.. autofunction:: preprocess
 
+.. autoclass:: PreprocessResult
+.. autofunction:: preprocess
 """
 
 

@@ -32,17 +32,12 @@ Code Generation Targets
 .. autoclass:: PyOpenCLTarget
 """
 
-import typing
 from typing import Any, Mapping, Optional
 
 from pytato.program import BoundProgram, BoundPyOpenCLProgram
 
-
-if typing.TYPE_CHECKING:
-    # Skip imports for efficiency.  FIXME: Neither of these work as type stubs
-    # are not present. Types are here only as documentation.
-    import pyopencl as cl
-    import loopy as lp
+import pyopencl
+import loopy
 
 
 class Target:
@@ -52,11 +47,11 @@ class Target:
     .. automethod:: bind_program
     """
 
-    def get_loopy_target(self) -> "lp.TargetBase":
+    def get_loopy_target(self) -> "loopy.TargetBase":
         """Return the corresponding :mod:`loopy` target."""
         raise NotImplementedError
 
-    def bind_program(self, program: "lp.LoopKernel",
+    def bind_program(self, program: "loopy.LoopKernel",
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """Create a :class:`pytato.program.BoundProgram` for this code generation target.
 
@@ -74,17 +69,17 @@ class PyOpenCLTarget(Target):
         The :mod:`pyopencl` command queue, or *None*.
     """
 
-    def __init__(self, queue: Optional["cl.CommandQueue"] = None):
+    def __init__(self, queue: Optional["pyopencl.CommandQueue"] = None):
         self.queue = queue
 
-    def get_loopy_target(self) -> "lp.PyOpenCLTarget":
+    def get_loopy_target(self) -> "loopy.PyOpenCLTarget":
         import loopy as lp
         device = None
         if self.queue is not None:
             device = self.queue.device
         return lp.PyOpenCLTarget(device)
 
-    def bind_program(self, program: "lp.LoopKernel",
+    def bind_program(self, program: "loopy.LoopKernel",
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
                 queue=self.queue,

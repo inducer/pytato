@@ -73,6 +73,7 @@ Pre-Defined Tags
 ----------------
 
 .. autoclass:: ImplementAs
+.. autoclass:: ImplementationStrategy
 .. autoclass:: CountNamed
 .. autoclass:: ImplStored
 .. autoclass:: ImplInlined
@@ -86,6 +87,7 @@ Built-in Expression Nodes
 .. autoclass:: MatrixProduct
 .. autoclass:: LoopyFunction
 .. autoclass:: Stack
+.. autoclass:: AttributeLookup
 
 Index Remapping
 ^^^^^^^^^^^^^^^
@@ -108,7 +110,7 @@ User-Facing Node Creation
 -------------------------
 
 Node constructors such as :class:`Placeholder.__init__` and
-:class:`DictOfNamedArrays.__init__` offer limited input validation
+:class:`~pytato.DictOfNamedArrays.__init__` offer limited input validation
 (in favor of faster execution). Node creation from outside
 :mod:`pytato` should use the following interfaces:
 
@@ -118,6 +120,33 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
+
+Aliases
+-------
+
+(This section exists because Sphinx, our documentation tool, can't (yet)
+canonicalize type references. Once Sphinx 4.0 is released, we should use the
+``:canonical:`` option here.)
+
+.. class:: Namespace
+
+    Should be referenced as :class:`pytato.Namespace`.
+
+.. class:: DottedName
+
+    Should be referenced as :class:`pytato.DottedName`.
+
+.. class:: Tag
+
+    Should be referenced as :class:`pytato.Tag`.
+
+.. class:: Array
+
+    Should be referenced as :class:`pytato.Array`.
+
+.. class:: DictOfNamedArrays
+
+    Should be referenced as :class:`pytato.DictOfNamedArrays`.
 """
 
 # }}}
@@ -200,8 +229,8 @@ class Namespace(Mapping[str, "Array"]):
     r"""
     Represents a mapping from :term:`identifier` strings to
     :term:`array expression`\ s or *None*, where *None* indicates that the name
-    may not be used.  (:class:`Placeholder` instances register their names in
-    this way to avoid ambiguity.)
+    may not be used.  (:class:`pytato.array.Placeholder` instances register
+    their names in this way to avoid ambiguity.)
 
     .. attribute:: name_gen
     .. automethod:: __contains__
@@ -289,6 +318,8 @@ class Tag:
     picklable, and have a reasonably concise :meth:`__repr__`
     of the form ``dotted.name(attr1=value1, attr2=value2)``.
     Positional arguments are not allowed.
+
+   .. automethod:: __repr__
 
    .. note::
 
@@ -419,7 +450,7 @@ class Array:
 
     .. attribute:: shape
 
-        Identifiers (:class:`pymbolic.Variable`) refer to names from
+        Identifiers (:class:`pymbolic.primitives.Variable`) refer to names from
         :attr:`namespace`.  A tuple of integers or :mod:`pymbolic` expressions.
         Shape may be (at most affinely) symbolic in these
         identifiers.
@@ -427,7 +458,8 @@ class Array:
         .. note::
 
             Affine-ness is mainly required by code generation for
-            :class:`IndexLambda`, but :class:`IndexLambda` is used to produce
+            :class:`~pytato.array.IndexLambda`, but
+            :class:`~pytato.array.IndexLambda` is used to produce
             references to named arrays. Since any array that needs to be
             referenced in this way needs to obey this restriction anyway,
             a decision was made to requir the same of *all* array expressions.
@@ -796,10 +828,11 @@ class DictOfNamedArrays(Mapping[str, Array]):
     to instances of :class:`Array`. May occur as a result
     type of array computations.
 
-    .. method:: __contains__
-    .. method:: __getitem__
-    .. method:: __iter__
-    .. method:: __len__
+    .. automethod:: __init__
+    .. automethod:: __contains__
+    .. automethod:: __getitem__
+    .. automethod:: __iter__
+    .. automethod:: __len__
 
     .. note::
 
@@ -833,6 +866,8 @@ class DictOfNamedArrays(Mapping[str, Array]):
 
 class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     """
+    .. attribute:: namespace
+
     .. attribute:: expr
 
         A scalar-valued :mod:`pymbolic` expression such as
@@ -1021,13 +1056,25 @@ class Stack(Array):
 # }}}
 
 
+# {{{ attribute lookup
+
+class AttributeLookup(Array):
+    """An expression node to extract an array from a :class:`DictOfNamedArrays`.
+
+    .. warning::
+
+        Not yet implemented.
+    """
+    pass
+
+
 # {{{ index remapping
 
 class IndexRemappingBase(Array):
     """Base class for operations that remap the indices of an array.
 
     Note that index remappings can also be expressed via
-    :class:`~pytato.IndexLambda`.
+    :class:`~pytato.array.IndexLambda`.
 
     .. attribute:: array
 
@@ -1267,6 +1314,9 @@ class DataWrapper(InputArgumentBase):
 class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     r"""A named placeholder for an array whose concrete value is supplied by the
     user during evaluation.
+
+    .. attribute:: name
+    .. automethod:: __init__
     """
 
     _mapper_method = "map_placeholder"
@@ -1277,6 +1327,9 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             shape: ShapeType,
             dtype: np.dtype,
             tags: Optional[TagsType] = None):
+        """Should not be called directly. Use :func:`make_placeholder`
+        instead.
+        """
         super().__init__(shape=shape,
                 dtype=dtype,
                 namespace=namespace,
