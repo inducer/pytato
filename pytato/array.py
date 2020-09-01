@@ -110,7 +110,7 @@ User-Facing Node Creation
 -------------------------
 
 Node constructors such as :class:`Placeholder.__init__` and
-:class:`DictOfNamedArrays.__init__` offer limited input validation
+:class:`~pytato.DictOfNamedArrays.__init__` offer limited input validation
 (in favor of faster execution). Node creation from outside
 :mod:`pytato` should use the following interfaces:
 
@@ -124,8 +124,9 @@ Node constructors such as :class:`Placeholder.__init__` and
 Aliases
 -------
 
-(This section exists because Sphinx, our documentation tool, can't canonicalize
-type references.)
+(This section exists because Sphinx, our documentation tool, can't (yet)
+canonicalize type references. Once Sphinx 4.0 is released, we should use the
+``:canonical:`` option here.)
 
 .. class:: Namespace
 
