@@ -88,16 +88,16 @@ class DGDiscr1D(object):
 
         Signature: ->()
         """
-        return self.elements[0,1] - self.elements[0,0]
+        return self.elements[0, 1] - self.elements[0, 0]
 
     def nodes(self):
         """Return the vector of node coordinates.
 
         Signature: ->(n*m,)
         """
-        centers = (self.elements[:,0] + self.elements[:,1]) / 2
-        radii = (self.elements[:,1] - self.elements[:,0]) / 2
-        return ((self.ref_nodes[:,np.newaxis] * radii) + centers).T.ravel()
+        centers = (self.elements[:, 0] + self.elements[:, 1]) / 2
+        radii = (self.elements[:, 1] - self.elements[:, 0]) / 2
+        return ((self.ref_nodes[:, np.newaxis] * radii) + centers).T.ravel()
 
     @property
     @memoized
@@ -155,11 +155,11 @@ class DGDiscr1D(object):
 
         Signature: ->(n, n)
         """
-        VrT = []
+        VrT = []  # noqa: N806
         for row in np.eye(self.nnodes):
             deriv = ortholegder(row)
             VrT.append(ortholegval(self.ref_nodes, deriv))
-        Vr = np.vstack(VrT).T
+        Vr = np.vstack(VrT).T  # noqa: N806
         return Vr @ la.inv(self.vdm)
 
     @property
@@ -205,8 +205,8 @@ class DGDiscr1D(object):
         Signature: ->(m, 2)
         """
         result = np.zeros((self.nelements, 2))
-        result[:,0] = -1
-        result[:,1] = 1
+        result[:, 0] = -1
+        result[:, 1] = 1
         return result
 
 
@@ -324,19 +324,6 @@ class AbstractDGOps1D(object):
         Signature: (m, 2) -> (m, 2)
         """
         raise NotImplementedError
-
-
-def elementwise(mat, vec):
-    """Apply a matrix to rows of the input representing per-element
-    degrees of freedom.
-
-    Inputs:
-        mat: Shape (a, b)
-        vec: Shape (c, b)
-
-    Signature: (a, b), (c, b) -> (c, a)
-    """
-    return np.einsum("ij,kj->ki", mat, vec)
 
 
 class DGOps1DRef(AbstractDGOps1D):

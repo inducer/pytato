@@ -151,10 +151,10 @@ class DotEmitter(CodeGeneratorBase):
 
 
 def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
-    td_attrib = "border=\"0\""
-    table_attrib = "border=\"0\" cellborder=\"1\" cellspacing=\"0\""
+    td_attrib = 'border="0"'
+    table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
-    rows = ["<tr><td colspan=\"2\" %s>%s</td></tr>"
+    rows = ['<tr><td colspan="2" %s>%s</td></tr>'
             % (td_attrib, dot_escape(info.title))]
 
     for name, field in info.fields.items():
@@ -173,11 +173,11 @@ def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
 
     with emit.block("subgraph cluster_%s" % label):
         emit("node [shape=ellipse]")
-        emit("label=\"%s\"" % label)
+        emit('label="%s"' % label)
 
         for name, array in names.items():
             name_id = id_gen(label)
-            emit("%s [label=\"%s\"]" % (name_id, dot_escape(name)))
+            emit('%s [label="%s"]' % (name_id, dot_escape(name)))
             array_id = array_to_id[array]
             # Edges must be outside the cluster.
             edges.append((name_id, array_id))
@@ -222,7 +222,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
         # Emit inputs.
         with emit.block("subgraph cluster_Inputs"):
-            emit("label=\"Inputs\"")
+            emit('label="Inputs"')
             for array in input_arrays:
                 _emit_array(emit, nodes[array], array_to_id[array])
 
@@ -235,7 +235,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
             for label, tail_array in node.edges.items():
                 tail = array_to_id[tail_array]
                 head = array_to_id[array]
-                emit("%s -> %s [label=\"%s\"]" % (tail, head, dot_escape(label)))
+                emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
 
         # Emit output/namespace name mappings.
         _emit_name_cluster(emit, outputs, array_to_id, id_gen, label="Outputs")
