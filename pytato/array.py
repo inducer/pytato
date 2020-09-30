@@ -684,6 +684,10 @@ class Array:
                 indices = tuple(var(f"_{i}") for i in range(self.ndim))
                 return val[indices]
 
+        if isinstance(other, Array):
+            if self.namespace is not other.namespace:
+                raise ValueError("Operands must belong to the same namespace.")
+
         if isinstance(other, Number):
             first_expr = add_indices(var("_in0"))
             second_expr = other
