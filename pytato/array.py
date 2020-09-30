@@ -935,7 +935,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
         else:
             return False
 
-        if index != tuple(var("_%d") % i for i in range(len(self.shape))):
+        if index != tuple(var("_%d" % i) for i in range(len(self.shape))):
             return False
 
         try:
