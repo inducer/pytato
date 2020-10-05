@@ -60,8 +60,6 @@ These functions generally follow the interface of the corresponding functions in
 Supporting Functionality
 ------------------------
 
-.. autoclass:: DottedName
-
 .. currentmodule:: pytato.array
 
 Concrete Array Data
@@ -132,18 +130,6 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 
     Should be referenced as :class:`pytato.Namespace`.
 
-.. class:: DottedName
-
-    Should be referenced as :class:`pytato.DottedName`.
-
-.. class:: Tag
-
-    Should be referenced as :class:`pytato.Tag`.
-
-.. class:: Array
-
-    Should be referenced as :class:`pytato.Array`.
-
 .. class:: DictOfNamedArrays
 
     Should be referenced as :class:`pytato.DictOfNamedArrays`.
@@ -161,8 +147,8 @@ from typing import (
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
-from pytools import (is_single_valued, memoize_method, UniqueNameGenerator,
-        Tag, UniqueTag, TagsType, tag_dataclass)
+from pytools import is_single_valued, memoize_method, UniqueNameGenerator
+from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
