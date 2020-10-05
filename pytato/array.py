@@ -154,16 +154,15 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 from functools import partialmethod
 from numbers import Number
 import operator
-from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        FrozenSet, Protocol, Sequence, cast, TYPE_CHECKING)
+        Protocol, Sequence, cast, TYPE_CHECKING)
 
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
-from pytools import (is_single_valued, memoize_method, UniqueNameGenerator, 
-        DottedName, Tag, UniqueTag, TagsType)
+from pytools import (is_single_valued, memoize_method, UniqueNameGenerator,
+        Tag, UniqueTag, TagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
