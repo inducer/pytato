@@ -121,6 +121,8 @@ Reserved Identifiers
 
     -   ``_pt_out``: The default name of an unnamed output argument
 
+    -   ``_pt_in``: The default name of an unnamed placeholder argument
+
     -   ``_pt_data``: Used to automatically generate identifiers for
         names of :class:`~pytato.array.DataWrapper` arguments that are
         not supplied by the user.

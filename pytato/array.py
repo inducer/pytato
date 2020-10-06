@@ -1537,21 +1537,22 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 
 
 def make_placeholder(namespace: Namespace,
-        name: str,
         shape: ConvertibleToShape,
         dtype: Any,
+        name: Optional[str] = None,
         tags: Optional[TagsType] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param namespace:  namespace of the placeholder array
-    :param name:       name of the placeholder array
+    :param name:       name of the placeholder array, generated automatically
+                       if not given
     :param shape:      shape of the placeholder array
     :param dtype:      dtype of the placeholder array
                        (must be convertible to :class:`numpy.dtype`)
     :param tags:       implementation tags
     """
     if name is None:
-        raise ValueError("Placeholder instances must have a name")
+        name = namespace.name_gen('_pt_in')
 
     if not name.isidentifier():
         raise ValueError(f"'{name}' is not a Python identifier")
