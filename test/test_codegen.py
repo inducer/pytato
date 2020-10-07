@@ -69,8 +69,8 @@ def test_size_param(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     namespace = pt.Namespace()
-    n = pt.make_size_param(namespace, "n")
-    pt.make_placeholder(namespace, "x", "(n,)", np.int)
+    n = pt.make_size_param(namespace, name="n")
+    pt.make_placeholder(namespace, name="x", shape="(n,)", dtype=np.int)
     prog = pt.generate_loopy(n, target=pt.PyOpenCLTarget(queue))
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(x=x_in)
@@ -157,7 +157,7 @@ def test_roll(ctx_factory, shift, axis):
 
     namespace = pt.Namespace()
     pt.make_size_param(namespace, "n")
-    x = pt.make_placeholder(namespace, "x", shape=("n", "n"), dtype=np.float)
+    x = pt.make_placeholder(namespace, name="x", shape=("n", "n"), dtype=np.float)
 
     prog = pt.generate_loopy(
             pt.roll(x, shift=shift, axis=axis),
