@@ -114,6 +114,17 @@ def test_stack_input_validation():
         pt.stack((x, x), axis=3)
 
 
+def test_make_placeholder_noname():
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float)
+    y = 2*x
+
+    knl = pt.generate_loopy(y).program
+
+    assert x.name in knl.arg_dict
+    assert x.name in knl.get_read_variables()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
