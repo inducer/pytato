@@ -125,6 +125,17 @@ def test_make_placeholder_noname():
     assert x.name in knl.get_read_variables()
 
 
+def test_zero_length_arrays():
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, shape=(0, 4), dtype=float)
+    y = 2*x
+
+    assert y.shape == (0, 4)
+
+    knl = pt.generate_loopy(y).program
+    assert all(dom.is_empty() for dom in knl.domains if dom.total_dim() != 0)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
