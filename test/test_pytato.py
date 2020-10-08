@@ -33,25 +33,25 @@ import pytato as pt
 def test_matmul_input_validation():
     namespace = pt.Namespace()
 
-    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
-    b = pt.make_placeholder(namespace, "b", (20, 10), np.float)
+    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
+    b = pt.make_placeholder(namespace, name="b", shape=(20, 10), dtype=np.float)
 
     with pytest.raises(ValueError):
         a @ b
 
-    c = pt.make_placeholder(namespace, "c", (), np.float)
+    c = pt.make_placeholder(namespace, name="c", shape=(), dtype=np.float)
     with pytest.raises(ValueError):
         c @ c
 
     pt.make_size_param(namespace, "n")
-    d = pt.make_placeholder(namespace, "d", "(n, n)", np.float)
+    d = pt.make_placeholder(namespace, name="d", shape="(n, n)", dtype=np.float)
     d @ d
 
 
 def test_roll_input_validation():
     namespace = pt.Namespace()
 
-    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
     pt.roll(a, 1, axis=0)
 
     with pytest.raises(ValueError):
@@ -64,7 +64,7 @@ def test_roll_input_validation():
 def test_transpose_input_validation():
     namespace = pt.Namespace()
 
-    a = pt.make_placeholder(namespace, "a", (10, 10), np.float)
+    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
     pt.transpose(a)
 
     with pytest.raises(ValueError):
@@ -80,7 +80,7 @@ def test_transpose_input_validation():
 def test_slice_input_validation():
     namespace = pt.Namespace()
 
-    a = pt.make_placeholder(namespace, "a", (10, 10, 10), np.float)
+    a = pt.make_placeholder(namespace, name="a", shape=(10, 10, 10), dtype=np.float)
 
     a[0]
     a[0, 0]
@@ -96,8 +96,8 @@ def test_slice_input_validation():
 def test_stack_input_validation():
     namespace = pt.Namespace()
 
-    x = pt.make_placeholder(namespace, "x", (10, 10), np.float)
-    y = pt.make_placeholder(namespace, "y", (1, 10), np.float)
+    x = pt.make_placeholder(namespace, name="x", shape=(10, 10), dtype=np.float)
+    y = pt.make_placeholder(namespace, name="y", shape=(1, 10), dtype=np.float)
 
     assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
 
@@ -112,6 +112,17 @@ def test_stack_input_validation():
 
     with pytest.raises(ValueError):
         pt.stack((x, x), axis=3)
+
+
+def test_make_placeholder_noname():
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float)
+    y = 2*x
+
+    knl = pt.generate_loopy(y).program
+
+    assert x.name in knl.arg_dict
+    assert x.name in knl.get_read_variables()
 
 
 if __name__ == "__main__":

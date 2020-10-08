@@ -20,7 +20,7 @@ def main():
     ns = pt.Namespace()
 
     pt.make_size_param(ns, "n")
-    array = pt.make_placeholder(ns, "array", shape="n", dtype=np.float)
+    array = pt.make_placeholder(ns, name="array", shape="n", dtype=np.float)
     stack = pt.stack([array, 2*array, array + 6])
     ns.assign("stack", stack)
     result = stack @ stack.T

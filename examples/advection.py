@@ -149,7 +149,7 @@ def test_advection_convergence(order, flux_type):
         pt.make_size_param(ns, "nelements")
         pt.make_size_param(ns, "nnodes")
         u = pt.make_placeholder(ns,
-                "u", shape="(nelements, nnodes)", dtype=np.float64)
+                name="u", shape="(nelements, nnodes)", dtype=np.float64)
         op = AdvectionOperator(discr, c=1, flux_type=flux_type,
                 dg_ops=DGOps1D(discr, ns))
         result = op.apply(u)
@@ -182,7 +182,7 @@ def main():
     pt.make_size_param(ns, "nelements")
     pt.make_size_param(ns, "nnodes")
     u = pt.make_placeholder(ns,
-            "u", shape="(nelements, nnodes)", dtype=np.float64)
+            name="u", shape="(nelements, nnodes)", dtype=np.float64)
     op = AdvectionOperator(discr, c=1, flux_type="central",
             dg_ops=DGOps1D(discr, ns))
     result = op.apply(u)
