@@ -639,7 +639,13 @@ def domain_for_shape(dim_names: Tuple[str, ...],
         dom &= aff_from_expr(dom.space, left).le_set(affs[iname])
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))
 
-    dom, = dom.get_basic_sets()
+    doms = dom.get_basic_sets()
+
+    if len(doms) == 0:
+        # empty set
+        dom = isl.BasicSet.empty(dom.get_space())
+    else:
+        dom, = doms
 
     return dom
 
