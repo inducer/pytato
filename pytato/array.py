@@ -1552,7 +1552,7 @@ def make_placeholder(namespace: Namespace,
     :param tags:       implementation tags
     """
     if name is None:
-        name = namespace.name_gen('_pt_in')
+        name = namespace.name_gen("_pt_in")
 
     if not name.isidentifier():
         raise ValueError(f"'{name}' is not a Python identifier")
