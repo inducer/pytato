@@ -42,8 +42,6 @@ Array Interface
 
 .. autoclass:: Namespace
 .. autoclass:: Array
-.. autoclass:: Tag
-.. autoclass:: UniqueTag
 .. autoclass:: DictOfNamedArrays
 
 NumPy-Like Interface
