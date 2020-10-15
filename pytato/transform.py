@@ -133,8 +133,8 @@ class CopyMapper(Mapper):
 
     def map_slice(self, expr: Slice) -> Array:
         return Slice(array=self.rec(expr.array),
-                begin=expr.begin,
-                size=expr.size,
+                starts=expr.starts,
+                stops=expr.stops,
                 tags=expr.tags)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
