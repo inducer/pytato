@@ -42,8 +42,6 @@ Array Interface
 
 .. autoclass:: Namespace
 .. autoclass:: Array
-.. autoclass:: Tag
-.. autoclass:: UniqueTag
 .. autoclass:: DictOfNamedArrays
 
 NumPy-Like Interface
@@ -59,8 +57,6 @@ These functions generally follow the interface of the corresponding functions in
 
 Supporting Functionality
 ------------------------
-
-.. autoclass:: DottedName
 
 .. currentmodule:: pytato.array
 
@@ -132,14 +128,6 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 
     Should be referenced as :class:`pytato.Namespace`.
 
-.. class:: DottedName
-
-    Should be referenced as :class:`pytato.DottedName`.
-
-.. class:: Tag
-
-    Should be referenced as :class:`pytato.Tag`.
-
 .. class:: Array
 
     Should be referenced as :class:`pytato.Array`.
@@ -154,15 +142,15 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 from functools import partialmethod
 from numbers import Number
 import operator
-from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        FrozenSet, Protocol, Sequence, cast, TYPE_CHECKING)
+        Protocol, Sequence, cast, TYPE_CHECKING)
 
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
+from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
@@ -179,47 +167,6 @@ if TYPE_CHECKING:
     Ellipsis = EllipsisType.Ellipsis
 else:
     EllipsisType = type(Ellipsis)
-
-
-# {{{ dotted name
-
-class DottedName:
-    """
-    .. attribute:: name_parts
-
-        A tuple of strings, each of which is a valid
-        Python identifier. No name part may start with
-        a double underscore.
-
-    The name (at least morally) exists in the
-    name space defined by the Python module system.
-    It need not necessarily identify an importable
-    object.
-
-    .. automethod:: from_class
-    """
-
-    def __init__(self, name_parts: Tuple[str, ...]):
-        if len(name_parts) == 0:
-            raise ValueError("empty name parts")
-
-        for p in name_parts:
-            if not p.isidentifier():
-                raise ValueError(f"{p} is not a Python identifier")
-
-        self.name_parts = name_parts
-
-    @classmethod
-    def from_class(cls, argcls: Any) -> DottedName:
-        name_parts = tuple(
-                [str(part) for part in argcls.__module__.split(".")]
-                + [str(argcls.__name__)])
-        if not all(not npart.startswith("__") for npart in name_parts):
-            raise ValueError(f"some name parts of {'.'.join(name_parts)} "
-                             "start with double underscores")
-        return cls(name_parts)
-
-# }}}
 
 
 # {{{ namespace
@@ -294,53 +241,6 @@ class Namespace(Mapping[str, "Array"]):
         return IndexLambda(
                 self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
-
-# }}}
-
-
-# {{{ tag
-
-tag_dataclass = dataclass(init=True, eq=True, frozen=True, repr=True)
-
-
-@tag_dataclass
-class Tag:
-    """
-    Generic metadata, applied to, among other things,
-    instances of :class:`Array`.
-
-    .. attribute:: tag_name
-
-        A fully qualified :class:`DottedName` that reflects
-        the class name of the tag.
-
-    Instances of this type must be immutable, hashable,
-    picklable, and have a reasonably concise :meth:`__repr__`
-    of the form ``dotted.name(attr1=value1, attr2=value2)``.
-    Positional arguments are not allowed.
-
-   .. automethod:: __repr__
-
-   .. note::
-
-       This mirrors the tagging scheme that :mod:`loopy`
-       is headed towards.
-    """
-
-    @property
-    def tag_name(self) -> DottedName:
-        return DottedName.from_class(type(self))
-
-
-class UniqueTag(Tag):
-    """
-    Only one instance of this type of tag may be assigned
-    to a single tagged object.
-    """
-    pass
-
-
-TagsType = FrozenSet[Tag]
 
 # }}}
 
@@ -470,7 +370,7 @@ class Array:
 
     .. attribute:: tags
 
-        A :class:`tuple` of :class:`Tag` instances.
+        A :class:`tuple` of :class:`pytools.tag.Tag` instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -625,7 +525,7 @@ class Array:
     def tagged(self, tag: Tag) -> Array:
         """
         Returns a copy of *self* tagged with *tag*.
-        If *tag* is a :class:`UniqueTag` and other
+        If *tag* is a :class:`pytools.tag.UniqueTag` and other
         tags of this type are already present, an error
         is raised.
         """

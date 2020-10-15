@@ -35,6 +35,7 @@ setup(name="pytato",
       python_requires="~=3.8",
       install_requires=[
           "loo.py",
+          "pytools>=2020.4.2"
           ],
 
       author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",

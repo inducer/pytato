@@ -25,8 +25,7 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        Namespace, Array, DictOfNamedArrays, Tag, UniqueTag,
-        DottedName, Placeholder, IndexLambda,
+        Namespace, Array, DictOfNamedArrays, Placeholder, IndexLambda,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -39,8 +38,8 @@ from pytato.target import Target, PyOpenCLTarget
 from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
-        "DottedName", "Namespace", "Array", "DictOfNamedArrays",
-        "Tag", "UniqueTag", "Placeholder", "IndexLambda",
+        "Namespace", "Array", "DictOfNamedArrays",
+        "Placeholder", "IndexLambda",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper",
