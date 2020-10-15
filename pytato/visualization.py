@@ -33,7 +33,7 @@ from typing import Callable, Dict, Union, Iterator, List, Mapping
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
-from pytools.tags import TagsType
+from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
