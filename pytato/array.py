@@ -130,6 +130,10 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 
     Should be referenced as :class:`pytato.Namespace`.
 
+.. class:: Array
+
+    Should be referenced as :class:`pytato.Array`.
+
 .. class:: DictOfNamedArrays
 
     Should be referenced as :class:`pytato.DictOfNamedArrays`.
