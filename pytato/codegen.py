@@ -196,7 +196,7 @@ class CodeGenPreprocessor(CopyMapper):
         return tuple(indices)
 
     def _indices_for_slice(self, expr: Slice) -> SymbolicIndex:
-        return tuple(var(f"_{d}") + expr.begin[d] for d in range(expr.ndim))
+        return tuple(var(f"_{d}") + expr.starts[d] for d in range(expr.ndim))
 
     # https://github.com/python/mypy/issues/8619
     map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # type: ignore  # noqa

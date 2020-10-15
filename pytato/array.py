@@ -425,6 +425,11 @@ class Array:
         raise NotImplementedError
 
     @property
+    def size(self) -> ScalarExpression:
+        from pytools import product
+        return product(self.shape)
+
+    @property
     def dtype(self) -> np.dtype:
         raise NotImplementedError
 
@@ -449,7 +454,7 @@ class Array:
         # Symbolic expression support is also limited.
 
         starts = []
-        sizes = []
+        stops = []
         kept_dims = []
 
         slice_spec_expanded = []
@@ -481,17 +486,17 @@ class Array:
                 if stride is not None and stride != 1:
                     raise ValueError("non-trivial strides unsupported")
                 starts.append(start)
-                sizes.append(stop - start)
+                stops.append(stop)
                 kept_dims.append(i)
 
             elif isinstance(elem, int):
                 starts.append(elem)
-                sizes.append(1)
+                stops.append(elem+1)
 
             else:
                 raise ValueError("unknown index along dimension")
 
-        slice_ = _make_slice(self, starts, sizes)
+        slice_ = _make_slice(self, starts, stops)
 
         if len(kept_dims) != self.ndim:
             # Return an IndexLambda that elides the indexed-into dimensions
@@ -1081,25 +1086,26 @@ class Reshape(IndexRemappingBase):
 class Slice(IndexRemappingBase):
     """Extracts a slice of constant size from an array.
 
-    .. attribute:: begin
-    .. attribute:: size
+    .. attribute:: starts
+    .. attribute:: stops
     """
-    _fields = IndexRemappingBase._fields + ("begin", "size")
+    _fields = IndexRemappingBase._fields + ("starts", "stops")
     _mapper_method = "map_slice"
 
     def __init__(self,
             array: Array,
-            begin: Tuple[int, ...],
-            size: Tuple[int, ...],
+            starts: Tuple[int, ...],
+            stops: Tuple[int, ...],
             tags: Optional[TagsType] = None):
         super().__init__(array, tags)
 
-        self.begin = begin
-        self.size = size
+        self.starts = starts
+        self.stops = stops
 
     @property
-    def shape(self) -> ShapeType:
-        return self.size
+    def shape(self) -> Tuple[int, ...]:
+        return tuple((stop-start)
+                     for start, stop in zip(self.starts, self.stops))
 
 # }}}
 
@@ -1380,14 +1386,15 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     return Stack(tuple(arrays), axis)
 
 
-def _make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Array:
+def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Array:
     """Extract a constant-sized slice from an array with constant offsets.
 
     :param array: input array
-    :param begin: a sequence of length *array.ndim* containing slice
+    :param starts: a sequence of length *array.ndim* containing slice
         offsets. Must be in bounds.
-    :param size: a sequence of length *array.ndim* containing the sizes of
-        the slice along each dimension. Must be in bounds.
+    :param stops: a sequence of length *array.ndim* containing slice stops
+        along each dimension. Must be in bounds and ``>= start`` for each
+        dimension.
 
     .. note::
 
@@ -1395,33 +1402,33 @@ def _make_slice(array: Array, begin: Sequence[int], size: Sequence[int]) -> Arra
         slices (i.e., not the length of the whole dimension) involving symbolic
         expressions are unsupported.
     """
-    if array.ndim != len(begin):
-        raise ValueError("'begin' and 'array' do not match in number of dimensions")
+    if array.ndim != len(starts):
+        raise ValueError("'starts' and 'array' do not match in number of dimensions")
 
-    if len(begin) != len(size):
-        raise ValueError("'begin' and 'size' do not match in number of dimensions")
+    if len(starts) != len(stops):
+        raise ValueError("'starts' and 'stops' do not match in number of dimensions")
 
-    for i, (bval, sval) in enumerate(zip(begin, size)):
+    for i, (start, stop) in enumerate(zip(starts, stops)):
         symbolic_index = not (
                 isinstance(array.shape[i], int)
-                and isinstance(bval, int)
-                and isinstance(sval, int))
+                and isinstance(start, int)
+                and isinstance(stop, int))
 
         if symbolic_index:
-            if not (0 == bval and sval == array.shape[i]):
+            if not (0 == start and stop == array.shape[i]):
                 raise ValueError(
                         "slicing with symbolic dimensions is unsupported")
             continue
 
         ubound: int = cast(int, array.shape[i])
-        if not (0 <= bval < ubound):
+        if not (0 <= start < ubound):
             raise ValueError("index '%d' of 'begin' out of bounds" % i)
 
-        if sval < 0 or not (0 <= bval + sval <= ubound):
+        if not (start <= stop <= ubound):
             raise ValueError("index '%d' of 'size' out of bounds" % i)
 
     # FIXME: Generate IndexLambda when possible
-    return Slice(array, tuple(begin), tuple(size))
+    return Slice(array, tuple(starts), tuple(stops))
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
