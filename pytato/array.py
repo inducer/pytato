@@ -425,6 +425,11 @@ class Array:
         raise NotImplementedError
 
     @property
+    def size(self) -> ScalarExpression:
+        from pytools import product
+        return product(self.shape)
+
+    @property
     def dtype(self) -> np.dtype:
         raise NotImplementedError
 
