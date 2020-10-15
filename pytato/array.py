@@ -370,7 +370,7 @@ class Array:
 
     .. attribute:: tags
 
-        A :class:`tuple` of :class:`Tag` instances.
+        A :class:`tuple` of :class:`pytools.tag.Tag` instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -525,7 +525,7 @@ class Array:
     def tagged(self, tag: Tag) -> Array:
         """
         Returns a copy of *self* tagged with *tag*.
-        If *tag* is a :class:`UniqueTag` and other
+        If *tag* is a :class:`pytools.tag.UniqueTag` and other
         tags of this type are already present, an error
         is raised.
         """
