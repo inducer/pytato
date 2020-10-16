@@ -54,6 +54,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: roll
 .. autofunction:: transpose
 .. autofunction:: stack
+.. autofunction:: concatenate
 
 Supporting Functionality
 ------------------------
@@ -83,6 +84,7 @@ Built-in Expression Nodes
 .. autoclass:: MatrixProduct
 .. autoclass:: LoopyFunction
 .. autoclass:: Stack
+.. autoclass:: Concatenate
 .. autoclass:: AttributeLookup
 
 Index Remapping
