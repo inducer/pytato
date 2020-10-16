@@ -405,6 +405,30 @@ def test_stack(ctx_factory, input_dims):
         assert (out == np.stack((x_in, y_in), axis=axis)).all()
 
 
+def test_concatenate(ctx_factory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x0_in = rng.random(size=(3, 9, 3))
+    x1_in = rng.random(size=(3, 11, 3))
+    x2_in = rng.random(size=(3, 22, 3))
+
+    namespace = pt.Namespace()
+    x0 = pt.make_data_wrapper(namespace, x0_in)
+    x1 = pt.make_data_wrapper(namespace, x1_in)
+    x2 = pt.make_data_wrapper(namespace, x2_in)
+
+    prog = pt.generate_loopy(
+            pt.concatenate((x0, x1, x2), axis=1),
+            target=pt.PyOpenCLTarget(queue))
+
+    _, (out,) = prog()
+    expected_out = np.concatenate((x0_in, x1_in, x2_in), axis=1)
+    assert (out == expected_out).all()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
