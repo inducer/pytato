@@ -26,7 +26,8 @@ import dataclasses
 from functools import partialmethod
 import re
 from typing import (
-        Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable, List)
+        Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable, List,
+        Any)
 
 import islpy as isl
 import loopy as lp
@@ -44,7 +45,6 @@ from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression
 from pytato.transform import Mapper, CopyMapper
-from numbers import Number
 
 
 __doc__ = """
@@ -175,9 +175,8 @@ class CodeGenPreprocessor(CopyMapper):
                      for i in range(len(expr.shape))]
             return Subscript(aggregate, tuple(index))
 
-        lbounds: List[Union[Number, ScalarExpression]] = [0]
-        ubounds: List[Union[Number, ScalarExpression]] = [
-                expr.arrays[0].shape[expr.axis]]
+        lbounds: List[Any] = [0]
+        ubounds: List[Any] = [expr.arrays[0].shape[expr.axis]]
 
         for i, array in enumerate(expr.arrays[1:], start=1):
             ubounds.append(ubounds[i-1]+array.shape[expr.axis])
