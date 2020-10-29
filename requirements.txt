@@ -1,2 +1,2 @@
-git+https://github.com/inducer/pytools.git
-git+https://github.com/inducer/loopy.git
+git+https://github.com/inducer/pytools.git#egg=pytools
+git+https://github.com/inducer/loopy.git@egg=loopy

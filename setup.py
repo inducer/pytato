@@ -34,7 +34,7 @@ setup(name="pytato",
 
       python_requires="~=3.8",
       install_requires=[
-          "loo.py",
+          "loopy>=2020.2",
           "pytools>=2020.4.2"
           ],
 
