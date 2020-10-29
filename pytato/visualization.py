@@ -190,7 +190,7 @@ def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
 
 
 def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
-    r"""Return a string in the `dot <http://graphviz.org>`_ language depicting the
+    r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
     :arg result: Outputs of the computation (cf. :func:`pytato.generate_loopy`).
