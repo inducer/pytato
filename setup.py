@@ -39,7 +39,7 @@ setup(name="pytato",
           ],
 
       author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
-      url="http://github.com/inducer/pytato",
+      url="https://github.com/inducer/pytato",
       author_email="inform@tiker.net",
       license="MIT",
       packages=find_packages())
