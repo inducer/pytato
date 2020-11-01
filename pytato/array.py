@@ -247,11 +247,12 @@ class Namespace(Mapping[str, "Array"]):
 
 # {{{ shape
 
-ShapeType = Tuple[ScalarExpression, ...]
+AxisLenType = Union[int, prim.Expression]
+ShapeType = Tuple[AxisLenType, ...]
 ConvertibleToShapeComponent = Union[int, prim.Expression, str]
 ConvertibleToShape = Union[
         str,
-        ScalarExpression,
+        AxisLenType,
         Tuple[ConvertibleToShapeComponent, ...]]
 
 
@@ -303,7 +304,7 @@ def normalize_shape(
         shape = scalar_expr.parse(shape)
 
     from numbers import Number
-    if isinstance(shape, (Number, prim.Expression)):
+    if isinstance(shape, (int, Number, prim.Expression)):
         shape = (shape,)
 
     return tuple(normalize_shape_component(s) for s in shape)
