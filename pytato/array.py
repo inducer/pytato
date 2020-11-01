@@ -1077,7 +1077,31 @@ class AxisPermutation(IndexRemappingBase):
 
 class Reshape(IndexRemappingBase):
     """
+    Reshape an array.
+
+    .. attribute:: array
+
+        The array to be reshaped
+
+    .. attribute:: newshape
+
+        The output shape
     """
+
+    _fields = Array._fields + ("array", "newshape")
+    _mapper_method = "map_reshape"
+
+    def __init__(self,
+            array: Array,
+            newshape: Tuple[int, ...],
+            tags: Optional[TagsType] = None):
+        # TODO: should also take in 'order'
+        super().__init__(array, tags)
+        self.newshape = newshape
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.newshape
 
 # }}}
 
@@ -1430,6 +1454,51 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
 
     # FIXME: Generate IndexLambda when possible
     return Slice(array, tuple(starts), tuple(stops))
+
+
+def reshape(array: Array, newshape: Sequence[int]) -> Array:
+    """
+    :param array: array to be reshaped
+    :param newshape: shape of the resulting array
+
+    .. note::
+
+        reshapes of arrays with symbolic shapes not yet implemented.
+    """
+    from pytools import product
+
+    if newshape.count(-1) > 1:
+        raise ValueError("can only specify one unknown dimension")
+
+    if not isinstance(array.size, int):
+        raise ValueError("reshape of arrays with symbolic lengths not allowed")
+
+    newshape_sans_minus_1 = []
+
+    for new_axislen in newshape:
+        if not isinstance(new_axislen, int):
+            raise ValueError("Symbolic reshapes not allowed.")
+
+        if not(new_axislen > 0 or new_axislen == -1):
+            raise ValueError("newshape should be either sequence of positive ints or"
+                    " -1")
+
+        if new_axislen == -1:
+            size_of_rest_of_newaxes = -1 * product(newshape)
+
+            if array.size % size_of_rest_of_newaxes != 0:
+                raise ValueError(f"cannot reshape array of size {array.size}"
+                        f" into ({size_of_rest_of_newaxes})")
+
+            new_axislen = array.size // size_of_rest_of_newaxes
+
+        newshape_sans_minus_1.append(new_axislen)
+
+    if product(newshape_sans_minus_1) != array.size:
+        raise ValueError(f"cannot reshape array of size {array.size}"
+                f" into {newshape}")
+
+    return Reshape(array, tuple(newshape_sans_minus_1))
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:

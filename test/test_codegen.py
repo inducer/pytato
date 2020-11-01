@@ -405,6 +405,37 @@ def test_stack(ctx_factory, input_dims):
         assert (out == np.stack((x_in, y_in), axis=axis)).all()
 
 
+@pytest.mark.parametrize("oldshape,newshape", itertools.product(
+                                      [(36,),
+                                       (3, 3, 4),
+                                       (12, 3),
+                                       (2, 2, 3, 3, 1)],
+                                      [(-1,),
+                                       (-1, 6),
+                                       (4, 9),
+                                       (9, -1),
+                                       (36, -1)]))
+def test_reshape(ctx_factory, oldshape, newshape):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=oldshape)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    expected_out = np.reshape(x_in, newshape=newshape)
+
+    prog = pt.generate_loopy(
+            pt.reshape(x, newshape=newshape),
+            target=pt.PyOpenCLTarget(queue))
+
+    _, (out,) = prog()
+    assert expected_out.shape == out.shape
+    assert (out == expected_out).all()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

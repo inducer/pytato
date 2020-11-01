@@ -30,7 +30,7 @@ from pytato.array import (
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
 
-        matmul, roll, transpose, stack,
+        matmul, roll, transpose, stack, reshape,
         )
 
 from pytato.codegen import generate_loopy
@@ -44,7 +44,7 @@ __all__ = (
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper",
 
-        "matmul", "roll", "transpose", "stack",
+        "matmul", "roll", "transpose", "stack", "reshape",
 
         "generate_loopy",
 
