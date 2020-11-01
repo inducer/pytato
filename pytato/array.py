@@ -304,10 +304,11 @@ def normalize_shape(
         shape = scalar_expr.parse(shape)
 
     from numbers import Number
-    if isinstance(shape, (int, Number, prim.Expression)):
+    if isinstance(shape, (Number, prim.Expression)):
         shape = (shape,)
 
-    return tuple(normalize_shape_component(s) for s in shape)
+    # https://github.com/python/mypy/issues/3186
+    return tuple(normalize_shape_component(s) for s in shape)  # type: ignore
 
 # }}}
 
