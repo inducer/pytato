@@ -24,11 +24,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, FrozenSet
 
 from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
-        Roll, AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays)
+        Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
+        DictOfNamedArrays)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -147,6 +148,53 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
 
+
+class DependencyMapper(Mapper):
+    def __init__(self) -> None:
+        self.cache: Dict[Array, FrozenSet[Array]] = {}
+
+    def rec(self, expr: Array) -> FrozenSet[Array]:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+        result: FrozenSet[Array] = super().rec(expr)
+        self.cache[expr] = result
+        return result
+
+    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+        from functools import reduce
+        return reduce(lambda a, b: a | b, args, frozenset())
+
+        return frozenset().union(*args)
+
+    def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), *(self.rec(bnd)
+                                                 for bnd in expr.bindings.values()))
+
+    def map_placeholder(self, expr: Placeholder) -> FrozenSet[Array]:
+        return frozenset([expr])
+
+    def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[Array]:
+        return frozenset([expr])
+
+    def map_size_param(self, expr: SizeParam) -> FrozenSet[Array]:
+        return frozenset([expr])
+
+    def map_matrix_product(self, expr: MatrixProduct) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.x1), self.rec(expr.x2))
+
+    def map_stack(self, expr: Stack) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), *(self.rec(ary)
+                                                 for ary in expr.arrays))
+
+    def map_roll(self, expr: Roll) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
+    def map_slice(self, expr: Slice) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
 # }}}
 
 
@@ -185,6 +233,15 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     for name, val in source_dict.items():
         data[name] = copy_mapper(val)
     return DictOfNamedArrays(data)
+
+
+def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
+    dep_mapper = DependencyMapper()
+
+    if isinstance(expr, Array):
+        return dep_mapper(expr)
+
+    return {name: dep_mapper(val) for name, val in expr.items()}
 
 # }}}
 
