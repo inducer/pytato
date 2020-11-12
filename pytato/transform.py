@@ -150,6 +150,10 @@ class CopyMapper(Mapper):
 
 
 class DependencyMapper(Mapper):
+    """
+    Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
+    :class:`pytato.array.Array`'s it depends on.
+    """
     def __init__(self) -> None:
         self.cache: Dict[Array, FrozenSet[Array]] = {}
 
@@ -234,6 +238,8 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
 
 
 def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
+    """Returns the dependencies of each named array in *expr*.
+    """
     dep_mapper = DependencyMapper()
 
     return {name: dep_mapper(val) for name, val in expr.items()}
