@@ -164,8 +164,6 @@ class DependencyMapper(Mapper):
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
-        return frozenset().union(*args)
-
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
                                                  for bnd in expr.bindings.values()))
@@ -237,9 +235,6 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
 
 def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     dep_mapper = DependencyMapper()
-
-    if isinstance(expr, Array):
-        return dep_mapper(expr)
 
     return {name: dep_mapper(val) for name, val in expr.items()}
 
