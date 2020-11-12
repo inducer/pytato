@@ -38,8 +38,10 @@ Transforming Computations
 -------------------------
 
 .. autoclass:: CopyMapper
+.. autoclass:: DependencyMapper
 .. autofunction:: copy_namespace
 .. autofunction:: copy_dict_of_named_arrays
+.. autofunction:: get_dependencies
 
 """
 
