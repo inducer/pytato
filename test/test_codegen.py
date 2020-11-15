@@ -405,16 +405,15 @@ def test_stack(ctx_factory, input_dims):
         assert (out == np.stack((x_in, y_in), axis=axis)).all()
 
 
-@pytest.mark.parametrize("oldshape,newshape", itertools.product(
-                                      [(36,),
-                                       (3, 3, 4),
-                                       (12, 3),
-                                       (2, 2, 3, 3, 1)],
-                                      [(-1,),
-                                       (-1, 6),
-                                       (4, 9),
-                                       (9, -1),
-                                       (36, -1)]))
+@pytest.mark.parametrize("oldshape", [(36,),
+                                      (3, 3, 4),
+                                      (12, 3),
+                                      (2, 2, 3, 3, 1)])
+@pytest.mark.parametrize("newshape", [(-1,),
+                                      (-1, 6),
+                                      (4, 9),
+                                      (9, -1),
+                                      (36, -1)])
 def test_reshape(ctx_factory, oldshape, newshape):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
