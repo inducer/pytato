@@ -64,7 +64,7 @@ Mypy:
 
 Documentation:
   script:
-  - EXTRA_INSTALL="pyopencl"
+  - EXTRA_INSTALL="pyopencl sphinx-autodoc-typehints"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
   - ./.ci-support/fix-code-for-docs.sh
   - ". ./build-docs.sh"
