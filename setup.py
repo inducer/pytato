@@ -34,12 +34,12 @@ setup(name="pytato",
 
       python_requires="~=3.8",
       install_requires=[
-          "loo.py",
+          "loopy>=2020.2",
           "pytools>=2020.4.2"
           ],
 
       author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
-      url="http://github.com/inducer/pytato",
+      url="https://github.com/inducer/pytato",
       author_email="inform@tiker.net",
       license="MIT",
       packages=find_packages())

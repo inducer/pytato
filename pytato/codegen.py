@@ -834,17 +834,43 @@ def get_initial_codegen_state(namespace: Namespace, target: Target,
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class PreprocessResult:
     outputs: DictOfNamedArrays
+    compute_order: Tuple[str, ...]
     bound_arguments: Dict[str, DataInterface]
 
 
 def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
     """Preprocess a computation for code generation."""
+    from pytato.transform import copy_dict_of_named_arrays, get_dependencies
+
+    # {{{ compute the order in which the outputs must be computed
+
+    # semantically order does not matter, but doing a toposort ordering of the
+    # outputs leads to a FLOP optimal choice
+
+    from pytools.graph import compute_topological_order
+
+    deps = get_dependencies(outputs)
+
+    # only look for dependencies between the outputs
+    deps = {name: (val & frozenset(outputs.values()))
+            for name, val in deps.items()}
+
+    # represent deps in terms of output names
+    output_to_name = {output: name for name, output in outputs.items()}
+    dag = {name: (frozenset([output_to_name[output] for output in val])
+                  - frozenset([name]))
+           for name, val in deps.items()}
+
+    output_order: List[str] = compute_topological_order(dag)[::-1]
+
+    # }}}
+
     mapper = CodeGenPreprocessor(Namespace())
 
-    from pytato.transform import copy_dict_of_named_arrays
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 
     return PreprocessResult(outputs=new_outputs,
+            compute_order=tuple(output_order),
             bound_arguments=mapper.bound_arguments)
 
 # }}}
@@ -868,6 +894,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
 
     preproc_result = preprocess(orig_outputs)
     outputs = preproc_result.outputs
+    compute_order = preproc_result.compute_order
     namespace = outputs.namespace
 
     state = get_initial_codegen_state(namespace, target, options)
@@ -884,8 +911,11 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
         _ = cg_mapper(val, state)
 
     # Generate code for outputs.
-    for name, expr in outputs.items():
-        add_store(name, expr, cg_mapper(expr, state), state)
+    for name in compute_order:
+        expr = outputs[name]
+        insn_id = add_store(name, expr, cg_mapper(expr, state), state)
+        # replace "expr" with the created stored variable
+        state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
     return target.bind_program(
             program=state.kernel,
