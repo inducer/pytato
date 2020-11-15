@@ -1087,18 +1087,26 @@ class Reshape(IndexRemappingBase):
     .. attribute:: newshape
 
         The output shape
+
+    .. attribute:: order
+
+        Output layout order, either ``C`` or ``F``.
     """
 
-    _fields = Array._fields + ("array", "newshape")
+    _fields = Array._fields + ("array", "newshape", "order")
     _mapper_method = "map_reshape"
 
     def __init__(self,
             array: Array,
             newshape: Tuple[int, ...],
+            order: str,
             tags: Optional[TagsType] = None):
-        # TODO: should also take in 'order'
+        # FIXME: Get rid of this restriction
+        assert order == "C"
+
         super().__init__(array, tags)
         self.newshape = newshape
+        self.order = order
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -1457,10 +1465,12 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
     return Slice(array, tuple(starts), tuple(stops))
 
 
-def reshape(array: Array, newshape: Sequence[int]) -> Array:
+def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
+    :param order: ``"C"`` or ``"F"``. Layout order of the result array. Only
+        ``"C"`` allowed for now.
 
     .. note::
 
@@ -1474,7 +1484,8 @@ def reshape(array: Array, newshape: Sequence[int]) -> Array:
     if not isinstance(array.size, int):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
-    newshape_sans_minus_1 = []
+    if order != "C":
+        raise ValueError("Reshapes to a 'F'-ordered arrays not implemented")
 
     for new_axislen in newshape:
         if not isinstance(new_axislen, int):
@@ -1499,7 +1510,7 @@ def reshape(array: Array, newshape: Sequence[int]) -> Array:
         raise ValueError(f"cannot reshape array of size {array.size}"
                 f" into {newshape}")
 
-    return Reshape(array, tuple(newshape_sans_minus_1))
+    return Reshape(array, tuple(newshape_sans_minus_1), order)
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
