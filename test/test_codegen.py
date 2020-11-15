@@ -435,7 +435,7 @@ def test_reshape(ctx_factory, oldshape, newshape):
     assert expected_out.shape == out.shape
     assert (out == expected_out).all()
 
-    
+
 def test_dict_of_named_array_codegen_avoids_recomputation():
     ns = pt.Namespace()
     x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")
