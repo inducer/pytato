@@ -428,7 +428,7 @@ def test_concatenate(ctx_factory):
     expected_out = np.concatenate((x0_in, x1_in, x2_in), axis=1)
     assert (out == expected_out).all()
 
-    
+
 def test_dict_of_named_array_codegen_avoids_recomputation():
     ns = pt.Namespace()
     x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")
