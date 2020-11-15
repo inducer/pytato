@@ -1481,11 +1481,13 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
 
-    if not isinstance(array.size, int):
+    if not all(isinstance(axis_len, int) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
     if order != "C":
         raise ValueError("Reshapes to a 'F'-ordered arrays not implemented")
+
+    newshape_explicit = []
 
     for new_axislen in newshape:
         if not isinstance(new_axislen, int):
@@ -1494,6 +1496,8 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
         if not(new_axislen > 0 or new_axislen == -1):
             raise ValueError("newshape should be either sequence of positive ints or"
                     " -1")
+
+        # {{{ infer the axis length corresponding to axis marked "-1"
 
         if new_axislen == -1:
             size_of_rest_of_newaxes = -1 * product(newshape)
@@ -1504,13 +1508,15 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
 
             new_axislen = array.size // size_of_rest_of_newaxes
 
-        newshape_sans_minus_1.append(new_axislen)
+        # }}}
 
-    if product(newshape_sans_minus_1) != array.size:
+        newshape_explicit.append(new_axislen)
+
+    if product(newshape_explicit) != array.size:
         raise ValueError(f"cannot reshape array of size {array.size}"
                 f" into {newshape}")
 
-    return Reshape(array, tuple(newshape_sans_minus_1), order)
+    return Reshape(array, tuple(newshape_explicit), order)
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
