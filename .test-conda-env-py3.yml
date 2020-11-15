@@ -10,3 +10,4 @@ dependencies:
 - mako
 - pyopencl
 - islpy
+- sphinx-autodoc-typehints

@@ -405,6 +405,18 @@ def test_stack(ctx_factory, input_dims):
         assert (out == np.stack((x_in, y_in), axis=axis)).all()
 
 
+def test_dict_of_named_array_codegen_avoids_recomputation():
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")
+    y = 2*x
+    z = y + 4*x
+
+    yz = pt.DictOfNamedArrays({"y": y, "z": z})
+
+    knl = pt.generate_loopy(yz).program
+    assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
