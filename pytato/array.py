@@ -974,8 +974,8 @@ class Concatenate(Array):
 
     .. attribute:: arrays
 
-        The sequence of arrays to join. The arrays must have same shape except
-        for the dimension corresponding to *axis*.
+        An instance of :class:`tuple` of the arrays to join. The arrays must
+        have same shape except for the dimension corresponding to *axis*.
 
     .. attribute:: axis
 
@@ -1450,6 +1450,9 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     if not arrays:
         raise ValueError("need at least one array to stack")
+
+    if not all(array.namespace is arrays[0].namespace for array in arrays):
+        raise ValueError("arrays must belong to the same namespace.")
 
     def shape_except_axis(ary: Array) -> Tuple[int, ...]:
         return ary.shape[:axis] + ary.shape[axis+1:]
