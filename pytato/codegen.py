@@ -38,7 +38,7 @@ from pytato.array import (
         Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll,
         AxisPermutation, Slice, IndexRemappingBase, Stack, Placeholder,
-        Namespace, DataInterface)
+        Reshape, Namespace, DataInterface)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -109,6 +109,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Roll`             :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.AxisPermutation`  :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Slice`            :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -198,11 +199,31 @@ class CodeGenPreprocessor(CopyMapper):
     def _indices_for_slice(self, expr: Slice) -> SymbolicIndex:
         return tuple(var(f"_{d}") + expr.starts[d] for d in range(expr.ndim))
 
+    def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
+        newstrides = [1]  # reshaped array strides
+        for axis_len in reversed(expr.shape[1:]):
+            newstrides.insert(0, newstrides[0]*axis_len)
+
+        flattened_idx = sum(prim.Variable(f"_{i}")*stride
+                            for i, stride in enumerate(newstrides))
+
+        oldstrides = [1]  # input array strides
+        for axis_len in reversed(expr.array.shape[1:]):
+            oldstrides.insert(0, oldstrides[0]*axis_len)
+
+        oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
+        for axis_len in reversed(expr.array.shape[:-1]):
+            oldsizetills.insert(0, oldsizetills[0]*axis_len)
+
+        return tuple(((flattened_idx % sizetill) // stride)
+                     for stride, sizetill in zip(oldstrides, oldsizetills))
+
     # https://github.com/python/mypy/issues/8619
     map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # type: ignore  # noqa
     map_axis_permutation = (
             partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
     map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
+    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) # noqa
 
     # }}}
 

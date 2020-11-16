@@ -153,7 +153,7 @@ from pytools import is_single_valued, memoize_method, UniqueNameGenerator
 from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
-from pytato.scalar_expr import ScalarExpression
+from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
 
 # Get a type variable that represents the type of '...'
@@ -247,11 +247,11 @@ class Namespace(Mapping[str, "Array"]):
 
 # {{{ shape
 
-ShapeType = Tuple[ScalarExpression, ...]
+ShapeType = Tuple[IntegralScalarExpression, ...]
 ConvertibleToShapeComponent = Union[int, prim.Expression, str]
 ConvertibleToShape = Union[
         str,
-        ScalarExpression,
+        IntegralScalarExpression,
         Tuple[ConvertibleToShapeComponent, ...]]
 
 
@@ -306,7 +306,8 @@ def normalize_shape(
     if isinstance(shape, (Number, prim.Expression)):
         shape = (shape,)
 
-    return tuple(normalize_shape_component(s) for s in shape)
+    # https://github.com/python/mypy/issues/3186
+    return tuple(normalize_shape_component(s) for s in shape)  # type: ignore
 
 # }}}
 
@@ -1076,7 +1077,39 @@ class AxisPermutation(IndexRemappingBase):
 
 class Reshape(IndexRemappingBase):
     """
+    Reshape an array.
+
+    .. attribute:: array
+
+        The array to be reshaped
+
+    .. attribute:: newshape
+
+        The output shape
+
+    .. attribute:: order
+
+        Output layout order, either ``C`` or ``F``.
     """
+
+    _fields = Array._fields + ("array", "newshape", "order")
+    _mapper_method = "map_reshape"
+
+    def __init__(self,
+            array: Array,
+            newshape: Tuple[int, ...],
+            order: str,
+            tags: Optional[TagsType] = None):
+        # FIXME: Get rid of this restriction
+        assert order == "C"
+
+        super().__init__(array, tags)
+        self.newshape = newshape
+        self.order = order
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.newshape
 
 # }}}
 
@@ -1429,6 +1462,60 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
 
     # FIXME: Generate IndexLambda when possible
     return Slice(array, tuple(starts), tuple(stops))
+
+
+def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
+    """
+    :param array: array to be reshaped
+    :param newshape: shape of the resulting array
+    :param order: ``"C"`` or ``"F"``. Layout order of the result array. Only
+        ``"C"`` allowed for now.
+
+    .. note::
+
+        reshapes of arrays with symbolic shapes not yet implemented.
+    """
+    from pytools import product
+
+    if newshape.count(-1) > 1:
+        raise ValueError("can only specify one unknown dimension")
+
+    if not all(isinstance(axis_len, int) for axis_len in array.shape):
+        raise ValueError("reshape of arrays with symbolic lengths not allowed")
+
+    if order != "C":
+        raise NotImplementedError("Reshapes to a 'F'-ordered arrays")
+
+    newshape_explicit = []
+
+    for new_axislen in newshape:
+        if not isinstance(new_axislen, int):
+            raise ValueError("Symbolic reshapes not allowed.")
+
+        if not(new_axislen > 0 or new_axislen == -1):
+            raise ValueError("newshape should be either sequence of positive ints or"
+                    " -1")
+
+        # {{{ infer the axis length corresponding to axis marked "-1"
+
+        if new_axislen == -1:
+            size_of_rest_of_newaxes = -1 * product(newshape)
+
+            if array.size % size_of_rest_of_newaxes != 0:
+                raise ValueError(f"cannot reshape array of size {array.size}"
+                        f" into ({size_of_rest_of_newaxes})")
+
+            new_axislen = array.size // size_of_rest_of_newaxes
+
+        # }}}
+
+        newshape_explicit.append(new_axislen)
+
+    if product(newshape_explicit) != array.size:
+        raise ValueError(f"cannot reshape array of size {array.size}"
+                f" into {newshape}")
+
+    return Reshape(array, tuple(newshape_explicit), order)
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
