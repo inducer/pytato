@@ -158,6 +158,25 @@ def test_concatenate_input_validation():
         pt.concatenate((x, x), axis=3)
 
 
+def test_reshape_input_validation():
+    ns = pt.Namespace()
+
+    x = pt.make_placeholder(ns, shape=(3, 3, 4), dtype=np.float)
+
+    assert pt.reshape(x, (-1,)).shape == (36,)
+    assert pt.reshape(x, (-1, 6)).shape == (6, 6)
+    assert pt.reshape(x, (4, -1)).shape == (4, 9)
+    assert pt.reshape(x, (36, -1)).shape == (36, 1)
+
+    with pytest.raises(ValueError):
+        # 36 not a multiple of 25
+        pt.reshape(x, (5, 5))
+
+    with pytest.raises(ValueError):
+        # 2 unknown dimensions
+        pt.reshape(x, (-1, -1, 3))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

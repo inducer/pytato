@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, FrozenSet
 from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Concatenate)
+        DictOfNamedArrays, Reshape, Concatenate)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -197,6 +197,9 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
     def map_slice(self, expr: Slice) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
+    def map_reshape(self, expr: Reshape) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:

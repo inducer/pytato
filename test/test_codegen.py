@@ -406,6 +406,29 @@ def test_concatenate(ctx_factory):
     assert_allclose_to_numpy(pt.concatenate((x0, x1, x2), axis=1), queue)
 
 
+@pytest.mark.parametrize("oldshape", [(36,),
+                                      (3, 3, 4),
+                                      (12, 3),
+                                      (2, 2, 3, 3, 1)])
+@pytest.mark.parametrize("newshape", [(-1,),
+                                      (-1, 6),
+                                      (4, 9),
+                                      (9, -1),
+                                      (36, -1)])
+def test_reshape(ctx_factory, oldshape, newshape):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=oldshape)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+
+    assert_allclose_to_numpy(pt.reshape(x, newshape=newshape), queue)
+
+
 def test_dict_of_named_array_codegen_avoids_recomputation():
     ns = pt.Namespace()
     x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")

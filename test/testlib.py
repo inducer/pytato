@@ -4,8 +4,8 @@ import numpy
 import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
-                          AxisPermutation, Slice, DataWrapper, Concatenate,
-                          Namespace)
+                          AxisPermutation, Slice, DataWrapper, Reshape,
+                          Concatenate, Namespace)
 
 
 class EagerEvaluator(Mapper):
@@ -42,6 +42,9 @@ class EagerEvaluator(Mapper):
         array = self.rec(expr.array)
         return array[tuple(slice(start, stop)
                            for start, stop in zip(expr.starts, expr.stops))]
+
+    def map_reshape(self, expr: Reshape) -> Any:
+        return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)
 
     def map_concatenate(self, expr: Concatenate) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
