@@ -1485,7 +1485,7 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
     if order != "C":
-        raise ValueError("Reshapes to a 'F'-ordered arrays not implemented")
+        raise NotImplementedError("Reshapes to a 'F'-ordered arrays")
 
     newshape_explicit = []
 
