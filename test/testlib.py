@@ -8,7 +8,7 @@ from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
                           Concatenate, Namespace)
 
 
-class EagerEvaluator(Mapper):
+class NumpyBasedEvaluator(Mapper):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.
@@ -60,7 +60,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     :arg queue: An instance of :class:`pyopencl.CommandQueue` to which the
         generated kernel must be enqueued.
     """
-    np_result = EagerEvaluator(numpy, expr.namespace, parameters)(expr)
+    np_result = NumpyBasedEvaluator(numpy, expr.namespace, parameters)(expr)
     prog = pt.generate_loopy(expr, target=pt.PyOpenCLTarget(queue))
 
     evt, (pt_result,) = prog(**{placeholder.name: data
