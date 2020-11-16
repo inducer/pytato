@@ -38,6 +38,7 @@ import pytest  # noqa
 
 import pytato as pt
 from pytato.array import Placeholder
+from testlib import assert_allclose_to_numpy
 
 
 def test_basic_codegen(ctx_factory):
@@ -159,15 +160,10 @@ def test_roll(ctx_factory, shift, axis):
     pt.make_size_param(namespace, "n")
     x = pt.make_placeholder(namespace, name="x", shape=("n", "n"), dtype=np.float)
 
-    prog = pt.generate_loopy(
-            pt.roll(x, shift=shift, axis=axis),
-            target=pt.PyOpenCLTarget(queue))
-
     x_in = np.arange(1., 10.).reshape(3, 3)
-
-    _, (x_out,) = prog(x=x_in)
-
-    assert (x_out == np.roll(x_in, shift=shift, axis=axis)).all()
+    assert_allclose_to_numpy(pt.roll(x, shift=shift, axis=axis),
+                              queue,
+                              {x: x_in})
 
 
 @pytest.mark.parametrize("axes", (
@@ -187,12 +183,7 @@ def test_axis_permutation(ctx_factory, axes):
 
     namespace = pt.Namespace()
     x = pt.make_data_wrapper(namespace, x_in)
-    prog = pt.generate_loopy(
-            pt.transpose(x, axes),
-            target=pt.PyOpenCLTarget(queue))
-
-    _, (x_out,) = prog()
-    assert (x_out == np.transpose(x_in, axes)).all()
+    assert_allclose_to_numpy(pt.transpose(x, axes), queue)
 
 
 def test_transpose(ctx_factory):
@@ -207,10 +198,7 @@ def test_transpose(ctx_factory):
 
     namespace = pt.Namespace()
     x = pt.make_data_wrapper(namespace, x_in)
-    prog = pt.generate_loopy(x.T, target=pt.PyOpenCLTarget(queue))
-
-    _, (x_out,) = prog()
-    assert (x_out == x_in.T).all()
+    assert_allclose_to_numpy(x.T, queue)
 
 
 # Doesn't include: ? (boolean), g (float128), G (complex256)
@@ -397,12 +385,7 @@ def test_stack(ctx_factory, input_dims):
     y = pt.make_data_wrapper(namespace, y_in)
 
     for axis in range(0, 1 + input_dims):
-        prog = pt.generate_loopy(
-                pt.stack((x, y), axis=axis),
-                target=pt.PyOpenCLTarget(queue))
-
-        _, (out,) = prog()
-        assert (out == np.stack((x_in, y_in), axis=axis)).all()
+        assert_allclose_to_numpy(pt.stack((x, y), axis=axis), queue)
 
 
 def test_concatenate(ctx_factory):
@@ -420,13 +403,7 @@ def test_concatenate(ctx_factory):
     x1 = pt.make_data_wrapper(namespace, x1_in)
     x2 = pt.make_data_wrapper(namespace, x2_in)
 
-    prog = pt.generate_loopy(
-            pt.concatenate((x0, x1, x2), axis=1),
-            target=pt.PyOpenCLTarget(queue))
-
-    _, (out,) = prog()
-    expected_out = np.concatenate((x0_in, x1_in, x2_in), axis=1)
-    assert (out == expected_out).all()
+    assert_allclose_to_numpy(pt.concatenate((x0, x1, x2), axis=1), queue)
 
 
 def test_dict_of_named_array_codegen_avoids_recomputation():
