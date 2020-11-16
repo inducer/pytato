@@ -54,6 +54,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: roll
 .. autofunction:: transpose
 .. autofunction:: stack
+.. autofunction:: concatenate
 
 Supporting Functionality
 ------------------------
@@ -83,6 +84,7 @@ Built-in Expression Nodes
 .. autoclass:: MatrixProduct
 .. autoclass:: LoopyFunction
 .. autoclass:: Stack
+.. autoclass:: Concatenate
 .. autoclass:: AttributeLookup
 
 Index Remapping
@@ -966,6 +968,51 @@ class Stack(Array):
 # }}}
 
 
+# {{{ concatenate
+
+class Concatenate(Array):
+    """Join a sequence of arrays along an existing axis.
+
+    .. attribute:: arrays
+
+        An instance of :class:`tuple` of the arrays to join. The arrays must
+        have same shape except for the dimension corresponding to *axis*.
+
+    .. attribute:: axis
+
+        The axis along which the *arrays* are to be concatenated.
+    """
+
+    _fields = Array._fields + ("arrays", "axis")
+    _mapper_method = "map_concatenate"
+
+    def __init__(self,
+            arrays: Tuple[Array, ...],
+            axis: int,
+            tags: Optional[TagsType] = None):
+        super().__init__(tags)
+        self.arrays = arrays
+        self.axis = axis
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.arrays[0].namespace
+
+    @property
+    def dtype(self) -> np.dtype:
+        return np.result_type(*(arr.dtype for arr in self.arrays))
+
+    @property
+    def shape(self) -> ShapeType:
+        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
+
+        return (self.arrays[0].shape[:self.axis]
+                + (common_axis_len,)
+                + self.arrays[0].shape[self.axis+1:])
+
+# }}}
+
+
 # {{{ attribute lookup
 
 class AttributeLookup(Array):
@@ -1417,6 +1464,41 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
         raise ValueError("invalid axis")
 
     return Stack(tuple(arrays), axis)
+
+
+def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
+    """Join a sequence of arrays along an existing axis.
+
+    Example::
+
+       >>> arrays = [pt.zeros(3)] * 4
+       >>> pt.concatenate(arrays, axis=0).shape
+       (12,)
+
+    :param arrays: a finite sequence, each of whose elements is an
+        :class:`Array` . The arrays are of the same shape except along the
+        *axis* dimension.
+    :param axis: The axis along which the arrays will be concatenated.
+    """
+
+    if not arrays:
+        raise ValueError("need at least one array to stack")
+
+    if not all(array.namespace is arrays[0].namespace for array in arrays):
+        raise ValueError("arrays must belong to the same namespace.")
+
+    def shape_except_axis(ary: Array) -> Tuple[int, ...]:
+        return ary.shape[:axis] + ary.shape[axis+1:]
+
+    for array in arrays[1:]:
+        if shape_except_axis(array) != shape_except_axis(arrays[0]):
+            raise ValueError("arrays must have the same shape expect along"
+                    f" dimension #{axis}.")
+
+    if not (0 <= axis <= arrays[0].ndim):
+        raise ValueError("invalid axis")
+
+    return Concatenate(tuple(arrays), axis)
 
 
 def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Array:
