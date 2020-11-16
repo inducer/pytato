@@ -58,6 +58,7 @@ Scalar Expressions
 
 # {{{ scalar expressions
 
+IntegralScalarExpression = Union[int, prim.Expression]
 ScalarExpression = Union[Number, prim.Expression]
 
 

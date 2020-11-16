@@ -153,7 +153,7 @@ from pytools import is_single_valued, memoize_method, UniqueNameGenerator
 from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
-from pytato.scalar_expr import ScalarExpression
+from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
 
 # Get a type variable that represents the type of '...'
@@ -247,12 +247,11 @@ class Namespace(Mapping[str, "Array"]):
 
 # {{{ shape
 
-AxisLenType = Union[int, prim.Expression]
-ShapeType = Tuple[AxisLenType, ...]
+ShapeType = Tuple[IntegralScalarExpression, ...]
 ConvertibleToShapeComponent = Union[int, prim.Expression, str]
 ConvertibleToShape = Union[
         str,
-        AxisLenType,
+        IntegralScalarExpression,
         Tuple[ConvertibleToShapeComponent, ...]]
 
 
