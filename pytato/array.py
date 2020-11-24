@@ -152,8 +152,8 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
-from pytools.tag import Tag, Taggable, UniqueTag, TagsType, TagOrTagsType,
-        tag_dataclass
+from pytools.tag import (
+        Tag, Taggable, UniqueTag, TagsType, TagOrTagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
@@ -537,7 +537,8 @@ class Array(Taggable):
         """
         return super.tagged(tags)
 
-    def without_tags(self, tags: TagOrTagsType, verify_existence: bool = True) -> Array:
+    def without_tags(self,
+            tags: TagOrTagsType, verify_existence: bool = True) -> Array:
         return super.without_tags(tags, verify_existence=verify_existence)
 
     @memoize_method
