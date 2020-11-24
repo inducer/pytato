@@ -152,7 +152,8 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
-from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
+from pytools.tag import Tag, Taggable, UniqueTag, TagsType, TagOrTagsType,
+        tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
@@ -329,7 +330,7 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype:
         return dtype
 
 
-class Array:
+class Array(Taggable):
     """
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
@@ -410,11 +411,8 @@ class Array:
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
-    def __init__(self, tags: Optional[TagsType] = None):
-        if tags is None:
-            tags = frozenset()
-
-        self.tags = tags
+    def __init__(self, tags: TagOrTagsType = frozenset()):
+        super(self, tags=tags)
 
     def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
@@ -530,22 +528,17 @@ class Array:
     def T(self) -> Array:
         return AxisPermutation(self, tuple(range(self.ndim)[::-1]))
 
-    def tagged(self, tag: Tag) -> Array:
+    def tagged(self, tags: TagOrTagsType) -> Array:
         """
-        Returns a copy of *self* tagged with *tag*.
-        If *tag* is a :class:`pytools.tag.UniqueTag` and other
+        Returns a copy of *self* tagged with *tags*.
+        If *tags* is/has a :class:`pytools.tag.UniqueTag` and other
         tags of this type are already present, an error
         is raised.
         """
-        return self.copy(tags=self.tags | frozenset([tag]))
+        return super.tagged(tags)
 
-    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
-        new_tags = tuple(t for t in self.tags if t != tag)
-
-        if verify_existence and len(new_tags) == len(self.tags):
-            raise ValueError(f"tag '{tag}' was not present")
-
-        return self.copy(tags=new_tags)
+    def without_tags(self, tags: TagOrTagsType, verify_existence: bool = True) -> Array:
+        return super.without_tags(tags, verify_existence=verify_existence)
 
     @memoize_method
     def __hash__(self) -> int:
@@ -1234,7 +1227,7 @@ class InputArgumentBase(Array):
     def tagged(self, tag: Tag) -> Array:
         raise ValueError("Cannot modify tags")
 
-    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
+    def without_tags(self, tag: Tag, verify_existence: bool = True) -> Array:
         raise ValueError("Cannot modify tags")
 
 # }}}
