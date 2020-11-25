@@ -152,8 +152,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
-from pytools.tag import (
-        Tag, Taggable, UniqueTag, TagsType, tag_dataclass)
+from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
