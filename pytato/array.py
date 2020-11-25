@@ -153,7 +153,7 @@ import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
 from pytools.tag import (
-        Tag, Taggable, UniqueTag, TagsType, TagOrTagsType, tag_dataclass)
+        Tag, Taggable, UniqueTag, TagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
@@ -411,9 +411,6 @@ class Array(Taggable):
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
-    def __init__(self, tags: TagOrTagsType = frozenset()):
-        super(self, tags=tags)
-
     def copy(self, **kwargs: Any) -> Array:
         raise NotImplementedError
 
@@ -527,19 +524,6 @@ class Array(Taggable):
     @property
     def T(self) -> Array:
         return AxisPermutation(self, tuple(range(self.ndim)[::-1]))
-
-    def tagged(self, tags: TagOrTagsType) -> Array:
-        """
-        Returns a copy of *self* tagged with *tags*.
-        If *tags* is/has a :class:`pytools.tag.UniqueTag` and other
-        tags of this type are already present, an error
-        is raised.
-        """
-        return super.tagged(tags)
-
-    def without_tags(self,
-            tags: TagOrTagsType, verify_existence: bool = True) -> Array:
-        return super.without_tags(tags, verify_existence=verify_existence)
 
     @memoize_method
     def __hash__(self) -> int:
