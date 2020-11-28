@@ -152,7 +152,8 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
-from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
+from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
+    TagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
@@ -790,7 +791,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             shape: ShapeType,
             dtype: np.dtype,
             bindings: Optional[Dict[str, Array]] = None,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagOrIterableType] = None):
 
         if bindings is None:
             bindings = {}
@@ -869,7 +870,7 @@ class MatrixProduct(Array):
     def __init__(self,
             x1: Array,
             x2: Array,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagOrIterableType] = None):
         super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
@@ -923,7 +924,7 @@ class Stack(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagOrIterableType] = None):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
