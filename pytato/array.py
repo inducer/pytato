@@ -967,7 +967,7 @@ class Concatenate(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagOrIterableType] = None):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
