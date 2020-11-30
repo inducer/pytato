@@ -1209,10 +1209,11 @@ class InputArgumentBase(Array):
     def namespace(self) -> Namespace:
         return self._namespace
 
-    def tagged(self, tag: Tag) -> Array:
+    def tagged(self, tag: TagOrIterableType) -> Array:
         raise ValueError("Cannot modify tags")
 
-    def without_tags(self, tag: Tag, verify_existence: bool = True) -> Array:
+    def without_tags(self, tag: TagOrIterableType,
+                        verify_existence: bool = True) -> Array:
         raise ValueError("Cannot modify tags")
 
 # }}}
