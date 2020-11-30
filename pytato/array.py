@@ -411,9 +411,6 @@ class Array(Taggable):
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
-    def copy(self, **kwargs: Any) -> Array:
-        raise NotImplementedError
-
     @property
     def namespace(self) -> Namespace:
         raise NotImplementedError
