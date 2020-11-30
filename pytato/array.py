@@ -382,8 +382,6 @@ class Array(Taggable):
         predicate: the tag, object: the arg).
 
     .. automethod:: named
-    .. automethod:: tagged
-    .. automethod:: without_tag
 
     Array interface:
 
