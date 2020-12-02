@@ -17,9 +17,9 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'Pytato'
-copyright = '2020, Andreas Klöckner, Matt Wala, Xiaoyu Wei'
-author = 'Andreas Klöckner, Matt Wala, Xiaoyu Wei'
+project = "Pytato"
+copyright = "2020, Andreas Klöckner, Matt Wala, Xiaoyu Wei"
+author = "Andreas Klöckner, Matt Wala, Xiaoyu Wei"
 
 
 # -- General configuration ---------------------------------------------------
@@ -28,34 +28,32 @@ author = 'Andreas Klöckner, Matt Wala, Xiaoyu Wei'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.mathjax',
-    'sphinx_autodoc_typehints',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
+    "sphinx_autodoc_typehints",
+    "sphinx_copybutton",
 ]
 
 autoclass_content = "class"
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = "furo"
 
 html_theme_options = {
-        "extra_nav_links": {
-            "🚀 Github": "https://github.com/inducer/pytato",
-            }
-        }
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -63,15 +61,15 @@ html_theme_options = {
 html_static_path = []
 
 intersphinx_mapping = {
-    'https://docs.python.org/3/': None,
-    'https://numpy.org/doc/stable/': None,
-    'https://documen.tician.de/boxtree/': None,
-    'https://documen.tician.de/meshmode/': None,
-    'https://documen.tician.de/modepy/': None,
-    'https://documen.tician.de/pyopencl/': None,
-    'https://documen.tician.de/pytools/': None,
-    'https://documen.tician.de/pymbolic/': None,
-    'https://documen.tician.de/loopy/': None,
-    'https://documen.tician.de/sumpy/': None,
-    'https://documen.tician.de/islpy/': None,
-    }
+    "https://docs.python.org/3/": None,
+    "https://numpy.org/doc/stable/": None,
+    "https://documen.tician.de/boxtree/": None,
+    "https://documen.tician.de/meshmode/": None,
+    "https://documen.tician.de/modepy/": None,
+    "https://documen.tician.de/pyopencl/": None,
+    "https://documen.tician.de/pytools/": None,
+    "https://documen.tician.de/pymbolic/": None,
+    "https://documen.tician.de/loopy/": None,
+    "https://documen.tician.de/sumpy/": None,
+    "https://documen.tician.de/islpy/": None,
+}

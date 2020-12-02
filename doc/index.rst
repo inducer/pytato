@@ -8,6 +8,8 @@ Welcome to Pytato's documentation!
     reference
     design
     misc
+    🚀 Github <https://github.com/inducer/pytato>
+    💾 Download Releases <https://pypi.org/project/pytato>
 
 Indices and tables
 ==================
