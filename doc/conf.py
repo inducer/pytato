@@ -32,6 +32,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx_autodoc_typehints",
+    "sphinx_copybutton",
 ]
 
 autoclass_content = "class"
@@ -49,12 +50,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "alabaster"
+html_theme = "furo"
 
 html_theme_options = {
-    "extra_nav_links": {
-        "🚀 Github": "https://github.com/inducer/pytato",
-    }
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
