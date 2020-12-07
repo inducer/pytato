@@ -928,7 +928,9 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays],
 
     # Generate code for graph nodes.
     cg_mapper = CodeGenMapper()
-    for name, val in namespace.items():
+    for name, val in sorted(namespace.items(),
+                            key=lambda x: x[0]  # lexicographic order of names
+                            ):
         _ = cg_mapper(val, state)
 
     # Generate code for outputs.
