@@ -67,7 +67,7 @@ Documentation:
     EXTRA_INSTALL="pyopencl sphinx-autodoc-typehints"
     ./.ci-support/fix-code-for-docs.sh
     curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-supoort.sh
-    . ci-support.sh
+    . ./ci-support.sh
     build_py_project_in_venv
     # Circular references in type hints. Sphinx currently doesn't deal well with those.
     # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
