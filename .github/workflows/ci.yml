@@ -91,9 +91,12 @@ jobs:
         -   name: "Main Script"
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+                ./.ci-support/fix-code-for-docs.sh
+                ./.ci-support/build-docs.sh
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
                 . ci-support.sh
-                ./.ci-support/fix-code-for-docs.sh
                 build_py_project_in_conda_env
-                build_docs
+                # Circular references in type hints. Sphinx currently doesn't deal well with those.
+                # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
+                build_docs --no-check
 
