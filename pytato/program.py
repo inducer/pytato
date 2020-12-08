@@ -36,12 +36,12 @@ from dataclasses import dataclass
 import typing
 from typing import Any, Mapping, Optional
 
+import loopy
 
 if typing.TYPE_CHECKING:
     # Imports skipped for efficiency.  FIXME: Neither of these work as type
     # stubs are not present. Types are here only as documentation.
     import pyopencl
-    import loopy
     # Imports skipped to avoid circular dependencies.
     import pytato.target
 
