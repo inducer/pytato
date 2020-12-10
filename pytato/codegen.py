@@ -820,19 +820,22 @@ def rename_reductions(
     return result
 
 
-def normalize_outputs(result: Union[Array, DictOfNamedArrays]) -> DictOfNamedArrays:
+def normalize_outputs(result: Union[Array, DictOfNamedArrays,
+                                    Dict[str, Array]]) -> DictOfNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
     Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
 
     :param result: Outputs of the computation.
     """
-    if not isinstance(result, (Array, DictOfNamedArrays)):
+    if not isinstance(result, (Array, DictOfNamedArrays, dict)):
         raise TypeError("outputs of the computation should be "
                 "either an Array or a DictOfNamedArrays")
 
     if isinstance(result, Array):
         outputs = DictOfNamedArrays({"_pt_out": result})
+    elif isinstance(result, dict):
+        outputs = DictOfNamedArrays(result)
     else:
         assert isinstance(result, DictOfNamedArrays)
         outputs = result
@@ -897,7 +900,7 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
 # }}}
 
 
-def generate_loopy(result: Union[Array, DictOfNamedArrays],
+def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[Target] = None,
         options: Optional[lp.Options] = None) -> BoundProgram:
     r"""Code generation entry point.
