@@ -441,6 +441,26 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
 
 
+def test_dict_to_loopy_kernel(ctx_factory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    ns = pt.Namespace()
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(10)
+
+    x = pt.make_data_wrapper(ns, x_in)
+    y = 2*x
+    z = 3*x
+
+    _, result_dict = pt.generate_loopy({"y": y, "z": z},
+                                       target=pt.PyOpenCLTarget(queue),
+                                       options=lp.Options(return_dict=True))()
+    np.testing.assert_allclose(result_dict["y"], 2*x_in)
+    np.testing.assert_allclose(result_dict["z"], 3*x_in)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
