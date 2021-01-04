@@ -36,6 +36,7 @@ extensions = [
 ]
 
 autoclass_content = "class"
+autodoc_typehints = "description"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
