@@ -65,19 +65,6 @@ def test_scalar_placeholder(ctx_factory):
     assert np.array_equal(x_out, x_in)
 
 
-def test_size_param(ctx_factory):
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
-
-    namespace = pt.Namespace()
-    n = pt.make_size_param(namespace, name="n")
-    pt.make_placeholder(namespace, name="x", shape="(n,)", dtype=np.int)
-    prog = pt.generate_loopy(n, target=pt.PyOpenCLTarget(queue))
-    x_in = np.array([1, 2, 3, 4, 5])
-    _, (n_out,) = prog(x=x_in)
-    assert n_out == 5
-
-
 @pytest.mark.parametrize("x1_ndim", (1, 2))
 @pytest.mark.parametrize("x2_ndim", (1, 2))
 def test_matmul(ctx_factory, x1_ndim, x2_ndim):
@@ -459,6 +446,19 @@ def test_dict_to_loopy_kernel(ctx_factory):
                                        options=lp.Options(return_dict=True))()
     np.testing.assert_allclose(result_dict["y"], 2*x_in)
     np.testing.assert_allclose(result_dict["z"], 3*x_in)
+
+
+def test_only_deps_as_knl_args():
+    # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, name="x", shape=(10, 4), dtype=float)
+    y = pt.make_placeholder(ns, name="y", shape=(10, 4), dtype=float)  # noqa:F841
+
+    z = 2*x
+    knl = pt.generate_loopy(z).program
+
+    assert "x" in knl.arg_dict
+    assert "y" not in knl.arg_dict
 
 
 if __name__ == "__main__":
