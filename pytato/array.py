@@ -211,7 +211,7 @@ class Namespace(Mapping[str, "Array"]):
 
     def copy(self) -> Namespace:
         from pytato.transform import CopyMapper, copy_namespace
-        return copy_namespace(self, CopyMapper(Namespace()))
+        return copy_namespace(self, CopyMapper(Namespace()), onlynames=None)
 
     def assign(self, name: str, value: Array) -> str:
         """Declare a new array.
