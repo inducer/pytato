@@ -212,19 +212,19 @@ class DependencyMapper(Mapper):
 # {{{ mapper frontends
 
 def copy_namespace(source_namespace: Namespace,
-        copy_mapper: CopyMapper, onlynames: Optional[FrozenSet[str]]) -> Namespace:
+        copy_mapper: CopyMapper, only_names: Optional[FrozenSet[str]]) -> Namespace:
     """Copy the elements of *namespace* into a new namespace.
 
     :param source_namespace: The namespace to copy
     :param copy_mapper: A mapper that performs copies into a new namespace
-    :param onlynames: Elements of *namespace* that are to be copied into the
-        new namespace. All elements are copied if *onlynames=None*,
+    :param only_names: Elements of *namespace* that are to be copied into the
+        new namespace. All elements are copied if *only_names=None*,
     :returns: A new namespace containing copies of the items in *source_namespace*
     """
-    if onlynames is None:
-        onlynames = frozenset(source_namespace.keys())
+    if only_names is None:
+        only_names = frozenset(source_namespace.keys())
 
-    for name in onlynames:
+    for name in only_names:
         mapped_val = copy_mapper(source_namespace[name])
         if name not in copy_mapper.namespace:
             copy_mapper.namespace.assign(name, mapped_val)
