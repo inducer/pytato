@@ -65,6 +65,8 @@ def test_scalar_placeholder(ctx_factory):
     assert np.array_equal(x_out, x_in)
 
 
+# https://github.com/inducer/pytato/issues/15
+@pytest.mark.xfail  # shape inference solver: not yet implemented
 def test_size_param(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -459,6 +461,19 @@ def test_dict_to_loopy_kernel(ctx_factory):
                                        options=lp.Options(return_dict=True))()
     np.testing.assert_allclose(result_dict["y"], 2*x_in)
     np.testing.assert_allclose(result_dict["z"], 3*x_in)
+
+
+def test_only_deps_as_knl_args():
+    # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, name="x", shape=(10, 4), dtype=float)
+    y = pt.make_placeholder(ns, name="y", shape=(10, 4), dtype=float)  # noqa:F841
+
+    z = 2*x
+    knl = pt.generate_loopy(z).program
+
+    assert "x" in knl.arg_dict
+    assert "y" not in knl.arg_dict
 
 
 if __name__ == "__main__":
