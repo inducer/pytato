@@ -65,6 +65,7 @@ def test_scalar_placeholder(ctx_factory):
     assert np.array_equal(x_out, x_in)
 
 
+# https://github.com/inducer/pytato/issues/15
 @pytest.mark.xfail  # shape inference solver: not yet implemented
 def test_size_param(ctx_factory):
     ctx = ctx_factory()
