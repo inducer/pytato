@@ -39,7 +39,7 @@ from pytato.array import (
         Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, DataWrapper, InputArgumentBase, MatrixProduct, Roll,
         AxisPermutation, Slice, IndexRemappingBase, Stack, Placeholder,
-        Reshape, Concatenate, Namespace, DataInterface)
+        Reshape, Concatenate, Namespace, DataInterface, C99MathFunction)
 from pytato.program import BoundProgram
 from pytato.target import Target, PyOpenCLTarget
 import pytato.scalar_expr as scalar_expr
@@ -112,6 +112,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Slice`            :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.C99MathFunction`  :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -211,6 +212,19 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=expr.shape,
                 dtype=expr.dtype,
                 bindings=bindings)
+
+    def map_c99_math_function(self, expr: C99MathFunction) -> Array:
+        from pymbolic.primitives import Subscript
+
+        idx_lmbda_expr = var(f"pytato.c99.{expr.name}")(
+                Subscript(var("_in"), tuple(var(f"_{i}")
+                    for i in range(len(expr.shape)))))
+
+        return IndexLambda(namespace=self.namespace,
+                expr=idx_lmbda_expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings={"_in": self.rec(expr.array)})
 
     # {{{ index remapping (roll, axis permutation, slice)
 
@@ -648,6 +662,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             impl_result: ImplementedResult = self.codegen_mapper(array,
                     expr_context.state)
             return impl_result.to_loopy_expression((), expr_context)
+
+    def map_call(self, expr: prim.Call,
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
+        if isinstance(expr.function, prim.Variable) and (
+                expr.function.name.startswith("pytato.c99.")):
+            name_in_loopy = expr.function.name[11:]
+
+            return prim.Call(prim.Variable(name_in_loopy),
+                             self.rec(expr.parameters, expr_context))
+
+        return super().map_call(expr, expr_context)
 
 # }}}
 

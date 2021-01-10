@@ -1365,6 +1365,50 @@ class LoopyFunction(DictOfNamedArrays):
 # }}}
 
 
+# {{{ c99 math call
+
+class C99MathFunction(Array):
+    """
+    Reshape an array.
+
+    .. attribute:: array
+
+        The array to be reshaped
+
+    .. attribute:: name
+
+        Function name.
+    """
+
+    _fields = Array._fields + ("array", "name")
+    _mapper_method = "map_c99_math_function"
+
+    def __init__(self,
+            array: Array,
+            name: str,
+            tags: Optional[TagsType] = None):
+        if array.dtype.kind != "f":
+            raise ValueError(f"'{name}' does not support '{array.dtype}' arrays.")
+
+        super().__init__(tags)
+        self.array = array
+        self.name = name
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return self.array.shape
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.array.namespace
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.array.dtype
+
+# }}}
+
+
 # {{{ end-user facing
 
 def matmul(x1: Array, x2: Array) -> Array:
@@ -1690,5 +1734,60 @@ def make_data_wrapper(namespace: Namespace,
 
 # }}}
 
+
+# {{{ math functions
+
+def abs(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "abs")
+
+
+def sin(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "sin")
+
+
+def cos(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "cos")
+
+
+def tan(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "tan")
+
+
+def arcsin(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "asin")
+
+
+def arccos(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "acos")
+
+
+def arctan(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "atan")
+
+
+def sinh(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "sinh")
+
+
+def cosh(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "cosh")
+
+
+def tanh(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "tanh")
+
+
+def exp(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "exp")
+
+
+def log(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "log")
+
+
+def log10(x: Array) -> C99MathFunction:
+    return C99MathFunction(x, "log10")
+
+# }}}
 
 # vim: foldmethod=marker
