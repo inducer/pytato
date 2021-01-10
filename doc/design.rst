@@ -63,7 +63,10 @@ Computation and Results
 
     Operations that introduce nontrivial mappings on indices (e.g. reshape,
     strided slice, roll) are identified as potential candidates for being captured
-    in their own high-level node vs. as an :class:`pytato.array.IndexLambda`.
+    in their own high-level node vs. as an :class:`~pytato.array.IndexLambda`.
+    
+    Operations that *can* be expressed as :class:`~pytato.array.IndexLambda`
+    without loss of information, *should* be expressed that way.
 
 Naming
 ------
