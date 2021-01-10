@@ -439,7 +439,7 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
 
     yz = pt.DictOfNamedArrays({"y": y, "z": z})
 
-    knl = pt.generate_loopy(yz).program
+    knl = pt.generate_loopy(yz).kernel
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
 
 
@@ -470,7 +470,7 @@ def test_only_deps_as_knl_args():
     y = pt.make_placeholder(ns, name="y", shape=(10, 4), dtype=float)  # noqa:F841
 
     z = 2*x
-    knl = pt.generate_loopy(z).program
+    knl = pt.generate_loopy(z).kernel
 
     assert "x" in knl.arg_dict
     assert "y" not in knl.arg_dict

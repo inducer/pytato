@@ -119,7 +119,7 @@ def test_make_placeholder_noname():
     x = pt.make_placeholder(ns, shape=(10, 4), dtype=float)
     y = 2*x
 
-    knl = pt.generate_loopy(y).program
+    knl = pt.generate_loopy(y).kernel
 
     assert x.name in knl.arg_dict
     assert x.name in knl.get_read_variables()
@@ -132,7 +132,7 @@ def test_zero_length_arrays():
 
     assert y.shape == (0, 4)
 
-    knl = pt.generate_loopy(y).program
+    knl = pt.generate_loopy(y).kernel
     assert all(dom.is_empty() for dom in knl.domains if dom.total_dim() != 0)
 
 
