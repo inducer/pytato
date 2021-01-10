@@ -5,7 +5,7 @@ import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
                           AxisPermutation, Slice, DataWrapper, Reshape,
-                          Concatenate, Namespace)
+                          Concatenate, Namespace, C99MathFunction)
 
 
 class NumpyBasedEvaluator(Mapper):
@@ -50,9 +50,22 @@ class NumpyBasedEvaluator(Mapper):
         arrays = [self.rec(array) for array in expr.arrays]
         return self.np.concatenate(arrays, expr.axis)
 
+    def map_c99_math_function(self, expr: C99MathFunction) -> Any:
+        func_name = expr.name
+        if func_name == "asin":
+            func_name = "arcsin"
+        elif func_name == "acos":
+            func_name = "arccos"
+        elif func_name == "atan":
+            func_name = "arctan"
+
+        fn = getattr(self.np, func_name)
+        return fn(self.rec(expr.array))
+
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
-                              parameters: Dict[Placeholder, Any] = {}):
+                              parameters: Dict[Placeholder, Any] = {},
+                              rtol=1e-7):
     """
     Raises an :class:`AssertionError`, if there is a discrepancy between *expr*
     evaluated lazily via :mod:`pytato` and eagerly via :mod:`numpy`.
@@ -69,4 +82,4 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    numpy.testing.assert_allclose(np_result, pt_result)
+    numpy.testing.assert_allclose(np_result, pt_result, rtol=rtol)
