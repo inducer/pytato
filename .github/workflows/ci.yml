@@ -55,13 +55,25 @@ jobs:
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-mypy.sh
                 . ./prepare-and-run-mypy.sh python3 mypy
 
-    pytest:
-        name: Conda Pytest
+    pytest-loopymaster:
+        name: Conda Pytest (Loopy master)
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
+                CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+                . ./build-and-test-py-project-within-miniconda.sh
+
+    pytest-loopycallables:
+        name: Conda Pytest (Loopy Kernel Callables)
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v2
+        -   name: "Main Script"
+            run: |
+                sed -i "s/loopy.git/loopy.git@kernel_callables_v3-edit2/g" requirements.txt
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh

@@ -15,6 +15,24 @@ Python 3 POCL:
       junit: test/pytest.xml
 
 
+Python 3 POCL (Loopy callables):
+  script:
+  - sed -i "s/loopy.git/loopy.git@kernel_callables_v3-edit2/g" requirements.txt
+  - export PY_EXE=python3
+  - export PYOPENCL_TEST=portable:pthread
+  - export EXTRA_INSTALL="pyopencl"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - ". ./build-and-test-py-project.sh"
+  tags:
+  - python3
+  - pocl
+  except:
+  - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
+
+
 Python 3 POCL Examples:
   script:
   - export PY_EXE=python3
