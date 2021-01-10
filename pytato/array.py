@@ -1024,6 +1024,8 @@ class AttributeLookup(Array):
     """
     pass
 
+# }}}
+
 
 # {{{ index remapping
 
