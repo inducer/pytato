@@ -14,6 +14,15 @@ TODO
     - function identifier scoping
     - piecewise def (use ISL?)
 
+.. note::
+
+    When this document refers to different ways of expressing a computation
+    and transforming between them "without loss of information", what is meant
+    is that the transformation is valid
+    
+    - in both directions, and
+    - for all possible inputs (including those with symbolic shapes).
+
 Computation and Results
 -----------------------
 
