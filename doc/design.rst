@@ -14,6 +14,15 @@ TODO
     - function identifier scoping
     - piecewise def (use ISL?)
 
+.. note::
+
+    When this document refers to different ways of expressing a computation
+    and transforming between them "without loss of information", what is meant
+    is that the transformation is valid
+    
+    - in both directions, and
+    - for all possible inputs (including those with symbolic shapes).
+
 Computation and Results
 -----------------------
 
@@ -63,7 +72,10 @@ Computation and Results
 
     Operations that introduce nontrivial mappings on indices (e.g. reshape,
     strided slice, roll) are identified as potential candidates for being captured
-    in their own high-level node vs. as an :class:`pytato.array.IndexLambda`.
+    in their own high-level node vs. as an :class:`~pytato.array.IndexLambda`.
+    
+    Operations that *can* be expressed as :class:`~pytato.array.IndexLambda`
+    without loss of information, *should* be expressed that way.
 
 Naming
 ------
