@@ -35,6 +35,7 @@ import pyopencl.tools as cl_tools  # noqa
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pytest  # noqa
+from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
 import pytato as pt
 from pytato.array import Placeholder
@@ -619,6 +620,59 @@ def test_maximum_minimum(ctx_factory, which):
     _, (y,) = pt.generate_loopy(pt_func(x1, x2),
                                 cl_device=queue.device)(queue)
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
+
+
+def test_call_loopy(ctx_factory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    ns = pt.Namespace()
+    x_in = np.random.rand(10, 4)
+    x = pt.make_placeholder(ns, shape=(10, 4), dtype=np.float, name="x")
+    y = 2*x
+
+    knl = lp.make_function(
+            "{[i, j]: 0<=i<10 and 0<=j<4}",
+            """
+            Z[i] = 10*sum(j, Y[i, j])
+            """, name="callee")
+
+    loopyfunc = pt.call_loopy(ns, knl, bindings={"Y": y}, entrypoint="callee")
+    z = loopyfunc["Z"]
+
+    evt, (z_out, ) = pt.generate_loopy(2*z, target=pt.PyOpenCLTarget(queue))(x=x_in)
+
+    assert (z_out == 40*(x_in.sum(axis=1))).all()
+
+
+def test_call_loopy_with_same_callee_names(ctx_factory):
+
+    queue = cl.CommandQueue(ctx_factory())
+
+    u_in = np.random.rand(10)
+    twice = lp.make_function(
+            "{[i]: 0<=i<10}",
+            """
+            y[i] = 2*x[i]
+            """, name="callee")
+
+    thrice = lp.make_function(
+            "{[i]: 0<=i<10}",
+            """
+            y[i] = 3*x[i]
+            """, name="callee")
+
+    ns = pt.Namespace()
+
+    u = pt.make_data_wrapper(ns, u_in)
+    cuatro_u = 2*pt.call_loopy(ns, twice, {"x": u}, "callee")["y"]
+    nueve_u = 3*pt.call_loopy(ns, thrice, {"x": u}, "callee")["y"]
+
+    out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
+
+    evt, out_dict = pt.generate_loopy(out, target=pt.PyOpenCLTarget(queue),
+                                      options=lp.Options(return_dict=True))()
+    np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
+    np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
 
 
 if __name__ == "__main__":

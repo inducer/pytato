@@ -24,12 +24,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Optional
+from typing import Any, Callable, Dict, FrozenSet, Optional, Union
 
 from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase)
+        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase,
+        LoopyFunction, LoopyFunctionResult)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -87,12 +88,13 @@ class CopyMapper(Mapper):
 
     def __init__(self, namespace: Namespace):
         self.namespace = namespace
-        self.cache: Dict[Array, Array] = {}
+        self.cache: Dict[Union[Array, DictOfNamedArrays], Array] = {}
 
-    def rec(self, expr: Array) -> Array:  # type: ignore
+    def rec(self, expr: Union[Array, DictOfNamedArrays]) -> Union[Array,
+            DictOfNamedArrays]:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
-        result: Array = super().rec(expr)
+        result: Union[Array, DictOfNamedArrays] = super().rec(expr)
         self.cache[expr] = result
         return result
 
@@ -150,6 +152,18 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
 
+    def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
+        bindings = {
+                name: self.rec(subexpr)
+                for name, subexpr in expr.bindings.items()}
+        return LoopyFunction(namespace=self.namespace,
+                program=expr.program,
+                bindings=bindings,
+                entrypoint=expr.entrypoint)
+
+    def map_loopyfunction_result(self, expr: DataWrapper) -> Array:
+        return self.rec(expr.loopyfunction)[expr.name]
+
 
 class DependencyMapper(Mapper):
     """
@@ -205,6 +219,10 @@ class DependencyMapper(Mapper):
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
+
+    def map_loopyfunction_result(self, expr: LoopyFunctionResult) -> FrozenSet[str]:
+        return self.combine(frozenset([expr]), *(self.rec(bnd)
+            for bnd in expr.loopyfunction.bindings.values()))
 
 # }}}
 
