@@ -380,7 +380,7 @@ class Array(Taggable):
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
-        
+
         Inherits from :class:`pytools.Taggable`.
 
     .. automethod:: named
