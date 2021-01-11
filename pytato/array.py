@@ -1365,50 +1365,6 @@ class LoopyFunction(DictOfNamedArrays):
 # }}}
 
 
-# {{{ c99 math call
-
-class C99MathFunction(Array):
-    """
-    Reshape an array.
-
-    .. attribute:: array
-
-        The array to be reshaped
-
-    .. attribute:: name
-
-        Function name.
-    """
-
-    _fields = Array._fields + ("array", "name")
-    _mapper_method = "map_c99_math_function"
-
-    def __init__(self,
-            array: Array,
-            name: str,
-            tags: Optional[TagsType] = None):
-        if array.dtype.kind != "f":
-            raise ValueError(f"'{name}' does not support '{array.dtype}' arrays.")
-
-        super().__init__(tags)
-        self.array = array
-        self.name = name
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        return self.array.shape
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.array.namespace
-
-    @property
-    def dtype(self) -> np.dtype:
-        return self.array.dtype
-
-# }}}
-
-
 # {{{ end-user facing
 
 def matmul(x1: Array, x2: Array) -> Array:
@@ -1737,56 +1693,67 @@ def make_data_wrapper(namespace: Namespace,
 
 # {{{ math functions
 
-def abs(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "abs")
+def _apply_elem_wise_func(x: Array, func_name: str) -> IndexLambda:
+    if x.dtype.kind != "f":
+        raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
+
+    expr = prim.Call(
+            var(f"pytato.c99.{func_name}"),
+            (prim.Subscript(var("in"),
+                tuple(var(f"_{i}") for i in range(len(x.shape)))),))
+    return IndexLambda(x.namespace, expr, x.shape, x.dtype, {"in": x})
 
 
-def sin(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "sin")
+def abs(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "abs")
 
 
-def cos(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "cos")
+def sin(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "sin")
 
 
-def tan(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "tan")
+def cos(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "cos")
 
 
-def arcsin(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "asin")
+def tan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "tan")
 
 
-def arccos(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "acos")
+def arcsin(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "asin")
 
 
-def arctan(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "atan")
+def arccos(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "acos")
 
 
-def sinh(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "sinh")
+def arctan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "atan")
 
 
-def cosh(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "cosh")
+def sinh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "sinh")
 
 
-def tanh(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "tanh")
+def cosh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "cosh")
 
 
-def exp(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "exp")
+def tanh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "tanh")
 
 
-def log(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "log")
+def exp(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "exp")
 
 
-def log10(x: Array) -> C99MathFunction:
-    return C99MathFunction(x, "log10")
+def log(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "log")
+
+
+def log10(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "log10")
 
 # }}}
 

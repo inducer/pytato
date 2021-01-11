@@ -490,8 +490,11 @@ def test_math_functions(ctx_factory, dtype, function_name):
     namespace = pt.Namespace()
     x = pt.make_data_wrapper(namespace, x_in)
     pt_func = getattr(pt, function_name)
+    np_func = getattr(np, function_name)
 
-    assert_allclose_to_numpy(pt_func(x), queue, rtol=1e-6)
+    _, (y,) = pt.generate_loopy(pt_func(x),
+            target=pt.PyOpenCLTarget(queue))()
+    np.testing.assert_allclose(y, np_func(x_in), rtol=1e-6)
 
 
 if __name__ == "__main__":

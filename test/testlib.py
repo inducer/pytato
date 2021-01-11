@@ -5,7 +5,7 @@ import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
                           AxisPermutation, Slice, DataWrapper, Reshape,
-                          Concatenate, Namespace, C99MathFunction)
+                          Concatenate, Namespace)
 
 
 class NumpyBasedEvaluator(Mapper):
@@ -49,18 +49,6 @@ class NumpyBasedEvaluator(Mapper):
     def map_concatenate(self, expr: Concatenate) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
         return self.np.concatenate(arrays, expr.axis)
-
-    def map_c99_math_function(self, expr: C99MathFunction) -> Any:
-        func_name = expr.name
-        if func_name == "asin":
-            func_name = "arcsin"
-        elif func_name == "acos":
-            func_name = "arccos"
-        elif func_name == "atan":
-            func_name = "arctan"
-
-        fn = getattr(self.np, func_name)
-        return fn(self.rec(expr.array))
 
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,

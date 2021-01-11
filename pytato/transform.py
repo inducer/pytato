@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, FrozenSet, Optional
 from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase, C99MathFunction)
+        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -150,9 +150,6 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
 
-    def map_c99_math_function(self, expr: C99MathFunction) -> Array:
-        return C99MathFunction(self.rec(expr.array), expr.name)
-
 
 class DependencyMapper(Mapper):
     """
@@ -208,9 +205,6 @@ class DependencyMapper(Mapper):
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
-
-    def map_c99_math_function(self, expr: C99MathFunction) -> FrozenSet[Array]:
-        return self.combine(frozenset([expr, expr.array]))
 
 # }}}
 
