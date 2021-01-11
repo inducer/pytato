@@ -152,7 +152,8 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import is_single_valued, memoize_method, UniqueNameGenerator
-from pytools.tag import Tag, UniqueTag, TagsType, tag_dataclass
+from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
+    TagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
@@ -329,7 +330,7 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype:
         return dtype
 
 
-class Array:
+class Array(Taggable):
     """
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
@@ -380,6 +381,8 @@ class Array:
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
 
+        Inherits from :class:`pytools.Taggable`.
+
     .. automethod:: named
     .. automethod:: tagged
     .. automethod:: without_tag
@@ -409,15 +412,6 @@ class Array:
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
-
-    def __init__(self, tags: Optional[TagsType] = None):
-        if tags is None:
-            tags = frozenset()
-
-        self.tags = tags
-
-    def copy(self, **kwargs: Any) -> Array:
-        raise NotImplementedError
 
     @property
     def namespace(self) -> Namespace:
@@ -529,23 +523,6 @@ class Array:
     @property
     def T(self) -> Array:
         return AxisPermutation(self, tuple(range(self.ndim)[::-1]))
-
-    def tagged(self, tag: Tag) -> Array:
-        """
-        Returns a copy of *self* tagged with *tag*.
-        If *tag* is a :class:`pytools.tag.UniqueTag` and other
-        tags of this type are already present, an error
-        is raised.
-        """
-        return self.copy(tags=self.tags | frozenset([tag]))
-
-    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
-        new_tags = tuple(t for t in self.tags if t != tag)
-
-        if verify_existence and len(new_tags) == len(self.tags):
-            raise ValueError(f"tag '{tag}' was not present")
-
-        return self.copy(tags=new_tags)
 
     @memoize_method
     def __hash__(self) -> int:
@@ -813,7 +790,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             shape: ShapeType,
             dtype: np.dtype,
             bindings: Optional[Dict[str, Array]] = None,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
 
         if bindings is None:
             bindings = {}
@@ -892,7 +869,7 @@ class MatrixProduct(Array):
     def __init__(self,
             x1: Array,
             x2: Array,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
@@ -946,7 +923,7 @@ class Stack(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -989,7 +966,7 @@ class Concatenate(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -1042,7 +1019,7 @@ class IndexRemappingBase(Array):
 
     def __init__(self,
             array: Array,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.array = array
 
@@ -1077,7 +1054,7 @@ class Roll(IndexRemappingBase):
             array: Array,
             shift: int,
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
         self.shift = shift
         self.axis = axis
@@ -1104,7 +1081,7 @@ class AxisPermutation(IndexRemappingBase):
     def __init__(self,
             array: Array,
             axes: Tuple[int, ...],
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
         self.array = array
         self.axes = axes
@@ -1146,7 +1123,7 @@ class Reshape(IndexRemappingBase):
             array: Array,
             newshape: Tuple[int, ...],
             order: str,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1176,7 +1153,7 @@ class Slice(IndexRemappingBase):
             array: Array,
             starts: Tuple[int, ...],
             stops: Tuple[int, ...],
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
 
         self.starts = starts
@@ -1216,7 +1193,7 @@ class InputArgumentBase(Array):
     def __init__(self,
             namespace: Namespace,
             name: str,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         if name is None:
             raise ValueError("Must have explicit name")
 
@@ -1231,10 +1208,11 @@ class InputArgumentBase(Array):
     def namespace(self) -> Namespace:
         return self._namespace
 
-    def tagged(self, tag: Tag) -> Array:
+    def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
 
-    def without_tag(self, tag: Tag, verify_existence: bool = True) -> Array:
+    def without_tags(self, tags: TagOrIterableType,
+                        verify_existence: bool = True) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
 
 # }}}
@@ -1282,7 +1260,7 @@ class DataWrapper(InputArgumentBase):
             name: str,
             data: DataInterface,
             shape: ShapeType,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         super().__init__(namespace, name, tags=tags)
 
         self.data = data
@@ -1316,7 +1294,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             name: str,
             shape: ShapeType,
             dtype: np.dtype,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
@@ -1616,7 +1594,7 @@ def make_placeholder(namespace: Namespace,
         shape: ConvertibleToShape,
         dtype: Any,
         name: Optional[str] = None,
-        tags: Optional[TagsType] = None) -> Placeholder:
+        tags: TagsType = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param namespace:  namespace of the placeholder array
@@ -1641,7 +1619,7 @@ def make_placeholder(namespace: Namespace,
 
 def make_size_param(namespace: Namespace,
         name: str,
-        tags: Optional[TagsType] = None) -> SizeParam:
+        tags: TagsType = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1664,7 +1642,7 @@ def make_data_wrapper(namespace: Namespace,
         data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: Optional[TagsType] = None) -> DataWrapper:
+        tags: TagsType = frozenset()) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
     :param namespace:  namespace
