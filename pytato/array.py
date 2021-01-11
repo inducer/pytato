@@ -1019,7 +1019,7 @@ class IndexRemappingBase(Array):
 
     def __init__(self,
             array: Array,
-            tags: TagsType = None):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.array = array
 
