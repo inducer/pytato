@@ -476,6 +476,27 @@ def test_only_deps_as_knl_args():
     assert "y" not in knl.arg_dict
 
 
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
+    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10"))
+def test_math_functions(ctx_factory, dtype, function_name):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=(10, 4)).astype(dtype)
+
+    namespace = pt.Namespace()
+    x = pt.make_data_wrapper(namespace, x_in)
+    pt_func = getattr(pt, function_name)
+    np_func = getattr(np, function_name)
+
+    _, (y,) = pt.generate_loopy(pt_func(x),
+            target=pt.PyOpenCLTarget(queue))()
+    np.testing.assert_allclose(y, np_func(x_in), rtol=1e-6)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

@@ -52,7 +52,8 @@ class NumpyBasedEvaluator(Mapper):
 
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
-                              parameters: Dict[Placeholder, Any] = {}):
+                              parameters: Dict[Placeholder, Any] = {},
+                              rtol=1e-7):
     """
     Raises an :class:`AssertionError`, if there is a discrepancy between *expr*
     evaluated lazily via :mod:`pytato` and eagerly via :mod:`numpy`.
@@ -69,4 +70,4 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    numpy.testing.assert_allclose(np_result, pt_result)
+    numpy.testing.assert_allclose(np_result, pt_result, rtol=rtol)

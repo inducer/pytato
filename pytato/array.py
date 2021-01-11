@@ -1001,6 +1001,8 @@ class AttributeLookup(Array):
     """
     pass
 
+# }}}
+
 
 # {{{ index remapping
 
@@ -1666,5 +1668,71 @@ def make_data_wrapper(namespace: Namespace,
 
 # }}}
 
+
+# {{{ math functions
+
+def _apply_elem_wise_func(x: Array, func_name: str) -> IndexLambda:
+    if x.dtype.kind != "f":
+        raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
+
+    expr = prim.Call(
+            var(f"pytato.c99.{func_name}"),
+            (prim.Subscript(var("in"),
+                tuple(var(f"_{i}") for i in range(len(x.shape)))),))
+    return IndexLambda(x.namespace, expr, x.shape, x.dtype, {"in": x})
+
+
+def abs(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "abs")
+
+
+def sin(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "sin")
+
+
+def cos(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "cos")
+
+
+def tan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "tan")
+
+
+def arcsin(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "asin")
+
+
+def arccos(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "acos")
+
+
+def arctan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "atan")
+
+
+def sinh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "sinh")
+
+
+def cosh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "cosh")
+
+
+def tanh(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "tanh")
+
+
+def exp(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "exp")
+
+
+def log(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "log")
+
+
+def log10(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "log10")
+
+# }}}
 
 # vim: foldmethod=marker

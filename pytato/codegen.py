@@ -649,6 +649,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                     expr_context.state)
             return impl_result.to_loopy_expression((), expr_context)
 
+    def map_call(self, expr: prim.Call,
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
+        if isinstance(expr.function, prim.Variable) and (
+                expr.function.name.startswith("pytato.c99.")):
+            name_in_loopy = expr.function.name[11:]
+
+            return prim.Call(prim.Variable(name_in_loopy),
+                             self.rec(expr.parameters, expr_context))
+
+        return super().map_call(expr, expr_context)
+
 # }}}
 
 
