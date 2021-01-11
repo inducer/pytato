@@ -790,7 +790,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             shape: ShapeType,
             dtype: np.dtype,
             bindings: Optional[Dict[str, Array]] = None,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
 
         if bindings is None:
             bindings = {}
@@ -869,7 +869,7 @@ class MatrixProduct(Array):
     def __init__(self,
             x1: Array,
             x2: Array,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
@@ -923,7 +923,7 @@ class Stack(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -966,7 +966,7 @@ class Concatenate(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -1019,7 +1019,7 @@ class IndexRemappingBase(Array):
 
     def __init__(self,
             array: Array,
-            tags: Optional[TagsType] = None):
+            tags: TagsType = None):
         super().__init__(tags)
         self.array = array
 
@@ -1054,7 +1054,7 @@ class Roll(IndexRemappingBase):
             array: Array,
             shift: int,
             axis: int,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
         self.shift = shift
         self.axis = axis
@@ -1081,7 +1081,7 @@ class AxisPermutation(IndexRemappingBase):
     def __init__(self,
             array: Array,
             axes: Tuple[int, ...],
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
         self.array = array
         self.axes = axes
@@ -1123,7 +1123,7 @@ class Reshape(IndexRemappingBase):
             array: Array,
             newshape: Tuple[int, ...],
             order: str,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1153,7 +1153,7 @@ class Slice(IndexRemappingBase):
             array: Array,
             starts: Tuple[int, ...],
             stops: Tuple[int, ...],
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(array, tags)
 
         self.starts = starts
@@ -1193,7 +1193,7 @@ class InputArgumentBase(Array):
     def __init__(self,
             namespace: Namespace,
             name: str,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         if name is None:
             raise ValueError("Must have explicit name")
 
@@ -1260,7 +1260,7 @@ class DataWrapper(InputArgumentBase):
             name: str,
             data: DataInterface,
             shape: ShapeType,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         super().__init__(namespace, name, tags=tags)
 
         self.data = data
@@ -1294,7 +1294,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             name: str,
             shape: ShapeType,
             dtype: np.dtype,
-            tags: Optional[TagsType] = frozenset()):
+            tags: TagsType = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
@@ -1594,7 +1594,7 @@ def make_placeholder(namespace: Namespace,
         shape: ConvertibleToShape,
         dtype: Any,
         name: Optional[str] = None,
-        tags: Optional[TagsType] = frozenset()) -> Placeholder:
+        tags: TagsType = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param namespace:  namespace of the placeholder array
@@ -1619,7 +1619,7 @@ def make_placeholder(namespace: Namespace,
 
 def make_size_param(namespace: Namespace,
         name: str,
-        tags: Optional[TagsType] = frozenset()) -> SizeParam:
+        tags: TagsType = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1642,7 +1642,7 @@ def make_data_wrapper(namespace: Namespace,
         data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: Optional[TagsType] = frozenset()) -> DataWrapper:
+        tags: TagsType = frozenset()) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
     :param namespace:  namespace
