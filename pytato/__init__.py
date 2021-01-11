@@ -43,6 +43,7 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
+        call_loopy,
         )
 
 from pytato.target.loopy.codegen import generate_loopy
@@ -58,6 +59,8 @@ __all__ = (
         "make_data_wrapper",
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
+
+        "call_loopy",
 
         "generate_loopy",
 

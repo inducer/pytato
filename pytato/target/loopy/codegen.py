@@ -45,6 +45,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper, WalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
+from pytato.loopy import LoopyFunctionResult
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen
@@ -283,6 +284,9 @@ class CodeGenState:
         else:
             self._program = self._program.with_kernel(kernel)
 
+    def update_program(self, program: lp.Program) -> None:
+        self._program = program
+
 
 class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
@@ -397,6 +401,99 @@ class CodeGenMapper(Mapper):
         shape_to_scalar_expression(expr.shape, self, state)  # walk over size params
 
         return result
+
+    def map_loopyfunction_result(self, expr: LoopyFunctionResult,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        from loopy.kernel.instruction import make_assignment
+        from loopy.symbolic import SubArrayRef
+
+        loopyfunction = expr.loopyfunction
+        callee_kernel = loopyfunction.entrykernel
+
+        state.update_program(lp.merge([state.program, loopyfunction.program]))
+
+        domains = []
+        depends_on = set()
+        call_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
+
+        def _get_sub_array_ref(array, name):
+            inames = tuple(
+                    state.var_name_gen(f"_{name}_dim{d}")
+                    for d in range(array.ndim))
+
+            domains.append(domain_for_shape(inames, array.shape, {}))
+
+            inames_as_vars = tuple(var(iname) for iname in inames)
+            return SubArrayRef(inames_as_vars,
+                               prim.Subscript(var(name), inames_as_vars))
+
+        # {{{ gather assignee sub array refs
+
+        results_to_names = {res: state.var_name_gen("_pt_temp")
+                            for res in loopyfunction.values()}
+
+        assignees = []
+
+        for arg in callee_kernel.args:
+            if arg.name in loopyfunction:
+                result_array = loopyfunction[arg.name]
+                assignee_name = results_to_names[result_array]
+                assignees.append(_get_sub_array_ref(result_array, assignee_name))
+
+        # }}}
+
+        # {{{ gather all the call params
+
+        call_kwargs = {}
+
+        for kw, arg in loopyfunction.bindings.items():
+            if arg in state.results:
+                if isinstance(state.results[arg], StoredResult):
+                    store_result = state.results[arg]
+                    name = store_result.name
+                    call_kwargs[kw] = _get_sub_array_ref(arg, name)
+                    depends_on.update(store_result.depends_on)
+                    continue
+
+            name = state.var_name_gen("_pt_temp")
+            store_insn_id = add_store(name, arg, self(arg, state), state,
+                output_to_temporary=True)
+            depends_on.add(store_insn_id)
+            # replace "arg" with the created stored variable
+            state.results[arg] = StoredResult(name, arg.ndim,
+                                              frozenset([store_insn_id]))
+            call_kwargs[kw] = _get_sub_array_ref(arg, name)
+
+        # }}}
+
+        new_insn = make_assignment(tuple(assignees),
+                prim.CallWithKwargs(var(loopyfunction.entrykernel.name),
+                                    parameters=(),
+                                    kw_parameters=call_kwargs),
+                depends_on=frozenset(depends_on),
+                id=call_insn_id)
+
+        for result, name in results_to_names.items():
+            state.results[result] = StoredResult(name, result.ndim,
+                                                 frozenset([call_insn_id]))
+
+        # update kernel
+        kernel = state.kernel
+        new_tvs = kernel.temporary_variables.copy()
+
+        for result, name in results_to_names.items():
+            new_tvs[name] = get_loopy_temporary(name, result)
+
+        kernel = kernel.copy(instructions=kernel.instructions+[new_insn],
+                             temporary_variables=new_tvs,
+                             domains=kernel.domains+domains)
+
+        state.update_kernel(kernel)
+
+        return state.results[expr]
 
 # }}}
 
@@ -708,7 +805,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         if cl_device is not None:
             raise TypeError("may not pass both 'target' and 'cl_device'")
 
-    preproc_result = preprocess(orig_outputs)
+    preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
 

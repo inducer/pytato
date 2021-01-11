@@ -35,6 +35,8 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           Concatenate, DataInterface, SizeParam, InputArgumentBase)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
+from pytato.target import Target
+from pytato.loopy import LoopyFunction
 from pytools import UniqueNameGenerator
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -91,6 +93,7 @@ class CodeGenPreprocessor(CopyMapper):
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
+        self.kernels_seen = set()
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -106,6 +109,36 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
+
+    def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
+        import pytools
+        import loopy as lp
+        program = expr.program.copy(target=self.target.get_loopy_target())
+        namegen = pytools.UniqueNameGenerator(self.kernels_seen)
+        entrypoint = expr.entrypoint
+
+        # {{{ eliminate callable name collision
+
+        clbls_to_rename = self.kernels_seen & set(program.callables_table)
+
+        for clbl_to_rename in clbls_to_rename:
+            new_name = namegen(clbl_to_rename)
+            if clbl_to_rename == entrypoint:
+                entrypoint = new_name
+
+            program = lp.rename_callable(program, clbl_to_rename, new_name)
+
+        # }}}
+
+        self.kernels_seen.update(set(program.callables_table))
+
+        bindings = {name: self.rec(subexpr)
+                    for name, subexpr in expr.bindings.items()}
+
+        return LoopyFunction(namespace=self.namespace,
+                program=program,
+                bindings=bindings,
+                entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name
@@ -348,7 +381,7 @@ class PreprocessResult:
     bound_arguments: Dict[str, DataInterface]
 
 
-def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
+def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays, get_dependencies
 
@@ -377,7 +410,7 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor()
+    mapper = CodeGenPreprocessor(target)
 
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 
