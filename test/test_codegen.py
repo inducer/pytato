@@ -213,7 +213,7 @@ def reverse_args(f):
     return wrapper
 
 
-@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     cl_ctx = ctx_factory()
@@ -251,7 +251,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
-@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv"))
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
     if which == "sub":

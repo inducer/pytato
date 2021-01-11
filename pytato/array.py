@@ -629,6 +629,9 @@ class Array(Taggable):
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
             get_result_type=_truediv_result_type, reverse=True)
 
+    __pow__ = partialmethod(_binary_op, operator.pow)
+    __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True)
+
     __neg__ = partialmethod(_unary_op, operator.neg)
 
     def __pos__(self) -> Array:
