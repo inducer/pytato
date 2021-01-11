@@ -790,7 +790,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             shape: ShapeType,
             dtype: np.dtype,
             bindings: Optional[Dict[str, Array]] = None,
-            tags: Optional[TagOrIterableType] = None):
+            tags: Optional[TagsType] = frozenset()):
 
         if bindings is None:
             bindings = {}
@@ -869,7 +869,7 @@ class MatrixProduct(Array):
     def __init__(self,
             x1: Array,
             x2: Array,
-            tags: Optional[TagOrIterableType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
@@ -923,7 +923,7 @@ class Stack(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagOrIterableType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -966,7 +966,7 @@ class Concatenate(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
-            tags: Optional[TagOrIterableType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
@@ -1193,7 +1193,7 @@ class InputArgumentBase(Array):
     def __init__(self,
             namespace: Namespace,
             name: str,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         if name is None:
             raise ValueError("Must have explicit name")
 
@@ -1208,10 +1208,10 @@ class InputArgumentBase(Array):
     def namespace(self) -> Namespace:
         return self._namespace
 
-    def tagged(self, tag: TagOrIterableType) -> InputArgumentBase:
+    def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
 
-    def without_tags(self, tag: TagOrIterableType,
+    def without_tags(self, tags: TagOrIterableType,
                         verify_existence: bool = True) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
 
@@ -1260,7 +1260,7 @@ class DataWrapper(InputArgumentBase):
             name: str,
             data: DataInterface,
             shape: ShapeType,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(namespace, name, tags=tags)
 
         self.data = data
@@ -1294,7 +1294,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             name: str,
             shape: ShapeType,
             dtype: np.dtype,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
@@ -1594,7 +1594,7 @@ def make_placeholder(namespace: Namespace,
         shape: ConvertibleToShape,
         dtype: Any,
         name: Optional[str] = None,
-        tags: Optional[TagsType] = None) -> Placeholder:
+        tags: Optional[TagsType] = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param namespace:  namespace of the placeholder array
@@ -1619,7 +1619,7 @@ def make_placeholder(namespace: Namespace,
 
 def make_size_param(namespace: Namespace,
         name: str,
-        tags: Optional[TagsType] = None) -> SizeParam:
+        tags: Optional[TagsType] = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1642,7 +1642,7 @@ def make_data_wrapper(namespace: Namespace,
         data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: Optional[TagsType] = None) -> DataWrapper:
+        tags: Optional[TagsType] = frozenset()) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
     :param namespace:  namespace
