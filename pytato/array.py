@@ -1054,7 +1054,7 @@ class Roll(IndexRemappingBase):
             array: Array,
             shift: int,
             axis: int,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(array, tags)
         self.shift = shift
         self.axis = axis
@@ -1081,7 +1081,7 @@ class AxisPermutation(IndexRemappingBase):
     def __init__(self,
             array: Array,
             axes: Tuple[int, ...],
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(array, tags)
         self.array = array
         self.axes = axes
@@ -1123,7 +1123,7 @@ class Reshape(IndexRemappingBase):
             array: Array,
             newshape: Tuple[int, ...],
             order: str,
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1153,7 +1153,7 @@ class Slice(IndexRemappingBase):
             array: Array,
             starts: Tuple[int, ...],
             stops: Tuple[int, ...],
-            tags: Optional[TagsType] = None):
+            tags: Optional[TagsType] = frozenset()):
         super().__init__(array, tags)
 
         self.starts = starts
