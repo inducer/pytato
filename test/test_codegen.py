@@ -649,6 +649,18 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
 
 
+def test_exprs_with_named_arrays(ctx_factory):
+    queue = cl.CommandQueue(ctx_factory())
+    ns = pt.Namespace()
+    x_in = np.random.rand(10, 4)
+    x = pt.make_data_wrapper(ns, x_in)
+    y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
+    res = 21*y1y2["y1"]
+    evt, (out,) = pt.generate_loopy(res, target=pt.PyOpenCLTarget(queue))()
+
+    np.testing.assert_allclose(out, 42*x_in)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
