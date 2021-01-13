@@ -623,6 +623,35 @@ class CountNamed(UniqueTag):
 
 # {{{ dict of named arrays
 
+class NamedArray(Array):
+    _fields = Array._fields + ("dict_of_named_arrays", "name")
+    _mapper_method = "map_named_array"
+
+    def __init__(self,
+            dict_of_named_arrays: DictOfNamedArrays,
+            name: str,
+            tags: TagsType = frozenset()):
+        super().__init__(tags=tags)
+        self.dict_of_named_arrays = dict_of_named_arrays
+        self.name = name
+
+    @property
+    def expr(self):
+        return self.dict_of_named_arrays._data[self.name]
+
+    @property
+    def shape(self):
+        return self.expr.shape
+
+    @property
+    def dtype(self):
+        return self.expr.dtype
+
+    @property
+    def namespace(self) -> Namespace:
+        return self.dict_of_named_arrays.namespace
+
+
 class DictOfNamedArrays(Mapping[str, Array]):
     """A container that maps valid Python identifiers
     to instances of :class:`Array`. May occur as a result
@@ -639,21 +668,32 @@ class DictOfNamedArrays(Mapping[str, Array]):
         This container deliberately does not implement
         arithmetic.
     """
+    _mapper_method = "map_dict_of_named_arrays"
 
     def __init__(self, data: Dict[str, Array]):
         self._data = data
+        self._named_arrays = {name: NamedArray(self, name)
+                              for name in data}
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
     def __getitem__(self, name: str) -> Array:
-        return self._data[name]
+        return self._named_arrays[name]
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
     def __len__(self) -> int:
         return len(self._data)
+
+    @property
+    def exprs(self) -> FrozenSet[Array]:
+        return frozenset(self._data.values())
+
+    @memoize_method
+    def __hash__(self) -> int:
+        return hash(frozenset(self._data.items()))
 
 # }}}
 

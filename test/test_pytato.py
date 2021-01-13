@@ -196,6 +196,15 @@ def test_same_placeholder_name_raises():
         pt.generate_loopy(2*x)
 
 
+def test_accessing_dict_of_named_arrays_validation():
+    x = pt.make_placeholder(name="x", shape=10, dtype=float)
+    y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
+
+    assert isinstance(y1y2["y1"], pt.array.NamedArray)
+    assert y1y2["y1"].shape == (2*x).shape
+    assert y1y2["y1"].dtype == (2*x).dtype
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

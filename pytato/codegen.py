@@ -397,12 +397,12 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     deps = get_dependencies(outputs)
 
     # only look for dependencies between the outputs
-    deps = {name: (val & frozenset(outputs.values()))
+    deps = {name: (val & frozenset(outputs.exprs))
             for name, val in deps.items()}
 
     # represent deps in terms of output names
-    output_to_name = {output: name for name, output in outputs.items()}
-    dag = {name: (frozenset([output_to_name[output] for output in val])
+    output_expr_to_name = {output.expr: name for name, output in outputs.items()}
+    dag = {name: (frozenset([output_expr_to_name[output] for output in val])
                   - frozenset([name]))
            for name, val in deps.items()}
 
