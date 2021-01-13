@@ -39,13 +39,14 @@ if TYPE_CHECKING:
     import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace)
+        SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace,
+        NamedArray)
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
-from pytato.loopy import LoopyFunctionResult
+from pytato.loopy import LoopyFunctionResult, LoopyFunction
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen
@@ -411,6 +412,29 @@ class CodeGenMapper(Mapper):
         state.results[expr] = result
         return result
 
+    def map_loopy_function(self, expr: LoopyFunction) -> Dict[StoredResult]:
+        raise NotImplementedError()
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
+            state: CodeGenState):
+        for key in expr:
+            subexpr = expr[key].expr
+            name = state.var_name_gen("_pt_temp")
+            insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
+                    output_to_temporary=True)
+            state.results[subexpr] = state.results[expr[key]] = (
+                    StoredResult(name, subexpr.ndim, frozenset([insn_id])))
+
+    def map_named_array(self, expr: NamedArray,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        self.rec(expr.dict_of_named_arrays, state)
+
+        assert expr in state.results
+        return state.results[expr]
+
     def map_loopyfunction_result(self, expr: LoopyFunctionResult,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
@@ -704,9 +728,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
 
 def get_loopy_temporary(name: str, expr: Array) -> lp.TemporaryVariable:
-    is_shape_symbolic = not all(isinstance(dim, int) for dim in expr.shape)
-    # Only global variables can have symbolic shape.
-    address_space = lp.AddressSpace.GLOBAL if is_shape_symbolic else lp.auto
+    # always allocating to global address space to avoid stack overflow
+    address_space = lp.AddressSpace.GLOBAL
     return lp.TemporaryVariable(name,
             dtype=expr.dtype,
             shape=expr.shape,
@@ -736,6 +759,8 @@ def rename_reductions(
 
     loopy_expr_context.reduction_bounds = new_reduction_bounds
     return result
+
+# }}}
 
 
 def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
@@ -804,7 +829,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     # Generate code for outputs.
     for name in compute_order:
-        expr = outputs[name]
+        expr = outputs[name].expr
         insn_id = add_store(name, expr, cg_mapper(expr, state), state)
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))

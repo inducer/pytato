@@ -30,7 +30,7 @@ from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
         DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase,
-        LoopyFunction, LoopyFunctionResult)
+        NamedArray, LoopyFunction, LoopyFunctionResult)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -152,6 +152,14 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
 
+    def map_named_array(self, expr: NamedArray) -> Array:
+        return NamedArray(self.rec(expr.dict_of_named_arrays), expr.name)
+
+    def map_dict_of_named_arrays(self,
+            expr: DictOfNamedArrays) -> DictOfNamedArrays:
+        return DictOfNamedArrays({key: self.rec(val.expr)
+                                  for key, val in expr.items()})
+
     def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
         bindings = {
                 name: self.rec(subexpr)
@@ -170,55 +178,64 @@ class DependencyMapper(Mapper):
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
     """
+    R = FrozenSet[Union[Array, DictOfNamedArrays]]
+
     def __init__(self) -> None:
         self.cache: Dict[Array, FrozenSet[Array]] = {}
 
-    def rec(self, expr: Array) -> FrozenSet[Array]:  # type: ignore
+    def rec(self, expr: Array) -> R:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
         result: FrozenSet[Array] = super().rec(expr)
         self.cache[expr] = result
         return result
 
-    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+    def combine(self, *args: FrozenSet[Array]) -> R:
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
-    def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> R:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
                                                  for bnd in expr.bindings.values()))
 
-    def map_placeholder(self, expr: Placeholder) -> FrozenSet[Array]:
+    def map_placeholder(self, expr: Placeholder) -> R:
         return frozenset([expr])
 
-    def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[Array]:
+    def map_data_wrapper(self, expr: DataWrapper) -> R:
         return frozenset([expr])
 
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[Array]:
+    def map_size_param(self, expr: SizeParam) -> R:
         return frozenset([expr])
 
-    def map_matrix_product(self, expr: MatrixProduct) -> FrozenSet[Array]:
+    def map_matrix_product(self, expr: MatrixProduct) -> R:
         return self.combine(frozenset([expr]), self.rec(expr.x1), self.rec(expr.x2))
 
-    def map_stack(self, expr: Stack) -> FrozenSet[Array]:
+    def map_stack(self, expr: Stack) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
 
-    def map_roll(self, expr: Roll) -> FrozenSet[Array]:
+    def map_roll(self, expr: Roll) -> R:
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
-    def map_axis_permutation(self, expr: AxisPermutation) -> FrozenSet[Array]:
+    def map_axis_permutation(self, expr: AxisPermutation) -> R:
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
-    def map_slice(self, expr: Slice) -> FrozenSet[Array]:
+    def map_slice(self, expr: Slice) -> R:
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
-    def map_reshape(self, expr: Reshape) -> FrozenSet[Array]:
+    def map_reshape(self, expr: Reshape) -> R:
         return self.combine(frozenset([expr]), self.rec(expr.array))
 
-    def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
+    def map_concatenate(self, expr: Concatenate) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
+
+    def map_named_array(self, expr: NamedArray) -> R:
+        return self.combine(frozenset([expr]), self.rec(expr.dict_of_named_arrays))
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> R:
+        return self.combine(frozenset([expr]), *(self.rec(ary)
+                                                 for ary in expr.exprs))
 
     def map_loopyfunction_result(self, expr: LoopyFunctionResult) -> FrozenSet[str]:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
@@ -272,14 +289,16 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     dep_names = (frozenset([dep.name
                             for dep in deps
                             if isinstance(dep, InputArgumentBase)])
-                 | get_scalar_expr_deps([dep.shape for dep in deps]))
+                 | get_scalar_expr_deps([dep.shape
+                                         for dep in deps
+                                         if isinstance(dep, Array)]))
 
     # }}}
 
     data = {}
     copy_namespace(source_dict.namespace, copy_mapper, dep_names)
     for name, val in source_dict.items():
-        data[name] = copy_mapper(val)
+        data[name] = copy_mapper(val.expr)
     return DictOfNamedArrays(data)
 
 
@@ -288,7 +307,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     """
     dep_mapper = DependencyMapper()
 
-    return {name: dep_mapper(val) for name, val in expr.items()}
+    return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 # }}}
 
