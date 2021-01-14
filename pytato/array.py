@@ -187,8 +187,6 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
-import loopy as lp
-
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -778,25 +776,25 @@ class DictOfNamedArrays(Mapping[str, Array]):
     _mapper_method = "map_dict_of_named_arrays"
 
     def __init__(self, data: Dict[str, Array]):
-        self._data = data
         self._named_arrays = {name: NamedArray(self, name)
                               for name in data}
+        self._data = data
 
     @property
     def namespace(self) -> Namespace:
         return next(iter(self._data.values())).namespace
 
     def __contains__(self, name: object) -> bool:
-        return name in self._data
+        return name in self._namespace
 
     def __getitem__(self, name: str) -> Array:
         return self._named_arrays[name]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+        return iter(self._named_arrays)
 
     def __len__(self) -> int:
-        return len(self._data)
+        return len(self._named_arrays)
 
     @property
     def exprs(self) -> FrozenSet[Array]:
@@ -1201,102 +1199,6 @@ class Reshape(IndexRemappingBase):
     @property
     def shape(self) -> Tuple[int, ...]:
         return self.newshape
-
-# }}}
-
-
-# {{{ call_loopy
-
-class LoopyFunction(DictOfNamedArrays):
-    """
-    A loopy function call node.
-    """
-    _mapper_method = "map_loopy_function"
-
-    def __init__(self,
-            namespace: Namespace,
-            program: lp.Program,
-            bindings: Dict[str, Array],
-            entrypoint: str):
-        super().__init__({})
-        if any([arg.is_input and arg.is_output
-                for arg in program[entrypoint].args]):
-            raise ValueError("Cannot have a kernel that writes to inputs")
-
-        if any([not all(isinstance(axis_len, Number) for axis_len in arg.shape)
-                for arg in program[entrypoint].args if arg.is_output]):
-            raise ValueError("loopy args cannot have symbolic shape, for now.")
-
-        self.program = program
-
-        self.bindings = bindings
-        self.entrypoint = entrypoint
-        self._namespace = namespace
-
-        self._data = {res: LoopyFunctionResult(self, res)
-                      for res in self.results}
-
-    @property
-    def results(self) -> FrozenSet[str]:
-        return frozenset([arg.name for arg in self.entrykernel.args
-                          if arg.is_output])
-
-    @property
-    def namespace(self) -> Namespace:
-        return self._namespace
-
-    @property
-    def entrykernel(self) -> lp.LoopKernel:
-        return self.program[self.entrypoint]
-
-    def __hash__(self):
-        from loopy.tools import LoopyKeyBuilder as lkb
-        return hash((lkb()(self.program), tuple(self.bindings.items()),
-            self.results))
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-
-        if not isinstance(other, LoopyFunction):
-            return False
-        if ((self.entrypoint == other.entrypoint)
-             and (self.bindings == other.bindings)
-             and (self.program == other.program)):
-            return True
-        return False
-
-
-class LoopyFunctionResult(Array):
-    """
-    """
-    _fields = Array._fields + ("loopyfunction", "name")
-    _mapper_method = "map_loopyfunction_result"
-
-    def __init__(self,
-            loopyfunction: LoopyFunction,
-            name: str,
-            tags: Optional[TagsType] = None):
-
-        super().__init__(tags)
-        self.loopyfunction = loopyfunction
-        self.name = name
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.loopyfunction.namespace
-
-    @property
-    def loopyarg(self) -> lp.ArrayArg:
-        return self.loopyfunction.entrykernel.arg_dict[self.name]
-
-    @property
-    def shape(self) -> ShapeType:
-        return self.loopyarg.shape
-
-    @property
-    def dtype(self) -> np.dtype:
-        return self.loopyarg.dtype
 
 # }}}
 
@@ -1725,38 +1627,6 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
                 f" into {newshape}")
 
     return Reshape(array, tuple(newshape_explicit), order)
-
-
-def call_loopy(namespace: Namespace, program: lp.Program, bindings: dict,
-        entrypoint: Optional[str] = None):
-    """
-    Operates a general :class:`loopy.Program` on the array inputs as specified
-    by *bindings*.
-
-    Restrictions on the structure of ``program[entrypoint]``:
-
-    * array arguments of ``program[entrypoint]`` should either be either
-      input-only or output-only.
-    * all input-only arguments of ``program[entrypoint]`` must appear in
-      *bindings*.
-    * all output-only arguments of ``program[entrypoint]`` must appear in
-      *bindings*.
-    * if *program* has been declared with multiple entrypoints, *entrypoint*
-      can not be *None*.
-
-    :arg bindings: mapping from argument names of ``program[entrypoint]`` to
-        :class:`pytato.array.Array`.
-    :arg results: names of ``program[entrypoint]`` argument names that have to
-        be returned from the call.
-    """
-    # FIXME: Sanity checks
-    if entrypoint is None:
-        if len(program.entrypoints) != 1:
-            raise ValueError("cannot infer entrypoint")
-
-        entrypoint, = program.entrypoints
-
-    return LoopyFunction(namespace, program, bindings, entrypoint)
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
