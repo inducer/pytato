@@ -2,7 +2,29 @@ import numpy as np
 import loopy as lp
 from loopy.types import NumpyType
 from typing import Dict, Optional
+from numbers import Number
 from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType, NamedArray)
+from loopy.symbolic import IdentityMapper
+from pytools import memoize_method
+
+
+class ToPytatoSubstitutor(IdentityMapper):
+    def __init__(self, bindings):
+        self.bindings = bindings
+
+    def map_product(self, expr):
+        from functools import reduce
+        import operator
+        return reduce(operator.mul, expr.children, 1)
+
+    def map_sum(self, expr):
+        return sum(expr.children, start=0)
+
+    def map_variable(self, expr):
+        try:
+            return self.bindings[expr.name]
+        except KeyError:
+            raise print(f"Got unknown variable '{expr.name}'")
 
 
 class LoopyFunction(DictOfNamedArrays):
@@ -18,11 +40,6 @@ class LoopyFunction(DictOfNamedArrays):
             entrypoint: str):
         super().__init__({})
 
-        if any([arg.is_input and arg.is_output
-                for arg in program[entrypoint].args]):
-            # Pytato DAG cannot have stateful nodes.
-            raise ValueError("Cannot have a kernel that writes to inputs.")
-
         self.program = program
         self.bindings = bindings
         self.entrypoint = entrypoint
@@ -33,6 +50,10 @@ class LoopyFunction(DictOfNamedArrays):
         self._named_arrays = {name: LoopyFunctionResult(self, name)
                               for name, lp_arg in entry_kernel.arg_dict.items()
                               if lp_arg.is_output}
+
+    @memoize_method
+    def to_pytato(self, expr):
+        return ToPytatoSubstitutor(self.bindings)(expr)
 
     @property
     def namespace(self) -> Namespace:
@@ -68,7 +89,7 @@ class LoopyFunctionResult(NamedArray):
     @property
     def shape(self) -> ShapeType:
         loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[self.name]
-        return loopy_arg.shape
+        return self.dict_of_named_arrays.to_pytato(loopy_arg.shape)
 
     @property
     def dtype(self) -> np.dtype:
@@ -113,6 +134,33 @@ def call_loopy(namespace: Namespace, program: lp.Program, bindings: dict,
 
     program = program.with_entrypoints(entrypoint)
 
+    # {{{ sanity checks
+
+    if any([arg.is_input and arg.is_output
+            for arg in program[entrypoint].args]):
+        # Pytato DAG cannot have stateful nodes.
+        raise ValueError("Cannot have a kernel that writes to inputs.")
+
+    for arg in program[entrypoint].args:
+        if arg.is_input:
+            if arg.name not in bindings:
+                raise ValueError(f"Kernel '{entrypoint}' expects an input"
+                        f" '{arg.name}'")
+            if isinstance(arg, lp.ArrayArg):
+                if not isinstance(bindings[arg.name], Array):
+                    raise ValueError(f"Argument '{arg.name}' expected to be a "
+                            f"pytato.Array, got {type(bindings[arg.name])}.")
+            else:
+                assert isinstance(arg, lp.ValueArg)
+                if not (isinstance(bindings[arg.name], Number) or (
+                        isinstance(bindings[arg.name], Array)
+                        and bindings[arg.name].shape == ())):
+                    raise ValueError(f"Argument '{arg.name}' expected to be a "
+                            " number or a pytato scalar, got "
+                            f"{type(bindings[arg.name])}.")
+
+    # }}}
+
     # {{{ infer types of the program
 
     program = lp.add_and_infer_dtypes(program, {name: ary.dtype
@@ -121,20 +169,6 @@ def call_loopy(namespace: Namespace, program: lp.Program, bindings: dict,
     # }}}
 
     # {{{ infer shapes of the program
-
-    entry_kernel = program[entrypoint]
-
-    def _add_shapes_to_args(arg):
-        if arg.name in bindings:
-            return arg.copy(shape=bindings[arg.name].shape, order="C",
-                            dim_tags=None)
-        else:
-            return arg
-
-    entry_kernel = entry_kernel.copy(args=[_add_shapes_to_args(arg)
-                                           for arg in entry_kernel.args])
-
-    program = program.with_kernel(entry_kernel)
 
     program = lp.infer_arg_descr(program)
 
