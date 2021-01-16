@@ -623,6 +623,7 @@ def test_maximum_minimum(ctx_factory, which):
 
 
 def test_call_loopy(ctx_factory):
+    from pytato.loopy import call_loopy
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     ns = pt.Namespace()
@@ -636,7 +637,7 @@ def test_call_loopy(ctx_factory):
             Z[i] = 10*sum(j, Y[i, j])
             """, name="callee")
 
-    loopyfunc = pt.call_loopy(ns, knl, bindings={"Y": y}, entrypoint="callee")
+    loopyfunc = call_loopy(ns, knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
     evt, (z_out, ) = pt.generate_loopy(2*z, target=pt.PyOpenCLTarget(queue))(x=x_in)
@@ -645,6 +646,7 @@ def test_call_loopy(ctx_factory):
 
 
 def test_call_loopy_with_same_callee_names(ctx_factory):
+    from pytato.loopy import call_loopy
 
     queue = cl.CommandQueue(ctx_factory())
 
@@ -664,8 +666,8 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
     ns = pt.Namespace()
 
     u = pt.make_data_wrapper(ns, u_in)
-    cuatro_u = 2*pt.call_loopy(ns, twice, {"x": u}, "callee")["y"]
-    nueve_u = 3*pt.call_loopy(ns, thrice, {"x": u}, "callee")["y"]
+    cuatro_u = 2*call_loopy(ns, twice, {"x": u}, "callee")["y"]
+    nueve_u = 3*call_loopy(ns, thrice, {"x": u}, "callee")["y"]
 
     out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
