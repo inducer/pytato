@@ -29,8 +29,8 @@ from typing import Any, Callable, Dict, FrozenSet, Union
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
-        Reshape, Concatenate, NamedArray, IndexRemappingBase, LoopyFunction,
-        LoopyFunctionResult)
+        Reshape, Concatenate, NamedArray, IndexRemappingBase)
+from pytato.loopy import LoopyFunction
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -156,7 +156,7 @@ class CopyMapper(Mapper):
         return SizeParam(name=expr.name, tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
-        return NamedArray(self.rec(expr.dict_of_named_arrays), expr.name)
+        return type(expr)(self.rec(expr.dict_of_named_arrays), expr.name)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -171,9 +171,6 @@ class CopyMapper(Mapper):
                 program=expr.program,
                 bindings=bindings,
                 entrypoint=expr.entrypoint)
-
-    def map_loopyfunction_result(self, expr: DataWrapper) -> Array:
-        return self.rec(expr.loopyfunction)[expr.name]
 
 
 class DependencyMapper(Mapper):
@@ -246,9 +243,9 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.exprs))
 
-    def map_loopyfunction_result(self, expr: LoopyFunctionResult) -> FrozenSet[str]:
-        return self.combine(frozenset([expr]), *(self.rec(bnd)
-            for bnd in expr.loopyfunction.bindings.values()))
+    def map_loopy_function(self, expr: LoopyFunction) -> R:
+        return self.combine(frozenset([expr]), *(self.rec(ary)
+                                                 for ary in expr.bindings.values()))
 
 # }}}
 

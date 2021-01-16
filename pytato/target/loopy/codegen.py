@@ -45,7 +45,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper, WalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
-from pytato.loopy import LoopyFunctionResult, LoopyFunction
+from pytato.loopy import LoopyFunction
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen
@@ -402,9 +402,6 @@ class CodeGenMapper(Mapper):
 
         return result
 
-    def map_loopy_function(self, expr: LoopyFunction) -> Dict[StoredResult]:
-        raise NotImplementedError()
-
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
             state: CodeGenState):
         for key in expr:
@@ -425,22 +422,16 @@ class CodeGenMapper(Mapper):
         assert expr in state.results
         return state.results[expr]
 
-    def map_loopyfunction_result(self, expr: LoopyFunctionResult,
-            state: CodeGenState) -> ImplementedResult:
-        if expr in state.results:
-            return state.results[expr]
-
+    def map_loopy_function(self, expr: LoopyFunction,
+            state: CodeGenState) -> Dict[StoredResult]:
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
-        loopyfunction = expr.loopyfunction
-        callee_kernel = loopyfunction.entrykernel
+        callee_kernel = expr.program[expr.entrypoint]
 
-        state.update_program(lp.merge([state.program, loopyfunction.program]))
+        state.update_program(lp.merge([state.program, expr.program]))
 
         domains = []
-        depends_on = set()
-        call_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
 
         def _get_sub_array_ref(array, name):
             inames = tuple(
@@ -453,70 +444,73 @@ class CodeGenMapper(Mapper):
             return SubArrayRef(inames_as_vars,
                                prim.Subscript(var(name), inames_as_vars))
 
-        # {{{ gather assignee sub array refs
-
-        results_to_names = {res: state.var_name_gen("_pt_temp")
-                            for res in loopyfunction.values()}
-
         assignees = []
+        params = []
+        depends_on = set()
+        new_tvs = state.kernel.temporary_variables.copy()
+        new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
 
         for arg in callee_kernel.args:
-            if arg.name in loopyfunction:
-                result_array = loopyfunction[arg.name]
-                assignee_name = results_to_names[result_array]
-                assignees.append(_get_sub_array_ref(result_array, assignee_name))
+            # must traverse in the order of callee's args to generate the correct
+            # assignees order
+            if arg.is_output:
+                assignee_name = state.var_name_gen("_pt_temp")
+                assignees.append(_get_sub_array_ref(expr[arg.name],
+                                                    assignee_name))
+
+                named_array = expr[arg.name]
+
+                # stored result for the assignee
+                result = StoredResult(assignee_name,
+                                      named_array.ndim,
+                                      frozenset([new_insn_id]))
+                # record the result for the corresponding loopy array
+                state.results[named_array] = result
+
+                new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
+                        named_array)
+            else:
+                assert arg.is_input
+
+                subexpr = expr.bindings[arg.name]
+
+                if subexpr in state.results and (
+                        isinstance(state.results[subexpr], StoredResult)):
+                    # found a stored result corresponding to the argument => use it
+                    stored_result = state.results[subexpr]
+                    name = stored_result.name
+                    params.append(_get_sub_array_ref(subexpr, name))
+                    depends_on.update(stored_result.depends_on)
+                else:
+                    # did not find a stored result for the sub-expression, store it
+                    # and then pass it to the call
+                    name = state.var_name_gen("_pt_temp")
+                    store_insn_id = add_store(name, subexpr,
+                            self.rec(subexpr, state),
+                            state, output_to_temporary=True)
+                    depends_on.add(store_insn_id)
+                    # replace "arg" with the created stored variable
+                    state.results[subexpr] = StoredResult(name, subexpr.ndim,
+                                                      frozenset([store_insn_id]))
+                    params.append(_get_sub_array_ref(subexpr, name))
+                    new_tvs[name] = get_loopy_temporary(name, subexpr)
 
         # }}}
 
-        # {{{ gather all the call params
-
-        call_kwargs = {}
-
-        for kw, arg in loopyfunction.bindings.items():
-            if arg in state.results:
-                if isinstance(state.results[arg], StoredResult):
-                    store_result = state.results[arg]
-                    name = store_result.name
-                    call_kwargs[kw] = _get_sub_array_ref(arg, name)
-                    depends_on.update(store_result.depends_on)
-                    continue
-
-            name = state.var_name_gen("_pt_temp")
-            store_insn_id = add_store(name, arg, self(arg, state), state,
-                output_to_temporary=True)
-            depends_on.add(store_insn_id)
-            # replace "arg" with the created stored variable
-            state.results[arg] = StoredResult(name, arg.ndim,
-                                              frozenset([store_insn_id]))
-            call_kwargs[kw] = _get_sub_array_ref(arg, name)
-
-        # }}}
-
-        new_insn = make_assignment(tuple(assignees),
-                prim.CallWithKwargs(var(loopyfunction.entrykernel.name),
-                                    parameters=(),
-                                    kw_parameters=call_kwargs),
+        new_insn = make_assignment(
+                tuple(assignees),
+                var(expr.entrypoint)(*params),
                 depends_on=frozenset(depends_on),
-                id=call_insn_id)
-
-        for result, name in results_to_names.items():
-            state.results[result] = StoredResult(name, result.ndim,
-                                                 frozenset([call_insn_id]))
+                id=new_insn_id)
 
         # update kernel
         kernel = state.kernel
-        new_tvs = kernel.temporary_variables.copy()
-
-        for result, name in results_to_names.items():
-            new_tvs[name] = get_loopy_temporary(name, result)
 
         kernel = kernel.copy(instructions=kernel.instructions+[new_insn],
                              temporary_variables=new_tvs,
                              domains=kernel.domains+domains)
 
         state.update_kernel(kernel)
-
-        return state.results[expr]
 
 # }}}
 
