@@ -463,49 +463,51 @@ class CodeGenMapper(Mapper):
         for arg in callee_kernel.args:
             # must traverse in the order of callee's args to generate the correct
             # assignees order
-            if arg.is_output:
-                assignee_name = state.var_name_gen("_pt_temp")
-                assignees.append(_get_sub_array_ref(expr[arg.name],
-                                                    assignee_name))
+            if isinstance(arg, lp.ArrayArg):
+                if arg.is_output:
+                    assignee_name = state.var_name_gen("_pt_temp")
+                    assignees.append(_get_sub_array_ref(expr[arg.name],
+                                                        assignee_name))
 
-                named_array = expr[arg.name]
+                    named_array = expr[arg.name]
 
-                # stored result for the assignee
-                result = StoredResult(assignee_name,
-                                      named_array.ndim,
-                                      frozenset([new_insn_id]))
-                # record the result for the corresponding loopy array
-                state.results[named_array] = result
+                    # stored result for the assignee
+                    result = StoredResult(assignee_name,
+                                          named_array.ndim,
+                                          frozenset([new_insn_id]))
+                    # record the result for the corresponding loopy array
+                    state.results[named_array] = result
 
-                new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
-                        named_array)
-            else:
-                assert arg.is_input
-
-                subexpr = expr.bindings[arg.name]
-
-                if subexpr in state.results and (
-                        isinstance(state.results[subexpr], StoredResult)):
-                    # found a stored result corresponding to the argument => use it
-                    stored_result = state.results[subexpr]
-                    name = stored_result.name
-                    params.append(_get_sub_array_ref(subexpr, name))
-                    depends_on.update(stored_result.depends_on)
+                    new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
+                            named_array)
                 else:
-                    # did not find a stored result for the sub-expression, store it
-                    # and then pass it to the call
-                    name = state.var_name_gen("_pt_temp")
-                    store_insn_id = add_store(name, subexpr,
-                            self.rec(subexpr, state),
-                            state, output_to_temporary=True)
-                    depends_on.add(store_insn_id)
-                    # replace "arg" with the created stored variable
-                    state.results[subexpr] = StoredResult(name, subexpr.ndim,
-                                                      frozenset([store_insn_id]))
-                    params.append(_get_sub_array_ref(subexpr, name))
-                    new_tvs[name] = get_loopy_temporary(name, subexpr)
+                    assert arg.is_input
 
-        # }}}
+                    subexpr = expr.bindings[arg.name]
+
+                    if subexpr in state.results and (
+                            isinstance(state.results[subexpr], StoredResult)):
+                        # found a stored result corresponding to the argument, use it
+                        stored_result = state.results[subexpr]
+                        name = stored_result.name
+                        params.append(_get_sub_array_ref(subexpr, name))
+                        depends_on.update(stored_result.depends_on)
+                    else:
+                        # did not find a stored result for the sub-expression, store
+                        # it and then pass it to the call
+                        name = state.var_name_gen("_pt_temp")
+                        store_insn_id = add_store(name, subexpr,
+                                self.rec(subexpr, state),
+                                state, output_to_temporary=True)
+                        depends_on.add(store_insn_id)
+                        # replace "arg" with the created stored variable
+                        state.results[subexpr] = StoredResult(name, subexpr.ndim,
+                                                          frozenset([store_insn_id]))
+                        params.append(_get_sub_array_ref(subexpr, name))
+                        new_tvs[name] = get_loopy_temporary(name, subexpr)
+            else:
+                assert isinstance(arg, lp.ValueArg) and arg.is_input
+                params.append(expr.bindings[arg.name])
 
         new_insn = make_assignment(
                 tuple(assignees),
