@@ -245,7 +245,8 @@ class DependencyMapper(Mapper):
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.bindings.values()))
+                                                 for ary in expr.bindings.values()
+                                                 if isinstance(ary, Array)))
 
 # }}}
 

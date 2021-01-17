@@ -132,7 +132,8 @@ class CodeGenPreprocessor(CopyMapper):
 
         self.kernels_seen.update(set(program.callables_table))
 
-        bindings = {name: self.rec(subexpr)
+        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+                           else subexpr)
                     for name, subexpr in expr.bindings.items()}
 
         return LoopyFunction(namespace=self.namespace,

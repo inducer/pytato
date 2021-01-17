@@ -3,9 +3,11 @@ import loopy as lp
 from loopy.types import NumpyType
 from typing import Dict, Optional
 from numbers import Number
-from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType, NamedArray)
+from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType,
+        NamedArray, normalize_shape)
 from loopy.symbolic import IdentityMapper
 from pytools import memoize_method
+import pymbolic.primitives as prim
 
 
 class ToPytatoSubstitutor(IdentityMapper):
@@ -152,19 +154,30 @@ def call_loopy(namespace: Namespace, program: lp.Program, bindings: dict,
                             f"pytato.Array, got {type(bindings[arg.name])}.")
             else:
                 assert isinstance(arg, lp.ValueArg)
-                if not (isinstance(bindings[arg.name], Number) or (
-                        isinstance(bindings[arg.name], Array)
-                        and bindings[arg.name].shape == ())):
+                if not (isinstance(bindings[arg.name], (str,
+                        prim.Expression, Number))):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
-                            " number or a pytato scalar, got "
+                            " number or a scalar expression, got "
                             f"{type(bindings[arg.name])}.")
+
+                if isinstance(bindings[arg.name], str):
+                    bindings[arg.name] = normalize_shape(bindings[arg.name],
+                            namespace)[0]
 
     # }}}
 
     # {{{ infer types of the program
 
-    program = lp.add_and_infer_dtypes(program, {name: ary.dtype
-        for name, ary in bindings.items()})
+    for name, ary in bindings.items():
+        if isinstance(ary, Array):
+            program = lp.add_dtypes(program, {name: ary.dtype})
+        elif isinstance(ary, prim.Expression):
+            program = lp.add_dtypes(program, {name: np.intp})
+        else:
+            assert isinstance(arg, Number)
+            program = lp.add_dtypes(program, {name, type(ary)})
+
+    program = lp.infer_unknown_types(program)
 
     # }}}
 
