@@ -663,6 +663,35 @@ def test_exprs_with_named_arrays(ctx_factory):
     np.testing.assert_allclose(out, 42*x_in)
 
 
+def test_call_loopy_with_parametric_sizes(ctx_factory):
+
+    x_in = np.random.rand(10, 4)
+
+    from pytato.loopy import call_loopy
+
+    queue = cl.CommandQueue(ctx_factory())
+
+    ns = pt.Namespace()
+
+    pt.make_size_param(ns, "M")
+    pt.make_size_param(ns, "N")
+    x = pt.make_placeholder(ns, shape="(M, N)", dtype=np.float, name="x")
+    y = 3*x
+
+    knl = lp.make_kernel(
+            "{[i, j]: 0<=i<m and 0<=j<n}",
+            """
+            Z[i] = 7*sum(j, Y[i, j])
+            """, name="callee", lang_version=(2018, 2))
+
+    loopyfunc = call_loopy(ns, knl, bindings={"Y": y, "m": "M", "n": "N"})
+    z = loopyfunc["Z"]
+
+    evt, (z_out, ) = pt.generate_loopy(2*z, target=pt.PyOpenCLTarget(queue))(x=x_in)
+
+    np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
