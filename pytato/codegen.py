@@ -538,7 +538,8 @@ class CodeGenMapper(Mapper):
         arg = lp.GlobalArg(expr.name,
                 shape=tuple(shape),
                 dtype=expr.dtype,
-                order="C")
+                order="C",
+                is_output_only=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
 
