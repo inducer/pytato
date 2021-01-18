@@ -403,7 +403,7 @@ class CodeGenMapper(Mapper):
         return result
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
-            state: CodeGenState):
+            state: CodeGenState) -> None:
         for key in expr:
             subexpr = expr[key].expr
             name = state.var_name_gen("_pt_temp")
@@ -422,8 +422,7 @@ class CodeGenMapper(Mapper):
         assert expr in state.results
         return state.results[expr]
 
-    def map_loopy_function(self, expr: LoopyFunction,
-            state: CodeGenState) -> Dict[StoredResult]:
+    def map_loopy_function(self, expr: LoopyFunction, state: CodeGenState) -> None:
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
@@ -433,7 +432,7 @@ class CodeGenMapper(Mapper):
 
         domains = []
 
-        def _get_sub_array_ref(array, name):
+        def _get_sub_array_ref(array: Array, name: str) -> "lp.symbolic.SubArrayRef":
             inames = tuple(
                     state.var_name_gen(f"_{name}_dim{d}")
                     for d in range(array.ndim))
@@ -446,7 +445,7 @@ class CodeGenMapper(Mapper):
 
         assignees = []
         params = []
-        depends_on = set()
+        depends_on: Set[str] = set()
         new_tvs = state.kernel.temporary_variables.copy()
         new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
 
@@ -472,13 +471,15 @@ class CodeGenMapper(Mapper):
                             named_array)
                 else:
                     assert arg.is_input
+                    assert isinstance(expr.bindings[arg.name], Array)
 
-                    subexpr = expr.bindings[arg.name]
+                    subexpr: Array = expr.bindings[arg.name]  # type: ignore
 
                     if subexpr in state.results and (
                             isinstance(state.results[subexpr], StoredResult)):
                         # found a stored result corresponding to the argument, use it
-                        stored_result = state.results[subexpr]
+                        stored_result: StoredResult = state.results[  # type: ignore
+                                subexpr]
                         name = stored_result.name
                         params.append(_get_sub_array_ref(subexpr, name))
                         depends_on.update(stored_result.depends_on)
@@ -498,6 +499,8 @@ class CodeGenMapper(Mapper):
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
                 params.append(expr.bindings[arg.name])
+
+        # }}}
 
         new_insn = make_assignment(
                 tuple(assignees),

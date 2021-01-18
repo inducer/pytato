@@ -170,7 +170,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, FrozenSet)
+        Protocol, Sequence, cast, TYPE_CHECKING)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -627,25 +627,25 @@ class NamedArray(Array):
     def __init__(self,
             dict_of_named_arrays: DictOfNamedArrays,
             name: str,
-            tags: TagsType = frozenset()):
+            tags: TagsType = frozenset()) -> None:
         super().__init__(tags=tags)
         self.dict_of_named_arrays = dict_of_named_arrays
         self.name = name
 
     @property
-    def expr(self):
+    def expr(self) -> Array:
         return self.dict_of_named_arrays._data[self.name]
 
     @property
-    def shape(self):
+    def shape(self) -> ShapeType:
         return self.expr.shape
 
     @property
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self.expr.dtype
 
 
-class DictOfNamedArrays(Mapping[str, Array]):
+class DictOfNamedArrays(Mapping[str, NamedArray]):
     """A container that maps valid Python identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
@@ -669,9 +669,9 @@ class DictOfNamedArrays(Mapping[str, Array]):
         self._data = data
 
     def __contains__(self, name: object) -> bool:
-        return name in self._namespace
+        return name in self.namespace
 
-    def __getitem__(self, name: str) -> Array:
+    def __getitem__(self, name: str) -> NamedArray:
         return self._named_arrays[name]
 
     def __iter__(self) -> Iterator[str]:
@@ -679,10 +679,6 @@ class DictOfNamedArrays(Mapping[str, Array]):
 
     def __len__(self) -> int:
         return len(self._named_arrays)
-
-    @property
-    def exprs(self) -> FrozenSet[Array]:
-        return frozenset(self._data.values())
 
     @memoize_method
     def __hash__(self) -> int:
