@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Optional, Union
+from typing import Any, Callable, Dict, FrozenSet, Optional, Union, TypeVar
 
 from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
@@ -32,6 +32,9 @@ from pytato.array import (
         DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase,
         NamedArray)
 from pytato.loopy import LoopyFunction
+
+T = TypeVar("T", Array, DictOfNamedArrays)
+R = FrozenSet[Union[Array, DictOfNamedArrays]]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -55,8 +58,7 @@ class UnsupportedArrayError(ValueError):
 
 
 class Mapper:
-    def handle_unsupported_array(self, expr: Array, *args: Any,
-            **kwargs: Any) -> Any:
+    def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
         method does not exist in this mapper.
@@ -68,7 +70,7 @@ class Mapper:
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
-    def rec(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+    def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         method: Callable[..., Array]
 
         try:
@@ -89,18 +91,18 @@ class CopyMapper(Mapper):
 
     def __init__(self, namespace: Namespace):
         self.namespace = namespace
-        self.cache: Dict[Union[Array, DictOfNamedArrays], Array] = {}
+        self.cache: Dict[Union[Array, DictOfNamedArrays],
+                Union[Array, DictOfNamedArrays]] = {}
 
-    def rec(self, expr: Union[Array, DictOfNamedArrays]) -> Union[Array,
-            DictOfNamedArrays]:  # type: ignore
+    def rec(self, expr: T) -> T:  # type: ignore
         if expr in self.cache:
-            return self.cache[expr]
-        result: Union[Array, DictOfNamedArrays] = super().rec(expr)
+            return self.cache[expr]  # type: ignore
+        result: T = super().rec(expr)
         self.cache[expr] = result
         return result
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings = {
+        bindings: Dict[str, Array] = {
                 name: self.rec(subexpr)
                 for name, subexpr in expr.bindings.items()}
         return IndexLambda(namespace=self.namespace,
@@ -153,22 +155,14 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
 
-    def map_named_array(self, expr: NamedArray) -> Array:
-        return type(expr)(self.rec(expr.dict_of_named_arrays), expr.name)
+    def map_named_array(self, expr: NamedArray) -> NamedArray:
+        return type(expr)(self.rec(expr.dict_of_named_arrays),
+                          expr.name)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
         return DictOfNamedArrays({key: self.rec(val.expr)
                                   for key, val in expr.items()})
-
-    def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
-        bindings = {
-                name: self.rec(subexpr)
-                for name, subexpr in expr.bindings.items()}
-        return LoopyFunction(namespace=self.namespace,
-                program=expr.program,
-                bindings=bindings,
-                entrypoint=expr.entrypoint)
 
 
 class DependencyMapper(Mapper):
@@ -176,25 +170,24 @@ class DependencyMapper(Mapper):
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
     """
-    R = FrozenSet[Union[Array, DictOfNamedArrays]]
 
     def __init__(self) -> None:
-        self.cache: Dict[Array, FrozenSet[Array]] = {}
+        self.cache: Dict[Union[Array, DictOfNamedArrays], R] = {}
 
-    def rec(self, expr: Array) -> R:  # type: ignore
+    def rec(self, expr: Union[Array, DictOfNamedArrays]) -> R:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
-        result: FrozenSet[Array] = super().rec(expr)
+        result: R = super().rec(expr)  # type:ignore
         self.cache[expr] = result
         return result
 
-    def combine(self, *args: FrozenSet[Array]) -> R:
+    def combine(self, *args: R) -> R:
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
     def map_index_lambda(self, expr: IndexLambda) -> R:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
-                                                 for bnd in expr.bindings.values()))
+            for bnd in expr.bindings.values()))
 
     def map_placeholder(self, expr: Placeholder) -> R:
         return frozenset([expr])
@@ -232,8 +225,8 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), self.rec(expr.dict_of_named_arrays))
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.exprs))
+        return self.combine(frozenset([expr]), *(self.rec(ary.expr)
+                                                 for ary in expr.values()))
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)

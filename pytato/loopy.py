@@ -1,32 +1,15 @@
 import numpy as np
 import loopy as lp
+import pymbolic.primitives as prim
 from loopy.types import NumpyType
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, Union
 from numbers import Number
 from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType,
-        NamedArray, normalize_shape)
-from loopy.symbolic import IdentityMapper
+        NamedArray, normalize_shape, ConvertibleToShape)
+from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
+        IntegralScalarExpression)
 from pytools import memoize_method
-import pymbolic.primitives as prim
-
-
-class ToPytatoSubstitutor(IdentityMapper):
-    def __init__(self, bindings):
-        self.bindings = bindings
-
-    def map_product(self, expr):
-        from functools import reduce
-        import operator
-        return reduce(operator.mul, expr.children, 1)
-
-    def map_sum(self, expr):
-        return sum(expr.children, start=0)
-
-    def map_variable(self, expr):
-        try:
-            return self.bindings[expr.name]
-        except KeyError:
-            raise print(f"Got unknown variable '{expr.name}'")
+from pytools.tag import TagsType
 
 
 class LoopyFunction(DictOfNamedArrays):
@@ -38,7 +21,7 @@ class LoopyFunction(DictOfNamedArrays):
     def __init__(self,
             namespace: Namespace,
             program: "lp.Program",
-            bindings: Dict[str, Array],
+            bindings: Dict[str, Union[Array, IntegralScalarExpression, Number]],
             entrypoint: str):
         super().__init__({})
 
@@ -54,8 +37,9 @@ class LoopyFunction(DictOfNamedArrays):
                               if lp_arg.is_output}
 
     @memoize_method
-    def to_pytato(self, expr):
-        return ToPytatoSubstitutor(self.bindings)(expr)
+    def to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
+        from pymbolic.mapper.substitutor import make_subst_func
+        return SubstitutionMapper(make_subst_func(self.bindings))(expr)
 
     @property
     def namespace(self) -> Namespace:
@@ -65,10 +49,10 @@ class LoopyFunction(DictOfNamedArrays):
     def entry_kernel(self) -> lp.LoopKernel:
         return self.program[self.entrypoint]
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.program, tuple(self.bindings.items()), self.entrypoint))
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
 
@@ -85,17 +69,27 @@ class LoopyFunction(DictOfNamedArrays):
 class LoopyFunctionResult(NamedArray):
     """
     """
+    def __init__(self,
+            dict_of_named_arrays: LoopyFunction,
+            name: str,
+            tags: TagsType = frozenset()) -> None:
+        super().__init__(dict_of_named_arrays, name, tags=tags)
+
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
     @property
     def shape(self) -> ShapeType:
-        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[self.name]
-        return self.dict_of_named_arrays.to_pytato(loopy_arg.shape)
+        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
+                self.name]
+        shape: ShapeType = self.dict_of_named_arrays.to_pytato(  # type:ignore
+                loopy_arg.shape)
+        return shape
 
     @property
     def dtype(self) -> np.dtype:
-        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[self.name]
+        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
+                self.name]
         dtype = loopy_arg.dtype
 
         if isinstance(dtype, np.dtype):
@@ -106,8 +100,9 @@ class LoopyFunctionResult(NamedArray):
             raise NotImplementedError(f"Unknown dtype type '{dtype}'")
 
 
-def call_loopy(namespace: Namespace, program: "lp.Program", bindings: dict,
-        entrypoint: Optional[str] = None):
+def call_loopy(namespace: Namespace, program: "lp.Program",
+        bindings: Dict[str, Union[Array, ConvertibleToShape, Number]],
+        entrypoint: Optional[str] = None) -> LoopyFunction:
     """
     Operates a general :class:`loopy.Program` on the array inputs as specified
     by *bindings*.
@@ -148,7 +143,7 @@ def call_loopy(namespace: Namespace, program: "lp.Program", bindings: dict,
             if arg.name not in bindings:
                 raise ValueError(f"Kernel '{entrypoint}' expects an input"
                         f" '{arg.name}'")
-            if isinstance(arg, lp.ArrayArg):
+            if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
                 if not isinstance(bindings[arg.name], Array):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             f"pytato.Array, got {type(bindings[arg.name])}.")

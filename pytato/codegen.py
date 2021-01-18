@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 import dataclasses
 from functools import partialmethod
-from typing import Union, Dict, Tuple, Callable, List, Any
+from typing import Union, Dict, Tuple, Callable, List, Any, Set
 
 import pymbolic.primitives as prim
 from pymbolic import var
@@ -93,7 +93,7 @@ class CodeGenPreprocessor(CopyMapper):
         super().__init__(namespace)
         self.target = target
         self.bound_arguments: Dict[str, DataInterface] = {}
-        self.kernels_seen = set()
+        self.kernels_seen: Set[str] = set()
 
     def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
         import pytools
@@ -324,7 +324,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     deps = get_dependencies(outputs)
 
     # only look for dependencies between the outputs
-    deps = {name: (val & frozenset(outputs.exprs))
+    deps = {name: (val & frozenset(out.expr for out in outputs.values()))
             for name, val in deps.items()}
 
     # represent deps in terms of output names
