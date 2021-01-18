@@ -37,7 +37,7 @@ class LoopyFunction(DictOfNamedArrays):
 
     def __init__(self,
             namespace: Namespace,
-            program: lp.Program,
+            program: "lp.Program",
             bindings: Dict[str, Array],
             entrypoint: str):
         super().__init__({})
@@ -106,7 +106,7 @@ class LoopyFunctionResult(NamedArray):
             raise NotImplementedError(f"Unknown dtype type '{dtype}'")
 
 
-def call_loopy(namespace: Namespace, program: lp.Program, bindings: dict,
+def call_loopy(namespace: Namespace, program: "lp.Program", bindings: dict,
         entrypoint: Optional[str] = None):
     """
     Operates a general :class:`loopy.Program` on the array inputs as specified
