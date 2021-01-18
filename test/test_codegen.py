@@ -43,6 +43,14 @@ from testlib import assert_allclose_to_numpy
 import pymbolic.primitives as p
 
 
+def does_lpy_support_knl_callables():
+    try:
+        import loopy.program  # noqa
+        return True
+    except ImportError:
+        return False
+
+
 def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -622,6 +630,8 @@ def test_maximum_minimum(ctx_factory, which):
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
 def test_call_loopy(ctx_factory):
     from pytato.loopy import call_loopy
     cl_ctx = ctx_factory()
@@ -645,6 +655,8 @@ def test_call_loopy(ctx_factory):
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
 
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
 def test_call_loopy_with_same_callee_names(ctx_factory):
     from pytato.loopy import call_loopy
 
@@ -689,6 +701,8 @@ def test_exprs_with_named_arrays(ctx_factory):
     np.testing.assert_allclose(out, 42*x_in)
 
 
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
 def test_call_loopy_with_parametric_sizes(ctx_factory):
 
     x_in = np.random.rand(10, 4)
