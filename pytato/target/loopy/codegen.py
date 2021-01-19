@@ -446,7 +446,7 @@ class CodeGenMapper(Mapper):
         assignees = []
         params = []
         depends_on: Set[str] = set()
-        new_tvs = state.kernel.temporary_variables.copy()
+        new_tvs = {}
         new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
 
         for arg in callee_kernel.args:
@@ -510,9 +510,11 @@ class CodeGenMapper(Mapper):
 
         # update kernel
         kernel = state.kernel
+        tvs = state.kernel.temporary_variables.copy()
+        tvs.update(new_tvs)
 
         kernel = kernel.copy(instructions=kernel.instructions+[new_insn],
-                             temporary_variables=new_tvs,
+                             temporary_variables=tvs,
                              domains=kernel.domains+domains)
 
         state.update_kernel(kernel)
