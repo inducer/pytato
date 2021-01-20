@@ -170,7 +170,7 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
             program = lp.add_dtypes(program, {name: np.intp})
         else:
             assert isinstance(ary, Number)
-            program = lp.add_dtypes(program, {name, type(ary)})
+            program = lp.add_dtypes(program, {name: type(ary)})
 
     program = lp.infer_unknown_types(program)
 
