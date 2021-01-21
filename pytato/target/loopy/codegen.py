@@ -508,7 +508,10 @@ class CodeGenMapper(Mapper):
                         new_tvs[name] = get_loopy_temporary(name, subexpr)
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
-                params.append(expr.bindings[arg.name])
+                loopy_expr_context = LoopyExpressionContext(state,
+                        local_namespace={}, num_indices=0)
+                params.append(self.exprgen_mapper(expr.bindings[arg.name],
+                        loopy_expr_context))
 
         # }}}
 
