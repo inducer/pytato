@@ -1758,7 +1758,7 @@ def log10(x: Array) -> IndexLambda:
 # {{{ full
 
 def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
-        dtype: type, order: str = "C") -> Array:
+        dtype: Any, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
     """
@@ -1766,12 +1766,11 @@ def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
         raise ValueError("Only C-ordered arrays supported for now.")
 
     shape = normalize_shape(shape, namespace)
-    fill_value = dtype(fill_value)
     dtype = np.dtype(dtype)
-    return IndexLambda(namespace, fill_value, shape, dtype, {})
+    return IndexLambda(namespace, dtype.type(fill_value), shape, dtype, {})
 
 
-def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
+def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
         order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to 0.
@@ -1780,7 +1779,7 @@ def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
     return full(namespace, shape, 0, dtype)  # type: ignore
 
 
-def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
+def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
         order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to 1.
