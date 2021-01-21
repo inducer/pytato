@@ -35,6 +35,8 @@ from pytato.array import (
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
         log10,
 
+        full, zeros, ones,
+
         )
 
 from pytato.codegen import generate_loopy
@@ -59,5 +61,7 @@ __all__ = (
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10",
+
+        "full", "zeros", "ones",
 
 )

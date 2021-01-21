@@ -1738,4 +1738,34 @@ def log10(x: Array) -> IndexLambda:
 
 # }}}
 
+
+# {{{ full
+
+def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
+        dtype: type, order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to *fill_value*.
+    """
+    if order != "C":
+        raise ValueError("Only C-ordered arrays supported for now.")
+
+    shape = normalize_shape(shape, namespace)
+    fill_value = dtype(fill_value)
+    dtype = np.dtype(dtype)
+    return IndexLambda(namespace, fill_value, shape, dtype, {})
+
+
+def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
+        order: str = "C") -> Array:
+    # https://github.com/python/mypy/issues/3186
+    return full(namespace, shape, 0, dtype)  # type: ignore
+
+
+def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
+        order: str = "C") -> Array:
+    # https://github.com/python/mypy/issues/3186
+    return full(namespace, shape, 1, dtype)  # type: ignore
+
+# }}}
+
 # vim: foldmethod=marker
