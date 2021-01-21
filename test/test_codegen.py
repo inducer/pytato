@@ -497,6 +497,27 @@ def test_math_functions(ctx_factory, dtype, function_name):
     np.testing.assert_allclose(y, np_func(x_in), rtol=1e-6)
 
 
+@pytest.mark.parametrize("dtype", (np.int32, np.int64, np.float32, np.float64))
+def test_full_zeros_ones(ctx_factory, dtype):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    ns = pt.Namespace()
+
+    _, (z,) = pt.generate_loopy(pt.zeros(ns, 10, dtype),
+            target=pt.PyOpenCLTarget(queue))()
+    _, (o,) = pt.generate_loopy(pt.ones(ns, 10, dtype),
+            target=pt.PyOpenCLTarget(queue))()
+    _, (t,) = pt.generate_loopy(pt.full(ns, 10, 2, dtype),
+            target=pt.PyOpenCLTarget(queue))()
+
+    for ary in (z, o, t):
+        assert ary.dtype == dtype
+
+    assert (z == 0).all()
+    assert (o == 1).all()
+    assert (t == 2).all()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

@@ -55,6 +55,22 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: transpose
 .. autofunction:: stack
 .. autofunction:: concatenate
+.. autofunction:: abs
+.. autofunction:: sin
+.. autofunction:: cos
+.. autofunction:: tan
+.. autofunction:: arcsin
+.. autofunction:: arccos
+.. autofunction:: arctan
+.. autofunction:: sinh
+.. autofunction:: cosh
+.. autofunction:: tanh
+.. autofunction:: exp
+.. autofunction:: log
+.. autofunction:: log10
+.. autofunction:: zeros
+.. autofunction:: ones
+.. autofunction:: full
 
 Supporting Functionality
 ------------------------
@@ -1735,6 +1751,41 @@ def log(x: Array) -> IndexLambda:
 
 def log10(x: Array) -> IndexLambda:
     return _apply_elem_wise_func(x, "log10")
+
+# }}}
+
+
+# {{{ full
+
+def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
+        dtype: Any, order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to *fill_value*.
+    """
+    if order != "C":
+        raise ValueError("Only C-ordered arrays supported for now.")
+
+    shape = normalize_shape(shape, namespace)
+    dtype = np.dtype(dtype)
+    return IndexLambda(namespace, dtype.type(fill_value), shape, dtype, {})
+
+
+def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
+        order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to 0.
+    """
+    # https://github.com/python/mypy/issues/3186
+    return full(namespace, shape, 0, dtype)  # type: ignore
+
+
+def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
+        order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to 1.
+    """
+    # https://github.com/python/mypy/issues/3186
+    return full(namespace, shape, 1, dtype)  # type: ignore
 
 # }}}
 
