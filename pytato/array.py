@@ -55,6 +55,22 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: transpose
 .. autofunction:: stack
 .. autofunction:: concatenate
+.. autofunction:: abs
+.. autofunction:: sin
+.. autofunction:: cos
+.. autofunction:: tan
+.. autofunction:: arcsin
+.. autofunction:: arccos
+.. autofunction:: arctan
+.. autofunction:: sinh
+.. autofunction:: cosh
+.. autofunction:: tanh
+.. autofunction:: exp
+.. autofunction:: log
+.. autofunction:: log10
+.. autofunction:: zeros
+.. autofunction:: ones
+.. autofunction:: full
 
 Supporting Functionality
 ------------------------
@@ -1757,12 +1773,18 @@ def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
 
 def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
         order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to 0.
+    """
     # https://github.com/python/mypy/issues/3186
     return full(namespace, shape, 0, dtype)  # type: ignore
 
 
 def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: type = float,
         order: str = "C") -> Array:
+    """
+    Returns an array of shape *shape* with all entries equal to 1.
+    """
     # https://github.com/python/mypy/issues/3186
     return full(namespace, shape, 1, dtype)  # type: ignore
 
