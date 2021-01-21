@@ -38,6 +38,7 @@ from pytato.transform import CopyMapper, WalkMapper
 from pytato.target import Target
 from pytato.loopy import LoopyFunction
 from pytools import UniqueNameGenerator
+import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
 
@@ -93,7 +94,7 @@ class CodeGenPreprocessor(CopyMapper):
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
-        self.kernels_seen = set()
+        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -111,26 +112,42 @@ class CodeGenPreprocessor(CopyMapper):
                 tags=expr.tags)
 
     def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
-        import pytools
-        import loopy as lp
         program = expr.program.copy(target=self.target.get_loopy_target())
-        namegen = pytools.UniqueNameGenerator(self.kernels_seen)
+        namegen = UniqueNameGenerator(set(self.kernels_seen))
         entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
 
-        clbls_to_rename = self.kernels_seen & set(program.callables_table)
+        for name, clbl in program.callables_table.items():
+            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+                if name in self.kernels_seen and (
+                        program[name] != self.kernels_seen[name]):
+                    # callee name collision => must rename
 
-        for clbl_to_rename in clbls_to_rename:
-            new_name = namegen(clbl_to_rename)
-            if clbl_to_rename == entrypoint:
-                entrypoint = new_name
+                    # {{{ see if it's one of the other kernels
 
-            program = lp.rename_callable(program, clbl_to_rename, new_name)
+                    for other_knl in self.kernels_seen.values():
+                        if other_knl.copy(name=name) == program[name]:
+                            new_name = other_knl.name
+                            break
+                    else:
+                        # didn't find any other equivalent kernel, rename to
+                        # something unique
+                        new_name = namegen(name)
+
+                    # }}}
+
+                    if name == entrypoint:
+                        # if the colliding name is the entrypoint, then rename the
+                        # entrypoint as well.
+                        entrypoint = new_name
+
+                    program = lp.rename_callable(program, name, new_name)
+                    name = new_name
+
+                self.kernels_seen[name] = program[name]
 
         # }}}
-
-        self.kernels_seen.update(set(program.callables_table))
 
         bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
