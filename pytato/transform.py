@@ -173,8 +173,9 @@ class DependencyMapper(Mapper):
     :class:`pytato.array.Array`'s it depends on.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, namespace) -> None:
         self.cache: Dict[Union[Array, DictOfNamedArrays], R] = {}
+        self.namespace = namespace
 
     def rec(self, expr: Union[Array, DictOfNamedArrays]) -> R:  # type: ignore
         if expr in self.cache:
@@ -237,9 +238,15 @@ class DependencyMapper(Mapper):
                                                  for ary in expr.values()))
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
+        from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
+        scalar_deps = frozenset().union(*(get_scalar_expr_deps(ary)
+                                          for ary in expr.bindings.values()
+                                          if not isinstance(ary, Array)))
+
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.bindings.values()
-                                                 if isinstance(ary, Array)))
+                                                 if isinstance(ary, Array)),
+                            frozenset([self.namespace[dep] for dep in scalar_deps]))
 
 # }}}
 
@@ -351,7 +358,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
 def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     """Returns the dependencies of each named array in *expr*.
     """
-    dep_mapper = DependencyMapper()
+    dep_mapper = DependencyMapper(expr.namespace)
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
