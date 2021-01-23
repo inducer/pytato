@@ -5,12 +5,13 @@ import mlir.astnodes as ast
 from mlir.builder import IRBuilder
 from typing import Union, Mapping, Any, Dict
 from pytato.array import (Array, DictOfNamedArrays, Namespace, InputArgumentBase,
-        SizeParam, Placeholder)
+        SizeParam, Placeholder, IndexLambda)
 from dataclasses import dataclass
 import pytato.scalar_expr as scalar_expr
 from pytato.codegen import normalize_outputs, preprocess
 from pytato.transform import Mapper
 import pymbolic.primitives as prim
+from pymbolic.mapper.substitutor import make_subst_func
 
 
 def np_dtype_to_mlir_dtype(dtype: np.dtype):
@@ -32,33 +33,6 @@ class BoundProgram:
     bound_arguments: Mapping[str, Any]
 
 
-def normalize_outputs_to_index_lambdas(outputs: DictOfNamedArrays):
-    def normalize(expr: Array):
-        if isinstance(expr, SizeParam):
-            return IndexLambda(namespace=self.namespace,
-                    expr=prim.Variable("_in"),
-                    shape=expr.shape,
-                    dtype=expr.dtype,
-                    bindings={"_in": expr},
-                    tags=expr.tags)
-        elif isinstance(expr, (Placeholder, DataWrapper)):
-            return IndexLambda(namespace=self.namespace,
-                    expr=prim.Subscript(prim.Variable("_in"),
-                                        tuple(prim.Variable(f"_{i}")
-                                              for i in range(expr.ndim))),
-                    shape=expr.shape,
-                    dtype=expr.dtype,
-                    bindings={"_in": expr},
-                    tags=expr.tags)
-        elif isinstance(expr, IndexLambda):
-            return expr
-        else:
-            raise NotImplementedError(f"{type(expr)}")
-
-    return make_dict_of_named_arrays({name: normalize(expr)
-                                      for name, expr in outputs.items()})
-
-
 @dataclass
 class CodeGenState:
     builder: IRBuilder
@@ -76,7 +50,7 @@ def get_initial_codegen_state(namespace) -> CodeGenState:
     with builder.goto_block(builder.make_block(module.region)):
         fn = builder.function("_pt_kernel")
 
-    return CodeGenState(builder, mlir_file, module, fn, namespace)
+    return CodeGenState(builder, mlir_file, module, fn, namespace, {})
 
 
 class BoundMLIRProgram(BoundProgram):
@@ -84,18 +58,28 @@ class BoundMLIRProgram(BoundProgram):
         raise NotImplementedError()
 
 
-class FlatIndexLamdaifier(Mapper):
-    def __init__(self, 
-    def 
-    ...
+class IndexLambdaSubstitutor(scalar_expr.IdentityMapper):
+    def __init__(self, bindings: Mapping[str, scalar_expr.scalar_expr]) -> None:
+        self.bindings = bindings
+
+    def map_subscript(self, expr: prim.Subscript):
+        idx_map = {f"_{i}": idx
+                   for i, idx in enumerate(expr.index_tuple)}
+        subst_mapper = scalar_expr.SubstitutionMapper(make_subst_func(idx_map))
+        return subst_mapper(self.bindings[expr.aggregate.name])
 
 
-class LinalgGenericizer(scalar_expr.IndentityMapper):
-    def __init__(self, ...):
-        ...
+class Pymbolicifier(Mapper):
+    def map_index_lambda(self, expr: IndexLambda):
+        return IndexLambdaSubstitutor({name: self.rec(val)
+            for name, val in expr.bindings.items()})(expr.expr)
+
+    def map_placeholder(self, expr: Placeholder):
+        return prim.Subscript(prim.Variable(expr.name), tuple(prim.Variable(f"_{i}")
+            for i in range(expr.ndim)))
 
 
-    def map_placeholder(
+class LinalgGenericizer(scalar_expr.IdentityMapper):
     ...
 
 
@@ -126,23 +110,24 @@ def generate_mlir(
             assert all(isinstance(dim, int) for dim in val.shape)
             mref_type = state.builder.MemRefType(shape=val.shape,
                     dtype=np_dtype_to_mlir_dtype(val.dtype))
-            arg = state.builder.add_function_arg(state.builder.function,
-                                                 [mref_type],
-                                                 [val.name])
-            state.expr_to_ssa[arg] = arg
+            arg, = state.builder.add_function_args(state.function,
+                                                   [mref_type],
+                                                   [val.name])
+            state.expr_to_ssa[val] = arg
         else:
             assert isinstance(val, InputArgumentBase)
             raise NotImplementedError(f"Not implemented for type {type(val)}.")
 
-    with state.builder.goto_bock(state.builder.make_block(state.function.region)):
+    with state.builder.goto_block(state.builder.make_block(state.function.region)):
         for name in compute_order:
             expr = outputs[name]
             assert isinstance(expr, IndexLambda)
-            idx_lmbda = FlatIndexLamdaifier(expr)
-            assert all(val in state.expr_to_ssa for val in idx_lmbda.values())
+            pymbolic_expr = Pymbolicifier()(expr)
+            print(pymbolic_expr)
+            1/0
             with state.builder.linalg_generic() as lgen:
                 with state.builder.goto_bock(state.builder.make_block(lgen.region)):
-                    LinalgGenericizer()(idx_lmbda, lgen)
+                    LinalgGenericizer()(pymbolic_expr, state.builder, lgen)
 
         state.builder.ret()
 
