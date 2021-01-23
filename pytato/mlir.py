@@ -4,10 +4,25 @@ import numpy as np
 import mlir.astnodes as ast
 from mlir.builder import IRBuilder
 from typing import Union, Mapping, Any, Dict
-from pytato.array import Array, DictOfNamedArrays, Namespace
+from pytato.array import (Array, DictOfNamedArrays, Namespace, InputArgumentBase,
+        SizeParam, Placeholder)
 from dataclasses import dataclass
+import pytato.scalar_expr as scalar_expr
 from pytato.codegen import normalize_outputs, preprocess
 from pytato.transform import Mapper
+
+
+def np_dtype_to_mlir_dtype(dtype: np.dtype):
+    if dtype == np.float64:
+        return IRBuilder.F64
+    elif dtype == np.float32:
+        return IRBuilder.F32
+    elif dtype == np.int32:
+        return IRBuilder.I32
+    elif dtype == np.int64:
+        return IRBuilder.I64
+    else:
+        raise NotImplementedError("No mapping known for type {dtype}.")
 
 
 @dataclass
@@ -22,14 +37,8 @@ class CodeGenState:
     file: ast.MLIRFile
     module: ast.Module
     function: ast.Function
-
     namespace: Namespace
-
-    def from_numpy_dtype(self, dtype: np.dtype):
-        if dtype == np.float64:
-            return self.builder.F64
-        else:
-            raise NotImplementedError(f"Unknown type {dtype}")
+    expr_to_ssa: Mapping[Array, ast.SsaId]
 
 
 def get_initial_codegen_state(namespace) -> CodeGenState:
@@ -47,22 +56,12 @@ class BoundMLIRProgram(BoundProgram):
         raise NotImplementedError()
 
 
-class CodeGenMapper(Mapper):
-    def __init__(self):
-        self.cache: Dict[Array, Any] = {}
+class FlatIndexLamdaifier(Mapper):
+    ...
 
-    def map_placeholder(self, expr: ast.Placeholder,
-            state: CodeGenState) -> ast.SsaId:
-        if expr in self.cache:
-            return self.cache[expr]
 
-        mlir_dtype = state.from_numpy_dtype(expr.dtype)
-        if not all(isinstance(dim, int) for dim in expr.shape):
-            raise NotImplementedError("Symbolic shapes not implemented.")
-        memref_type = state.builder.MemRefType(shape=expr.shape, dtype=mlir_dtype)
-        return state.builder.add_function_args(state.function,
-                                               [memref_type],
-                                               expr.name)[0]
+class LinalgGenericizer(scalar_expr.IndentityMapper):
+    ...
 
 
 def generate_mlir(
@@ -82,22 +81,36 @@ def generate_mlir(
     state = get_initial_codegen_state(namespace)
 
     # Generate code for graph leaves
-    cg_mapper = CodeGenMapper()
     for name, val in sorted(namespace.items(),
                             key=lambda x: x[0]  # lexicographic order of names
                             ):
-        _ = cg_mapper(val, state)
+        if isinstance(val, SizeParam):
+            raise ValueError("SizeParams requires Pytato to have a shape inference"
+                    " engine of its own")
+        elif isinstance(val, Placeholder):
+            assert all(isinstance(dim, int) for dim in val.shape)
+            mref_type = state.builder.MemRefType(shape=val.shape,
+                    dtype=np_dtype_to_mlir_dtype(val.dtype))
+            arg = state.builder.add_function_arg(state.builder.function,
+                                                 [mref_type],
+                                                 [val.name])
+            state.expr_to_ssa[arg] = arg
+        else:
+            assert isinstance(val, InputArgumentBase)
+            raise NotImplementedError(f"Not implemented for type {type(val)}.")
 
-    # Generate code for outputs.
-    builder = state.builder
-    with builder.goto_block(builder.make_block(builder.function.region)):
+    with state.builder.goto_bock(state.builder.make_block(state.function.region)):
         for name in compute_order:
             expr = outputs[name]
-            raise NotImplementedError(expr)
+            idx_lmbda = FlatIndexLamdaifier(expr)
+            assert all(val in state.expr_to_ssa for val in idx_lmbda.values())
+            with state.builder.linalg_generic() as lgen:
+                with state.builder.goto_bock(state.builder.make_block(lgen.region)):
+                    LinalgGenericizer()(idx_lmbda, lgen)
 
-        builder.ret()
+        state.builder.ret()
 
-    return BoundMLIRProgram(builder.file, preproc_result.bound_arguments)
+    return BoundMLIRProgram(state.builder.file, preproc_result.bound_arguments)
 
 
 # vim: fdm=marker
