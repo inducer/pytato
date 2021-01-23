@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import pytato.scalar_expr as scalar_expr
 from pytato.codegen import normalize_outputs, preprocess
 from pytato.transform import Mapper
+import pymbolic.primitives as prim
 
 
 def np_dtype_to_mlir_dtype(dtype: np.dtype):
@@ -29,6 +30,33 @@ def np_dtype_to_mlir_dtype(dtype: np.dtype):
 class BoundProgram:
     program: ast.MLIRFile
     bound_arguments: Mapping[str, Any]
+
+
+def normalize_outputs_to_index_lambdas(outputs: DictOfNamedArrays):
+    def normalize(expr: Array):
+        if isinstance(expr, SizeParam):
+            return IndexLambda(namespace=self.namespace,
+                    expr=prim.Variable("_in"),
+                    shape=expr.shape,
+                    dtype=expr.dtype,
+                    bindings={"_in": expr},
+                    tags=expr.tags)
+        elif isinstance(expr, (Placeholder, DataWrapper)):
+            return IndexLambda(namespace=self.namespace,
+                    expr=prim.Subscript(prim.Variable("_in"),
+                                        tuple(prim.Variable(f"_{i}")
+                                              for i in range(expr.ndim))),
+                    shape=expr.shape,
+                    dtype=expr.dtype,
+                    bindings={"_in": expr},
+                    tags=expr.tags)
+        elif isinstance(expr, IndexLambda):
+            return expr
+        else:
+            raise NotImplementedError(f"{type(expr)}")
+
+    return make_dict_of_named_arrays({name: normalize(expr)
+                                      for name, expr in outputs.items()})
 
 
 @dataclass
@@ -57,10 +85,17 @@ class BoundMLIRProgram(BoundProgram):
 
 
 class FlatIndexLamdaifier(Mapper):
+    def __init__(self, 
+    def 
     ...
 
 
 class LinalgGenericizer(scalar_expr.IndentityMapper):
+    def __init__(self, ...):
+        ...
+
+
+    def map_placeholder(
     ...
 
 
@@ -102,6 +137,7 @@ def generate_mlir(
     with state.builder.goto_bock(state.builder.make_block(state.function.region)):
         for name in compute_order:
             expr = outputs[name]
+            assert isinstance(expr, IndexLambda)
             idx_lmbda = FlatIndexLamdaifier(expr)
             assert all(val in state.expr_to_ssa for val in idx_lmbda.values())
             with state.builder.linalg_generic() as lgen:
