@@ -93,8 +93,10 @@ class Pymbolicifier(Mapper):
 class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
     """
     """
-    def __init__(self, name_to_memref_ssa: Dict[str, ast.SsaId]) -> None:
+    def __init__(self, name_to_memref_ssa: Dict[str, ast.SsaId],
+            name_to_pt_expr: Dict[str, Array]) -> None:
         self.name_to_memeref_ssa = name_to_memref_ssa
+        self.name_to_pt_expr = name_to_pt_expr
         self.scalar_expr_to_ssa: Dict[scalar_expr.scalar_expr, ast.SsaId] = {}
 
     def map_subscript(self, expr: prim.Subscript,
@@ -103,15 +105,33 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
         if expr in self.scalar_expr_to_ssa:
             return self.scalar_expr_to_ssa[expr]
 
-        # 1. build an affine map corresponding to the indexing access
-        # 2. using the affine map to register the trait for the linalg generic.
-        #   - make sure to add the trait at 0-th position
-        # 3. Insert a block arg at the 0-th position
-        # 4. That's your SSA ID, put it into "result".
+        pt_array = self.name_to_pt_expr[expr.aggregate.name]
+        mref_type = builder.MemRefType(shape=pt_array.shape,
+                dtype=np_dtype_to_mlir_dtype(pt_array.dtype))
+
+        # {{{ build the affine map
+
+        from pymbolic.mapper.evaluator import evaluate
+
+        dims = [f"_{i}" for i in range(len(expr.index_tuple))]
+
+        if scalar_expr.get_dependencies(expr.index_tuple) >= dims:
+            raise NotImplementedError("only pure indices as dependencies"
+                    " allowed for now.")
+
+        multi_dim_affine_expr = evaluate(expr.index_tuple, {
+            f"_{i}": builder.make_affine_dim_or_symbol(f"_{i}")
+            for i in range(len(expr.index_tuple))})
+
+        result = builder.linalg_generic_add_in(self.lgen,
+                self.name_to_memref_ssa[expr.aggregate.name],
+                mref_type,
+                builder.make_affine_map(multi_dim_affine_expr, dims))
+
+        # }}}
 
         self.scalar_expr_to_ssa[expr] = result
 
-        pt_array = ...
         return result, pt_array.dtype
 
     def map_constant(self, expr: Number, lgen: ast.dialects.linalg.LinalgGenericOp,
@@ -224,17 +244,18 @@ def generate_mlir(
             # }}}
 
             pymbolic_expr = Pymbolicifier()(expr)
-            with state.builder.linalg_generic() as lgen:
+            lgen = state.builder.linalg_generic(["parallel"]*expr.ndim)
+            state.builder.add_outs(arg, mref_type)
+
+            with state.builder.goto_bock(state.builder.make_block(lgen.region)):
                 # TODO: This should also be cleaned (referring to mref_dtype
                 # multiple times isn't ideal)
                 state.builder.add_linalg_generic_outs(lgen, [arg], [mref_type])
-
-                with state.builder.goto_bock(state.builder.make_block(lgen.region)):
-                    result_ssa = LinalgGenericBlockWriter(
-                            state.pymbolic_name_to_ssa)(pymbolic_expr,
-                                                        state.builder,
-                                                        lgen)
-                    state.builder.linalg_yield(result_ssa)
+                result_ssa = LinalgGenericBlockWriter(
+                        state.pymbolic_name_to_ssa)(pymbolic_expr,
+                                                    state.builder,
+                                                    lgen)
+                state.builder.linalg_yield(result_ssa)
 
         state.builder.ret()
 
