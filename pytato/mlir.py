@@ -142,16 +142,17 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
     def map_constant(self, expr: Number,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         dtype = np.array(expr).dtype
+        mlir_type = np_dtype_to_mlir_dtype(dtype)
         if dtype.kind == "f":
-            result = state.builder.float_constant(expr, dtype)
+            result = state.builder.float_constant(expr, mlir_type)
         elif dtype.kind == "i":
-            result = state.builder.float_constant(expr, dtype)
+            result = state.builder.float_constant(expr, mlir_type)
         else:
             raise NotImplementedError(f"{dtype}")
 
         return result, dtype
 
-    def map_sum(self, expr: prim.Sum,
+    def map_sum(self, expr: prim.Add,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         def add_values_in_ssa(ssa1: ast.SsaId, dtype1: np.dtype,
                 ssa2: ast.SsaId, dtype2: np.dtype):
@@ -170,8 +171,8 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
 
             return result, res_dtype
 
-        return reduce(add_values_in_ssa,
-                      (self.rec(child) for child in expr.children))
+        return reduce(lambda x, y: add_values_in_ssa(*x, *y),
+                      (self.rec(child, state) for child in expr.children))
 
     def map_product(self, expr: prim.Add,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
