@@ -22,9 +22,9 @@ def np_dtype_to_mlir_dtype(dtype: np.dtype):
     elif dtype == np.float32:
         return IRBuilder.F32
     elif dtype == np.int32:
-        return IRBuilder.I32
+        return IRBuilder.INT32
     elif dtype == np.int64:
-        return IRBuilder.I64
+        return IRBuilder.INT64
     else:
         raise NotImplementedError("No mapping known for type {dtype}.")
 
@@ -42,7 +42,15 @@ class CodeGenState:
     module: ast.Module
     function: ast.Function
     namespace: Namespace
-    expr_to_ssa: Mapping[Array, ast.SsaId]
+    expr_to_pymbolic_name: Mapping[Array, str]
+    pymbolic_name_to_ssa: Mapping[str, ast.SsaId]
+
+    def pymbolic_name_to_expr(self, name: str) -> Array:
+        try:
+            return next(iter(key for key, val in self.expr_to_pymbolic_name.items()
+                             if val == name))
+        except StopIteration:
+            raise ValueError(f"Unknown pymbolic name '{name}'")
 
 
 def get_initial_codegen_state(namespace) -> CodeGenState:
@@ -52,7 +60,7 @@ def get_initial_codegen_state(namespace) -> CodeGenState:
     with builder.goto_block(builder.make_block(module.region)):
         fn = builder.function("_pt_kernel")
 
-    return CodeGenState(builder, mlir_file, module, fn, namespace, {})
+    return CodeGenState(builder, mlir_file, module, fn, namespace, {}, {})
 
 
 class BoundMLIRProgram(BoundProgram):
@@ -93,20 +101,17 @@ class Pymbolicifier(Mapper):
 class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
     """
     """
-    def __init__(self, name_to_memref_ssa: Dict[str, ast.SsaId],
-            name_to_pt_expr: Dict[str, Array]) -> None:
-        self.name_to_memeref_ssa = name_to_memref_ssa
-        self.name_to_pt_expr = name_to_pt_expr
+    def __init__(self, lgen: ast.dialects.linalg.LinalgGeneric) -> None:
+        self.lgen = lgen
         self.scalar_expr_to_ssa: Dict[scalar_expr.scalar_expr, ast.SsaId] = {}
 
     def map_subscript(self, expr: prim.Subscript,
-            lgen: ast.dialects.linalg.LinalgGenericOp,
-            builder: IRBuilder) -> ast.SsaId:
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         if expr in self.scalar_expr_to_ssa:
             return self.scalar_expr_to_ssa[expr]
 
-        pt_array = self.name_to_pt_expr[expr.aggregate.name]
-        mref_type = builder.MemRefType(shape=pt_array.shape,
+        pt_array = state.pymbolic_name_to_expr(expr.aggregate.name)
+        mref_type = state.builder.MemRefType(shape=pt_array.shape,
                 dtype=np_dtype_to_mlir_dtype(pt_array.dtype))
 
         # {{{ build the affine map
@@ -115,18 +120,18 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
 
         dims = [f"_{i}" for i in range(len(expr.index_tuple))]
 
-        if scalar_expr.get_dependencies(expr.index_tuple) >= dims:
+        if scalar_expr.get_dependencies(expr.index_tuple) > set(dims):
             raise NotImplementedError("only pure indices as dependencies"
                     " allowed for now.")
 
         multi_dim_affine_expr = evaluate(expr.index_tuple, {
-            f"_{i}": builder.make_affine_dim_or_symbol(f"_{i}")
+            f"_{i}": state.builder.make_affine_dim(f"_{i}")
             for i in range(len(expr.index_tuple))})
 
-        result = builder.linalg_generic_add_in(self.lgen,
-                self.name_to_memref_ssa[expr.aggregate.name],
+        result = state.builder.linalg_generic_add_in(self.lgen,
+                state.pymbolic_name_to_ssa[expr.aggregate.name],
                 mref_type,
-                builder.make_affine_map(multi_dim_affine_expr, dims))
+                state.builder.make_affine_map(multi_dim_affine_expr, dims))
 
         # }}}
 
@@ -134,21 +139,20 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
 
         return result, pt_array.dtype
 
-    def map_constant(self, expr: Number, lgen: ast.dialects.linalg.LinalgGenericOp,
-            builder: IRBuilder) -> Tuple[ast.SsaId, np.dtype]:
+    def map_constant(self, expr: Number,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         dtype = np.array(expr).dtype
         if dtype.kind == "f":
-            result = builder.float_constant(expr, dtype)
+            result = state.builder.float_constant(expr, dtype)
         elif dtype.kind == "i":
-            result = builder.float_constant(expr, dtype)
+            result = state.builder.float_constant(expr, dtype)
         else:
             raise NotImplementedError(f"{dtype}")
 
         return result, dtype
 
-    def map_sum(self, expr: prim.Add,
-            lgen: ast.dialects.linalg.LinalgGenericOp,
-            builder: IRBuilder) -> ast.SsaId:
+    def map_sum(self, expr: prim.Sum,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         def add_values_in_ssa(ssa1: ast.SsaId, dtype1: np.dtype,
                 ssa2: ast.SsaId, dtype2: np.dtype):
             res_dtype = (
@@ -156,9 +160,11 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
                     + np.empty(0, dtype=dtype2)
                     ).dtype
             if res_dtype.kind == "f":
-                result = builder.addf(ssa1, ssa2, np_dtype_to_mlir_dtype(res_dtype))
+                result = state.builder.addf(ssa1, ssa2,
+                        np_dtype_to_mlir_dtype(res_dtype))
             elif res_dtype.kind == "i":
-                result = builder.addi(ssa1, ssa2, np_dtype_to_mlir_dtype(res_dtype))
+                result = state.builder.addi(ssa1, ssa2,
+                        np_dtype_to_mlir_dtype(res_dtype))
             else:
                 raise NotImplementedError(f"{res_dtype}")
 
@@ -167,9 +173,8 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
         return reduce(add_values_in_ssa,
                       (self.rec(child) for child in expr.children))
 
-    def map_prod(self, expr: prim.Add,
-            lgen: ast.dialects.linalg.LinalgGenericOp,
-            builder: IRBuilder) -> ast.SsaId:
+    def map_product(self, expr: prim.Add,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         def mult_values_in_ssa(ssa1: ast.SsaId, dtype1: np.dtype,
                 ssa2: ast.SsaId, dtype2: np.dtype):
             res_dtype = (
@@ -177,16 +182,18 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
                     * np.empty(0, dtype=dtype2)
                     ).dtype
             if res_dtype.kind == "f":
-                result = builder.mulf(ssa1, ssa2, np_dtype_to_mlir_dtype(res_dtype))
+                result = state.builder.mulf(ssa1, ssa2,
+                        np_dtype_to_mlir_dtype(res_dtype))
             elif res_dtype.kind == "i":
-                result = builder.muli(ssa1, ssa2, np_dtype_to_mlir_dtype(res_dtype))
+                result = state.builder.muli(ssa1, ssa2,
+                        np_dtype_to_mlir_dtype(res_dtype))
             else:
                 raise NotImplementedError(f"{res_dtype}")
 
             return result, res_dtype
 
-        return reduce(mult_values_in_ssa,
-                      (self.rec(child) for child in expr.children))
+        return reduce(lambda x, y: mult_values_in_ssa(*x, *y),
+                      (self.rec(child, state) for child in expr.children))
 
 
 def generate_mlir(
@@ -220,7 +227,7 @@ def generate_mlir(
                                                    [mref_type],
                                                    [val.name])
             state.expr_to_pymbolic_name[val] = name
-            state.pymbolic_name_to_ssa[val] = arg
+            state.pymbolic_name_to_ssa[name] = arg
         else:
             assert isinstance(val, InputArgumentBase)
             raise NotImplementedError(f"Not implemented for type {type(val)}.")
@@ -238,26 +245,27 @@ def generate_mlir(
             arg, = state.builder.add_function_args(state.function,
                                                    [mref_type],
                                                    [name])
-            state.expr_to_pymbolic_name[val] = name
-            state.pymbolic_name_to_ssa[val] = arg
-
             # }}}
 
-            pymbolic_expr = Pymbolicifier()(expr)
+            pymbolic_expr = Pymbolicifier(state.expr_to_pymbolic_name)(expr)
             lgen = state.builder.linalg_generic(["parallel"]*expr.ndim)
-            state.builder.add_outs(arg, mref_type)
 
-            with state.builder.goto_bock(state.builder.make_block(lgen.region)):
+            with state.builder.goto_block(state.builder.make_block(lgen.region)):
                 # TODO: This should also be cleaned (referring to mref_dtype
                 # multiple times isn't ideal)
-                state.builder.add_linalg_generic_outs(lgen, [arg], [mref_type])
-                result_ssa = LinalgGenericBlockWriter(
-                        state.pymbolic_name_to_ssa)(pymbolic_expr,
-                                                    state.builder,
-                                                    lgen)
-                state.builder.linalg_yield(result_ssa)
+                state.builder.linalg_generic_add_out(lgen, arg, mref_type,
+                        state.builder.make_identity_map(expr.ndim))
+                ssa, dtype = LinalgGenericBlockWriter(lgen)(pymbolic_expr, state)
+                state.builder.linalg_yield(ssa, np_dtype_to_mlir_dtype(dtype))
+
+            state.expr_to_pymbolic_name[expr] = name
+            state.pymbolic_name_to_ssa[name] = arg
 
         state.builder.ret()
+
+
+    print(state.file.dump())
+    1/0
 
     return BoundMLIRProgram(state.builder.file, preproc_result.bound_arguments)
 
