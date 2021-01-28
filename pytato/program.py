@@ -90,6 +90,10 @@ class BoundPyOpenCLProgram(BoundProgram):
         if not self.queue:
             raise ValueError("queue must be specified")
 
+        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+            raise ValueError("Got arguments that were previously bound: "
+                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+
         updated_kwargs = dict(self.bound_arguments)
         updated_kwargs.update(kwargs)
         return self.program(self.queue, *args, **updated_kwargs)

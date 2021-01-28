@@ -518,6 +518,17 @@ def test_full_zeros_ones(ctx_factory, dtype):
     assert (t == 2).all()
 
 
+def test_passsing_bound_arguments_raises(ctx_factory):
+    queue = cl.CommandQueue(ctx_factory())
+
+    ns = pt.Namespace()
+    x = pt.make_data_wrapper(ns, np.ones(10), name="x")
+    prg = pt.generate_loopy(42*x, pt.PyOpenCLTarget(queue))
+
+    with pytest.raises(ValueError):
+        evt, (out2,) = prg(x=np.random.rand(10))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
