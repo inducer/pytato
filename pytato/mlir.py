@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 import mlir.astnodes as ast
 from mlir.builder import IRBuilder
-from typing import Union, Mapping, Any, Dict, Tuple
+from typing import Union, Mapping, Any, Dict, Tuple, List
 from pytato.array import (Array, DictOfNamedArrays, Namespace, InputArgumentBase,
-        SizeParam, Placeholder, IndexLambda)
+        SizeParam, Placeholder, IndexLambda, DataInterface)
 from dataclasses import dataclass
 import pytato.scalar_expr as scalar_expr
 from pytato.codegen import normalize_outputs, preprocess
@@ -29,10 +29,31 @@ def np_dtype_to_mlir_dtype(dtype: np.dtype):
         raise NotImplementedError("No mapping known for type {dtype}.")
 
 
+# {{{ FIXME: remove after github.com/inducer/pytato/pull/20 is merged
+
+class NamedArray(Array):
+    def __init__(self, name, shape, dtype):
+        super().__init__(frozenset())
+        self.name = name
+        self._shape = shape
+        self._dtype = dtype
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+# }}}
+
+
 @dataclass
 class BoundProgram:
     program: ast.MLIRFile
     bound_arguments: Mapping[str, Any]
+    options: List[str]
 
 
 @dataclass
@@ -44,6 +65,7 @@ class CodeGenState:
     namespace: Namespace
     expr_to_pymbolic_name: Mapping[Array, str]
     pymbolic_name_to_ssa: Mapping[str, ast.SsaId]
+    arguments: List[str]
 
     def pymbolic_name_to_expr(self, name: str) -> Array:
         try:
@@ -60,12 +82,59 @@ def get_initial_codegen_state(namespace) -> CodeGenState:
     with builder.goto_block(builder.make_block(module.region)):
         fn = builder.function("_pt_kernel")
 
-    return CodeGenState(builder, mlir_file, module, fn, namespace, {}, {})
+    return CodeGenState(builder, mlir_file, module, fn, namespace, {}, {}, [])
 
 
+@dataclass
 class BoundMLIRProgram(BoundProgram):
-    def __call__(self, *arg: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError()
+    arguments: List[Union[Placeholder, NamedArray]]
+
+    def __call__(self, **kwargs: DataInterface) -> Any:
+        args_to_mlir_knl = []
+        return_dict = {}
+
+        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+            raise ValueError("Got arguments that were previously bound: "
+                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+
+        updated_kwargs = self.bound_arguments.copy()
+        updated_kwargs.update(kwargs)
+
+        for pt_ary in self.arguments:
+            if isinstance(pt_ary, Placeholder):
+                # FIXME: Need to do some type, shape checking
+                if pt_ary.name not in updated_kwargs:
+                    raise ValueError(f"Argument '{pt_ary.name}' not provided.")
+
+                if not isinstance(updated_kwargs[pt_ary.name], np.ndarray):
+                    raise TypeError("BoundMLIRProgram.__call__ expects a numpy"
+                        f" array as argument for '{pt_ary.name}', got"
+                        f"'{type(updated_kwargs[pt_ary.name])}.'")
+
+                args_to_mlir_knl.append(updated_kwargs[pt_ary.name])
+            else:
+                assert isinstance(pt_ary, NamedArray)
+                if pt_ary.name in updated_kwargs:
+                    # FIXME: Need to do some type, shape checking
+                    args_to_mlir_knl.append(updated_kwargs[pt_ary.name])
+                else:
+                    # user didn't provide the address for the array => create own.
+                    empty_ary = np.empty(dtype=pt_ary.dtype, shape=pt_ary.shape)
+                    args_to_mlir_knl.append(empty_ary)
+                    return_dict[pt_ary.name] = empty_ary
+
+        from mlir.run import mlir_opt, call_function
+        source = mlir_opt(self.program.dump(), self.options)
+        call_function(source, "_pt_kernel", args_to_mlir_knl)
+        return return_dict
+
+
+"""
+    .. attribute:: arguments
+
+        ith entry in the list corresponds to the pytato array name of the ith
+        argument of the built MLIR function.
+"""
 
 
 class IndexLambdaSubstitutor(scalar_expr.IdentityMapper):
@@ -198,7 +267,9 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
 
 
 def generate_mlir(
-        result: Union[Array, DictOfNamedArrays, Dict[str, Array]]) -> BoundProgram:
+        result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
+        options: List[str] = ["-convert-linalg-to-loops",
+                              "-convert-scf-to-std"]) -> BoundProgram:
     r"""Code generation entry point.
 
     :param result: Outputs of the computation.
@@ -229,6 +300,7 @@ def generate_mlir(
                                                    [val.name])
             state.expr_to_pymbolic_name[val] = name
             state.pymbolic_name_to_ssa[name] = arg
+            state.arguments.append(val)
         else:
             assert isinstance(val, InputArgumentBase)
             raise NotImplementedError(f"Not implemented for type {type(val)}.")
@@ -246,6 +318,8 @@ def generate_mlir(
             arg, = state.builder.add_function_args(state.function,
                                                    [mref_type],
                                                    [name])
+            state.arguments.append(NamedArray(name=name, shape=expr.shape,
+                dtype=expr.dtype))
             # }}}
 
             pymbolic_expr = Pymbolicifier(state.expr_to_pymbolic_name)(expr)
@@ -264,11 +338,9 @@ def generate_mlir(
 
         state.builder.ret()
 
-
-    print(state.file.dump())
-    1/0
-
-    return BoundMLIRProgram(state.builder.file, preproc_result.bound_arguments)
+    return BoundMLIRProgram(state.file,
+            preproc_result.bound_arguments,
+            options, state.arguments)
 
 
 # vim: fdm=marker
