@@ -12,7 +12,7 @@ from pytato.codegen import normalize_outputs, preprocess
 from pytato.transform import Mapper
 import pymbolic.primitives as prim
 from pymbolic.mapper.substitutor import make_subst_func
-from functools import reduce
+from functools import reduce, partialmethod
 from numbers import Number
 from pytato.program import BoundProgram
 
@@ -219,12 +219,15 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
                 mref_type,
                 state.builder.make_affine_map(multi_dim_affine_expr, dims))
 
-        self.scalar_expr_to_ssa[expr] = result
+        self.scalar_expr_to_ssa[expr] = result, pt_array.dtype
 
         return result, pt_array.dtype
 
     def map_constant(self, expr: Number,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
+        if expr in self.scalar_expr_to_ssa:
+            return self.scalar_expr_to_ssa[expr]
+
         dtype = np.array(expr).dtype
         mlir_type = np_dtype_to_mlir_dtype(dtype)
         if dtype.kind == "f":
@@ -234,51 +237,47 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
         else:
             raise NotImplementedError(f"{dtype}")
 
+        self.scalar_expr_to_ssa[expr] = result, dtype
         return result, dtype
 
-    def map_sum(self, expr: prim.Add,
-            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
-        def add_values_in_ssa(ssa1: ast.SsaId, dtype1: np.dtype,
+    def _map_binary_op(self, expr: scalar_expr.scalar_expr,
+                       state: CodeGenState,
+                       scalar_op_int_method: str,
+                       scalar_op_float_method: str) -> Tuple[ast.SsaId, np.dtype]:
+
+        if expr in self.scalar_expr_to_ssa:
+            return self.scalar_expr_to_ssa[expr]
+
+        def emit_binary_op(ssa1: ast.SsaId, dtype1: np.dtype,
                 ssa2: ast.SsaId, dtype2: np.dtype):
             res_dtype = (
                     np.empty(0, dtype=dtype1)
                     + np.empty(0, dtype=dtype2)
                     ).dtype
-            if res_dtype.kind == "f":
-                result = state.builder.addf(ssa1, ssa2,
-                        np_dtype_to_mlir_dtype(res_dtype))
-            elif res_dtype.kind == "i":
-                result = state.builder.addi(ssa1, ssa2,
-                        np_dtype_to_mlir_dtype(res_dtype))
+            if res_dtype.kind == "i":
+                op = getattr(state.builder, scalar_op_int_method)
+            elif res_dtype.kind == "f":
+                op = getattr(state.builder, scalar_op_float_method)
             else:
                 raise NotImplementedError(f"{res_dtype}")
 
-            return result, res_dtype
-
-        return reduce(lambda x, y: add_values_in_ssa(*x, *y),
-                      (self.rec(child, state) for child in expr.children))
-
-    def map_product(self, expr: prim.Add,
-            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
-        def mult_values_in_ssa(ssa1: ast.SsaId, dtype1: np.dtype,
-                ssa2: ast.SsaId, dtype2: np.dtype):
-            res_dtype = (
-                    np.empty(0, dtype=dtype1)
-                    * np.empty(0, dtype=dtype2)
-                    ).dtype
-            if res_dtype.kind == "f":
-                result = state.builder.mulf(ssa1, ssa2,
-                        np_dtype_to_mlir_dtype(res_dtype))
-            elif res_dtype.kind == "i":
-                result = state.builder.muli(ssa1, ssa2,
-                        np_dtype_to_mlir_dtype(res_dtype))
-            else:
-                raise NotImplementedError(f"{res_dtype}")
+            ssa1 = astype(state.builder, ssa1, dtype1, res_dtype)
+            ssa2 = astype(state.builder, ssa2, dtype2, res_dtype)
+            result = op(ssa1, ssa2, np_dtype_to_mlir_dtype(res_dtype))
 
             return result, res_dtype
 
-        return reduce(lambda x, y: mult_values_in_ssa(*x, *y),
+        result = reduce(lambda x, y: emit_binary_op(*x, *y),
                       (self.rec(child, state) for child in expr.children))
+
+        self.scalar_expr_to_ssa[expr] = result
+
+        return result
+
+    map_sum = partialmethod(_map_binary_op, scalar_op_int_method="addi",
+            scalar_op_float_method="addf")
+    map_product = partialmethod(_map_binary_op, scalar_op_int_method="muli",
+            scalar_op_float_method="mulf")
 
 
 # {{{ builder helpers
@@ -329,6 +328,20 @@ def build_linalg_generic(state: CodeGenState,
                 )
         ssa, dtype = LinalgGenericBlockWriter(lgen)(pym_expr, state)
         state.builder.linalg_yield(ssa, np_dtype_to_mlir_dtype(dtype))
+
+
+def astype(builder, src_ssa: ast.SsaId,
+           src_type: np.dtype,
+           dst_type: np.dtype) -> ast.SsaId:
+    if src_type == dst_type:
+        return src_ssa
+
+    if src_type.kind == "i":
+        if dst_type.kind == "f":
+            return builder.sitofp(src_ssa, np_dtype_to_mlir_dtype(src_type),
+                    np_dtype_to_mlir_dtype(dst_type))
+
+    raise NotImplementedError(f"{src_type} -> {dst_type}: type-cast not implemented")
 
 # }}}
 
