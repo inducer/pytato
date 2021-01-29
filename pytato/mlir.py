@@ -126,9 +126,9 @@ class IndexLambdaSubstitutor(scalar_expr.IdentityMapper):
 
     ::
         >>> bindings = {"in": scalar_expr.parse("x[_1 + 7, _0] + y[_0, _1]")}
-        >>> input_expr = scalar_expr.parse("in[_1 + 3, _0] + 1")
+        >>> input_expr = scalar_expr.parse("in[_1 + 3, _0] + 17")
         >>> print(IndexLambdaSubstitutor(bindings)(input_expr))
-        >>> x[_0 + 7, _1 + 3] + y[_1 + 3, _0]
+        >>> x[_0 + 7, _1 + 3] + y[_1 + 3, _0] + 17
     """
     def __init__(self, bindings: Mapping[str, scalar_expr.scalar_expr]) -> None:
         self.bindings = bindings
