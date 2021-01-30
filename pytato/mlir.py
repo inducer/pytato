@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 import numpy as np
 import mlir.astnodes as ast
 from mlir.builder import IRBuilder
@@ -13,7 +14,6 @@ from pytato.transform import Mapper
 import pymbolic.primitives as prim
 from pymbolic.mapper.substitutor import make_subst_func
 from functools import reduce, partialmethod
-from numbers import Number
 from pytato.program import BoundProgram
 
 
@@ -223,7 +223,7 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
 
         return result, pt_array.dtype
 
-    def map_constant(self, expr: Number,
+    def map_constant(self, expr: numbers.Number,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
         if expr in self.scalar_expr_to_ssa:
             return self.scalar_expr_to_ssa[expr]
@@ -296,7 +296,9 @@ def np_dtype_to_mlir_dtype(dtype: np.dtype):
 
 
 def to_memref_type(expr: Array):
-    return IRBuilder.MemRefType(shape=expr.shape,
+    shape = [dim if isinstance(dim, numbers.Integral) else None
+             for dim in expr.shape]
+    return IRBuilder.MemRefType(shape=shape,
             dtype=np_dtype_to_mlir_dtype(expr.dtype))
 
 
@@ -369,14 +371,13 @@ def generate_mlir(
     for name, val in sorted(namespace.items(),
                             key=lambda x: x[0]  # lexicographic order of names
                             ):
-        if isinstance(val, SizeParam):
-            raise ValueError("SizeParams requires Pytato to have a shape inference"
-                    " engine of its own")
-        elif isinstance(val, Placeholder):
-            assert all(isinstance(dim, int) for dim in val.shape)
+        if isinstance(val, Placeholder):
             arg = add_function_arg(state, val)
             state.expr_to_pymbolic_name[val] = name
             state.pymbolic_name_to_ssa[name] = arg
+        elif isinstance(val, SizeParam):
+            # do nothing for size params
+            pass
         else:
             raise NotImplementedError(f"Not implemented for type {type(val)}.")
 
