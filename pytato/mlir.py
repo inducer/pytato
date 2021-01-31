@@ -3,10 +3,11 @@ from __future__ import annotations
 import numbers
 import numpy as np
 import mlir.astnodes as ast
+import islpy as isl
 from mlir.builder import IRBuilder
-from typing import Union, Mapping, Any, Dict, Tuple, List
+from typing import Union, Mapping, Any, Dict, Tuple, List, FrozenSet
 from pytato.array import (Array, DictOfNamedArrays, Namespace,
-        SizeParam, Placeholder, IndexLambda, DataInterface)
+        SizeParam, Placeholder, IndexLambda, DataInterface, InputArgumentBase)
 from dataclasses import dataclass
 import pytato.scalar_expr as scalar_expr
 from pytato.codegen import normalize_outputs, preprocess
@@ -15,6 +16,7 @@ import pymbolic.primitives as prim
 from pymbolic.mapper.substitutor import make_subst_func
 from functools import reduce, partialmethod
 from pytato.program import BoundProgram
+from loopy.symbolic import isl_set_from_expr
 
 
 # {{{ FIXME: remove after github.com/inducer/pytato/pull/20 is merged
@@ -38,14 +40,30 @@ class NamedArray(Array):
 
 
 @dataclass
+class DimOperation(prim.Expression):
+    array_name: str
+    axis: int
+
+    def __str__(self):
+        return f"dim({self.array_name}, {self.axis})"
+
+    def __hash__(self):
+        return hash((self.array_name, self.axis))
+
+    mapper_method = "map_dim_op"
+
+
+@dataclass
 class CodeGenState:
     builder: IRBuilder
     file: ast.MLIRFile
     module: ast.Module
     function: ast.Function
     namespace: Namespace
+    size_param_array_dim_bset: isl.BasicSet
     expr_to_pymbolic_name: Mapping[Array, str]
     pymbolic_name_to_ssa: Mapping[str, ast.SsaId]
+
     arguments: List[str]
 
     def pymbolic_name_to_expr(self, name: str) -> Array:
@@ -56,14 +74,15 @@ class CodeGenState:
             raise ValueError(f"Unknown pymbolic name '{name}'")
 
 
-def get_initial_codegen_state(namespace) -> CodeGenState:
+def get_initial_codegen_state(namespace: Namespace) -> CodeGenState:
     builder = IRBuilder()
     mlir_file = builder.make_mlir_file()
     module = mlir_file.module
     with builder.goto_block(builder.make_block(module.region)):
         fn = builder.function("_pt_kernel")
 
-    return CodeGenState(builder, mlir_file, module, fn, namespace, {}, {}, [])
+    bset = get_size_param_array_dim_basic_set(namespace)
+    return CodeGenState(builder, mlir_file, module, fn, namespace, bset, {}, {}, [])
 
 
 @dataclass
@@ -130,7 +149,7 @@ class IndexLambdaSubstitutor(scalar_expr.IdentityMapper):
         >>> print(IndexLambdaSubstitutor(bindings)(input_expr))
         >>> x[_0 + 7, _1 + 3] + y[_1 + 3, _0] + 17
     """
-    def __init__(self, bindings: Mapping[str, scalar_expr.scalar_expr]) -> None:
+    def __init__(self, bindings: Mapping[str, scalar_expr.ScalarExpression]) -> None:
         self.bindings = bindings
 
     def map_subscript(self, expr: prim.Subscript):
@@ -138,6 +157,12 @@ class IndexLambdaSubstitutor(scalar_expr.IdentityMapper):
                    for i, idx in enumerate(expr.index_tuple)}
         subst_mapper = scalar_expr.SubstitutionMapper(make_subst_func(idx_map))
         return subst_mapper(self.bindings[expr.aggregate.name])
+
+    def map_variable(self, expr: prim.Variable):
+        try:
+            return self.bindings[expr.name]
+        except KeyError:
+            return expr
 
 
 class Pymbolicifier(Mapper):
@@ -174,54 +199,21 @@ class Pymbolicifier(Mapper):
         return prim.Subscript(prim.Variable(expr.name), tuple(prim.Variable(f"_{i}")
             for i in range(expr.ndim)))
 
+    def map_size_param(self, expr: SizeParam):
+        return prim.Variable(self.expr_to_pymbolic_name[expr])
 
-class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
-    """
-    Maps an indexed expression, with ``_0, _1, ...`` as the indices,
-    to a :class:`mlir.dialects.linalg.LinalgGeneric` for it.
 
-    :attribute lgen: The linalg generic operation being built. Updated during mapper
-        method calls.
-    :attribute scalar_expr_to_ssa: A mapping from scalar expression to it's ssa id
-        and dtype in the region of the block.
+class ScalarExpressionBlockWriter(scalar_expr.IdentityMapper):
     """
-    def __init__(self, lgen: ast.dialects.linalg.LinalgGeneric) -> None:
-        self.lgen = lgen
-        self.scalar_expr_to_ssa: Dict[scalar_expr.scalar_expr,
+    Maps a scalar expression to the mlir ops.
+
+    .. note::
+
+        Cannot handle indexed expressions.
+    """
+    def __init__(self) -> None:
+        self.scalar_expr_to_ssa: Dict[scalar_expr.ScalarExpression,
                                       Tuple[ast.SsaId, np.dtype]] = {}
-
-    def map_subscript(self, expr: prim.Subscript,
-            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
-        if expr in self.scalar_expr_to_ssa:
-            return self.scalar_expr_to_ssa[expr]
-
-        pt_array = state.pymbolic_name_to_expr(expr.aggregate.name)
-        mref_type = to_memref_type(pt_array)
-
-        # {{{ build the affine map
-
-        from pymbolic.mapper.evaluator import evaluate
-
-        dims = [f"_{i}" for i in range(len(expr.index_tuple))]
-
-        if scalar_expr.get_dependencies(expr.index_tuple) > set(dims):
-            raise NotImplementedError("only pure indices as dependencies "
-                    "allowed for now.")
-
-        multi_dim_affine_expr = evaluate(expr.index_tuple, {
-            f"_{i}": state.builder.make_affine_dim(f"_{i}")
-            for i in range(len(expr.index_tuple))})
-
-        # }}}
-
-        result = state.builder.linalg_generic_add_in(self.lgen,
-                state.pymbolic_name_to_ssa[expr.aggregate.name],
-                mref_type,
-                state.builder.make_affine_map(multi_dim_affine_expr, dims))
-
-        self.scalar_expr_to_ssa[expr] = result, pt_array.dtype
-
-        return result, pt_array.dtype
 
     def map_constant(self, expr: numbers.Number,
             state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
@@ -240,7 +232,17 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
         self.scalar_expr_to_ssa[expr] = result, dtype
         return result, dtype
 
-    def _map_binary_op(self, expr: scalar_expr.scalar_expr,
+    def map_dim_op(self, expr: DimOperation,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
+        ary_ssa = state.pymbolic_name_to_ssa[expr.array_name]
+        idx_ssa = state.builder.index_constant(expr.axis)
+        result_as_idx = state.builder.dim(ary_ssa, idx_ssa,
+                to_memref_type(state.pymbolic_name_to_expr(expr.array_name)))
+        result_as_int = state.builder.index_cast(result_as_idx, state.builder.INDEX,
+                state.builder.INT64)
+        return result_as_int, np.dtype(np.intp)
+
+    def _map_binary_op(self, expr: scalar_expr.ScalarExpression,
                        state: CodeGenState,
                        scalar_op_int_method: str,
                        scalar_op_float_method: str) -> Tuple[ast.SsaId, np.dtype]:
@@ -280,6 +282,59 @@ class LinalgGenericBlockWriter(scalar_expr.IdentityMapper):
             scalar_op_float_method="mulf")
 
 
+class LinalgGenericBlockWriter(ScalarExpressionBlockWriter):
+    """
+    Maps an indexed expression, with ``_0, _1, ...`` as the indices,
+    to its corresponding :class:`mlir.dialects.linalg.LinalgGeneric`.
+
+    :attribute lgen: The linalg generic operation being built. Updated during mapper
+        method calls.
+    :attribute scalar_expr_to_ssa: A mapping from scalar expression to it's ssa id
+        and dtype in the region of the block.
+    """
+    def __init__(self, lgen: ast.dialects.linalg.LinalgGeneric) -> None:
+        super().__init__()
+        self.lgen = lgen
+
+    def map_subscript(self, expr: prim.Subscript,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
+        if expr in self.scalar_expr_to_ssa:
+            return self.scalar_expr_to_ssa[expr]
+
+        pt_array = state.pymbolic_name_to_expr(expr.aggregate.name)
+        mref_type = to_memref_type(pt_array)
+
+        # {{{ build the affine map
+
+        from pymbolic.mapper.evaluator import evaluate
+
+        dims = [f"_{i}" for i in range(len(expr.index_tuple))]
+
+        if scalar_expr.get_dependencies(expr.index_tuple) > set(dims):
+            raise NotImplementedError("only pure indices as dependencies "
+                    "allowed for now.")
+
+        multi_dim_affine_expr = evaluate(expr.index_tuple, {
+            f"_{i}": state.builder.make_affine_dim(f"_{i}")
+            for i in range(len(expr.index_tuple))})
+
+        # }}}
+
+        result = state.builder.linalg_generic_add_in(self.lgen,
+                state.pymbolic_name_to_ssa[expr.aggregate.name],
+                mref_type,
+                state.builder.make_affine_map(multi_dim_affine_expr, dims))
+
+        self.scalar_expr_to_ssa[expr] = result, pt_array.dtype
+
+        return result, pt_array.dtype
+
+    def map_variable(self, expr: prim.Variable,
+            state: CodeGenState) -> Tuple[ast.SsaId, np.dtype]:
+        pt_array = state.pymbolic_name_to_expr(expr.name)
+        return state.pymbolic_name_to_ssa[expr.name], pt_array.dtype
+
+
 # {{{ builder helpers
 
 def np_dtype_to_mlir_dtype(dtype: np.dtype):
@@ -314,9 +369,53 @@ def add_function_arg(state: CodeGenState, expr: Array) -> ast.SsaId:
     return arg
 
 
+def emit_size_param(state: CodeGenState, expr: SizeParam) -> ast.SsaId:
+    bset = state.size_param_array_dim_bset
+
+    # {{{ project out all other size params
+
+    for val in state.namespace.values():
+        if isinstance(val, SizeParam):
+            if val != expr:
+                dt, pos = bset.get_var_dict()[val.name]
+                bset = bset.project_out(dt, pos, 1)
+
+    # }}}
+
+    # get expr's dt, pos
+    dt, pos = bset.get_var_dict()[expr.name]
+
+    # grab one constraint having 'expr' terms
+    cnstrnt = next(iter(cnstrnt for cnstrnt in bset.get_constraints()
+        if expr.name in cnstrnt.get_coefficients_by_name()))
+
+    aff = cnstrnt.get_bound(dt, pos)
+
+    def aff_to_expr(aff):
+        denom = aff.get_denominator_val().to_python()
+
+        result = (aff.get_constant_val()*denom).to_python()
+        for dt in [isl.dim_type.in_, isl.dim_type.param]:
+            for i in range(aff.dim(dt)):
+                coeff = (aff.get_coefficient_val(dt, i)*denom).to_python()
+                if coeff:
+                    dim_id = aff.get_dim_id(dt, i)
+                    result += coeff*dim_id.user
+
+        for i in range(aff.dim(isl.dim_type.div)):
+            coeff = (aff.get_coefficient_val(isl.dim_type.div, i)*denom).to_python()
+            if coeff:
+                result += coeff*aff_to_expr(aff.get_div(i))
+
+        return result // denom
+
+    ssa, dtype = ScalarExpressionBlockWriter()(aff_to_expr(aff), state)
+    return ssa
+
+
 def build_linalg_generic(state: CodeGenState,
                          out_ssa: ast.SsaId,
-                         pym_expr: scalar_expr.scalar_expr,
+                         pym_expr: scalar_expr.ScalarExpression,
                          pt_expr: Array):
     """
     Adds a :class:`ast.dialects.linalg.LinalgGeneric`operation to *state*'s block.
@@ -348,6 +447,55 @@ def astype(builder, src_ssa: ast.SsaId,
 # }}}
 
 
+def get_size_param_array_dim_basic_set(namespace):
+    isl_ctx = isl.DEFAULT_CONTEXT
+
+    # {{{ add dims to the ISL set.
+
+    bset = isl.BasicSet.universe(isl.Space.set_alloc(isl_ctx, 0, 0))
+
+    for expr in namespace.values():
+        if isinstance(expr, Placeholder):
+            for iaxis in range(expr.ndim):
+                bset = bset.add_dims(isl.dim_type.set, 1)
+                dim_op = DimOperation(expr.name, iaxis)
+                bset = bset.set_dim_id(
+                        isl.dim_type.set,
+                        bset.dim(isl.dim_type.set)-1,
+                        isl.Id(context=isl_ctx, name=str(dim_op), user=dim_op))
+        elif isinstance(expr, SizeParam):
+            bset = bset.add_dims(isl.dim_type.set, 1)
+            bset = bset.set_dim_id(
+                    isl.dim_type.set,
+                    bset.dim(isl.dim_type.set)-1,
+                    isl.Id(context=isl_ctx, name=expr.name,
+                           user=prim.Variable(expr.name)))
+        else:
+            # The shape expressions only exert relations between the placeholders
+            # and the size params.
+            raise NotImplementedError(f"Not implemented for {type(expr)}")
+
+    # }}}
+
+    # {{{ add constraints to bset
+
+    # grab shape expressions from placeholder's axis lengths
+    for expr in namespace.values():
+        if isinstance(expr, Placeholder):
+            for iaxis in range(expr.ndim):
+                bset &= isl_set_from_expr(bset.get_space(),
+                        prim.Comparison(prim.Variable(str(DimOperation(expr.name,
+                                                                       iaxis))),
+                                        "==",
+                                        expr.shape[iaxis]))
+
+    # }}}
+
+    bset, = bset.get_basic_sets()
+
+    return bset
+
+
 def generate_mlir(
         result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         options: List[str] = ["-convert-linalg-to-loops",
@@ -361,27 +509,52 @@ def generate_mlir(
     del result
 
     preproc_result = preprocess(orig_outputs)
+
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
     namespace = outputs.namespace
 
+    # {{{ get all dependencies of 'output'
+
+    from pytato.transform import get_dependencies
+    # https://github.com/python/mypy/issues/2013
+    deps: FrozenSet[Array] = set().union(
+            *list(get_dependencies(outputs).values()))  # type: ignore
+    all_deps = frozenset([dep.name
+                            for dep in deps
+                            if isinstance(dep, InputArgumentBase)])
+
+    # }}}
+
     state = get_initial_codegen_state(namespace)
 
-    # Generate code for DAG's leaves
-    for name, val in sorted(namespace.items(),
-                            key=lambda x: x[0]  # lexicographic order of names
-                            ):
-        if isinstance(val, Placeholder):
-            arg = add_function_arg(state, val)
-            state.expr_to_pymbolic_name[val] = name
-            state.pymbolic_name_to_ssa[name] = arg
-        elif isinstance(val, SizeParam):
-            # do nothing for size params
-            pass
-        else:
-            raise NotImplementedError(f"Not implemented for type {type(val)}.")
-
     with state.builder.goto_block(state.builder.make_block(state.function.region)):
+        # {{{ register placeholders as function arguments
+
+        for name, val in sorted(namespace.items(),
+                                key=lambda x: x[0]  # lexicographic order of names
+                                ):
+            if isinstance(val, Placeholder):
+                arg = add_function_arg(state, val)
+                state.expr_to_pymbolic_name[val] = name
+                state.pymbolic_name_to_ssa[name] = arg
+
+        # }}}
+
+        # {{{ emit size params if needed
+
+        for name, val in sorted(namespace.items(),
+                                key=lambda x: x[0]  # lexicographic order of names
+                                ):
+            if isinstance(val, SizeParam):
+                # only emit size param if it is one of the dependencies
+                if val.name in all_deps:
+                    arg = emit_size_param(state, val)
+                    state.expr_to_pymbolic_name[val] = name
+                    state.pymbolic_name_to_ssa[name] = arg
+
+        # }}}
+
         for name in compute_order:
             expr = outputs[name]
 
