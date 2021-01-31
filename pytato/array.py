@@ -175,7 +175,8 @@ import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
 
-# Get a type variable that represents the type of '...'
+# {{{ get a type variable that represents the type of '...'
+
 # https://github.com/python/typing/issues/684#issuecomment-548203158
 if TYPE_CHECKING:
     from enum import Enum
@@ -186,6 +187,13 @@ if TYPE_CHECKING:
     Ellipsis = EllipsisType.Ellipsis
 else:
     EllipsisType = type(Ellipsis)
+
+# }}}
+
+if TYPE_CHECKING:
+    _dtype_any = np.dtype[Any]
+else:
+    _dtype_any = np.dtype
 
 
 # {{{ namespace
@@ -334,16 +342,16 @@ def normalize_shape(
 # {{{ array inteface
 
 SliceItem = Union[int, slice, None, EllipsisType]
-DtypeOrScalar = Union[np.dtype, Number]
+DtypeOrScalar = Union[_dtype_any, Number]
 
 
-def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype:
+def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
     dtype = np.result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     if dtype.kind in "iu":
-        return np.float64
+        return np.dtype(np.float64)
     else:
-        return dtype
+        return cast(_dtype_any, dtype)
 
 
 class Array(Taggable):
@@ -443,7 +451,7 @@ class Array(Taggable):
         return product(self.shape)
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
 
     def named(self, name: str) -> Array:
@@ -575,7 +583,7 @@ class Array(Taggable):
     def _binary_op(self,
             op: Any,
             other: Union[Array, Number],
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype] = np.result_type,  # noqa
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
         def add_indices(val: prim.Expression) -> prim.Expression:
@@ -665,7 +673,7 @@ class _SuppliedShapeAndDtypeMixin(object):
 
     def __init__(self,
             shape: ShapeType,
-            dtype: np.dtype,
+            dtype: np.dtype[Any],
             **kwargs: Any):
         # https://github.com/python/mypy/issues/5887
         super().__init__(**kwargs)  # type: ignore
@@ -677,7 +685,7 @@ class _SuppliedShapeAndDtypeMixin(object):
         return self._shape
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return self._dtype
 
 # }}}
@@ -807,7 +815,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             namespace: Namespace,
             expr: prim.Expression,
             shape: ShapeType,
-            dtype: np.dtype,
+            dtype: np.dtype[Any],
             bindings: Optional[Dict[str, Array]] = None,
             tags: TagsType = frozenset()):
 
@@ -915,8 +923,8 @@ class MatrixProduct(Array):
         assert False
 
     @property
-    def dtype(self) -> np.dtype:
-        return np.result_type(self.x1.dtype, self.x2.dtype)
+    def dtype(self) -> np.dtype[Any]:
+        return cast(_dtype_any, np.result_type(self.x1.dtype, self.x2.dtype))
 
 # }}}
 
@@ -952,8 +960,9 @@ class Stack(Array):
         return self.arrays[0].namespace
 
     @property
-    def dtype(self) -> np.dtype:
-        return np.result_type(*(arr.dtype for arr in self.arrays))
+    def dtype(self) -> np.dtype[Any]:
+        return cast(_dtype_any,
+                np.result_type(*(arr.dtype for arr in self.arrays)))
 
     @property
     def shape(self) -> ShapeType:
@@ -995,8 +1004,9 @@ class Concatenate(Array):
         return self.arrays[0].namespace
 
     @property
-    def dtype(self) -> np.dtype:
-        return np.result_type(*(arr.dtype for arr in self.arrays))
+    def dtype(self) -> np.dtype[Any]:
+        return cast(_dtype_any,
+                np.result_type(*(arr.dtype for arr in self.arrays)))
 
     @property
     def shape(self) -> ShapeType:
@@ -1045,7 +1055,7 @@ class IndexRemappingBase(Array):
         self.array = array
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return self.array.dtype
 
     @property
@@ -1255,7 +1265,7 @@ class DataInterface(Protocol):
     """
 
     shape: ShapeType
-    dtype: np.dtype
+    dtype: np.dtype[Any]
 
 
 class DataWrapper(InputArgumentBase):
@@ -1292,7 +1302,7 @@ class DataWrapper(InputArgumentBase):
         return self._shape
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
 # }}}
@@ -1314,7 +1324,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             namespace: Namespace,
             name: str,
             shape: ShapeType,
-            dtype: np.dtype,
+            dtype: np.dtype[Any],
             tags: TagsType = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
@@ -1342,7 +1352,7 @@ class SizeParam(InputArgumentBase):
         return ()
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
 
 # }}}
