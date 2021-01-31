@@ -37,3 +37,11 @@ Example::
 Pytato is licensed to you under the MIT/X Consortium license. See
 the `documentation <https://documen.tician.de/pytato/misc.html>`__
 for further details
+
+Numpy compatibility
+-------------------
+
+Pytato is written to pose no particular restrictions on the version of numpy
+used for execution. To use mypy-based type checking on Pytato itself or
+packages using Pytato, numpy 1.20 or newer is required, due to the
+typing-based changes to numpy in that release.
