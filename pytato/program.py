@@ -36,8 +36,6 @@ from dataclasses import dataclass
 import typing
 from typing import Any, Mapping, Optional
 
-import loopy
-
 if typing.TYPE_CHECKING:
     # Imports skipped for efficiency.  FIXME: Neither of these work as type
     # stubs are not present. Types are here only as documentation.
@@ -52,11 +50,8 @@ class BoundProgram:
 
     .. attribute:: program
 
-        The underlying :class:`loopy.LoopKernel`.
-
-    .. attribute:: target
-
-       The code generation target.
+        Encapsulates the generated program. *program*'s type depends
+        on the subclass.
 
     .. attribute:: bound_arguments
 
@@ -65,9 +60,8 @@ class BoundProgram:
     .. automethod:: __call__
     """
 
-    program: "loopy.LoopKernel"
+    program: Any
     bound_arguments: Mapping[str, Any]
-    target: "pytato.target.Target"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -77,12 +71,17 @@ class BoundProgram:
 class BoundPyOpenCLProgram(BoundProgram):
     """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
 
+    .. attribute:: target
+
+       The code generation target.
+
     .. attribute:: queue
 
         A :mod:`pyopencl` command queue.
 
     .. automethod:: __call__
     """
+    target: "pytato.target.Target"
     queue: Optional["pyopencl.CommandQueue"]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
