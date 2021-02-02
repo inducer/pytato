@@ -5,7 +5,7 @@ import numpy as np
 import mlir.astnodes as ast
 import islpy as isl
 from mlir.builder import IRBuilder
-from typing import Union, Mapping, Any, Dict, Tuple, List, FrozenSet
+from typing import Union, Mapping, Any, Dict, Tuple, List, FrozenSet, Set
 from pytato.array import (Array, DictOfNamedArrays, Namespace,
         SizeParam, Placeholder, IndexLambda, DataInterface, InputArgumentBase)
 from dataclasses import dataclass
@@ -17,6 +17,8 @@ from pymbolic.mapper.substitutor import make_subst_func
 from functools import reduce, partialmethod
 from pytato.program import BoundProgram
 from loopy.symbolic import isl_set_from_expr
+from pytools import memoize_method
+from pyrsistent import pmap
 
 
 # {{{ FIXME: remove after github.com/inducer/pytato/pull/20 is merged
@@ -63,8 +65,8 @@ class CodeGenState:
     size_param_array_dim_bset: isl.BasicSet
     expr_to_pymbolic_name: Mapping[Array, str]
     pymbolic_name_to_ssa: Mapping[str, ast.SsaId]
-
     arguments: List[str]
+    stored_names: Set[str]
 
     def pymbolic_name_to_expr(self, name: str) -> Array:
         try:
@@ -74,23 +76,102 @@ class CodeGenState:
             raise ValueError(f"Unknown pymbolic name '{name}'")
 
 
-def get_initial_codegen_state(namespace: Namespace) -> CodeGenState:
+def get_initial_codegen_state(outputs: DictOfNamedArrays) -> CodeGenState:
+    namespace = outputs.namespace
     builder = IRBuilder()
     mlir_file = builder.make_mlir_file()
     module = mlir_file.module
     with builder.goto_block(builder.make_block(module.region)):
         fn = builder.function("_pt_kernel")
 
-    bset = get_size_param_array_dim_basic_set(namespace)
-    return CodeGenState(builder, mlir_file, module, fn, namespace, bset, {}, {}, [])
+    bset = get_size_param_array_dim_basic_set(outputs)
+    return CodeGenState(builder, mlir_file, module, fn, namespace, bset, {}, {}, [],
+            set())
 
 
 @dataclass
 class BoundMLIRProgram(BoundProgram):
     options: List[str]
+    # arguments: arrays ordered by the position in the function
     arguments: List[Union[Placeholder, NamedArray]]
+    size_param_array_dim_bset: isl.BasicSet
 
-    def __call__(self, **kwargs: DataInterface) -> Any:
+    @property
+    @memoize_method
+    def arg_ids(self) -> List[str]:
+        return [arg.name for arg in self.arguments]
+
+    @memoize_method
+    def infer_shapes(self,
+            shapes: Dict[str, Union[Tuple[int, ...]]]) -> Dict[str, Tuple[int, ...]]:
+
+        # {{{ intersect with the known shapes set with user-provided shapes
+
+        shapes_bset = self.size_param_array_dim_bset
+
+        for arg_name, shape in shapes.items():
+            if arg_name in self.arg_ids:
+                for iaxis, dim_len in enumerate(shape):
+                    shapes_bset &= isl_set_from_expr(shapes_bset.get_space(),
+                            prim.Comparison(prim.Variable(str(DimOperation(arg_name,
+                                                                           iaxis))),
+                                            "==",
+                                            dim_len))
+            else:
+                # proabably a size param
+                if arg_name not in self.size_param_array_dim_bset.get_var_dict():
+                    raise ValueError(f"Got unexpected argument {arg_name}.")
+
+                if not isinstance(shape, numbers.Integral):
+                    raise TypeError(f"Size param '{arg_name}' expected to be an int")
+
+                shapes_bset &= isl_set_from_expr(shapes_bset.get_space(),
+                        prim.Comparison(prim.Variable(arg_name),
+                                        "==",
+                                        shape))
+
+        # }}}
+
+        # {{{ validity checks
+
+        if shapes_bset.is_empty():
+            raise ValueError(f"Provided shapes: '{shapes}' has no intersection with"
+                    " the system of shape equations: "
+                    f"'{self.size_param_array_dim_bset}'")
+
+        if shapes_bset.count_val().to_python() != 1:
+            raise ValueError(f"Provided shapes: '{shapes}' has on intersecting with "
+                    "the system of shape equations: "
+                    f"'{self.size_param_array_dim_bset}' did not produce "
+                    "a unique solution.")
+
+        # }}}
+
+        shapes_bset, = shapes_bset.get_basic_sets()
+
+        # {{{ solve for the dim lengths
+
+        result = {}
+
+        dom_var_dict = shapes_bset.get_var_dict()
+
+        for arg in self.arguments:
+            inferred_shape = []
+            for iaxis in range(arg.ndim):
+                _, pos = dom_var_dict[str(DimOperation(arg_name, iaxis))]
+                inferred_shape.append(shapes_bset.dim_max_val(pos).to_python())
+
+            result[arg.name] = tuple(inferred_shape)
+
+        # }}}
+
+        return result
+
+    @memoize_method
+    def arg_id_to_dtype(self, name: str) -> np.dtype:
+        return next(iter(arg.dtype for arg in self.arguments if arg.name == name))
+
+    def __call__(self, **kwargs: Union[DataInterface, numbers.Integral]) -> Any:
         args_to_mlir_knl = []
         return_dict = {}
 
@@ -101,9 +182,13 @@ class BoundMLIRProgram(BoundProgram):
         updated_kwargs = self.bound_arguments.copy()
         updated_kwargs.update(kwargs)
 
+        input_shapes = pmap({kw: arg.shape if isinstance(arg, DataInterface) else arg
+                for kw, arg in updated_kwargs.items()})
+
+        output_shapes = self.infer_shapes(input_shapes)
+
         for pt_ary in self.arguments:
             if isinstance(pt_ary, Placeholder):
-                # FIXME: Need to do some type, shape checking
                 if pt_ary.name not in updated_kwargs:
                     raise ValueError(f"Argument '{pt_ary.name}' not provided.")
 
@@ -112,15 +197,30 @@ class BoundMLIRProgram(BoundProgram):
                         f" array as argument for '{pt_ary.name}', got"
                         f"'{type(updated_kwargs[pt_ary.name])}.'")
 
+                if pt_ary.dtype != updated_kwargs[pt_ary.name].dtype:
+                    raise TypeError(f"dtype mismatch for {pt_ary.name}. Expected "
+                            f"{pt_ary.dtype}, got "
+                            f"{updated_kwargs[pt_ary.name].dtype}.")
+
                 args_to_mlir_knl.append(updated_kwargs[pt_ary.name])
             else:
                 assert isinstance(pt_ary, NamedArray)
                 if pt_ary.name in updated_kwargs:
-                    # FIXME: Need to do some type, shape checking
+                    if not isinstance(updated_kwargs[pt_ary.name], np.ndarray):
+                        raise TypeError("BoundMLIRProgram.__call__ expects a numpy"
+                            f" array as argument for '{pt_ary.name}', got"
+                            f"'{type(updated_kwargs[pt_ary.name])}.'")
+
+                    if pt_ary.dtype != updated_kwargs[pt_ary.name].dtype:
+                        raise TypeError(f"dtype mismatch for {pt_ary.name}. "
+                                f"Expected {pt_ary.dtype}, got "
+                                f"{updated_kwargs[pt_ary.name].dtype}.")
+
                     args_to_mlir_knl.append(updated_kwargs[pt_ary.name])
                 else:
                     # user didn't provide the address for the array => create own.
-                    empty_ary = np.empty(dtype=pt_ary.dtype, shape=pt_ary.shape)
+                    empty_ary = np.empty(dtype=pt_ary.dtype,
+                            shape=output_shapes[pt_ary.name])
                     args_to_mlir_knl.append(empty_ary)
                     return_dict[pt_ary.name] = empty_ary
 
@@ -180,17 +280,20 @@ class Pymbolicifier(Mapper):
         >>> print(Pymbolicifier({x: "u", y: "v"})(processed_z))
         >>> 10*u[_0 // 6, _0 % 6] + 4*v[_0 // 9, _0 % 9]
     """
-    def __init__(self, expr_to_pymbolic_name: Dict[Array, str]):
+    def __init__(self, expr_to_pymbolic_name: Dict[Array, str],
+            available_arrays: Set[str]) -> None:
         self.expr_to_pymbolic_name = expr_to_pymbolic_name
+        self.available_arrays = available_arrays
 
     def map_index_lambda(self, expr: IndexLambda):
         if expr in self.expr_to_pymbolic_name:
             # index lambda has a name, probably stored as a named array
             # => just return the expression in terms of the named array
             name = self.expr_to_pymbolic_name[expr]
-            return prim.Subscript(prim.Variable(name),
-                                  tuple(prim.Variable(f"_{i}")
-                                        for i in range(expr.ndim)))
+            if name in self.available_arrays:
+                return prim.Subscript(prim.Variable(name),
+                                      tuple(prim.Variable(f"_{i}")
+                                            for i in range(expr.ndim)))
 
         return IndexLambdaSubstitutor({name: self.rec(val)
             for name, val in expr.bindings.items()})(expr.expr)
@@ -366,7 +469,9 @@ def add_function_arg(state: CodeGenState, expr: Array) -> ast.SsaId:
                                            [to_memref_type(expr)],
                                            [expr.name])
     state.arguments.append(expr)
-    return arg
+    state.expr_to_pymbolic_name[expr] = expr.name
+    state.pymbolic_name_to_ssa[expr.name] = arg
+    # return arg
 
 
 def emit_size_param(state: CodeGenState, expr: SizeParam) -> ast.SsaId:
@@ -410,7 +515,9 @@ def emit_size_param(state: CodeGenState, expr: SizeParam) -> ast.SsaId:
         return result // denom
 
     ssa, dtype = ScalarExpressionBlockWriter()(aff_to_expr(aff), state)
-    return ssa
+
+    state.expr_to_pymbolic_name[expr] = expr.name
+    state.pymbolic_name_to_ssa[expr.name] = ssa
 
 
 def build_linalg_generic(state: CodeGenState,
@@ -447,7 +554,8 @@ def astype(builder, src_ssa: ast.SsaId,
 # }}}
 
 
-def get_size_param_array_dim_basic_set(namespace):
+def get_size_param_array_dim_basic_set(outputs):
+    namespace = outputs.namespace
     isl_ctx = isl.DEFAULT_CONTEXT
 
     # {{{ add dims to the ISL set.
@@ -475,6 +583,15 @@ def get_size_param_array_dim_basic_set(namespace):
             # and the size params.
             raise NotImplementedError(f"Not implemented for {type(expr)}")
 
+    for name, expr in outputs.items():
+        for iaxis in range(expr.ndim):
+            bset = bset.add_dims(isl.dim_type.set, 1)
+            dim_op = DimOperation(name, iaxis)
+            bset = bset.set_dim_id(
+                    isl.dim_type.set,
+                    bset.dim(isl.dim_type.set)-1,
+                    isl.Id(context=isl_ctx, name=str(dim_op), user=dim_op))
+
     # }}}
 
     # {{{ add constraints to bset
@@ -488,6 +605,14 @@ def get_size_param_array_dim_basic_set(namespace):
                                                                        iaxis))),
                                         "==",
                                         expr.shape[iaxis]))
+
+    for name, expr in outputs.items():
+        for iaxis in range(expr.ndim):
+            bset &= isl_set_from_expr(bset.get_space(),
+                    prim.Comparison(prim.Variable(str(DimOperation(name,
+                                                                   iaxis))),
+                                    "==",
+                                    expr.shape[iaxis]))
 
     # }}}
 
@@ -526,7 +651,7 @@ def generate_mlir(
 
     # }}}
 
-    state = get_initial_codegen_state(namespace)
+    state = get_initial_codegen_state(outputs)
 
     with state.builder.goto_block(state.builder.make_block(state.function.region)):
         # {{{ register placeholders as function arguments
@@ -535,9 +660,19 @@ def generate_mlir(
                                 key=lambda x: x[0]  # lexicographic order of names
                                 ):
             if isinstance(val, Placeholder):
-                arg = add_function_arg(state, val)
-                state.expr_to_pymbolic_name[val] = name
-                state.pymbolic_name_to_ssa[name] = arg
+                add_function_arg(state, val)
+                state.stored_names.add(name)
+
+        # }}}
+
+        # {{{ register outputs as function_arguments
+
+        for name in compute_order:
+            expr = outputs[name]
+            add_function_arg(state,
+                             NamedArray(name=name,
+                                        shape=expr.shape,
+                                        dtype=expr.dtype))
 
         # }}}
 
@@ -549,9 +684,7 @@ def generate_mlir(
             if isinstance(val, SizeParam):
                 # only emit size param if it is one of the dependencies
                 if val.name in all_deps:
-                    arg = emit_size_param(state, val)
-                    state.expr_to_pymbolic_name[val] = name
-                    state.pymbolic_name_to_ssa[name] = arg
+                    emit_size_param(state, val)
 
         # }}}
 
@@ -559,21 +692,17 @@ def generate_mlir(
             expr = outputs[name]
 
             build_linalg_generic(state,
-                                 add_function_arg(state,
-                                                  NamedArray(name=name,
-                                                             shape=expr.shape,
-                                                             dtype=expr.dtype)),
-                                  Pymbolicifier(state.expr_to_pymbolic_name)(expr),
-                                  expr)
-
-            state.expr_to_pymbolic_name[expr] = name
-            state.pymbolic_name_to_ssa[name] = arg
+                                 state.pymbolic_name_to_ssa[name],
+                                 Pymbolicifier(state.expr_to_pymbolic_name,
+                                               state.stored_names)(expr),
+                                 expr)
+            state.stored_names.add(name)
 
         state.builder.ret()
 
     return BoundMLIRProgram(state.file,
             preproc_result.bound_arguments,
-            options, state.arguments)
+            options, state.arguments, state.size_param_array_dim_bset)
 
 
 # vim: fdm=marker
