@@ -62,13 +62,13 @@ class Target:
 class BoundProgram:
     """A wrapper around a :mod:`loopy` kernel for execution.
 
-    .. attribute:: program
-
-        The underlying :class:`loopy.LoopKernel`.
-
     .. attribute:: target
 
        The code generation target.
+
+    .. attribute:: program
+
+        Description of the program as per :attr:`BoundProgram.target`.
 
     .. attribute:: bound_arguments
 
