@@ -39,7 +39,7 @@ from pytato.array import (
 
         )
 
-from pytato.codegen.loopy import generate_loopy
+from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import PyOpenCLTarget
 from pytato.visualization import get_dot_graph, show_dot_graph

@@ -51,13 +51,6 @@ References
 
     Should be referenced as :class:`pytato.array.DataInterface`.
 
-Generating Code
----------------
-
-.. currentmodule:: pytato
-
-.. automodule:: pytato.codegen.loopy
-
 Code Generation Helpers
 -------------------------
 

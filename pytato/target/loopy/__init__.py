@@ -28,6 +28,12 @@ __doc__ = """
 .. autoclass:: LoopyTarget
 .. autoclass:: PyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
+
+
+Generating code
+^^^^^^^^^^^^^^^
+
+.. automodule:: pytato.target.loopy.codegen
 """
 
 from dataclasses import dataclass

@@ -43,22 +43,17 @@ from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 
 __doc__ = """
-.. currentmodule:: pytato.codegen.loopy
+.. currentmodule:: pytato.target.loopy.codegen
 
 .. autofunction:: generate_loopy
-
-Loopy Codegen Internals
-^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: LoopyExpressionContext
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult
 .. autoclass:: InlinedResult
 .. autoclass:: SubstitutionRuleResult
-
 .. autoclass:: CodeGenState
 .. autoclass:: CodeGenMapper
-
 .. autoclass:: InlinedExpressionGenMapper
 
 .. autofunction:: domain_for_shape
@@ -634,7 +629,7 @@ def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
         options: Optional[lp.Options] = None) -> BoundProgram:
-    r"""Code generation entry point.
+    r"""Loopy code generation entry point.
 
     :param result: Outputs of the computation.
     :param target: Code generation target.
