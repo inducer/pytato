@@ -23,45 +23,41 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-.. currentmodule:: pytato.target
+.. currentmodule:: pytato.target.loopy
 
-Code Generation Targets
------------------------
-
-.. autoclass:: Target
+.. autoclass:: LoopyTarget
 .. autoclass:: PyOpenCLTarget
+.. autoclass:: BoundPyOpenCLProgram
 """
 
+from dataclasses import dataclass
+
+import typing
 from typing import Any, Mapping, Optional
 
-from pytato.program import BoundProgram, BoundPyOpenCLProgram
+from pytato.target import Target, BoundProgram
 
-import pyopencl
 import loopy
 
 
-class Target:
-    """An abstract code generation target.
+if typing.TYPE_CHECKING:
+    # Imports skipped for efficiency.  FIXME: Neither of these work as type
+    # stubs are not present. Types are here only as documentation.
+    import pyopencl
+
+
+class LoopyTarget(Target):
+    """An :mod:`loopy` target.
 
     .. automethod:: get_loopy_target
-    .. automethod:: bind_program
     """
 
     def get_loopy_target(self) -> "loopy.TargetBase":
         """Return the corresponding :mod:`loopy` target."""
         raise NotImplementedError
 
-    def bind_program(self, program: "loopy.LoopKernel",
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
-        """Create a :class:`pytato.program.BoundProgram` for this code generation target.
 
-        :param program: the :mod:`loopy` kernel
-        :param bound_arguments: a mapping from argument names to outputs
-        """
-        raise NotImplementedError
-
-
-class PyOpenCLTarget(Target):
+class PyOpenCLTarget(LoopyTarget):
     """A :mod:`pyopencl` code generation target.
 
     .. attribute:: queue
@@ -85,5 +81,32 @@ class PyOpenCLTarget(Target):
                 queue=self.queue,
                 bound_arguments=bound_arguments,
                 target=self)
+
+
+@dataclass(init=True, repr=False, eq=False)
+class BoundPyOpenCLProgram(BoundProgram):
+    """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
+
+    .. attribute:: queue
+
+        A :mod:`pyopencl` command queue.
+
+    .. automethod:: __call__
+    """
+    queue: Optional["pyopencl.CommandQueue"]
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Convenience function for launching a :mod:`pyopencl` computation."""
+        if not self.queue:
+            raise ValueError("queue must be specified")
+
+        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+            raise ValueError("Got arguments that were previously bound: "
+                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+
+        updated_kwargs = dict(self.bound_arguments)
+        updated_kwargs.update(kwargs)
+        return self.program(self.queue, *args, **updated_kwargs)
+
 
 # vim: foldmethod=marker

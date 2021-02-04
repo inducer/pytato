@@ -23,27 +23,39 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-.. currentmodule:: pytato.program
+.. currentmodule:: pytato.target
 
-Generated Executable Programs
------------------------------
+Code Generation Targets
+-----------------------
 
+.. autoclass:: Target
 .. autoclass:: BoundProgram
-.. autoclass:: BoundPyOpenCLProgram
+
+
+Available targets
+-----------------
+
+.. automodule:: pytato.target.loopy
 """
 
 from dataclasses import dataclass
-import typing
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
-import loopy
 
-if typing.TYPE_CHECKING:
-    # Imports skipped for efficiency.  FIXME: Neither of these work as type
-    # stubs are not present. Types are here only as documentation.
-    import pyopencl
-    # Imports skipped to avoid circular dependencies.
-    import pytato.target
+class Target:
+    """An abstract code generation target.
+
+    .. automethod:: bind_program
+    """
+
+    def bind_program(self, program: Any,
+            bound_arguments: Mapping[str, Any]) -> BoundProgram:
+        """Create a :class:`BoundProgram` for this code generation target.
+
+        :param program: the :mod:`loopy` kernel
+        :param bound_arguments: a mapping from argument names to outputs
+        """
+        raise NotImplementedError
 
 
 @dataclass(init=True, repr=False, eq=False)
@@ -65,37 +77,12 @@ class BoundProgram:
     .. automethod:: __call__
     """
 
-    program: "loopy.LoopKernel"
+    program: Any
     bound_arguments: Mapping[str, Any]
-    target: "pytato.target.Target"
+    target: Target
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
-
-@dataclass(init=True, repr=False, eq=False)
-class BoundPyOpenCLProgram(BoundProgram):
-    """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
-
-    .. attribute:: queue
-
-        A :mod:`pyopencl` command queue.
-
-    .. automethod:: __call__
-    """
-    queue: Optional["pyopencl.CommandQueue"]
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Convenience function for launching a :mod:`pyopencl` computation."""
-        if not self.queue:
-            raise ValueError("queue must be specified")
-
-        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
-            raise ValueError("Got arguments that were previously bound: "
-                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
-
-        updated_kwargs = dict(self.bound_arguments)
-        updated_kwargs.update(kwargs)
-        return self.program(self.queue, *args, **updated_kwargs)
 
 # vim: foldmethod=marker
