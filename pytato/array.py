@@ -749,7 +749,7 @@ class NamedArray(Array):
         return self.expr.shape
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return self.expr.dtype
 
     @property

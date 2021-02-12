@@ -87,7 +87,7 @@ class LoopyFunctionResult(NamedArray):
         return shape
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
                 self.name]
         dtype = loopy_arg.dtype
@@ -95,7 +95,7 @@ class LoopyFunctionResult(NamedArray):
         if isinstance(dtype, np.dtype):
             return dtype
         elif isinstance(dtype, NumpyType):
-            return dtype.numpy_dtype
+            return np.dtype(dtype.numpy_dtype)
         else:
             raise NotImplementedError(f"Unknown dtype type '{dtype}'")
 
