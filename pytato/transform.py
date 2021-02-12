@@ -173,7 +173,7 @@ class DependencyMapper(Mapper):
     :class:`pytato.array.Array`'s it depends on.
     """
 
-    def __init__(self, namespace) -> None:
+    def __init__(self, namespace: Namespace) -> None:
         self.cache: Dict[Union[Array, DictOfNamedArrays], R] = {}
         self.namespace = namespace
 
@@ -239,9 +239,12 @@ class DependencyMapper(Mapper):
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
         from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
-        scalar_deps = frozenset().union(*(get_scalar_expr_deps(ary)
+
+        # https://github.com/python/mypy/issues/2013
+        scalar_deps = frozenset().union(*(get_scalar_expr_deps(ary)  # type: ignore
                                           for ary in expr.bindings.values()
-                                          if not isinstance(ary, Array)))
+                                          if not isinstance(ary, Array))
+                                        )
 
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.bindings.values()
