@@ -176,6 +176,11 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
         # Pytato DAG cannot have stateful nodes.
         raise ValueError("Cannot have a kernel that writes to inputs.")
 
+    for name in bindings:
+        if name not in program[entrypoint].arg_dict:
+            raise ValueError(f"Kernel '{entrypoint}' got an unexpected input: "
+                    f"'{name}'.")
+
     for arg in program[entrypoint].args:
         if arg.is_input:
             if arg.name not in bindings:
