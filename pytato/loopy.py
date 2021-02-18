@@ -180,6 +180,9 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
         if name not in program[entrypoint].arg_dict:
             raise ValueError(f"Kernel '{entrypoint}' got an unexpected input: "
                     f"'{name}'.")
+        if program[entrypoint].arg_dict[name].is_output:
+            raise ValueError(f"Kernel '{entrypoint}' got an output arg '{name}' "
+                    f"as input.")
 
     for arg in program[entrypoint].args:
         if arg.is_input:
