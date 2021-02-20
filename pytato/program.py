@@ -34,7 +34,7 @@ Generated Executable Programs
 
 from dataclasses import dataclass
 import typing
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Union
 
 import loopy
 
@@ -52,7 +52,7 @@ class BoundProgram:
 
     .. attribute:: program
 
-        The underlying :class:`loopy.LoopKernel`.
+        The underlying :class:`loopy.Program`.
 
     .. attribute:: target
 
@@ -65,12 +65,19 @@ class BoundProgram:
     .. automethod:: __call__
     """
 
-    program: "loopy.LoopKernel"
+    program: Union["loopy.LoopKernel", "loopy.Program"]
     bound_arguments: Mapping[str, Any]
     target: "pytato.target.Target"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
+
+    @property
+    def kernel(self) -> "loopy.LoopKernel":
+        if isinstance(self.program, loopy.LoopKernel):
+            return self.program
+        else:
+            return self.program["_pt_kernel"]
 
 
 @dataclass(init=True, repr=False, eq=False)
@@ -96,6 +103,9 @@ class BoundPyOpenCLProgram(BoundProgram):
 
         updated_kwargs = dict(self.bound_arguments)
         updated_kwargs.update(kwargs)
+        if not isinstance(self. program, loopy.LoopKernel):
+            updated_kwargs.setdefault("entrypoint", "_pt_kernel")
+
         return self.program(self.queue, *args, **updated_kwargs)
 
 # vim: foldmethod=marker

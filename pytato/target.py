@@ -32,7 +32,7 @@ Code Generation Targets
 .. autoclass:: PyOpenCLTarget
 """
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Union
 
 from pytato.program import BoundProgram, BoundPyOpenCLProgram
 
@@ -51,11 +51,11 @@ class Target:
         """Return the corresponding :mod:`loopy` target."""
         raise NotImplementedError
 
-    def bind_program(self, program: "loopy.LoopKernel",
+    def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """Create a :class:`pytato.program.BoundProgram` for this code generation target.
 
-        :param program: the :mod:`loopy` kernel
+        :param program: the :mod:`loopy` program
         :param bound_arguments: a mapping from argument names to outputs
         """
         raise NotImplementedError
@@ -79,7 +79,7 @@ class PyOpenCLTarget(Target):
             device = self.queue.device
         return lp.PyOpenCLTarget(device)
 
-    def bind_program(self, program: "loopy.LoopKernel",
+    def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
                 queue=self.queue,
