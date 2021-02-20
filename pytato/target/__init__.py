@@ -32,12 +32,8 @@ Code Generation Targets
 .. autoclass:: BoundProgram
 
 
-<<<<<<< HEAD:pytato/target/__init__.py
 Available targets
 -----------------
-=======
-from typing import Any, Mapping, Optional, Union
->>>>>>> master:pytato/target.py
 
 .. automodule:: pytato.target.loopy
 """
