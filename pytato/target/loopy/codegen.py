@@ -37,7 +37,7 @@ from typing import (
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace)
 from pytato.target import BoundProgram
-from pytato.target.loopy import PyOpenCLTarget, LoopyTarget
+from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
@@ -665,7 +665,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     del result
 
     if target is None:
-        target = PyOpenCLTarget()
+        target = LoopyPyOpenCLTarget()
 
     preproc_result = preprocess(orig_outputs)
     outputs = preproc_result.outputs

@@ -26,7 +26,7 @@ __doc__ = """
 .. currentmodule:: pytato.target.loopy
 
 .. autoclass:: LoopyTarget
-.. autoclass:: PyOpenCLTarget
+.. autoclass:: LoopyPyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
 
 
@@ -63,7 +63,7 @@ class LoopyTarget(Target):
         raise NotImplementedError
 
 
-class PyOpenCLTarget(LoopyTarget):
+class LoopyPyOpenCLTarget(LoopyTarget):
     """A :mod:`pyopencl` code generation target.
 
     .. attribute:: queue
@@ -74,7 +74,7 @@ class PyOpenCLTarget(LoopyTarget):
     def __init__(self, queue: Optional["pyopencl.CommandQueue"] = None):
         self.queue = queue
 
-    def get_loopy_target(self) -> "loopy.PyOpenCLTarget":
+    def get_loopy_target(self) -> "loopy.LoopyPyOpenCLTarget":
         import loopy as lp
         device = None
         if self.queue is not None:

@@ -154,7 +154,7 @@ def test_advection_convergence(order, flux_type):
                 dg_ops=DGOps1D(discr, ns))
         result = op.apply(u)
 
-        prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
+        prog = pt.generate_loopy(result, target=pt.LoopyPyOpenCLTarget(queue))
 
         u = rk4(lambda t, y: prog(
                 u=y.reshape(nelements, order))[1][0].reshape(-1),
@@ -187,7 +187,7 @@ def main():
             dg_ops=DGOps1D(discr, ns))
     result = op.apply(u)
 
-    prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(result, target=pt.LoopyPyOpenCLTarget(queue))
     print(prog.program)
 
     u = np.sin(discr.nodes())
