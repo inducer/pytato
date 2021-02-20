@@ -781,7 +781,12 @@ class DictOfNamedArrays(Mapping[str, Array]):
 # {{{ index lambda
 
 class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
-    """
+    r"""Represents an array that can be computed by evaluating
+    :attr:`expr` for every value of the input indices. The
+    input indices are represented by
+    :class:`~pymbolic.primitives.Variable`\ s with names ``_1``,
+    ``_2``, and so on.
+
     .. attribute:: namespace
 
     .. attribute:: expr
