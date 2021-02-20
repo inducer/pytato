@@ -39,7 +39,7 @@ Generating code
 from dataclasses import dataclass
 
 import typing
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Union
 
 from pytato.target import Target, BoundProgram
 
@@ -81,7 +81,7 @@ class PyOpenCLTarget(LoopyTarget):
             device = self.queue.device
         return lp.PyOpenCLTarget(device)
 
-    def bind_program(self, program: "loopy.LoopKernel",
+    def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
                 queue=self.queue,
@@ -112,7 +112,17 @@ class BoundPyOpenCLProgram(BoundProgram):
 
         updated_kwargs = dict(self.bound_arguments)
         updated_kwargs.update(kwargs)
+        if not isinstance(self. program, loopy.LoopKernel):
+            updated_kwargs.setdefault("entrypoint", "_pt_kernel")
+
         return self.program(self.queue, *args, **updated_kwargs)
+
+    @property
+    def kernel(self) -> "loopy.LoopKernel":
+        if isinstance(self.program, loopy.LoopKernel):
+            return self.program
+        else:
+            return self.program["_pt_kernel"]
 
 
 # vim: foldmethod=marker

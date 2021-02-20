@@ -67,6 +67,8 @@ __doc__ = """
 
 # {{{ generated array expressions
 
+# SymbolicIndex and ShapeType are semantically distinct but identical at the
+# type level.
 ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 
 
@@ -235,9 +237,9 @@ class CodeGenState:
 
         The (global) namespace
 
-    .. attribute:: kernel
+    .. attribute:: _program
 
-        The partial :class:`loopy.LoopKernel` being built.
+        The partial :class:`loopy.LoopKernel` or :class:`loopy.Program` being built.
 
     .. attribute:: results
 
@@ -250,22 +252,40 @@ class CodeGenState:
     .. automethod:: update_kernel
     """
     namespace: Mapping[str, Array]
-    _kernel: lp.LoopKernel
+    _program: Union["lp.Program", lp.LoopKernel]
     results: Dict[Array, ImplementedResult]
 
     var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
     insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.var_name_gen = self._kernel.get_var_name_generator()
-        self.insn_id_gen = self._kernel.get_instruction_id_generator()
+        if isinstance(self._program, lp.LoopKernel):
+            self.var_name_gen = self._program.get_var_name_generator()
+            self.insn_id_gen = self._program.get_instruction_id_generator()
+        else:
+            self.var_name_gen = self._program["_pt_kernel"].get_var_name_generator()
+            self.insn_id_gen = (
+                    self._program["_pt_kernel"].get_instruction_id_generator())
+
+    @property
+    def program(self) -> Union["lp.Program", lp.LoopKernel]:
+        return self._program
 
     @property
     def kernel(self) -> lp.LoopKernel:
-        return self._kernel
+        """
+        Returns the entry kernel of the loopy program being built.
+        """
+        if isinstance(self._program, lp.LoopKernel):
+            return self._program
+        else:
+            return self._program["_pt_kernel"]
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
-        self._kernel = kernel
+        if isinstance(self._program, lp.LoopKernel):
+            self._program = kernel
+        else:
+            self._program = self._program.with_kernel(kernel)
 
 
 class CodeGenMapper(Mapper):
@@ -305,7 +325,8 @@ class CodeGenMapper(Mapper):
         arg = lp.GlobalArg(expr.name,
                 shape=tuple(shape),
                 dtype=expr.dtype,
-                order="C")
+                order="C",
+                is_output_only=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
 
@@ -447,6 +468,8 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
 # }}}
 
+
+# {{{ utils
 
 def domain_for_shape(dim_names: Tuple[str, ...],
          shape: ShapeType,
@@ -615,26 +638,28 @@ def rename_reductions(
 
 
 def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
-        options: Optional[lp.Options]) -> CodeGenState:
+        options: lp.Options) -> CodeGenState:
     kernel = lp.make_kernel("{:}", [],
+            name="_pt_kernel",
             target=target.get_loopy_target(),
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
     return CodeGenState(namespace=namespace,
-            _kernel=kernel,
+            _program=kernel,
             results=dict())
 
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
         options: Optional[lp.Options] = None) -> BoundProgram:
-    r"""Loopy code generation entry point.
+    r"""Code generation entry point.
 
     :param result: Outputs of the computation.
     :param target: Code generation target.
     :param options: Code generation options for the kernel.
-    :returns: A wrapped generated :mod:`loopy` kernel
+    :returns: A :class:`pytato.program.BoundProgram` wrapping the generated
+        :mod:`loopy` program.
     """
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
@@ -670,5 +695,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
     return target.bind_program(
-            program=state.kernel,
+            program=state.program,
             bound_arguments=preproc_result.bound_arguments)
+
+
+# vim:fdm=marker

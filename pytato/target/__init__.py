@@ -32,8 +32,12 @@ Code Generation Targets
 .. autoclass:: BoundProgram
 
 
+<<<<<<< HEAD:pytato/target/__init__.py
 Available targets
 -----------------
+=======
+from typing import Any, Mapping, Optional, Union
+>>>>>>> master:pytato/target.py
 
 .. automodule:: pytato.target.loopy
 """
@@ -52,7 +56,7 @@ class Target:
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """Create a :class:`BoundProgram` for this code generation target.
 
-        :param program: the :mod:`loopy` kernel
+        :param program: the :mod:`loopy` program
         :param bound_arguments: a mapping from argument names to outputs
         """
         raise NotImplementedError
@@ -76,13 +80,11 @@ class BoundProgram:
 
     .. automethod:: __call__
     """
-
     program: Any
     bound_arguments: Mapping[str, Any]
     target: Target
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
-
 
 # vim: foldmethod=marker
