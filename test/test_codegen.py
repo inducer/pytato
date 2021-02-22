@@ -47,7 +47,7 @@ def test_basic_codegen(ctx_factory):
 
     namespace = pt.Namespace()
     x = Placeholder(namespace, "x", (5,), np.int)
-    prog = pt.generate_loopy(x * x, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(x * x, target=pt.LoopyPyOpenCLTarget(queue))
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(x=x_in)
     assert (out == x_in * x_in).all()
@@ -59,7 +59,7 @@ def test_scalar_placeholder(ctx_factory):
 
     namespace = pt.Namespace()
     x = Placeholder(namespace, "x", (), np.int)
-    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(x, target=pt.LoopyPyOpenCLTarget(queue))
     x_in = np.array(1)
     _, (x_out,) = prog(x=x_in)
     assert np.array_equal(x_out, x_in)
@@ -74,7 +74,7 @@ def test_size_param(ctx_factory):
     namespace = pt.Namespace()
     n = pt.make_size_param(namespace, name="n")
     pt.make_placeholder(namespace, name="x", shape="(n,)", dtype=np.int)
-    prog = pt.generate_loopy(n, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(n, target=pt.LoopyPyOpenCLTarget(queue))
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(x=x_in)
     assert n_out == 5
@@ -96,7 +96,7 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
     namespace = pt.Namespace()
     x1 = pt.make_data_wrapper(namespace, x1_in)
     x2 = pt.make_data_wrapper(namespace, x2_in)
-    prog = pt.generate_loopy(x1 @ x2, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(x1 @ x2, target=pt.LoopyPyOpenCLTarget(queue))
     _, (out,) = prog()
 
     assert (out == x1_in @ x2_in).all()
@@ -110,7 +110,7 @@ def test_data_wrapper(ctx_factory):
     namespace = pt.Namespace()
     x_in = np.array([1, 2, 3, 4, 5])
     x = pt.make_data_wrapper(namespace, x_in)
-    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(x, target=pt.LoopyPyOpenCLTarget(queue))
     _, (x_out,) = prog()
     assert (x_out == x_in).all()
 
@@ -119,7 +119,7 @@ def test_data_wrapper(ctx_factory):
     x_in = np.array([[1, 2], [3, 4], [5, 6]])
     pt.make_size_param(namespace, "n")
     x = pt.make_data_wrapper(namespace, x_in, name="x", shape="(n, 2)")
-    prog = pt.generate_loopy(x, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(x, target=pt.LoopyPyOpenCLTarget(queue))
     _, (x_out,) = prog()
     assert (x_out == x_in).all()
 
@@ -137,14 +137,14 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
 
     # Without return_dict.
-    prog = pt.generate_loopy(result, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(result, target=pt.LoopyPyOpenCLTarget(queue))
     _, (x_out, y_out) = prog(x=x_in, y=y_in)
     assert (x_out == x_in).all()
     assert (y_out == y_in).all()
 
     # With return_dict.
     prog = pt.generate_loopy(result,
-            target=pt.PyOpenCLTarget(queue),
+            target=pt.LoopyPyOpenCLTarget(queue),
             options=lp.Options(return_dict=True))
 
     _, outputs = prog(x=x_in, y=y_in)
@@ -237,7 +237,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             exprs[dtype] = op(x_in, y)
 
         prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-                target=pt.PyOpenCLTarget(queue),
+                target=pt.LoopyPyOpenCLTarget(queue),
                 options=lp.Options(return_dict=True))
 
         _, outputs = prog()
@@ -279,7 +279,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             exprs[dtype] = op(x, y)
 
         prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-                target=pt.PyOpenCLTarget(queue),
+                target=pt.LoopyPyOpenCLTarget(queue),
                 options=lp.Options(return_dict=True))
 
         _, outputs = prog()
@@ -309,7 +309,7 @@ def test_unary_arith(ctx_factory, which):
                 pt.make_data_wrapper(namespace, x_orig.astype(dtype)))
 
     prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-            target=pt.PyOpenCLTarget(queue),
+            target=pt.LoopyPyOpenCLTarget(queue),
             options=lp.Options(return_dict=True))
 
     _, outputs = prog()
@@ -359,7 +359,7 @@ def test_slice(ctx_factory, shape):
 
     prog = pt.generate_loopy(
             pt.make_dict_of_named_arrays(outputs),
-            target=pt.PyOpenCLTarget(queue),
+            target=pt.LoopyPyOpenCLTarget(queue),
             options=lp.Options(return_dict=True))
 
     _, outputs = prog()
@@ -457,7 +457,7 @@ def test_dict_to_loopy_kernel(ctx_factory):
     z = 3*x
 
     _, result_dict = pt.generate_loopy({"y": y, "z": z},
-                                       target=pt.PyOpenCLTarget(queue),
+                                       target=pt.LoopyPyOpenCLTarget(queue),
                                        options=lp.Options(return_dict=True))()
     np.testing.assert_allclose(result_dict["y"], 2*x_in)
     np.testing.assert_allclose(result_dict["z"], 3*x_in)
@@ -493,7 +493,7 @@ def test_math_functions(ctx_factory, dtype, function_name):
     np_func = getattr(np, function_name)
 
     _, (y,) = pt.generate_loopy(pt_func(x),
-            target=pt.PyOpenCLTarget(queue))()
+            target=pt.LoopyPyOpenCLTarget(queue))()
     np.testing.assert_allclose(y, np_func(x_in), rtol=1e-6)
 
 
@@ -504,11 +504,11 @@ def test_full_zeros_ones(ctx_factory, dtype):
     ns = pt.Namespace()
 
     _, (z,) = pt.generate_loopy(pt.zeros(ns, 10, dtype),
-            target=pt.PyOpenCLTarget(queue))()
+            target=pt.LoopyPyOpenCLTarget(queue))()
     _, (o,) = pt.generate_loopy(pt.ones(ns, 10, dtype),
-            target=pt.PyOpenCLTarget(queue))()
+            target=pt.LoopyPyOpenCLTarget(queue))()
     _, (t,) = pt.generate_loopy(pt.full(ns, 10, 2, dtype),
-            target=pt.PyOpenCLTarget(queue))()
+            target=pt.LoopyPyOpenCLTarget(queue))()
 
     for ary in (z, o, t):
         assert ary.dtype == dtype
@@ -523,7 +523,7 @@ def test_passsing_bound_arguments_raises(ctx_factory):
 
     ns = pt.Namespace()
     x = pt.make_data_wrapper(ns, np.ones(10), name="x")
-    prg = pt.generate_loopy(42*x, pt.PyOpenCLTarget(queue))
+    prg = pt.generate_loopy(42*x, pt.LoopyPyOpenCLTarget(queue))
 
     with pytest.raises(ValueError):
         evt, (out2,) = prg(x=np.random.rand(10))

@@ -193,7 +193,8 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
-    :arg result: Outputs of the computation (cf. :func:`pytato.generate_loopy`).
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.target.loopy.codegen.generate_loopy`).
     """
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
@@ -248,7 +249,8 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
-    :arg result: Outputs of the computation (cf. :func:`pytato.generate_loopy`).
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.target.loopy.codegen.generate_loopy`).
     """
     dot_code: str
 

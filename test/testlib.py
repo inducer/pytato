@@ -62,7 +62,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
         generated kernel must be enqueued.
     """
     np_result = NumpyBasedEvaluator(numpy, expr.namespace, parameters)(expr)
-    prog = pt.generate_loopy(expr, target=pt.PyOpenCLTarget(queue))
+    prog = pt.generate_loopy(expr, target=pt.LoopyPyOpenCLTarget(queue))
 
     evt, (pt_result,) = prog(**{placeholder.name: data
                                 for placeholder, data in parameters.items()})
