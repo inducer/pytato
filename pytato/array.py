@@ -1817,9 +1817,9 @@ INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
 def make_index_lambda(namespace: Namespace,
         expression: Union[str, ScalarExpression],
-        bindings: Mapping[str, Array],
+        bindings: Dict[str, Array],
         shape: ShapeType,
-        dtype: Any):
+        dtype: Any) -> IndexLambda:
     if isinstance(expression, str):
         raise NotImplementedError("Sorry the developers were too lazy to implement"
                 " a parser.")
@@ -1845,8 +1845,10 @@ def make_index_lambda(namespace: Namespace,
 
 # {{{ reductions
 
-def _preprocess_reduction_axes(shape: ShapeType,
-        reduction_axes: Optional[int, Tuple[int]]) -> Tuple[ShapeType, ShapeType]:
+def _preprocess_reduction_axes(
+        shape: ShapeType,
+        reduction_axes: Optional[Union[int, Tuple[int]]]
+        ) -> Tuple[ShapeType, Tuple[int, ...]]:
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
 
@@ -1872,7 +1874,7 @@ def _preprocess_reduction_axes(shape: ShapeType,
 
 
 def _get_reduction_indices_bounds(shape: ShapeType,
-        axes: Tuple[int]) -> Tuple[
+        axes: Tuple[int, ...]) -> Tuple[
                 List[ScalarExpression],
                 Mapping[str, Tuple[ScalarExpression, ScalarExpression]]]:
 
@@ -1885,7 +1887,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
         if idim in axes:
             idx = f"_r{n_redn_dims}"
             indices.append(prim.Variable(idx))
-            redn_bounds[idx] = (0, axis_len)
+            redn_bounds[idx] = (0, axis_len)  # type: ignore
             n_redn_dims += 1
         else:
             indices.append(prim.Variable(f"_{n_out_dims}"))
@@ -1894,7 +1896,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     return indices, redn_bounds
 
 
-def sum(a: Array, axis: Optional[int, Tuple[int]] = None):
+def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Sums array *a*'s elements along the *axis* axes.
 
