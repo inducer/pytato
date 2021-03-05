@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set
+from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple
 
 from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
@@ -34,7 +34,10 @@ from pymbolic.mapper.substitutor import (SubstitutionMapper as
         SubstitutionMapperBase)
 from pymbolic.mapper.dependency import (DependencyMapper as
         DependencyMapperBase)
+from dataclasses import dataclass, field
 import pymbolic.primitives as prim
+import math
+from enum import Enum
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -153,6 +156,52 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 # }}}
+
+
+class ReductionOp(Enum):
+    MAX = "max"
+    MIN = "min"
+    SUM = "sum"
+    PRODUCT = "product"
+
+    @property
+    def neutral_element(self):
+        if self.value == "max":
+            return -math.inf
+        elif self.value == "min":
+            return math.inf
+        elif self.value == "sum":
+            return 0
+        elif self.value == "product":
+            return 1
+        else:
+            raise NotImplementedError(f"Unknown reduction op {self}.")
+
+
+@dataclass
+class Reduce(prim.Expression):
+    inner_expr: ScalarExpression
+    op: ReductionOp
+    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
+    neutral_element: Optional[ScalarExpression] = None
+    mapper_method: str = field(init=False, default="map_reduce")
+
+    def __post_init__(self):
+        self.neutral_element = self.neutral_element or self.op.neutral_element
+
+    def __hash__(self):
+        return hash((self.inner_expr,
+                self.op,
+                tuple(self.bounds.keys()),
+                tuple(self.bounds.values()),
+                self.neutral_element))
+
+    def __str__(self):
+        bounds_expr = " and ".join(f"{lb}<={key}<{ub}"
+                for key, (lb, ub) in self.bounds.items())
+        bounds_expr = "{" + bounds_expr + "}"
+        return (f"{self.op.value}({bounds_expr}, {self.inner_expr},"
+                f" {self.neutral_element})")
 
 
 # vim: foldmethod=marker
