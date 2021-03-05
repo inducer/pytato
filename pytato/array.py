@@ -83,6 +83,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: where
 .. autofunction:: maximum
 .. autofunction:: minimum
+.. autofunction:: sum
 
 Supporting Functionality
 ------------------------
