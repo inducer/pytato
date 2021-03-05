@@ -72,7 +72,7 @@ __doc__ = """
 # {{{ loopy-specific mappers
 
 class SubstitutionMapper(scalar_expr.SubstitutionMapper,
-                         lp.symbolic.SubstitutionMapper):
+        lp.symbolic.SubstitutionMapper):  # type: ignore
     pass
 
 # }}}

@@ -27,7 +27,6 @@ THE SOFTWARE.
 from numbers import Number
 from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple
 
-from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
@@ -96,9 +95,9 @@ class SubstitutionMapper(SubstitutionMapperBase):
 
 class DependencyMapper(DependencyMapperBase):
 
-    def map_reduce(self, expr: Reduction,
+    def map_reduce(self, expr: Reduce,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
-        return self.combine([
+        return self.combine([  # type: ignore
             self.rec(expr.inner_expr),
             set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
@@ -165,17 +164,20 @@ class ReductionOp(Enum):
     PRODUCT = "product"
 
     @property
-    def neutral_element(self):
+    def neutral_element(self) -> Number:
         if self.value == "max":
-            return -math.inf
+            neutral = -math.inf
         elif self.value == "min":
-            return math.inf
+            neutral = math.inf
         elif self.value == "sum":
-            return 0
+            neutral = 0
         elif self.value == "product":
-            return 1
+            neutral = 1
         else:
             raise NotImplementedError(f"Unknown reduction op {self}.")
+
+        # https://github.com/python/mypy/issues/3186
+        return neutral   # type: ignore
 
 
 @dataclass
@@ -186,17 +188,17 @@ class Reduce(prim.Expression):
     neutral_element: Optional[ScalarExpression] = None
     mapper_method: str = field(init=False, default="map_reduce")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.neutral_element = self.neutral_element or self.op.neutral_element
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.inner_expr,
                 self.op,
                 tuple(self.bounds.keys()),
                 tuple(self.bounds.values()),
                 self.neutral_element))
 
-    def __str__(self):
+    def __str__(self) -> str:
         bounds_expr = " and ".join(f"{lb}<={key}<{ub}"
                 for key, (lb, ub) in self.bounds.items())
         bounds_expr = "{" + bounds_expr + "}"
