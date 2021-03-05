@@ -173,6 +173,7 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
+import re
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -1803,5 +1804,39 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
     return full(namespace, shape, 1, dtype)  # type: ignore
 
 # }}}
+
+
+# {{{ make_index_lambda
+
+INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
+
+
+def make_index_lambda(namespace: Namespace,
+        expression: Union[str, ScalarExpression],
+        bindings: Mapping[str, Array],
+        shape: ShapeType,
+        dtype: Any):
+    if isinstance(expression, str):
+        raise NotImplementedError("Sorry the developers were too lazy to implement"
+                " a parser.")
+
+    # {{{ sanity checks
+
+    from pytato.scalar_expr import get_dependencies
+    unknown_dep = (get_dependencies(expression)
+                   - set(namespace) - set(bindings))
+    for dep in unknown_dep:
+        if not INDEX_RE.fullmatch(dep):
+            raise ValueError(f"Unknown variable '{dep}' in the expression.")
+
+    # }}}
+
+    return IndexLambda(namespace, expr=expression,
+            bindings=bindings,
+            shape=shape,
+            dtype=dtype)
+
+# }}}
+
 
 # vim: foldmethod=marker
