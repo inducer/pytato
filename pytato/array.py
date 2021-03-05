@@ -180,7 +180,7 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression)
+                                ScalarExpression, Reduce, ReductionOp)
 import re
 
 
@@ -1879,9 +1879,9 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
 
     return make_index_lambda(a.namespace,
-            scalar_expr.Reduce(
+            Reduce(
                 prim.Subscript(prim.Variable("in"), tuple(indices)),
-                scalar_expr.ReductionOp.SUM,
+                ReductionOp.SUM,
                 redn_bounds),
             {"in": a},
             new_shape,

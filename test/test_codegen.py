@@ -595,6 +595,21 @@ def test_maximum_minimum(ctx_factory, which):
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
+@pytest.mark.parametrize("axis", (None, 1, 0))
+def test_sum(ctx_factory, axis):
+    queue = cl.CommandQueue(ctx_factory())
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=(10, 4))
+
+    x = pt.make_data_wrapper(x_in)
+    prg = pt.generate_loopy(pt.sum(x, axis=axis), pt.LoopyPyOpenCLTarget(queue))
+
+    evt, (out,) = prg()
+    assert np.all(abs(1 - out/x_in.sum(axis)) < 1e-14)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
