@@ -734,7 +734,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
     return target.bind_program(
-            program=state.program,
+            program=lp.make_reduction_inames_unique(state.program),
             bound_arguments=preproc_result.bound_arguments)
 
 # }}}
