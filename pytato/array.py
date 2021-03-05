@@ -170,7 +170,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING)
+        Protocol, Sequence, cast, TYPE_CHECKING, List)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -841,7 +841,11 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
+        from functools import reduce
+        import operator
+
+        common_axis_len = reduce(operator.add, (ary.shape[self.axis]
+                                                for ary in self.arrays))
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
@@ -1809,5 +1813,78 @@ def make_index_lambda(
 
 # }}}
 
+
+# {{{ reductions
+
+def _preprocess_reduction_axes(shape: ShapeType,
+        reduction_axes: Optional[int, Tuple[int]]) -> Tuple[ShapeType, ShapeType]:
+    if reduction_axes is None:
+        return (), tuple(range(len(shape)))
+
+    if isinstance(reduction_axes, int):
+        reduction_axes = reduction_axes,
+
+    if not isinstance(reduction_axes, tuple):
+        raise TypeError("Reduction axes expected to be of type 'NoneType', 'int'"
+                f" or 'tuple'. (Got {type(reduction_axes)})")
+
+    for axis in reduction_axes:
+        if not (0 <= axis < len(shape)):
+            raise ValueError(f"{axis} is out of bounds for array of dimension"
+                    f" {len(shape)}.")
+
+    new_shape = []
+
+    for i, axis_len in enumerate(shape):
+        if i not in reduction_axes:
+            new_shape.append(axis_len)
+
+    return tuple(new_shape), reduction_axes
+
+
+def _get_reduction_indices_bounds(shape: ShapeType,
+        axes: Tuple[int]) -> Tuple[
+                List[ScalarExpression],
+                Mapping[str, Tuple[ScalarExpression, ScalarExpression]]]:
+
+    indices: List[prim.Variable] = []
+    redn_bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+
+    n_out_dims = 0
+    n_redn_dims = 0
+    for idim, axis_len in enumerate(shape):
+        if idim in axes:
+            idx = f"_r{n_redn_dims}"
+            indices.append(prim.Variable(idx))
+            redn_bounds[idx] = (0, axis_len)
+            n_redn_dims += 1
+        else:
+            indices.append(prim.Variable(f"_{n_out_dims}"))
+            n_out_dims += 1
+
+    return indices, redn_bounds
+
+
+def sum(a: Array, axis: Optional[int, Tuple[int]] = None):
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(a.namespace,
+            scalar_expr.Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                scalar_expr.ReductionOp.SUM,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
+# }}}
 
 # vim: foldmethod=marker
