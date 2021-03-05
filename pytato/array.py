@@ -71,6 +71,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: sum
 
 Supporting Functionality
 ------------------------
