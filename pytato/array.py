@@ -179,7 +179,9 @@ from pytools import memoize_method
 from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES)
+from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
+                                ScalarExpression)
+import re
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -1772,6 +1774,38 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     # https://github.com/python/mypy/issues/3186
     return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
                  where(less(x1, x2), x1, x2))
+
+# }}}
+
+
+# {{{ make_index_lambda
+
+INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
+
+
+def make_index_lambda(
+        expression: Union[str, ScalarExpression],
+        bindings: Mapping[str, Array],
+        shape: ShapeType,
+        dtype: Any):
+    if isinstance(expression, str):
+        raise NotImplementedError("Sorry the developers were too lazy to implement"
+                " a parser.")
+
+    # {{{ sanity checks
+
+    from pytato.scalar_expr import get_dependencies
+    unknown_dep = get_dependencies(expression) - set(bindings)
+    for dep in unknown_dep:
+        if not INDEX_RE.fullmatch(dep):
+            raise ValueError(f"Unknown variable '{dep}' in the expression.")
+
+    # }}}
+
+    return IndexLambda(expr=expression,
+                       bindings=bindings,
+                       shape=shape,
+                       dtype=dtype)
 
 # }}}
 
