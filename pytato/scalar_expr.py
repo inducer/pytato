@@ -83,60 +83,24 @@ def parse(s: str) -> ScalarExpression:
 # {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
-
-    def map_reduction(self, expr: Reduction, *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr, *args, **kwargs):
-            return
-
-        self.rec(expr.expr, *args, **kwargs)
+    pass
 
 
 class IdentityMapper(IdentityMapperBase):
-
-    def map_reduction(self, expr: Reduction,
-            *args: Any, **kwargs: Any) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.rec(prim.Variable(iname), *args, **kwargs)
-            if not isinstance(new_iname, prim.Variable):
-                raise ValueError(
-                        f"reduction iname {iname} can only be renamed"
-                        " to another iname")
-            new_inames.append(new_iname.name)
-
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr, *args, **kwargs),
-                allow_simultaneous=expr.allow_simultaneous)
+    pass
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
-
-    def map_reduction(self, expr: Reduction) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.subst_func(iname)
-            if new_iname is None:
-                new_iname = prim.Variable(iname)
-            else:
-                if not isinstance(new_iname, prim.Variable):
-                    raise ValueError(
-                            f"reduction iname {iname} can only be renamed"
-                            " to another iname")
-            new_inames.append(new_iname.name)
-
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr),
-                allow_simultaneous=expr.allow_simultaneous)
+    pass
 
 
 class DependencyMapper(DependencyMapperBase):
 
-    def map_reduction(self, expr: Reduction,
+    def map_reduce(self, expr: Reduction,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
-        deps: Set[prim.Variable] = self.rec(expr.expr, *args, **kwargs)
-        return deps - set(prim.Variable(iname) for iname in expr.inames)
+        return self.combine([
+            self.rec(expr.inner_expr),
+            set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
 
 class EvaluationMapper(EvaluationMapperBase):

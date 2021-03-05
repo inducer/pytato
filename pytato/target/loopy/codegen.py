@@ -69,6 +69,15 @@ __doc__ = """
 """
 
 
+# {{{ loopy-specific mappers
+
+class SubstitutionMapper(scalar_expr.SubstitutionMapper,
+                         lp.symbolic.SubstitutionMapper):
+    pass
+
+# }}}
+
+
 # {{{ generated array expressions
 
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
