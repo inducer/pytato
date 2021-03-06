@@ -1888,6 +1888,48 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
             new_shape,
             a.dtype)
 
+
+def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(a.namespace,
+            scalar_expr.Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                scalar_expr.ReductionOp.MAX,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
+
+def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(a.namespace,
+            scalar_expr.Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                scalar_expr.ReductionOp.MIN,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
 # }}}
 
 # vim: foldmethod=marker
