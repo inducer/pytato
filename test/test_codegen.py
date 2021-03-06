@@ -556,7 +556,8 @@ def test_broadcasting(ctx_factory, shape1, shape2):
 
 
 @pytest.mark.parametrize("axis", (None, 1, 0))
-def test_sum(ctx_factory, axis):
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin"))
+def test_reductions(ctx_factory, axis, redn):
     queue = cl.CommandQueue(ctx_factory())
 
     from numpy.random import default_rng
@@ -565,10 +566,13 @@ def test_sum(ctx_factory, axis):
 
     ns = pt.Namespace()
     x = pt.make_data_wrapper(ns, x_in)
-    prg = pt.generate_loopy(pt.sum(x, axis=axis), pt.LoopyPyOpenCLTarget(queue))
+    np_func = getattr(np, redn)
+    pt_func = getattr(pt, redn)
+    prg = pt.generate_loopy(pt_func(x, axis=axis), pt.LoopyPyOpenCLTarget(queue))
 
     evt, (out,) = prg()
-    assert np.all(abs(1 - out/x_in.sum(axis)) < 1e-14)
+
+    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-15)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ from pytato.array import (
 
         full, zeros, ones,
 
-        sum,
+        sum, amax, amin,
 
         )
 
@@ -67,6 +67,6 @@ __all__ = (
 
         "full", "zeros", "ones",
 
-        "sum",
+        "sum", "amax", "amin",
 
 )
