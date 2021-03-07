@@ -98,6 +98,9 @@ class CodeGenPreprocessor(CopyMapper):
         self.kernels_seen: Dict[str, lp.LoopKernel] = {}
 
     def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
+        from pytato.target.loopy import LoopyTarget
+        if not isinstance(self.target, LoopyTarget):
+            raise ValueError("Got a LoopyFunction for a non-loopy target.")
         program = expr.program.copy(target=self.target.get_loopy_target())
         namegen = pytools.UniqueNameGenerator(set(self.kernels_seen))
         entrypoint = expr.entrypoint
