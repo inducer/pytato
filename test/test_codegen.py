@@ -555,6 +555,27 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     np.testing.assert_allclose(out, x_in+y_in)
 
 
+@pytest.mark.parametrize("which", ("maximum", "minimum"))
+def test_maximum_minimum(ctx_factory, which):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x1_in = rng.random(size=(10, 4))
+    x2_in = rng.random(size=(10, 4))
+
+    namespace = pt.Namespace()
+    x1 = pt.make_data_wrapper(namespace, x1_in)
+    x2 = pt.make_data_wrapper(namespace, x2_in)
+    pt_func = getattr(pt, which)
+    np_func = getattr(np, which)
+
+    _, (y,) = pt.generate_loopy(pt_func(x1, x2),
+            target=pt.LoopyPyOpenCLTarget(queue))()
+    np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
