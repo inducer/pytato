@@ -1804,4 +1804,38 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
 
 # }}}
 
+
+# {{{ (max|min)inimum
+
+def _select(x1: Array, x2: Array, op: str) -> IndexLambda:
+    if x1.shape != x2.shape:
+        raise NotImplementedError("broadcasting not supported")
+
+    dtype = np.maximum(np.empty((), dtype=x1.dtype),
+                       np.empty((), dtype=x2.dtype)).dtype
+
+    expr1 = prim.Subscript(var("in0"), tuple(var(f"_{i}")
+                                             for i in range(len(x1.shape))))
+    expr2 = prim.Subscript(var("in1"), tuple(var(f"_{i}")
+                                             for i in range(len(x2.shape))))
+    condition = prim.Comparison(expr1, op, expr2)
+    return IndexLambda(
+            x1.namespace,
+            prim.If(condition, expr1, expr2),
+            bindings={"in0": x1, "in1": x2},
+            shape=x1.shape,
+            dtype=dtype,
+            )
+
+
+def maximum(x1: Array, x2: Array) -> IndexLambda:
+    return _select(x1, x2, ">")
+
+
+def minimum(x1: Array, x2: Array) -> IndexLambda:
+    return _select(x1, x2, "<")
+
+# }}}
+
+
 # vim: foldmethod=marker
