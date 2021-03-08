@@ -2,7 +2,7 @@ name: CI
 on:
     push:
         branches:
-        - master
+        - main
     pull_request:
         paths-ignore:
         - 'doc/*.rst'
@@ -21,7 +21,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
                 . ./prepare-and-run-flake8.sh "$(basename $GITHUB_REPOSITORY)" test examples
 
     pylint:
@@ -36,7 +36,7 @@ jobs:
         -   name: "Main Script"
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
                 . ci-support.sh
                 build_py_project_in_conda_env
                 run_pylint "$(basename $GITHUB_REPOSITORY)" test/test_*.py examples
@@ -52,7 +52,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-mypy.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-mypy.sh
                 . ./prepare-and-run-mypy.sh python3 mypy
 
     pytest:
@@ -60,14 +60,14 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                loopy-branch: [master, kernel_callables_v3-edit2]
+                loopy-branch: [main, kernel_callables_v3-edit2]
         steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
                 sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
 
     examples:
@@ -75,14 +75,14 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                loopy-branch: [master, kernel_callables_v3-edit2]
+                loopy-branch: [main, kernel_callables_v3-edit2]
         steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
                 sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
                 . ci-support.sh
                 build_py_project_in_conda_env
                 run_examples
@@ -100,7 +100,7 @@ jobs:
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 ./.ci-support/fix-code-for-docs.sh
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
                 . ci-support.sh
                 build_py_project_in_conda_env
                 # Circular references in type hints. Sphinx currently doesn't deal well with those.

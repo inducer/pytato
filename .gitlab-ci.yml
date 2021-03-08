@@ -4,7 +4,7 @@ Python 3 POCL:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -17,7 +17,7 @@ Python 3 POCL:
 
   parallel:
     matrix:
-      - LOOPY_BRANCH: master
+      - LOOPY_BRANCH: main
       - LOOPY_BRANCH: kernel_callables_v3-edit2
 
 
@@ -27,7 +27,7 @@ Python 3 POCL Examples:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-py-project-and-run-examples.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
   - ". ./build-py-project-and-run-examples.sh"
   tags:
   - python3
@@ -37,7 +37,7 @@ Python 3 POCL Examples:
   - tags
   parallel:
     matrix:
-      - LOOPY_BRANCH: master
+      - LOOPY_BRANCH: main
       - LOOPY_BRANCH: kernel_callables_v3-edit2
 
 
@@ -45,7 +45,7 @@ Pylint:
   script:
   - export PY_EXE=python3
   - EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-pylint.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
   - . ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py examples
   tags:
   - python3
@@ -55,7 +55,7 @@ Pylint:
 
 Flake8:
   script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
   - . ./prepare-and-run-flake8.sh ${CI_PROJECT_NAME} test examples
   tags:
   - python3
@@ -65,7 +65,7 @@ Flake8:
 
 Mypy:
   script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-mypy.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-mypy.sh
   - ". ./prepare-and-run-mypy.sh python3 mypy"
   tags:
   - python3
@@ -77,7 +77,7 @@ Documentation:
   script: |
     EXTRA_INSTALL="pyopencl sphinx-autodoc-typehints"
     ./.ci-support/fix-code-for-docs.sh
-    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
     . ./ci-support.sh
     build_py_project_in_venv
     # Circular references in type hints. Sphinx currently doesn't deal well with those.
