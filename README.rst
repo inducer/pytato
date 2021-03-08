@@ -1,12 +1,12 @@
 Pytato: Get Descriptions of Array Computations via Lazy Evaluation
 ==================================================================
 
-.. image:: https://gitlab.tiker.net/inducer/pytato/badges/master/pipeline.svg
+.. image:: https://gitlab.tiker.net/inducer/pytato/badges/main/pipeline.svg
     :alt: Gitlab Build Status
-    :target: https://gitlab.tiker.net/inducer/pytato/commits/master
-.. image:: https://github.com/inducer/pytato/workflows/CI/badge.svg?branch=master&event=push
+    :target: https://gitlab.tiker.net/inducer/pytato/commits/main
+.. image:: https://github.com/inducer/pytato/workflows/CI/badge.svg?branch=main&event=push
     :alt: Github Build Status
-    :target: https://github.com/inducer/pytato/actions?query=branch%3Amaster+workflow%3ACI+event%3Apush
+    :target: https://github.com/inducer/pytato/actions?query=branch%3Amain+workflow%3ACI+event%3Apush
 .. image:: https://badge.fury.io/py/pytato.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/pytato/
