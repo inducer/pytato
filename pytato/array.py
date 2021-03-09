@@ -612,7 +612,7 @@ class Array(Taggable):
             dtype = get_result_type(self.dtype, other.dtype)
 
         else:
-            raise ValueError("unknown argument")
+            return NotImplemented
 
         if reverse:
             first_expr, second_expr = second_expr, first_expr
