@@ -529,13 +529,17 @@ def test_passsing_bound_arguments_raises(ctx_factory):
         evt, (out2,) = prg(x=np.random.rand(10))
 
 
-def test_broadcasting(ctx_factory):
+@pytest.mark.parametrize("shape1, shape2", (
+                                            [(10, 4), ()],
+                                            [(32, 32, 3), (3,)],
+                                           ))
+def test_broadcasting(ctx_factory, shape1, shape2):
     queue = cl.CommandQueue(ctx_factory())
 
     ns = pt.Namespace()
 
-    x_in = np.random.randn(32, 32, 3).astype(np.int8)
-    y_in = np.random.randn(3).astype(np.int8)
+    x_in = np.random.random_sample(shape1).astype(np.int8)
+    y_in = np.random.random_sample(shape2).astype(np.int8)
     x = pt.make_data_wrapper(ns, x_in)
     y = pt.make_data_wrapper(ns, y_in)
 
