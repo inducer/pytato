@@ -183,13 +183,13 @@ def test_binary_op_dispatch():
             if isinstance(other, pt.Array):
                 return "bar"
 
-            raise TypeError
+            return NotImplemented
 
         def __radd__(self, other):
             if isinstance(other, pt.Array):
                 return "baz"
 
-            raise TypeError
+            return NotImplemented
 
     ns = pt.Namespace()
     x = pt.make_placeholder(ns, name="x", shape=(10,), dtype=float)
