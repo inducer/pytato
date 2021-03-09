@@ -177,6 +177,26 @@ def test_reshape_input_validation():
         pt.reshape(x, (-1, -1, 3))
 
 
+def test_binary_op_dispatch():
+    class Foo:
+        def __add__(self, other):
+            if isinstance(other, pt.Array):
+                return "bar"
+
+            return NotImplemented
+
+        def __radd__(self, other):
+            if isinstance(other, pt.Array):
+                return "baz"
+
+            return NotImplemented
+
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, name="x", shape=(10,), dtype=float)
+    assert Foo() + x == "bar"
+    assert x + Foo() == "baz"
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
