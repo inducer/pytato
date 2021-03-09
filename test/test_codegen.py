@@ -529,6 +529,21 @@ def test_passsing_bound_arguments_raises(ctx_factory):
         evt, (out2,) = prg(x=np.random.rand(10))
 
 
+def test_broadcasting(ctx_factory):
+    queue = cl.CommandQueue(ctx_factory())
+
+    ns = pt.Namespace()
+
+    x_in = np.random.randn(32, 32, 3).astype(np.int8)
+    y_in = np.random.randn(3).astype(np.int8)
+    x = pt.make_data_wrapper(ns, x_in)
+    y = pt.make_data_wrapper(ns, y_in)
+
+    evt, (out,) = pt.generate_loopy(x+y, pt.LoopyPyOpenCLTarget(queue))()
+
+    np.testing.assert_allclose(out, x_in+y_in)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
