@@ -531,7 +531,10 @@ def test_passsing_bound_arguments_raises(ctx_factory):
 
 @pytest.mark.parametrize("shape1, shape2", (
                                             [(10, 4), ()],
+                                            [(), (10, 4)],
+                                            [(3,), (32, 32, 3)],
                                             [(32, 32, 3), (3,)],
+                                            [(4, 1, 3), (1, 7, 1)],
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
     queue = cl.CommandQueue(ctx_factory())

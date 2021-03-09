@@ -34,7 +34,7 @@ def get_shape_after_broadcasting(s1: ShapeType, s2: ShapeType) -> ShapeType:
 
     result = list(s_big[:len(s_big)-len(s_small)])
 
-    for dim1, dim2 in zip(s_big[-len(s_small):], s_small):
+    for dim1, dim2 in zip(s_big[len(s_big)-len(s_small):], s_small):
         if dim1 == dim2:
             result.append(dim1)
         elif dim1 == 1:
@@ -54,6 +54,7 @@ def get_indexing_expression(s: ShapeType,
     Returns the indices while broadcasting an array of shape *s* into one of shape
     *r*.
     """
+    assert len(s) <= len(r)
     i_start = len(r) - len(s)
     indices = []
     for i, (dim1, dim2) in enumerate(zip(s, r[i_start:])):

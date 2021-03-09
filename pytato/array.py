@@ -589,7 +589,7 @@ class Array(Taggable):
 
         def add_indices(val: prim.Expression,
                         s: ShapeType, r: ShapeType) -> prim.Expression:
-            if self.ndim == 0:
+            if len(s) == 0:
                 return val
             else:
                 indices = utils.get_indexing_expression(s, r)
@@ -600,16 +600,17 @@ class Array(Taggable):
                 raise ValueError("Operands must belong to the same namespace.")
 
         if isinstance(other, Number):
+            shape = self.shape
             first_expr = add_indices(var("_in0"), self.shape, self.shape)
             second_expr = other
             bindings = {"_in0": self}
             dtype = get_result_type(self.dtype, other)
 
         elif isinstance(other, Array):
-            result_shape = utils.get_shape_after_broadcasting(self.shape,
-                                                              other.shape)
-            first_expr = add_indices(var("_in0"), self.shape, result_shape)
-            second_expr = add_indices(var("_in1"), other.shape, result_shape)
+            shape = utils.get_shape_after_broadcasting(self.shape,
+                                                       other.shape)
+            first_expr = add_indices(var("_in0"), self.shape, shape)
+            second_expr = add_indices(var("_in1"), other.shape, shape)
             bindings = {"_in0": self, "_in1": other}
             dtype = get_result_type(self.dtype, other.dtype)
 
@@ -623,7 +624,7 @@ class Array(Taggable):
 
         return IndexLambda(self.namespace,
                 expr,
-                shape=self.shape,
+                shape=shape,
                 dtype=dtype,
                 bindings=bindings)
 
