@@ -35,8 +35,12 @@ def get_shape_after_broadcasting(s1: ShapeType, s2: ShapeType) -> ShapeType:
     result = list(s_big[:-len(s_small)])
 
     for dim1, dim2 in zip(s_big[-len(s_small):], s_small):
-        if dim1 == dim2 or (dim1 == 1) or (dim2 == 1):
-            result.append(max(dim1, dim2))
+        if dim1 == dim2:
+            result.append(dim1)
+        elif dim1 == 1:
+            result.append(dim2)
+        elif dim2 == 1:
+            result.append(dim1)
         else:
             raise ValueError("operands could not be broadcast together with shapes "
                              f"{s1} {s2}.")
