@@ -197,6 +197,17 @@ def test_binary_op_dispatch():
     assert x + Foo() == "baz"
 
 
+def test_gc():
+    def f(ns):
+        x = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x")
+        del x
+    ns = pt.Namespace()
+    f(ns)
+    pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x1")
+    x2 = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x2")  # noqa: F841
+    assert list(ns.keys()) == ["x2"]
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
