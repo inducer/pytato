@@ -272,8 +272,8 @@ class Namespace(Mapping[str, "Array"]):
     def remove_out_of_scope_data_wrappers(self) -> None:
         import sys
         data_wrappers = {name
-                         for name, ary in self.items()
-                         if (isinstance(ary, DataWrapper)
+                         for name in self
+                         if (isinstance(self[name], DataWrapper)
                              and name.startswith("_pt"))}
         out_of_scope_dws = {name
                             for name in data_wrappers
