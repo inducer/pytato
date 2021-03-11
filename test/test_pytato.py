@@ -208,6 +208,22 @@ def test_accessing_dict_of_named_arrays_validation():
     assert y1y2["y1"].dtype == (2*x).dtype
 
 
+def test_gc():
+    def f(ns):
+        x = pt.make_data_wrapper(ns, np.random.rand(10, 10))
+        del x
+    ns = pt.Namespace()
+    f(ns)
+    pt.make_data_wrapper(ns, np.random.rand(10, 10))
+    x1 = pt.make_data_wrapper(ns, np.random.rand(10, 10))  # noqa: F841
+    pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x2")  # noqa: F841
+    x3 = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x3")  # noqa: F841
+    assert len(ns) == 3
+    assert x1.name in ns
+    assert "x2" in ns
+    assert "x3" in ns
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
