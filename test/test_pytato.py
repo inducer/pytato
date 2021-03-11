@@ -199,13 +199,18 @@ def test_binary_op_dispatch():
 
 def test_gc():
     def f(ns):
-        x = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x")
+        x = pt.make_data_wrapper(ns, np.random.rand(10, 10))
         del x
     ns = pt.Namespace()
     f(ns)
-    pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x1")
-    x2 = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x2")  # noqa: F841
-    assert list(ns.keys()) == ["x2"]
+    pt.make_data_wrapper(ns, np.random.rand(10, 10))
+    x1 = pt.make_data_wrapper(ns, np.random.rand(10, 10))  # noqa: F841
+    pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x2")  # noqa: F841
+    x3 = pt.make_data_wrapper(ns, np.random.rand(10, 10), name="x3")  # noqa: F841
+    assert len(ns) == 3
+    assert x1.name in ns
+    assert "x2" in ns
+    assert "x3" in ns
 
 
 if __name__ == "__main__":
