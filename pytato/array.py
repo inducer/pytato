@@ -269,15 +269,16 @@ class Namespace(Mapping[str, "Array"]):
                 self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
-    def remove_out_of_ref_data_wrappers(self) -> None:
+    def remove_out_of_scope_data_wrappers(self) -> None:
         import sys
         data_wrappers = {name
                          for name, ary in self.items()
-                         if isinstance(ary, DataWrapper)}
-        out_of_refs = {name
-                       for name in data_wrappers
-                       if sys.getrefcount(self[name]) <= 2}
-        for k in out_of_refs:
+                         if (isinstance(ary, DataWrapper)
+                             and name.startswith("_pt"))}
+        out_of_scope_dws = {name
+                            for name in data_wrappers
+                            if sys.getrefcount(self[name]) <= 2}
+        for k in out_of_scope_dws:
             del self._symbol_table[k]
 
 # }}}
@@ -1698,7 +1699,7 @@ def make_data_wrapper(namespace: Namespace,
     :param shape:      optional shape of the array, inferred from *data* if not given
     :param tags:       implementation tags
     """
-    namespace.remove_out_of_ref_data_wrappers()
+    namespace.remove_out_of_scope_data_wrappers()
 
     if name is None:
         name = namespace.name_gen("_pt_data")
