@@ -73,14 +73,9 @@ class BoundProgram:
     .. attribute:: bound_arguments
 
         A map from names to pre-bound kernel arguments.
-
-    .. automethod:: __call__
     """
     program: Any
     bound_arguments: Mapping[str, Any]
     target: Target
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
 
 # vim: foldmethod=marker
