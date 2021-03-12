@@ -66,25 +66,25 @@ class LoopyTarget(Target):
 class LoopyPyOpenCLTarget(LoopyTarget):
     """A :mod:`pyopencl` code generation target.
 
-    .. attribute:: queue
+    .. attribute:: device
 
-        The :mod:`pyopencl` command queue, or *None*.
+        The :mod:`pyopencl` device used to construct the
+        :class:`loopy.PyOpenCLTarget`, or *None*.
     """
 
-    def __init__(self, queue: Optional["pyopencl.CommandQueue"] = None):
-        self.queue = queue
+    def __init__(self, device: Optional["pyopencl.Device"] = None):
+        import pyopencl as cl
+        if device is not None and not isinstance(device, cl.Device):
+            raise TypeError("device must be cl.Device or None")
+        self.device = device
 
     def get_loopy_target(self) -> "loopy.LoopyPyOpenCLTarget":
         import loopy as lp
-        device = None
-        if self.queue is not None:
-            device = self.queue.device
-        return lp.PyOpenCLTarget(device)
+        return lp.PyOpenCLTarget(self.device)
 
     def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
             bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
-                queue=self.queue,
                 bound_arguments=bound_arguments,
                 target=self)
 
@@ -93,18 +93,10 @@ class LoopyPyOpenCLTarget(LoopyTarget):
 class BoundPyOpenCLProgram(BoundProgram):
     """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
 
-    .. attribute:: queue
-
-        A :mod:`pyopencl` command queue.
-
     .. automethod:: __call__
     """
-    queue: Optional["pyopencl.CommandQueue"]
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, queue, *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
-        if not self.queue:
-            raise ValueError("queue must be specified")
 
         if set(kwargs.keys()) & set(self.bound_arguments.keys()):
             raise ValueError("Got arguments that were previously bound: "
@@ -115,7 +107,7 @@ class BoundPyOpenCLProgram(BoundProgram):
         if not isinstance(self. program, loopy.LoopKernel):
             updated_kwargs.setdefault("entrypoint", "_pt_kernel")
 
-        return self.program(self.queue, *args, **updated_kwargs)
+        return self.program(queue, *args, **updated_kwargs)
 
     @property
     def kernel(self) -> "loopy.LoopKernel":
