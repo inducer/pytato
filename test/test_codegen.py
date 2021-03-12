@@ -518,6 +518,16 @@ def test_passsing_bound_arguments_raises(ctx_factory):
         evt, (out2,) = prg(queue, x=np.random.rand(10))
 
 
+def test_expr_canonicalization(ctx_factory):
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")
+    y = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="y")
+    knl1 = pt.generate_loopy(2*x).program
+    knl2 = pt.generate_loopy(2*y).program
+
+    assert knl1 == knl2
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
