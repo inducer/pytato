@@ -9,6 +9,10 @@ that the graph represents a computation that's being repeated often enough that
 it is worthwhile to do expensive processing on it (code generation, fusion,
 OpenCL compilation, etc).
 
+Here's an example usage:
+
+.. literalinclude:: ../examples/demo.py
+
 .. toctree::
     :maxdepth: 2
     :caption: Contents:
