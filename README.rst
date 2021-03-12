@@ -19,7 +19,8 @@ that the graph represents a computation that's being repeated often enough that
 it is worthwhile to do expensive processing on it (code generation, fusion,
 OpenCL compilation, etc).
 
-* `Documentation <https://documen.tician.de/pytato>`__ (read how things work)
+* `Documentation <https://documen.tician.de/pytato>`__ (read how things work, see an example)
+* `Github <https://github.com/inducer/pytato>`__ (get latest source code, file bugs)
 
 Pytato is licensed to you under the MIT/X Consortium license. See
 the `documentation <https://documen.tician.de/pytato/misc.html>`__
