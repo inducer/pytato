@@ -21,27 +21,6 @@ OpenCL compilation, etc).
 
 * `Documentation <https://documen.tician.de/pytato>`__ (read how things work)
 
-Example::
-
-    import pytato as pt
-    import numpy as np
-
-    ns = pt.Namespace()
-    pt.SizeParameter(ns, "n")  # -> prescribes shape=(), dtype=np.intp
-    a = pt.Placeholder(ns, "a", "n,n", dtype=np.float32)
-
-    # Also: pt.roll
-    # If we can: np.roll
-    a2a = a@(2*a)
-
-    aat = a@a.T
-
-    # FIXME: those names are only local...?
-    # maybe change name of DictOfNamedArrays
-    result = pt.DictOfNamedArrays({"a2a": a2a, "aat": aat})
-
-    prg = pt.generate_loopy(result)
-
 Pytato is licensed to you under the MIT/X Consortium license. See
 the `documentation <https://documen.tician.de/pytato/misc.html>`__
 for further details.
