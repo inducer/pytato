@@ -657,6 +657,7 @@ def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
         options: Optional[lp.Options] = None,
+        *,
         cl_device: Optional["pyopencl.Device"] = None) -> BoundProgram:
     r"""Code generation entry point.
 
