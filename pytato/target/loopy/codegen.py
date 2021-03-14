@@ -657,6 +657,7 @@ def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
         options: Optional[lp.Options] = None,
+        *,
         cl_device: Optional["pyopencl.Device"] = None) -> BoundProgram:
     r"""Code generation entry point.
 
@@ -677,6 +678,9 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     if target is None:
         target = LoopyPyOpenCLTarget(device=cl_device)
+    else:
+        if cl_device is not None:
+            raise TypeError("may not pass both 'target' and 'cl_device'")
 
     preproc_result = preprocess(orig_outputs)
     outputs = preproc_result.outputs
