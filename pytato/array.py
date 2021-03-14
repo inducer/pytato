@@ -269,6 +269,14 @@ class Namespace(Mapping[str, "Array"]):
                 self, expr=var_ref, shape=value.shape,
                 dtype=value.dtype)
 
+    def remove(self, name: str) -> None:
+        """
+        Removes an array from the namespace.
+
+        :param name: Name of the array to be removed.
+        """
+        del self._symbol_table[name]
+
 # }}}
 
 

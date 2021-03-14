@@ -31,6 +31,9 @@ from pytato.array import (
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
         DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase)
 
+import pytato.scalar_expr as scalar_expr
+import pymbolic.primitives as prim
+
 __doc__ = """
 .. currentmodule:: pytato.transform
 
@@ -39,6 +42,8 @@ Transforming Computations
 
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
+.. autoclass:: ExpressionSubstitutionMapper
+.. autoclass:: Renamer
 .. autofunction:: copy_namespace
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
@@ -206,6 +211,110 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
 
+
+class ExpressionSubstitutionMapper(CopyMapper):
+    def __init__(self, namespace: Namespace,
+            subst_func: Callable[[scalar_expr.ScalarExpression],
+                                 Optional[scalar_expr.ScalarExpression]]) -> None:
+        self.namespace = namespace
+        self.cache: Dict[Array, Array] = {}
+        self.scalar_expr_mapper = scalar_expr.SubstitutionMapper(subst_func)
+
+    def map_index_lambda(self, expr: IndexLambda) -> Array:
+        bindings = {
+                name: self.rec(subexpr)
+                for name, subexpr in expr.bindings.items()}
+        return IndexLambda(namespace=self.namespace,
+                expr=self.scalar_expr_mapper(expr.expr),
+                shape=self.scalar_expr_mapper(expr.shape),
+                dtype=expr.dtype,
+                bindings=bindings,
+                tags=expr.tags)
+
+    def map_placeholder(self, expr: Placeholder) -> Array:
+        return Placeholder(namespace=self.namespace,
+                name=expr.name,
+                shape=self.scalar_expr_mapper(expr.shape),
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> Array:
+        return AxisPermutation(array=self.rec(expr.array),
+                axes=expr.axes,
+                tags=expr.tags)
+
+    def map_data_wrapper(self, expr: DataWrapper) -> Array:
+        return DataWrapper(namespace=self.namespace,
+                name=expr.name,
+                data=expr.data,
+                shape=self.scalar_expr_mapper(expr.shape),
+                tags=expr.tags)
+
+
+class Renamer(CopyMapper):
+    def __init__(self, namespace: Namespace,
+                 old_name_to_new_name: Dict[str, str]) -> None:
+        super().__init__(namespace)
+        self.old_name_to_new_name = old_name_to_new_name
+
+    def map_placeholder(self, expr: Placeholder) -> Array:
+        return Placeholder(namespace=self.namespace,
+                name=self.old_name_to_new_name[expr.name],
+                shape=expr.shape,
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_data_wrapper(self, expr: DataWrapper) -> Array:
+        return DataWrapper(namespace=self.namespace,
+                name=self.old_name_to_new_name[expr.name],
+                data=expr.data,
+                shape=expr.shape,
+                tags=expr.tags)
+
+    def map_size_param(self, expr: SizeParam) -> Array:
+        return SizeParam(self.namespace, name=self.old_name_to_new_name[expr.name],
+                tags=expr.tags)
+
+
+class Pymbolicifier(Mapper):
+    """
+    Maps an :class:`~pytato.array.Array` to an indexed expression with the indices
+    ``_0, _1, ...`` corresponding to the output's indices.
+
+    ::
+        >>> from pytato.codegen import preprocess
+        >>> x = pt.make_placeholder(ns, shape=(6, 6), dtype=float, name="u")
+        >>> y = pt.make_placeholder(ns, shape=(4, 9), dtype=float, name="v")
+        >>> z = 10*pt.reshape(x, (-1, )) + 4*pt.reshape(y, (-1, ))
+        >>> # preprocessing "z" to convert reshapes into index lambdas
+        >>> processed_z = preprocess(
+        ...     pt.make_dict_of_named_arrays({"z": z})).outputs["z"]
+        >>> print(Pymbolicifier({x: "u", y: "v"})(processed_z))
+        >>> 10*u[_0 // 6, _0 % 6] + 4*v[_0 // 9, _0 % 9]
+    """
+    def __init__(self, named_arrays: Dict[Array, str]) -> None:
+        self.named_arrays = named_arrays
+
+    def map_index_lambda(self, expr: IndexLambda) -> prim.Expression:
+        try:
+            # index lambda has a name, probably stored as a named array
+            # => just return the expression in terms of the named array
+            name = self.named_arrays[expr]
+            return prim.Subscript(prim.Variable(name),
+                                  tuple(prim.Variable(f"_{i}")
+                                        for i in range(expr.ndim)))
+        except KeyError:
+            return scalar_expr.IndexLambdaSubstitutor({key: self.rec(val)
+                for key, val in expr.bindings.items()})(expr.expr)
+
+    def map_placeholder(self, expr: Placeholder) -> prim.Expression:
+        return prim.Subscript(prim.Variable(expr.name),
+                              tuple(prim.Variable(f"_{i}")
+                                    for i in range(expr.ndim)))
+
+    def map_size_param(self, expr: SizeParam) -> prim.Expression:
+        return prim.Variable(expr.name)
+
 # }}}
 
 
@@ -232,12 +341,15 @@ def copy_namespace(source_namespace: Namespace,
 
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
-        copy_mapper: CopyMapper) -> DictOfNamedArrays:
+        copy_mapper: CopyMapper,
+        only_deps: bool = True) -> DictOfNamedArrays:
     """Copy the elements of a :class:`~pytato.DictOfNamedArrays` into a
     :class:`~pytato.DictOfNamedArrays` with a new namespace.
 
     :param source_dict: The :class:`~pytato.DictOfNamedArrays` to copy
     :param copy_mapper: A mapper that performs copies into a new namespace
+    :param only_deps: If *False* all entries in *source_dict*'s namespace would be
+        copied, else only those entries on which *outputs* depend on will be copied.
     :returns: A new :class:`~pytato.DictOfNamedArrays` containing copies of the
         items in *source_dict*
     """
@@ -248,13 +360,16 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
 
     # {{{ extract dependencies elements of the namespace
 
-    # https://github.com/python/mypy/issues/2013
-    deps: FrozenSet[Array] = frozenset().union(
-            *list(get_dependencies(source_dict).values()))  # type: ignore
-    dep_names = (frozenset([dep.name
-                            for dep in deps
-                            if isinstance(dep, InputArgumentBase)])
-                 | get_scalar_expr_deps([dep.shape for dep in deps]))
+    dep_names: Optional[FrozenSet[str]] = None
+
+    if only_deps:
+        # https://github.com/python/mypy/issues/2013
+        deps: FrozenSet[Array] = frozenset().union(
+                *list(get_dependencies(source_dict).values()))  # type: ignore
+        dep_names = (frozenset([dep.name
+                                for dep in deps
+                                if isinstance(dep, InputArgumentBase)])
+                     | get_scalar_expr_deps([dep.shape for dep in deps]))
 
     # }}}
 

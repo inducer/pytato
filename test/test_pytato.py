@@ -119,7 +119,7 @@ def test_make_placeholder_noname():
     x = pt.make_placeholder(ns, shape=(10, 4), dtype=float)
     y = 2*x
 
-    knl = pt.generate_loopy(y).kernel
+    knl = pt.generate_loopy(y, keep_names=True).kernel
 
     assert x.name in knl.arg_dict
     assert x.name in knl.get_read_variables()
