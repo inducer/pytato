@@ -535,7 +535,7 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     x = pt.make_data_wrapper(ns, x_in)
     y = pt.make_data_wrapper(ns, y_in)
 
-    evt, (out,) = pt.generate_loopy(x+y, cl_device=queue.device)()
+    evt, (out,) = pt.generate_loopy(x+y, cl_device=queue.device)(queue)
 
     np.testing.assert_allclose(out, x_in+y_in)
 
