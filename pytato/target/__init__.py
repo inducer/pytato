@@ -74,9 +74,9 @@ class BoundProgram:
     .. attribute:: bound_arguments
 
         A map from names to pre-bound kernel arguments.
-        
+
     .. method:: __call__
-    
+
         It is expected that every concrete subclass of this class
         have a ``__call__`` method to run the generated code,
         however interfaces may vary based on the specific
