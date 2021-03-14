@@ -30,8 +30,8 @@ from typing import Any, Union, Mapping, FrozenSet, Set
 from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
-from pymbolic.mapper.substitutor import (SubstitutionMapper as
-        SubstitutionMapperBase)
+from pymbolic.mapper.substitutor import (make_subst_func,
+        SubstitutionMapper as SubstitutionMapperBase)
 from pymbolic.mapper.dependency import (DependencyMapper as
         DependencyMapperBase)
 import pymbolic.primitives as prim
@@ -154,5 +154,35 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
 
 # }}}
 
+
+# {{{ IndexLambdaSubstitutor
+
+class IndexLambdaSubstitutor(IdentityMapper):
+    """
+    Substitutes the usage of an :class:`pytato.array.IndexLambda` according
+    to the provided *bindings*.
+
+    ::
+        >>> bindings = {"in": scalar_expr.parse("x[_1 + 7, _0] + y[_0, _1]")}
+        >>> input_expr = scalar_expr.parse("in[_1 + 3, _0] + 17")
+        >>> print(IndexLambdaSubstitutor(bindings)(input_expr))
+        >>> x[_0 + 7, _1 + 3] + y[_1 + 3, _0] + 17
+    """
+    def __init__(self, bindings: Mapping[str, ScalarExpression]) -> None:
+        self.bindings = bindings
+
+    def map_subscript(self, expr: prim.Subscript) -> prim.Subscript:
+        idx_map = {f"_{i}": idx
+                   for i, idx in enumerate(expr.index_tuple)}
+        subst_mapper = SubstitutionMapper(make_subst_func(idx_map))
+        return subst_mapper(self.bindings[expr.aggregate.name])
+
+    def map_variable(self, expr: prim.Variable) -> prim.Variable:
+        try:
+            return self.bindings[expr.name]
+        except KeyError:
+            return super().map_variable(expr)
+
+# }}}
 
 # vim: foldmethod=marker
