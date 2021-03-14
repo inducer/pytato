@@ -518,6 +518,22 @@ def test_passsing_bound_arguments_raises(ctx_factory):
         evt, (out2,) = prg(queue, x=np.random.rand(10))
 
 
+def test_namespace_variables_in_idx_lambda_exprs(ctx_factory):
+    from pymbolic import parse
+    from numpy.random import default_rng
+
+    queue = cl.CommandQueue(ctx_factory())
+    rng = default_rng()
+    x_in = rng.random(size=(10, 4))
+
+    ns = pt.Namespace()
+    pt.make_placeholder(ns, name="x", shape=(10, 4), dtype=float)
+    y = pt.IndexLambda(ns, parse("2*x[_0, _1]"), (10, 4), float)
+    evt, (out, ) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
+
+    np.testing.assert_allclose(out, 2*x_in)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
