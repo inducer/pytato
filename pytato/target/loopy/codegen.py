@@ -666,7 +666,13 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     :param options: Code generation options for the kernel.
     :returns: A :class:`pytato.program.BoundProgram` wrapping the generated
         :mod:`loopy` program.
+
+    If *result* is a :class:`dict` or a :class:`DictOfNamedArrays` and *options*
+    is not supplied, then the Loopy option :attr:`~loopy.Options.return_dict`
+    will be set to *True*.
     """
+
+    result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
@@ -680,6 +686,9 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
     namespace = outputs.namespace
+
+    if options is None and result_is_dict:
+        options = lp.Options(return_dict=True)
 
     state = get_initial_codegen_state(namespace, target, options)
 

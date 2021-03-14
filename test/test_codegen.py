@@ -137,15 +137,14 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
 
     # Without return_dict.
-    prog = pt.generate_loopy(result, cl_device=queue.device)
+    prog = pt.generate_loopy(result, cl_device=queue.device,
+            options=lp.Options(return_dict=False))
     _, (x_out, y_out) = prog(queue, x=x_in, y=y_in)
     assert (x_out == x_in).all()
     assert (y_out == y_in).all()
 
     # With return_dict.
-    prog = pt.generate_loopy(result,
-            cl_device=queue.device,
-            options=lp.Options(return_dict=True))
+    prog = pt.generate_loopy(result, cl_device=queue.device)
 
     _, outputs = prog(queue, x=x_in, y=y_in)
     assert (outputs["x_out"] == x_in).all()
@@ -236,9 +235,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = op(x_in, y)
 
-        prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-                cl_device=queue.device,
-                options=lp.Options(return_dict=True))
+        prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
         _, outputs = prog(queue)
 
@@ -278,9 +275,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = op(x, y)
 
-        prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-                cl_device=queue.device,
-                options=lp.Options(return_dict=True))
+        prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
         _, outputs = prog(queue)
 
@@ -308,9 +303,7 @@ def test_unary_arith(ctx_factory, which):
         exprs[dtype] = op(
                 pt.make_data_wrapper(namespace, x_orig.astype(dtype)))
 
-    prog = pt.generate_loopy(pt.make_dict_of_named_arrays(exprs),
-            cl_device=queue.device,
-            options=lp.Options(return_dict=True))
+    prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
     _, outputs = prog(queue)
 
@@ -357,10 +350,7 @@ def test_slice(ctx_factory, shape):
         ref_outputs[f"out_{i}"] = x_in[slice_]
         i += 1
 
-    prog = pt.generate_loopy(
-            pt.make_dict_of_named_arrays(outputs),
-            cl_device=queue.device,
-            options=lp.Options(return_dict=True))
+    prog = pt.generate_loopy(outputs, cl_device=queue.device)
 
     _, outputs = prog(queue)
 
@@ -456,9 +446,8 @@ def test_dict_to_loopy_kernel(ctx_factory):
     y = 2*x
     z = 3*x
 
-    _, result_dict = pt.generate_loopy({"y": y, "z": z},
-                                       cl_device=queue.device,
-                                       options=lp.Options(return_dict=True))(queue)
+    _, result_dict = pt.generate_loopy({"y": y, "z": z}, cl_device=queue.device)(
+            queue)
     np.testing.assert_allclose(result_dict["y"], 2*x_in)
     np.testing.assert_allclose(result_dict["z"], 3*x_in)
 
