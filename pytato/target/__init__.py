@@ -40,6 +40,7 @@ Available targets
 
 from dataclasses import dataclass
 from typing import Any, Mapping
+from pytools import memoize_method
 
 
 class Target:
@@ -49,7 +50,8 @@ class Target:
     """
 
     def bind_program(self, program: Any,
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
+            bound_arguments: Mapping[str, Any],
+            namespace_mapping: Mapping[str, str]) -> BoundProgram:
         """Create a :class:`BoundProgram` for this code generation target.
 
         :param program: the :mod:`loopy` program
@@ -85,5 +87,12 @@ class BoundProgram:
     program: Any
     bound_arguments: Mapping[str, Any]
     target: Target
+    namespace_mapping: Mapping[str, str]
+
+    @property  # type: ignore
+    @memoize_method
+    def inverse_namespace_mapping(self) -> Mapping[str, str]:
+        return {v: k for k, v in self.namespace_mapping.items()}
+
 
 # vim: foldmethod=marker

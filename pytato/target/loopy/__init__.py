@@ -83,9 +83,11 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         return lp.PyOpenCLTarget(self.device)
 
     def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
+            bound_arguments: Mapping[str, Any],
+            namespace_mapping: Mapping[str, str]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
                 bound_arguments=bound_arguments,
+                namespace_mapping=namespace_mapping,
                 target=self)
 
 
@@ -105,10 +107,26 @@ class BoundPyOpenCLProgram(BoundProgram):
 
         updated_kwargs = dict(self.bound_arguments)
         updated_kwargs.update(kwargs)
+
+        try:
+            updated_kwargs = {self.namespace_mapping[k]: v
+                              for k, v in updated_kwargs.items()}
+        except KeyError as e:
+            raise ValueError("BoundPyOpenCLProgram.__call__ got an unexpected "
+                             f"input: '{e.args[0]}'.")
+
         if not isinstance(self. program, loopy.LoopKernel):
             updated_kwargs.setdefault("entrypoint", "_pt_kernel")
 
-        return self.program(queue, *args, **updated_kwargs)
+        evt, out = self.program(queue, *args, **updated_kwargs)
+
+        out = ({self.inverse_namespace_mapping[k]: v for k, v in out.items()}
+                if isinstance(out, dict)
+
+                else
+                out)
+
+        return evt, out
 
     @property
     def kernel(self) -> "loopy.LoopKernel":

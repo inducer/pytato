@@ -658,6 +658,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
         options: Optional[lp.Options] = None,
         *,
+        keep_names: bool = False,
         cl_device: Optional["pyopencl.Device"] = None) -> BoundProgram:
     r"""Code generation entry point.
 
@@ -682,7 +683,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         if cl_device is not None:
             raise TypeError("may not pass both 'target' and 'cl_device'")
 
-    preproc_result = preprocess(orig_outputs)
+    preproc_result = preprocess(orig_outputs, keep_names)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
     namespace = outputs.namespace
@@ -714,7 +715,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     return target.bind_program(
             program=state.program,
-            bound_arguments=preproc_result.bound_arguments)
+            bound_arguments=preproc_result.bound_arguments,
+            namespace_mapping=preproc_result.namespace_mapping)
 
 # }}}
 
