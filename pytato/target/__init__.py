@@ -60,7 +60,8 @@ class Target:
 
 @dataclass(init=True, repr=False, eq=False)
 class BoundProgram:
-    """A wrapper around a :mod:`loopy` kernel for execution.
+    """A container for the result of code generation along with data
+    bindings for already-bound arguments.
 
     .. attribute:: target
 
@@ -73,6 +74,13 @@ class BoundProgram:
     .. attribute:: bound_arguments
 
         A map from names to pre-bound kernel arguments.
+        
+    .. method:: __call__
+    
+        It is expected that every concrete subclass of this class
+        have a ``__call__`` method to run the generated code,
+        however interfaces may vary based on the specific
+        subclass.
     """
     program: Any
     bound_arguments: Mapping[str, Any]
