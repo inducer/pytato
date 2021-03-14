@@ -96,7 +96,7 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
     namespace = pt.Namespace()
     x1 = pt.make_data_wrapper(namespace, x1_in)
     x2 = pt.make_data_wrapper(namespace, x2_in)
-    prog = pt.generate_loopy(x1 @ x2, cl_device=queue.device)
+    prog = pt.generate_loopy(x1 @ x2, keep_names=True, cl_device=queue.device)
     _, (out,) = prog(queue)
 
     assert (out == x1_in @ x2_in).all()
@@ -429,7 +429,7 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
 
     yz = pt.DictOfNamedArrays({"y": y, "z": z})
 
-    knl = pt.generate_loopy(yz).kernel
+    knl = pt.generate_loopy(yz, keep_names=True).kernel
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
 
 
@@ -459,7 +459,7 @@ def test_only_deps_as_knl_args():
     y = pt.make_placeholder(ns, name="y", shape=(10, 4), dtype=float)  # noqa:F841
 
     z = 2*x
-    knl = pt.generate_loopy(z).kernel
+    knl = pt.generate_loopy(z, keep_names=True).kernel
 
     assert "x" in knl.arg_dict
     assert "y" not in knl.arg_dict
