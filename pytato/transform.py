@@ -171,8 +171,13 @@ class DependencyMapper(Mapper):
         return reduce(lambda a, b: a | b, args, frozenset())
 
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
-        return self.combine(frozenset([expr]), *(self.rec(bnd)
-                                                 for bnd in expr.bindings.values()))
+        from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
+        expr_ns_deps = ((get_scalar_expr_deps(expr.expr) - set(expr.bindings))
+                        & set(expr.namespace.keys()))
+
+        return self.combine(frozenset([expr]),
+                            *(self.rec(bnd) for bnd in expr.bindings.values()),
+                            *(self.rec(expr.namespace[dep]) for dep in expr_ns_deps))
 
     def map_placeholder(self, expr: Placeholder) -> FrozenSet[Array]:
         return frozenset([expr])
