@@ -232,12 +232,15 @@ def copy_namespace(source_namespace: Namespace,
 
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
-        copy_mapper: CopyMapper) -> DictOfNamedArrays:
+        copy_mapper: CopyMapper,
+        only_deps: bool = True) -> DictOfNamedArrays:
     """Copy the elements of a :class:`~pytato.DictOfNamedArrays` into a
     :class:`~pytato.DictOfNamedArrays` with a new namespace.
 
     :param source_dict: The :class:`~pytato.DictOfNamedArrays` to copy
     :param copy_mapper: A mapper that performs copies into a new namespace
+    :param only_deps: If *False* all entries in *source_dict*'s namespace would be
+        copied, else only those entries on which *outputs* depend on will be copied.
     :returns: A new :class:`~pytato.DictOfNamedArrays` containing copies of the
         items in *source_dict*
     """
@@ -248,13 +251,16 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
 
     # {{{ extract dependencies elements of the namespace
 
-    # https://github.com/python/mypy/issues/2013
-    deps: FrozenSet[Array] = frozenset().union(
-            *list(get_dependencies(source_dict).values()))  # type: ignore
-    dep_names = (frozenset([dep.name
-                            for dep in deps
-                            if isinstance(dep, InputArgumentBase)])
-                 | get_scalar_expr_deps([dep.shape for dep in deps]))
+    dep_names: Optional[FrozenSet[str]] = None
+
+    if only_deps:
+        # https://github.com/python/mypy/issues/2013
+        deps: FrozenSet[Array] = frozenset().union(
+                *list(get_dependencies(source_dict).values()))  # type: ignore
+        dep_names = (frozenset([dep.name
+                                for dep in deps
+                                if isinstance(dep, InputArgumentBase)])
+                     | get_scalar_expr_deps([dep.shape for dep in deps]))
 
     # }}}
 
