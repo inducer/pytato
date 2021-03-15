@@ -49,8 +49,8 @@ def get_shape_after_broadcasting(s1: ShapeType, s2: ShapeType) -> ShapeType:
     return tuple(result)
 
 
-def get_indexing_expression(s: ShapeType,
-                            r: ShapeType) -> Tuple[ScalarExpression, ...]:
+def get_indexing_expression(shape: ShapeType,
+                            result_shape: ShapeType) -> Tuple[ScalarExpression, ...]:
     """
     Returns the indices while broadcasting an array of shape *s* into one of shape
     *r*.
