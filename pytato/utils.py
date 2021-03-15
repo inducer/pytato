@@ -60,7 +60,6 @@ def get_shape_after_broadcasting(
                  for i in range(result_dim))
 
 
-
 def get_indexing_expression(shape: ShapeType,
                             result_shape: ShapeType) -> Tuple[ScalarExpression, ...]:
     """
