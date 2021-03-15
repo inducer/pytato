@@ -588,7 +588,7 @@ class Array(Taggable):
         import pytato.utils as utils
 
         def add_indices(val: prim.Expression,
-                        s: ShapeType, r: ShapeType) -> prim.Expression:
+                        shape: ShapeType, result_shape: ShapeType) -> prim.Expression:
             if len(s) == 0:
                 return val
             else:
