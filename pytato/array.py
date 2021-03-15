@@ -590,9 +590,6 @@ class Array(Taggable):
 
         if not isinstance(other, (Array, Number)):
             return NotImplemented
-        if isinstance(other, Array):
-            if self.namespace is not other.namespace:
-                raise ValueError("Operands must belong to the same namespace.")
 
         # }}}
 
@@ -608,6 +605,9 @@ class Array(Taggable):
             dtype = get_result_type(self.dtype, other)
         else:
             assert isinstance(other, Array)
+            if self.namespace is not other.namespace:
+                raise ValueError("Operands must belong to the same namespace.")
+
             second_expr = utils.with_indices_for_broadcasted_shape(var("_in1"),
                                                                    other.shape,
                                                                    result_shape)
