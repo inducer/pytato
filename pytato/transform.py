@@ -46,7 +46,8 @@ Transforming Computations
 
 """
 
-INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
+# Match variables like "_0, _1, ..." and "pytato.c99.sin", ...
+PYTATO_DEPS_RE = re.compile(r"(_(0|([1-9][0-9]*)))|(pytato(\.\w+)+)")
 
 
 # {{{ mapper classes
@@ -177,7 +178,7 @@ class DependencyMapper(Mapper):
         from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
         expr_ns_deps = [dep for dep in (get_scalar_expr_deps(expr.expr)
                                         - set(expr.bindings))
-                        if not INDEX_RE.fullmatch(dep)]
+                        if not PYTATO_DEPS_RE.fullmatch(dep)]
 
         return self.combine(frozenset([expr]),
                             *(self.rec(bnd) for bnd in expr.bindings.values()),
