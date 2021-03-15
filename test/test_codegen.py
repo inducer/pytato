@@ -39,6 +39,7 @@ import pytest  # noqa
 import pytato as pt
 from pytato.array import Placeholder
 from testlib import assert_allclose_to_numpy
+import pymbolic.primitives as p
 
 
 def test_basic_codegen(ctx_factory):
@@ -525,11 +526,11 @@ def test_passsing_bound_arguments_raises(ctx_factory):
                                             [(32, 32, 3), (3,)],
                                             [(32, 22, 1), (3,)],
                                             [(4, 1, 3), (1, 7, 1)],
-                                            [(4, 1, 3), (1, "n+2", 1)],
+                                            [(4, 1, 3), (1, p.Variable("n")+2, 1)],
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
     from numpy.random import default_rng
-    from pymbolic.mapper.substitutor import substitute
+    from pymbolic.mapper.evaluator import evaluate
 
     queue = cl.CommandQueue(ctx_factory())
 
@@ -538,11 +539,11 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     rng = default_rng()
     n = rng.integers(20, 40)
 
-    x_in = rng.random(substitute(shape1, {"n": n})).astype(np.int8)
-    y_in = rng.random(substitute(shape1, {"n": n})).astype(np.int8)
+    x_in = rng.random(evaluate(shape1, {"n": n})).astype(np.int8)
+    y_in = rng.random(evaluate(shape2, {"n": n})).astype(np.int8)
     pt.make_size_param(ns, "n")
-    x = pt.make_data_wrapper(ns, x_in)
-    y = pt.make_data_wrapper(ns, y_in)
+    x = pt.make_data_wrapper(ns, x_in, shape=shape1)
+    y = pt.make_data_wrapper(ns, y_in, shape=shape2)
 
     prg = pt.generate_loopy(x+y, cl_device=queue.device)
 
