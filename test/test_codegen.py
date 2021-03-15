@@ -523,19 +523,33 @@ def test_passsing_bound_arguments_raises(ctx_factory):
                                             [(), (10, 4)],
                                             [(3,), (32, 32, 3)],
                                             [(32, 32, 3), (3,)],
+                                            [(32, 22, 1), (3,)],
                                             [(4, 1, 3), (1, 7, 1)],
+                                            [(4, 1, 3), (1, "n+2", 1)],
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
+    from numpy.random import default_rng
+    from pymbolic.mapper.substitutor import substitute
+
     queue = cl.CommandQueue(ctx_factory())
 
     ns = pt.Namespace()
 
-    x_in = np.random.random_sample(shape1).astype(np.int8)
-    y_in = np.random.random_sample(shape2).astype(np.int8)
+    rng = default_rng()
+    n = rng.integers(20, 40)
+
+    x_in = rng.random(substitute(shape1, {"n": n})).astype(np.int8)
+    y_in = rng.random(substitute(shape1, {"n": n})).astype(np.int8)
+    pt.make_size_param(ns, "n")
     x = pt.make_data_wrapper(ns, x_in)
     y = pt.make_data_wrapper(ns, y_in)
 
-    evt, (out,) = pt.generate_loopy(x+y, cl_device=queue.device)(queue)
+    prg = pt.generate_loopy(x+y, cl_device=queue.device)
+
+    if "n" in prg.kernel.arg_dict:
+        evt, (out,) = prg(queue, n=n)
+    else:
+        evt, (out,) = prg(queue)
 
     np.testing.assert_allclose(out, x_in+y_in)
 
