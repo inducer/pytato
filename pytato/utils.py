@@ -32,6 +32,7 @@ from pytato.scalar_expr import ScalarExpression
 def get_shape_after_broadcasting(s1: ShapeType, s2: ShapeType) -> ShapeType:
     s_big, s_small = (s1, s2) if len(s1) > len(s2) else (s2, s1)
 
+    # Use leading dimensions from s_big unmodified.
     result = list(s_big[:len(s_big)-len(s_small)])
 
     for dim1, dim2 in zip(s_big[len(s_big)-len(s_small):], s_small):
