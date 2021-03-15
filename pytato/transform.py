@@ -24,6 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import re
 from typing import Any, Callable, Dict, FrozenSet, Optional
 
 from pytato.array import (
@@ -44,6 +45,8 @@ Transforming Computations
 .. autofunction:: get_dependencies
 
 """
+
+INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
 
 
 # {{{ mapper classes
@@ -172,8 +175,9 @@ class DependencyMapper(Mapper):
 
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
         from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
-        expr_ns_deps = ((get_scalar_expr_deps(expr.expr) - set(expr.bindings))
-                        & set(expr.namespace.keys()))
+        expr_ns_deps = [dep for dep in (get_scalar_expr_deps(expr.expr)
+                                        - set(expr.bindings))
+                        if not INDEX_RE.fullmatch(dep)]
 
         return self.combine(frozenset([expr]),
                             *(self.rec(bnd) for bnd in expr.bindings.values()),
