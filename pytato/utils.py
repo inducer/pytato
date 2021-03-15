@@ -26,7 +26,7 @@ import pymbolic.primitives as prim
 
 from typing import Tuple, List, Union
 from pytato.array import Array, ShapeType
-from pytato.scalar_expr import ScalarExpression
+from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
 
 def get_shape_after_broadcasting(
@@ -41,16 +41,24 @@ def get_shape_after_broadcasting(
     # append leading dimensions of all the shapes with 1's to match result_dim.
     augmented_shapes = [((1,)*(result_dim-len(s)) + s) for s in shapes]
 
-    result_shape = tuple(max(s[i] for s in augmented_shapes)
-                         for i in range(result_dim))
-
-    for s in augmented_shapes:
-        for axis_len, result_dim in zip(s, result_shape):
-            if (axis_len != result_dim) and (axis_len != 1):
+    def _get_result_axis_length(axis_lengths: List[IntegralScalarExpression]
+                                ) -> IntegralScalarExpression:
+        result_axis_len = axis_lengths[0]
+        for axis_len in axis_lengths[1:]:
+            if axis_len == result_axis_len:
+                pass
+            elif axis_len == 1:
+                pass
+            elif result_axis_len == 1:
+                result_axis_len = axis_len
+            else:
                 raise ValueError("operands could not be broadcasted together with "
-                        f"shapes {' '.join(str(s) for s in shapes)}.")
+                                 f"shapes {' '.join(str(s) for s in shapes)}.")
+        return result_axis_len
 
-    return result_shape
+    return tuple(_get_result_axis_length([s[i] for s in augmented_shapes])
+                 for i in range(result_dim))
+
 
 
 def get_indexing_expression(shape: ShapeType,
