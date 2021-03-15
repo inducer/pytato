@@ -585,37 +585,34 @@ class Array(Taggable):
             other: Union[Array, Number],
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
-        import pytato.utils as utils
 
-        def add_indices(val: prim.Expression,
-                        shape: ShapeType, result_shape: ShapeType) -> prim.Expression:
-            if len(s) == 0:
-                return val
-            else:
-                indices = utils.get_indexing_expression(s, r)
-                return val[indices]
+        # {{{ sanity checks
 
+        if not isinstance(other, (Array, Number)):
+            return NotImplemented
         if isinstance(other, Array):
             if self.namespace is not other.namespace:
                 raise ValueError("Operands must belong to the same namespace.")
 
+        # }}}
+
+        import pytato.utils as utils
+        result_shape = utils.get_shape_after_broadcasting([self, other])
+        bindings = {"_in0": self}
+        first_expr = utils.with_indices_for_broadcasted_shape(var("_in0"),
+                                                              self.shape,
+                                                              result_shape)
+
         if isinstance(other, Number):
-            shape = self.shape
-            first_expr = add_indices(var("_in0"), self.shape, self.shape)
             second_expr = other
-            bindings = {"_in0": self}
             dtype = get_result_type(self.dtype, other)
-
-        elif isinstance(other, Array):
-            shape = utils.get_shape_after_broadcasting(self.shape,
-                                                       other.shape)
-            first_expr = add_indices(var("_in0"), self.shape, shape)
-            second_expr = add_indices(var("_in1"), other.shape, shape)
-            bindings = {"_in0": self, "_in1": other}
-            dtype = get_result_type(self.dtype, other.dtype)
-
         else:
-            return NotImplemented
+            assert isinstance(other, Array)
+            second_expr = utils.with_indices_for_broadcasted_shape(var("_in1"),
+                                                                   other.shape,
+                                                                   result_shape)
+            bindings["_in1"] = other
+            dtype = get_result_type(self.dtype, other.dtype)
 
         if reverse:
             first_expr, second_expr = second_expr, first_expr
@@ -624,7 +621,7 @@ class Array(Taggable):
 
         return IndexLambda(self.namespace,
                 expr,
-                shape=shape,
+                shape=result_shape,
                 dtype=dtype,
                 bindings=bindings)
 

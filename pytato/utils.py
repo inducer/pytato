@@ -24,41 +24,45 @@ THE SOFTWARE.
 
 import pymbolic.primitives as prim
 
-from typing import Tuple
-from pytato.array import ShapeType
+from typing import Tuple, List, Union
+from pytato.array import Array, ShapeType
 from pytato.scalar_expr import ScalarExpression
 
 
-def get_shape_after_broadcasting(s1: ShapeType, s2: ShapeType) -> ShapeType:
-    s_big, s_small = (s1, s2) if len(s1) > len(s2) else (s2, s1)
+def get_shape_after_broadcasting(
+        exprs: List[Union[Array, ScalarExpression]]) -> ShapeType:
+    """
+    Returns the shape after broadcasting *exprs* in an operation.
+    """
+    shapes = [expr.shape if isinstance(expr, Array) else () for expr in exprs]
 
-    # Use leading dimensions from s_big unmodified.
-    result = list(s_big[:len(s_big)-len(s_small)])
+    result_dim = max(len(s) for s in shapes)
 
-    for dim1, dim2 in zip(s_big[len(s_big)-len(s_small):], s_small):
-        if dim1 == dim2:
-            result.append(dim1)
-        elif dim1 == 1:
-            result.append(dim2)
-        elif dim2 == 1:
-            result.append(dim1)
-        else:
-            raise ValueError("operands could not be broadcast together with shapes "
-                             f"{s1} {s2}.")
+    # append leading dimensions of all the shapes with 1's to match result_dim.
+    augmented_shapes = [((1,)*(result_dim-len(s)) + s) for s in shapes]
 
-    return tuple(result)
+    result_shape = tuple(max(s[i] for s in augmented_shapes)
+                         for i in range(result_dim))
+
+    for s in augmented_shapes:
+        for axis_len, result_dim in zip(s, result_shape):
+            if (axis_len != result_dim) and (axis_len != 1):
+                raise ValueError("operands could not be broadcasted together with "
+                        f"shapes {' '.join(str(s) for s in shapes)}.")
+
+    return result_shape
 
 
 def get_indexing_expression(shape: ShapeType,
                             result_shape: ShapeType) -> Tuple[ScalarExpression, ...]:
     """
-    Returns the indices while broadcasting an array of shape *s* into one of shape
-    *r*.
+    Returns the indices while broadcasting an array of shape *shape* into one of
+    shape *result_shape*.
     """
-    assert len(s) <= len(r)
-    i_start = len(r) - len(s)
+    assert len(shape) <= len(result_shape)
+    i_start = len(result_shape) - len(shape)
     indices = []
-    for i, (dim1, dim2) in enumerate(zip(s, r[i_start:])):
+    for i, (dim1, dim2) in enumerate(zip(shape, result_shape[i_start:])):
         if dim1 != dim2:
             assert dim1 == 1
             indices.append(0)
@@ -67,3 +71,12 @@ def get_indexing_expression(shape: ShapeType,
             indices.append(prim.Variable(f"_{i+i_start}"))
 
     return tuple(indices)
+
+
+def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
+                                       result_shape: ShapeType) -> prim.Expression:
+    if len(shape) == 0:
+        # scalar expr => do not index
+        return val
+    else:
+        return val[get_indexing_expression(shape, result_shape)]
