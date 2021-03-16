@@ -71,6 +71,12 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: equal
+.. autofunction:: not_equal
+.. autofunction:: less
+.. autofunction:: less_equal
+.. autofunction:: greater
+.. autofunction:: greater_equal
 
 Supporting Functionality
 ------------------------
@@ -1847,31 +1853,49 @@ def _compare(a1: Union[Array, Number], a2: Union[Array, Number],
 
 def equal(x1: Union[Array, Number],
           x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 == x2) element-wise.
+    """
     return _compare(x1, x2, "==")
 
 
 def not_equal(x1: Union[Array, Number],
               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 != x2) element-wise.
+    """
     return _compare(x1, x2, "!=")
 
 
 def less(x1: Union[Array, Number],
          x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 < x2) element-wise.
+    """
     return _compare(x1, x2, "<")
 
 
 def less_equal(x1: Union[Array, Number],
                x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 <= x2) element-wise.
+    """
     return _compare(x1, x2, "<=")
 
 
 def greater(x1: Union[Array, Number],
             x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 > x2) element-wise.
+    """
     return _compare(x1, x2, ">")
 
 
 def greater_equal(x1: Union[Array, Number],
                   x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 >= x2) element-wise.
+    """
     return _compare(x1, x2, ">=")
 
 # }}}
