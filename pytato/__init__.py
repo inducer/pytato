@@ -39,6 +39,8 @@ from pytato.array import (
 
         full, zeros, ones,
 
+        equal, not_equal, less, less_equal, greater, greater_equal,
+
         )
 
 from pytato.target.loopy.codegen import generate_loopy
@@ -68,5 +70,7 @@ __all__ = (
         "maximum", "minimum",
 
         "full", "zeros", "ones",
+
+        "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
 
 )
