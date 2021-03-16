@@ -1820,7 +1820,7 @@ def _compare(a1: Union[Array, Number], a2: Union[Array, Number],
              which: str) -> Union[Array, bool]:
     if isinstance(a1, Number) and isinstance(a2, Number):
         from pymbolic.mapper.evaluator import evaluate
-        return evaluate(prim.Comparison(a1, which, a2))
+        return evaluate(prim.Comparison(a1, which, a2))  # type: ignore
 
     if isinstance(a1, Array) and isinstance(a2, Array) and (
             a1.namespace is not a2.namespace):
@@ -1834,7 +1834,7 @@ def _compare(a1: Union[Array, Number], a2: Union[Array, Number],
     bindings = {}
 
     def _update_bindings_and_get_expr(arr: Union[Array, Number],
-            bnd_name: Union[Array, Number]) -> ScalarExpression:
+                                      bnd_name: str) -> ScalarExpression:
 
         if isinstance(arr, Number):
             return arr
@@ -1932,7 +1932,7 @@ def where(condition: Union[Array, Number],
     bindings = {}
 
     def _update_bindings_and_get_expr(arr: Union[Array, Number],
-            bnd_name: Union[Array, Number]) -> ScalarExpression:
+                                      bnd_name: str) -> ScalarExpression:
 
         if isinstance(arr, Number):
             return arr
@@ -1957,24 +1957,28 @@ def where(condition: Union[Array, Number],
 
 # {{{ (max|min)inimum
 
-def maximum(x1: Union[Array, Number], x2: Union[Array, Number]) -> IndexLambda:
+def maximum(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, Number]:
     """
     Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
-    return where(not_equal(x1, x1), np.NaN,  # x1[i] is NaN
-                 where(not_equal(x2, x2), np.NaN,  # x2[i] is NaN
-                       where(greater(x1, x2), x1, x2)))
+    # https://github.com/python/mypy/issues/3186
+    return where(not_equal(x1, x1), np.NaN,  # type: ignore
+                 where(not_equal(x2, x2), np.NaN,  # type: ignore
+                       where(greater(x1, x2), x1, x2)))  # type: ignore
 
 
-def minimum(x1: Array, x2: Array) -> IndexLambda:
+def minimum(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, Number]:
     """
     Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
-    return where(not_equal(x1, x1), np.NaN,  # x1[i] is NaN
-                 where(not_equal(x2, x2), np.NaN,  # x2[i] is NaN
-                       where(less(x1, x2), x1, x2)))
+    # https://github.com/python/mypy/issues/3186
+    return where(not_equal(x1, x1), np.NaN,  # type: ignore
+                 where(not_equal(x2, x2), np.NaN,  # type: ignore
+                       where(less(x1, x2), x1, x2)))  # type: ignore
 
 # }}}
 
