@@ -596,8 +596,15 @@ def test_maximum_minimum(ctx_factory, which):
 
     from numpy.random import default_rng
     rng = default_rng()
-    x1_in = rng.random(size=(10, 4))
-    x2_in = rng.random(size=(10, 4))
+
+    def _get_rand_with_nans(shape):
+        arr = rng.random(size=shape)
+        mask = rng.choice([False, True], shape)
+        arr[mask] = np.nan
+        return arr
+
+    x1_in = _get_rand_with_nans((10, 4))
+    x2_in = _get_rand_with_nans((10, 4))
 
     namespace = pt.Namespace()
     x1 = pt.make_data_wrapper(namespace, x1_in)
@@ -606,7 +613,7 @@ def test_maximum_minimum(ctx_factory, which):
     np_func = getattr(np, which)
 
     _, (y,) = pt.generate_loopy(pt_func(x1, x2),
-            target=pt.LoopyPyOpenCLTarget(queue))()
+                                cl_device=queue.device)(queue)
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
