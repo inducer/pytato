@@ -213,15 +213,26 @@ def reverse_args(f):
     return wrapper
 
 
-@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow"))
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
+                                   "equal", "not_equal", "less", "less_equal",
+                                   "greater", "greater_equal"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    is_comparison = which in ["equal", "not_equal", "less", "less_equal", "greater",
+                              "greater_equal"]
 
-    op = getattr(operator, which)
+    try:
+        pt_op = getattr(operator, which)
+        np_op = getattr(operator, which)
+    except AttributeError:
+        pt_op = getattr(pt, which)
+        np_op = getattr(np, which)
+
     if reverse:
-        op = reverse_args(op)
+        pt_op = reverse_args(pt_op)
+        np_op = reverse_args(np_op)
 
     x_orig = 7
     y_orig = np.array([1, 2, 3, 4, 5])
@@ -230,11 +241,16 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
         namespace = pt.Namespace()
         x_in = first_dtype(x_orig)
 
+        if first_dtype == complex:
+            continue
+
         exprs = {}
         for dtype in ARITH_DTYPES:
+            if dtype in "FDG" and is_comparison:
+                continue
             y = pt.make_data_wrapper(namespace,
                     y_orig.astype(dtype), name=f"y{dtype}")
-            exprs[dtype] = op(x_in, y)
+            exprs[dtype] = pt_op(x_in, y)
 
         prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
@@ -242,14 +258,16 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
 
         for dtype in exprs:
             out = outputs[dtype]
-            out_ref = op(x_in, y_orig.astype(dtype))
+            out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
             # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
-@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow"))
+@pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
+                                   "equal", "not_equal", "less", "less_equal",
+                                   "greater", "greater_equal"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
     if which == "sub":
@@ -257,32 +275,48 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+    is_comparison = which in ["equal", "not_equal", "less", "less_equal", "greater",
+                              "greater_equal"]
 
-    op = getattr(operator, which)
+    try:
+        pt_op = getattr(operator, which)
+        np_op = getattr(operator, which)
+    except AttributeError:
+        pt_op = getattr(pt, which)
+        np_op = getattr(np, which)
+
     if reverse:
-        op = reverse_args(op)
+        pt_op = reverse_args(pt_op)
+        np_op = reverse_args(np_op)
 
     x_orig = np.array([1, 2, 3, 4, 5])
     y_orig = np.array([10, 9, 8, 7, 6])
 
     for first_dtype in ARITH_DTYPES:
+        if first_dtype in "FDG" and is_comparison:
+            continue
+
         namespace = pt.Namespace()
         x_in = x_orig.astype(first_dtype)
         x = pt.make_data_wrapper(namespace, x_in, name="x")
 
         exprs = {}
         for dtype in ARITH_DTYPES:
+            if dtype in "FDG" and is_comparison:
+                continue
             y = pt.make_data_wrapper(namespace,
                     y_orig.astype(dtype), name=f"y{dtype}")
-            exprs[dtype] = op(x, y)
+            exprs[dtype] = pt_op(x, y)
 
         prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
         _, outputs = prog(queue)
 
         for dtype in ARITH_DTYPES:
+            if dtype in "FDG" and is_comparison:
+                continue
             out = outputs[dtype]
-            out_ref = op(x_in, y_orig.astype(dtype))
+            out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
             # In some cases ops are done in float32 in loopy but float64 in numpy.
