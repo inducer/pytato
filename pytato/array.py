@@ -1805,6 +1805,78 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
 # }}}
 
 
+# {{{ comparison operator
+
+def _compare(a1: Union[Array, Number], a2: Union[Array, Number],
+             which: str) -> Union[Array, bool]:
+    if isinstance(a1, Number) and isinstance(a2, Number):
+        from pymbolic.mapper.evaluator import evaluate
+        return evaluate(prim.Comparison(a1, which, a2))
+
+    if isinstance(a1, Array) and isinstance(a2, Array) and (
+            a1.namespace is not a2.namespace):
+        raise ValueError("Operands must belong to the same namespace.")
+
+    namespace = next(a.namespace for a in [a1, a2] if isinstance(a, Array))
+
+    import pytato.utils as utils
+    result_shape = utils.get_shape_after_broadcasting([a1, a2])
+
+    bindings = {}
+
+    def _update_bindings_and_get_expr(arr: Union[Array, Number],
+            bnd_name: Union[Array, Number]) -> ScalarExpression:
+
+        if isinstance(arr, Number):
+            return arr
+
+        bindings[bnd_name] = arr
+        return utils.with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
+                                                        arr.shape,
+                                                        result_shape)
+
+    expr1 = _update_bindings_and_get_expr(a1, "_in0")
+    expr2 = _update_bindings_and_get_expr(a2, "_in1")
+
+    return IndexLambda(namespace,
+            prim.Comparison(expr1, which, expr2),
+            shape=result_shape,
+            dtype=np.bool8,
+            bindings=bindings)
+
+
+def equal(x1: Union[Array, Number],
+          x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, "==")
+
+
+def not_equal(x1: Union[Array, Number],
+              x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, "!=")
+
+
+def less(x1: Union[Array, Number],
+         x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, "<")
+
+
+def less_equal(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, "<=")
+
+
+def greater(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, ">")
+
+
+def greater_equal(x1: Union[Array, Number],
+                  x2: Union[Array, Number]) -> Union[Array, bool]:
+    return _compare(x1, x2, ">=")
+
+# }}}
+
+
 # {{{ (max|min)inimum
 
 def _select(x1: Array, x2: Array, op: str) -> IndexLambda:
