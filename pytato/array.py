@@ -77,6 +77,9 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: less_equal
 .. autofunction:: greater
 .. autofunction:: greater_equal
+.. autofunction:: where
+.. autofunction:: maximum
+.. autofunction:: minimum
 
 Supporting Functionality
 ------------------------
@@ -1901,35 +1904,77 @@ def greater_equal(x1: Union[Array, Number],
 # }}}
 
 
+# {{{ where
+
+def where(condition: Union[Array, Number],
+          x: Union[Array, Number], y: Union[Array, Number]) -> Union[Array, Number]:
+    """
+    Elementwise selector between *x* and *y* depending on *condition*.
+    """
+    import pytato.utils as utils
+
+    if (isinstance(condition, Number) and isinstance(x, Number)
+            and isinstance(y, Number)):
+        return x if condition else y
+
+    namespace = next(a.namespace for a in [condition, x, y] if isinstance(a, Array))
+
+    # {{{ find dtype
+
+    x_dtype = x.dtype if isinstance(x, Array) else np.dtype(type(x))
+    y_dtype = y.dtype if isinstance(y, Array) else np.dtype(type(y))
+    dtype = np.find_common_type([x_dtype, y_dtype], [])
+
+    # }}}
+
+    result_shape = utils.get_shape_after_broadcasting([condition, x, y])
+
+    bindings = {}
+
+    def _update_bindings_and_get_expr(arr: Union[Array, Number],
+            bnd_name: Union[Array, Number]) -> ScalarExpression:
+
+        if isinstance(arr, Number):
+            return arr
+
+        bindings[bnd_name] = arr
+        return utils.with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
+                                                        arr.shape,
+                                                        result_shape)
+
+    expr1 = _update_bindings_and_get_expr(condition, "_in0")
+    expr2 = _update_bindings_and_get_expr(x, "_in1")
+    expr3 = _update_bindings_and_get_expr(y, "_in2")
+
+    return IndexLambda(namespace,
+            prim.If(expr1, expr2, expr3),
+            shape=result_shape,
+            dtype=dtype,
+            bindings=bindings)
+
+# }}}
+
+
 # {{{ (max|min)inimum
 
-def _select(x1: Array, x2: Array, op: str) -> IndexLambda:
-    if x1.shape != x2.shape:
-        raise NotImplementedError("broadcasting not supported")
-
-    dtype = np.maximum(np.empty((), dtype=x1.dtype),
-                       np.empty((), dtype=x2.dtype)).dtype
-
-    expr1 = prim.Subscript(var("in0"), tuple(var(f"_{i}")
-                                             for i in range(len(x1.shape))))
-    expr2 = prim.Subscript(var("in1"), tuple(var(f"_{i}")
-                                             for i in range(len(x2.shape))))
-    condition = prim.Comparison(expr1, op, expr2)
-    return IndexLambda(
-            x1.namespace,
-            prim.If(condition, expr1, expr2),
-            bindings={"in0": x1, "in1": x2},
-            shape=x1.shape,
-            dtype=dtype,
-            )
-
-
-def maximum(x1: Array, x2: Array) -> IndexLambda:
-    return _select(x1, x2, ">")
+def maximum(x1: Union[Array, Number], x2: Union[Array, Number]) -> IndexLambda:
+    """
+    Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
+    array-like objects that could be broadcasted together. NaNs are propagated.
+    """
+    return where(not_equal(x1, x1), np.NaN,  # x1[i] is NaN
+                 where(not_equal(x2, x2), np.NaN,  # x2[i] is NaN
+                       where(greater(x1, x2), x1, x2)))
 
 
 def minimum(x1: Array, x2: Array) -> IndexLambda:
-    return _select(x1, x2, "<")
+    """
+    Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
+    array-like objects that could be broadcasted together. NaNs are propagated.
+    """
+    return where(not_equal(x1, x1), np.NaN,  # x1[i] is NaN
+                 where(not_equal(x2, x2), np.NaN,  # x2[i] is NaN
+                       where(less(x1, x2), x1, x2)))
 
 # }}}
 
