@@ -215,13 +215,15 @@ def reverse_args(f):
 
 @pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
                                    "equal", "not_equal", "less", "less_equal",
-                                   "greater", "greater_equal"))
+                                   "greater", "greater_equal", "logical_and",
+                                   "logical_or"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    is_comparison = which in ["equal", "not_equal", "less", "less_equal", "greater",
-                              "greater_equal"]
+    not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
+                                     "greater", "greater_equal",
+                                     "logical_and", "logical_or"]
 
     try:
         pt_op = getattr(operator, which)
@@ -241,12 +243,12 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
         namespace = pt.Namespace()
         x_in = first_dtype(x_orig)
 
-        if first_dtype == complex and is_comparison:
+        if first_dtype == complex and not_valid_in_complex:
             continue
 
         exprs = {}
         for dtype in ARITH_DTYPES:
-            if dtype in "FDG" and is_comparison:
+            if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(namespace,
                     y_orig.astype(dtype), name=f"y{dtype}")
@@ -267,7 +269,8 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
 
 @pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
                                    "equal", "not_equal", "less", "less_equal",
-                                   "greater", "greater_equal"))
+                                   "greater", "greater_equal", "logical_or",
+                                   "logical_and"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
     if which == "sub":
@@ -275,8 +278,9 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
 
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    is_comparison = which in ["equal", "not_equal", "less", "less_equal", "greater",
-                              "greater_equal"]
+    not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
+                                     "greater", "greater_equal",
+                                     "logical_and", "logical_or"]
 
     try:
         pt_op = getattr(operator, which)
@@ -293,7 +297,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
     y_orig = np.array([10, 9, 8, 7, 6])
 
     for first_dtype in ARITH_DTYPES:
-        if first_dtype in "FDG" and is_comparison:
+        if first_dtype in "FDG" and not_valid_in_complex:
             continue
 
         namespace = pt.Namespace()
@@ -302,7 +306,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
 
         exprs = {}
         for dtype in ARITH_DTYPES:
-            if dtype in "FDG" and is_comparison:
+            if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(namespace,
                     y_orig.astype(dtype), name=f"y{dtype}")
@@ -313,7 +317,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
         _, outputs = prog(queue)
 
         for dtype in ARITH_DTYPES:
-            if dtype in "FDG" and is_comparison:
+            if dtype in "FDG" and not_valid_in_complex:
                 continue
             out = outputs[dtype]
             out_ref = np_op(x_in, y_orig.astype(dtype))
