@@ -241,7 +241,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
         namespace = pt.Namespace()
         x_in = first_dtype(x_orig)
 
-        if first_dtype == complex:
+        if first_dtype == complex and is_comparison:
             continue
 
         exprs = {}
