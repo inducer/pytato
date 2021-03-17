@@ -33,7 +33,7 @@ from pytato.array import (
         matmul, roll, transpose, stack, reshape, concatenate,
 
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
-        log10,
+        log10, isnan,
 
         maximum, minimum,
 
@@ -67,7 +67,7 @@ __all__ = (
 
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
-        "tanh", "exp", "log", "log10",
+        "tanh", "exp", "log", "log10", "isnan",
 
         "maximum", "minimum",
 

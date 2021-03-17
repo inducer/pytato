@@ -68,6 +68,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: exp
 .. autofunction:: log
 .. autofunction:: log10
+.. autofunction:: isnan
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
@@ -1693,15 +1694,18 @@ def make_data_wrapper(namespace: Namespace,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: Array, func_name: str) -> IndexLambda:
+def _apply_elem_wise_func(x: Array, func_name: str,
+                          ret_dtype: Optional[_dtype_any] = None) -> IndexLambda:
     if x.dtype.kind != "f":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
+    if ret_dtype is None:
+        ret_dtype = x.dtype
 
     expr = prim.Call(
             var(f"pytato.c99.{func_name}"),
             (prim.Subscript(var("in"),
                 tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(x.namespace, expr, x.shape, x.dtype, {"in": x})
+    return IndexLambda(x.namespace, expr, x.shape, ret_dtype, {"in": x})
 
 
 def abs(x: Array) -> IndexLambda:
@@ -1754,6 +1758,10 @@ def log(x: Array) -> IndexLambda:
 
 def log10(x: Array) -> IndexLambda:
     return _apply_elem_wise_func(x, "log10")
+
+
+def isnan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
 
 # }}}
 
@@ -1960,9 +1968,8 @@ def maximum(x1: Union[Array, Number],
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
-    return where(not_equal(x1, x1), np.NaN,  # type: ignore
-                 where(not_equal(x2, x2), np.NaN,  # type: ignore
-                       where(greater(x1, x2), x1, x2)))  # type: ignore
+    return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+                 where(greater(x1, x2), x1, x2))  # type: ignore
 
 
 def minimum(x1: Union[Array, Number],
@@ -1972,9 +1979,8 @@ def minimum(x1: Union[Array, Number],
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
-    return where(not_equal(x1, x1), np.NaN,  # type: ignore
-                 where(not_equal(x2, x2), np.NaN,  # type: ignore
-                       where(less(x1, x2), x1, x2)))  # type: ignore
+    return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+                 where(less(x1, x2), x1, x2))  # type: ignore
 
 # }}}
 
