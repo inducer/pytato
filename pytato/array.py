@@ -603,36 +603,12 @@ class Array(Taggable):
         # }}}
 
         import pytato.utils as utils
-        result_shape = utils.get_shape_after_broadcasting([self, other])
-        bindings = {"_in0": self}
-        first_expr = utils.with_indices_for_broadcasted_shape(var("_in0"),
-                                                              self.shape,
-                                                              result_shape)
-
-        if isinstance(other, Number):
-            second_expr = other
-            dtype = get_result_type(self.dtype, other)
-        else:
-            assert isinstance(other, Array)
-            if self.namespace is not other.namespace:
-                raise ValueError("Operands must belong to the same namespace.")
-
-            second_expr = utils.with_indices_for_broadcasted_shape(var("_in1"),
-                                                                   other.shape,
-                                                                   result_shape)
-            bindings["_in1"] = other
-            dtype = get_result_type(self.dtype, other.dtype)
-
         if reverse:
-            first_expr, second_expr = second_expr, first_expr
-
-        expr = op(first_expr, second_expr)
-
-        return IndexLambda(self.namespace,
-                expr,
-                shape=result_shape,
-                dtype=dtype,
-                bindings=bindings)
+            return utils.broadcasted_binary_op(other, self, op,
+                                               get_result_type)  # type: ignore
+        else:
+            return utils.broadcasted_binary_op(self, other, op,
+                                               get_result_type)  # type: ignore
 
     def _unary_op(self, op: Any) -> Array:
         if self.ndim == 0:
@@ -1816,42 +1792,13 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
 
 # {{{ comparison operator
 
-def _compare(a1: Union[Array, Number], a2: Union[Array, Number],
+def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
              which: str) -> Union[Array, bool]:
-    if isinstance(a1, Number) and isinstance(a2, Number):
-        from pymbolic.mapper.evaluator import evaluate
-        return evaluate(prim.Comparison(a1, which, a2))  # type: ignore
-
-    if isinstance(a1, Array) and isinstance(a2, Array) and (
-            a1.namespace is not a2.namespace):
-        raise ValueError("Operands must belong to the same namespace.")
-
-    namespace = next(a.namespace for a in [a1, a2] if isinstance(a, Array))
-
+    # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
-    result_shape = utils.get_shape_after_broadcasting([a1, a2])
-
-    bindings = {}
-
-    def _update_bindings_and_get_expr(arr: Union[Array, Number],
-                                      bnd_name: str) -> ScalarExpression:
-
-        if isinstance(arr, Number):
-            return arr
-
-        bindings[bnd_name] = arr
-        return utils.with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
-                                                        arr.shape,
-                                                        result_shape)
-
-    expr1 = _update_bindings_and_get_expr(a1, "_in0")
-    expr2 = _update_bindings_and_get_expr(a2, "_in1")
-
-    return IndexLambda(namespace,
-            prim.Comparison(expr1, which, expr2),
-            shape=result_shape,
-            dtype=np.bool8,
-            bindings=bindings)
+    return utils.broadcasted_binary_op(x1, x2,
+                                       lambda x, y: prim.Comparison(x, which, y),
+                                       lambda x, y: np.bool8)  # type: ignore
 
 
 def equal(x1: Union[Array, Number],

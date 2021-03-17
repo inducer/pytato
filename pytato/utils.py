@@ -22,10 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 import pymbolic.primitives as prim
 
-from typing import Tuple, List, Union
-from pytato.array import Array, ShapeType
+from numbers import Number
+from typing import Tuple, List, Union, Callable, Any
+from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
 
@@ -87,3 +89,56 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
         return val
     else:
         return val[get_indexing_expression(shape, result_shape)]
+
+
+def extract_dtypes(exprs: List[Union[Array, Number]]) -> List[DtypeOrScalar]:
+    dtypes: List[DtypeOrScalar] = []
+    for expr in exprs:
+        if isinstance(expr, Array):
+            dtypes.append(expr.dtype)
+        else:
+            assert isinstance(expr, Number)
+            dtypes.append(expr)
+
+    return dtypes
+
+
+def broadcasted_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
+                          op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
+                          get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
+                          ) -> Union[Array, Number]:
+    if isinstance(a1, Number) and isinstance(a2, Number):
+        from pymbolic.mapper.evaluator import evaluate
+        return evaluate(op(a1, a2))  # type: ignore
+
+    if isinstance(a1, Array) and isinstance(a2, Array) and (
+            a1.namespace is not a2.namespace):
+        raise ValueError("Operands must belong to the same namespace.")
+
+    namespace = next(a.namespace for a in [a1, a2] if isinstance(a, Array))
+
+    result_shape = get_shape_after_broadcasting([a1, a2])
+    dtypes = extract_dtypes([a1, a2])
+    result_dtype = get_result_type(*dtypes)
+
+    bindings = {}
+
+    def _update_bindings_and_get_expr(arr: Union[Array, Number],
+                                      bnd_name: str) -> ScalarExpression:
+
+        if isinstance(arr, Number):
+            return arr
+
+        bindings[bnd_name] = arr
+        return with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
+                                                  arr.shape,
+                                                  result_shape)
+
+    expr1 = _update_bindings_and_get_expr(a1, "_in0")
+    expr2 = _update_bindings_and_get_expr(a2, "_in1")
+
+    return IndexLambda(namespace,
+                       op(expr1, expr2),
+                       shape=result_shape,
+                       dtype=result_dtype,
+                       bindings=bindings)
