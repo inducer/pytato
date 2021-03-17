@@ -77,6 +77,9 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: less_equal
 .. autofunction:: greater
 .. autofunction:: greater_equal
+.. autofunction:: logical_or
+.. autofunction:: logical_and
+.. autofunction:: logical_not
 .. autofunction:: where
 .. autofunction:: maximum
 .. autofunction:: minimum
@@ -1847,6 +1850,52 @@ def greater_equal(x1: Union[Array, Number],
     Returns (x1 >= x2) element-wise.
     """
     return _compare(x1, x2, ">=")
+
+# }}}
+
+
+# {{{ logical operations
+
+def logical_or(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical OR of *x1* and *x2*.
+    """
+    # https://github.com/python/mypy/issues/3186
+    import pytato.utils as utils
+    return utils.broadcasted_binary_op(x1, x2,
+                                       lambda x, y: prim.LogicalOr((x, y)),
+                                       lambda x, y: np.bool8)  # type: ignore
+
+
+def logical_and(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical AND of *x1* and *x2*.
+    """
+    # https://github.com/python/mypy/issues/3186
+    import pytato.utils as utils
+    return utils.broadcasted_binary_op(x1, x2,
+                                       lambda x, y: prim.LogicalAnd((x, y)),
+                                       lambda x, y: np.bool8)  # type: ignore
+
+
+def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical NOT of *x*.
+    """
+    if isinstance(x, Number):
+        # https://github.com/python/mypy/issues/3186
+        return np.logical_not(x)  # type: ignore
+
+    from pytato.utils import with_indices_for_broadcasted_shape
+    return IndexLambda(x.namespace,
+                       with_indices_for_broadcasted_shape(prim.Variable("_in0"),
+                                                          x.shape,
+                                                          x.shape),
+                       shape=x.shape,
+                       dtype=np.bool8,
+                       bindings={"_in0": x})
 
 # }}}
 

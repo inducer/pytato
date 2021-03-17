@@ -41,6 +41,8 @@ from pytato.array import (
 
         equal, not_equal, less, less_equal, greater, greater_equal,
 
+        logical_or, logical_and, logical_not,
+
         )
 
 from pytato.target.loopy.codegen import generate_loopy
@@ -73,4 +75,5 @@ __all__ = (
 
         "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
 
+        "logical_or", "logical_and", "logical_not",
 )
