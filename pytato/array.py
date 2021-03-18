@@ -1804,4 +1804,12 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
 
 # }}}
 
+
+
+def make_phase(x: Array, fn: Callable) -> Array:
+    print("in make_phase")
+    return x
+
+
+
 # vim: foldmethod=marker

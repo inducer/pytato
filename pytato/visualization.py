@@ -89,6 +89,8 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
     def handle_unsupported_array(self, expr: Array,  # type: ignore
             nodes: Dict[Array, DotNodeInfo]) -> None:
         # Default handler, does its best to guess how to handle fields.
+
+        print(expr)
         if expr in nodes:
             return
         info = self.get_common_dot_info(expr)

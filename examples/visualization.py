@@ -8,22 +8,34 @@ import subprocess
 
 import pytato as pt
 
+from pytato.array import make_phase
+
 
 logger = logging.getLogger(__name__)
 
 
 GRAPH_DOT = "graph.dot"
-GRAPH_SVG = "graph.svg"
+GRAPH_SVG = "graph.pdf"
+
+
+def comm(ns):
+    print("comm() called")
 
 
 def main():
     ns = pt.Namespace()
 
     pt.make_size_param(ns, "n")
-    array = pt.make_placeholder(ns, name="array", shape="n", dtype=np.float)
+    array = pt.make_placeholder(ns, name="array", shape="n", dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
     ns.assign("stack", stack)
     result = stack @ stack.T
+    # result = make_phase(result, comm)
+
+    # nodes: Dict[Array, DotNodeInfo] = {}
+    # mapper = ArrayToDotNodeInfoMapper()
+    # for elem in itertools.chain(namespace.values(), normalize_outputs(result).values()):
+    #     mapper(elem, nodes)
 
     dot_code = pt.get_dot_graph(result)
 
@@ -33,7 +45,7 @@ def main():
 
     dot_path = shutil.which("dot")
     if dot_path is not None:
-        subprocess.run([dot_path, "-Tsvg", GRAPH_DOT, "-o", GRAPH_SVG], check=True)
+        subprocess.run([dot_path, "-Tpdf", GRAPH_DOT, "-o", GRAPH_SVG], check=True)
         logger.info("wrote '%s'", GRAPH_SVG)
     else:
         logger.info("'dot' executable not found; cannot convert to SVG")
