@@ -15,11 +15,11 @@ result = pt.DictOfNamedArrays({"a2a": a2a, "aat": aat})
 import pyopencl as cl
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)
-prg = pt.generate_loopy(result, target=pt.LoopyPyOpenCLTarget(queue))
+prg = pt.generate_loopy(result, cl_device=queue.device)
 a = np.random.randn(20, 20)
-_, (a2a, aat) = prg(a=a)
-assert np.allclose(a2a, a@(2*a))
-assert np.allclose(aat, a@a.T)
+_, out = prg(queue, a=a)
+assert np.allclose(out["a2a"], a@(2*a))
+assert np.allclose(out["aat"], a@a.T)
 
 # }}}
 

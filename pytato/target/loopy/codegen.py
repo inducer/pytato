@@ -32,7 +32,11 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from typing import (
-        Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable)
+        Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable,
+        TYPE_CHECKING)
+
+if TYPE_CHECKING:
+    import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace)
@@ -652,7 +656,9 @@ def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
-        options: Optional[lp.Options] = None) -> BoundProgram:
+        options: Optional[lp.Options] = None,
+        *,
+        cl_device: Optional["pyopencl.Device"] = None) -> BoundProgram:
     r"""Code generation entry point.
 
     :param result: Outputs of the computation.
@@ -660,17 +666,29 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     :param options: Code generation options for the kernel.
     :returns: A :class:`pytato.program.BoundProgram` wrapping the generated
         :mod:`loopy` program.
+
+    If *result* is a :class:`dict` or a :class:`DictOfNamedArrays` and *options*
+    is not supplied, then the Loopy option :attr:`~loopy.Options.return_dict`
+    will be set to *True*.
     """
+
+    result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
     if target is None:
-        target = LoopyPyOpenCLTarget()
+        target = LoopyPyOpenCLTarget(device=cl_device)
+    else:
+        if cl_device is not None:
+            raise TypeError("may not pass both 'target' and 'cl_device'")
 
     preproc_result = preprocess(orig_outputs)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
     namespace = outputs.namespace
+
+    if options is None and result_is_dict:
+        options = lp.Options(return_dict=True)
 
     state = get_initial_codegen_state(namespace, target, options)
 
@@ -698,5 +716,6 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
             program=state.program,
             bound_arguments=preproc_result.bound_arguments)
 
+# }}}
 
 # vim:fdm=marker

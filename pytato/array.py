@@ -586,33 +586,33 @@ class Array(Taggable):
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
-        def add_indices(val: prim.Expression) -> prim.Expression:
-            if self.ndim == 0:
-                return val
-            else:
-                indices = tuple(var(f"_{i}") for i in range(self.ndim))
-                return val[indices]
+        # {{{ sanity checks
 
-        if isinstance(other, Array):
+        if not isinstance(other, (Array, Number)):
+            return NotImplemented
+
+        # }}}
+
+        import pytato.utils as utils
+        result_shape = utils.get_shape_after_broadcasting([self, other])
+        bindings = {"_in0": self}
+        first_expr = utils.with_indices_for_broadcasted_shape(var("_in0"),
+                                                              self.shape,
+                                                              result_shape)
+
+        if isinstance(other, Number):
+            second_expr = other
+            dtype = get_result_type(self.dtype, other)
+        else:
+            assert isinstance(other, Array)
             if self.namespace is not other.namespace:
                 raise ValueError("Operands must belong to the same namespace.")
 
-        if isinstance(other, Number):
-            first_expr = add_indices(var("_in0"))
-            second_expr = other
-            bindings = dict(_in0=self)
-            dtype = get_result_type(self.dtype, other)
-
-        elif isinstance(other, Array):
-            if self.shape != other.shape:
-                raise NotImplementedError("broadcasting not supported")
-            first_expr = add_indices(var("_in0"))
-            second_expr = add_indices(var("_in1"))
-            bindings = dict(_in0=self, _in1=other)
+            second_expr = utils.with_indices_for_broadcasted_shape(var("_in1"),
+                                                                   other.shape,
+                                                                   result_shape)
+            bindings["_in1"] = other
             dtype = get_result_type(self.dtype, other.dtype)
-
-        else:
-            return NotImplemented
 
         if reverse:
             first_expr, second_expr = second_expr, first_expr
@@ -621,7 +621,7 @@ class Array(Taggable):
 
         return IndexLambda(self.namespace,
                 expr,
-                shape=self.shape,
+                shape=result_shape,
                 dtype=dtype,
                 bindings=bindings)
 
