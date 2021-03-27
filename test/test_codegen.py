@@ -555,6 +555,26 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     np.testing.assert_allclose(out, x_in+y_in)
 
 
+@pytest.mark.parametrize("axis", (None, 1, 0))
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin"))
+def test_reductions(ctx_factory, axis, redn):
+    queue = cl.CommandQueue(ctx_factory())
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=(10, 4))
+
+    ns = pt.Namespace()
+    x = pt.make_data_wrapper(ns, x_in)
+    np_func = getattr(np, redn)
+    pt_func = getattr(pt, redn)
+    prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
+
+    evt, (out,) = prg(queue)
+
+    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-15)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

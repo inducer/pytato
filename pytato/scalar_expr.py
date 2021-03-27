@@ -25,16 +25,18 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set
+from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple
 
-from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
         SubstitutionMapperBase)
 from pymbolic.mapper.dependency import (DependencyMapper as
         DependencyMapperBase)
+from dataclasses import dataclass, field
 import pymbolic.primitives as prim
+import math
+from enum import Enum
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -72,60 +74,24 @@ def parse(s: str) -> ScalarExpression:
 # {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
-
-    def map_reduction(self, expr: Reduction, *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr, *args, **kwargs):
-            return
-
-        self.rec(expr.expr, *args, **kwargs)
+    pass
 
 
 class IdentityMapper(IdentityMapperBase):
-
-    def map_reduction(self, expr: Reduction,
-            *args: Any, **kwargs: Any) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.rec(prim.Variable(iname), *args, **kwargs)
-            if not isinstance(new_iname, prim.Variable):
-                raise ValueError(
-                        f"reduction iname {iname} can only be renamed"
-                        " to another iname")
-            new_inames.append(new_iname.name)
-
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr, *args, **kwargs),
-                allow_simultaneous=expr.allow_simultaneous)
+    pass
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
-
-    def map_reduction(self, expr: Reduction) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.subst_func(iname)
-            if new_iname is None:
-                new_iname = prim.Variable(iname)
-            else:
-                if not isinstance(new_iname, prim.Variable):
-                    raise ValueError(
-                            f"reduction iname {iname} can only be renamed"
-                            " to another iname")
-            new_inames.append(new_iname.name)
-
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr),
-                allow_simultaneous=expr.allow_simultaneous)
+    pass
 
 
 class DependencyMapper(DependencyMapperBase):
 
-    def map_reduction(self, expr: Reduction,
+    def map_reduce(self, expr: Reduce,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
-        deps: Set[prim.Variable] = self.rec(expr.expr, *args, **kwargs)
-        return deps - set(prim.Variable(iname) for iname in expr.inames)
+        return self.combine([  # type: ignore
+            self.rec(expr.inner_expr),
+            set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
 # }}}
 
@@ -153,6 +119,55 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 # }}}
+
+
+class ReductionOp(Enum):
+    MAX = "max"
+    MIN = "min"
+    SUM = "sum"
+    PRODUCT = "product"
+
+    @property
+    def neutral_element(self) -> Number:
+        if self.value == "max":
+            neutral = -math.inf
+        elif self.value == "min":
+            neutral = math.inf
+        elif self.value == "sum":
+            neutral = 0
+        elif self.value == "product":
+            neutral = 1
+        else:
+            raise NotImplementedError(f"Unknown reduction op {self}.")
+
+        # https://github.com/python/mypy/issues/3186
+        return neutral   # type: ignore
+
+
+@dataclass
+class Reduce(prim.Expression):
+    inner_expr: ScalarExpression
+    op: ReductionOp
+    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
+    neutral_element: Optional[ScalarExpression] = None
+    mapper_method: str = field(init=False, default="map_reduce")
+
+    def __post_init__(self) -> None:
+        self.neutral_element = self.neutral_element or self.op.neutral_element
+
+    def __hash__(self) -> int:
+        return hash((self.inner_expr,
+                self.op,
+                tuple(self.bounds.keys()),
+                tuple(self.bounds.values()),
+                self.neutral_element))
+
+    def __str__(self) -> str:
+        bounds_expr = " and ".join(f"{lb}<={key}<{ub}"
+                for key, (lb, ub) in self.bounds.items())
+        bounds_expr = "{" + bounds_expr + "}"
+        return (f"{self.op.value}({bounds_expr}, {self.inner_expr},"
+                f" {self.neutral_element})")
 
 
 # vim: foldmethod=marker

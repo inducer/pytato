@@ -37,6 +37,8 @@ from pytato.array import (
 
         full, zeros, ones,
 
+        sum, amax, amin,
+
         )
 
 from pytato.target.loopy.codegen import generate_loopy
@@ -64,5 +66,7 @@ __all__ = (
         "tanh", "exp", "log", "log10",
 
         "full", "zeros", "ones",
+
+        "sum", "amax", "amin",
 
 )
