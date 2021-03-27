@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple
+from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple, Dict
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -184,7 +184,7 @@ class ReductionOp(Enum):
 class Reduce(prim.Expression):
     inner_expr: ScalarExpression
     op: ReductionOp
-    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
+    bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]]
     neutral_element: Optional[ScalarExpression] = None
     mapper_method: str = field(init=False, default="map_reduce")
 

@@ -607,9 +607,9 @@ def test_reductions(ctx_factory, axis, redn):
     x = pt.make_data_wrapper(x_in)
     np_func = getattr(np, redn)
     pt_func = getattr(pt, redn)
-    prg = pt.generate_loopy(pt_func(x, axis=axis), pt.LoopyPyOpenCLTarget(queue))
+    prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
 
-    evt, (out,) = prg()
+    evt, (out,) = prg(queue)
 
     assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-15)
 

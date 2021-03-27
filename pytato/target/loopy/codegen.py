@@ -395,12 +395,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
 
-        match = ELWISE_INDEX_RE.fullmatch(expr.name)
-        if match:
+        elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
+        redn_match = REDN_INDEX_RE.fullmatch(expr.name)
+        if elw_match:
             # Found an index of the form _0, _1, ...
-            index = int(match.group(1))
+            index = int(elw_match.group(1))
             if not (0 <= index < expr_context.num_indices):
                 raise ValueError(f"invalid index encountered: _{index}")
+            return expr
+        elif redn_match:
+            if expr.name not in expr_context.reduction_bounds:
+                raise ValueError(f"invalid index encountered: '{expr}'.")
             return expr
         else:
             array = expr_context.lookup(expr.name)
@@ -430,7 +435,14 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                 old_name: prim.Variable(state.var_name_gen(f"_pt_{expr.op.value}")
                                         + old_name)
                 for old_name in expr.bounds}
-        inner_expr = self.rec(expr.inner_expr, expr_context)
+
+        inner_expr = self.rec(expr.inner_expr,
+                              LoopyExpressionContext(
+                                  state=state,
+                                  _depends_on=expr_context.depends_on,
+                                  local_namespace=expr_context.local_namespace,
+                                  num_indices=expr_context.num_indices,
+                                  reduction_bounds=expr.bounds))
         inner_expr = SubstitutionMapper(
                 make_subst_func(unique_names_mapping))(inner_expr)
         inner_expr = Reduction(parse_reduction_op(expr.op.value),

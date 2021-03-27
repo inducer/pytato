@@ -1848,10 +1848,10 @@ def _preprocess_reduction_axes(
 def _get_reduction_indices_bounds(shape: ShapeType,
         axes: Tuple[int, ...]) -> Tuple[
                 List[ScalarExpression],
-                Mapping[str, Tuple[ScalarExpression, ScalarExpression]]]:
+                Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
 
     indices: List[prim.Variable] = []
-    redn_bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+    redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
 
     n_out_dims = 0
     n_redn_dims = 0
@@ -1859,7 +1859,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
         if idim in axes:
             idx = f"_r{n_redn_dims}"
             indices.append(prim.Variable(idx))
-            redn_bounds[idx] = (0, axis_len)  # type: ignore
+            redn_bounds[idx] = (0, axis_len)
             n_redn_dims += 1
         else:
             indices.append(prim.Variable(f"_{n_out_dims}"))
@@ -1879,7 +1879,7 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
 
-    return make_index_lambda(a.namespace,
+    return make_index_lambda(
             Reduce(
                 prim.Subscript(prim.Variable("in"), tuple(indices)),
                 ReductionOp.SUM,
@@ -1900,10 +1900,10 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
 
-    return make_index_lambda(a.namespace,
-            scalar_expr.Reduce(
+    return make_index_lambda(
+            Reduce(
                 prim.Subscript(prim.Variable("in"), tuple(indices)),
-                scalar_expr.ReductionOp.MAX,
+                ReductionOp.MAX,
                 redn_bounds),
             {"in": a},
             new_shape,
@@ -1921,10 +1921,10 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
 
-    return make_index_lambda(a.namespace,
-            scalar_expr.Reduce(
+    return make_index_lambda(
+            Reduce(
                 prim.Subscript(prim.Variable("in"), tuple(indices)),
-                scalar_expr.ReductionOp.MIN,
+                ReductionOp.MIN,
                 redn_bounds),
             {"in": a},
             new_shape,
