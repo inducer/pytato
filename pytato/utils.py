@@ -103,10 +103,10 @@ def extract_dtypes(exprs: List[Union[Array, Number]]) -> List[DtypeOrScalar]:
     return dtypes
 
 
-def broadcasted_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
-                          op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
-                          get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
-                          ) -> Union[Array, Number]:
+def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
+                        op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
+                        get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
+                        ) -> Union[Array, Number]:
     if isinstance(a1, Number) and isinstance(a2, Number):
         from pymbolic.mapper.evaluator import evaluate
         return evaluate(op(a1, a2))  # type: ignore

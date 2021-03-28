@@ -608,11 +608,11 @@ class Array(Taggable):
 
         import pytato.utils as utils
         if reverse:
-            return utils.broadcasted_binary_op(other, self, op,
-                                               get_result_type)  # type: ignore
+            return utils.broadcast_binary_op(other, self, op,
+                                             get_result_type)  # type: ignore
         else:
-            return utils.broadcasted_binary_op(self, other, op,
-                                               get_result_type)  # type: ignore
+            return utils.broadcast_binary_op(self, other, op,
+                                             get_result_type)  # type: ignore
 
     def _unary_op(self, op: Any) -> Array:
         if self.ndim == 0:
@@ -1807,9 +1807,9 @@ def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
              which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
-    return utils.broadcasted_binary_op(x1, x2,
-                                       lambda x, y: prim.Comparison(x, which, y),
-                                       lambda x, y: np.bool8)  # type: ignore
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.Comparison(x, which, y),
+                                     lambda x, y: np.bool8)  # type: ignore
 
 
 def equal(x1: Union[Array, Number],
@@ -1871,9 +1871,9 @@ def logical_or(x1: Union[Array, Number],
     """
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
-    return utils.broadcasted_binary_op(x1, x2,
-                                       lambda x, y: prim.LogicalOr((x, y)),
-                                       lambda x, y: np.bool8)  # type: ignore
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.LogicalOr((x, y)),
+                                     lambda x, y: np.bool8)  # type: ignore
 
 
 def logical_and(x1: Union[Array, Number],
@@ -1883,9 +1883,9 @@ def logical_and(x1: Union[Array, Number],
     """
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
-    return utils.broadcasted_binary_op(x1, x2,
-                                       lambda x, y: prim.LogicalAnd((x, y)),
-                                       lambda x, y: np.bool8)  # type: ignore
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.LogicalAnd((x, y)),
+                                     lambda x, y: np.bool8)  # type: ignore
 
 
 def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
