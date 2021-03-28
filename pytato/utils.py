@@ -26,7 +26,7 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from numbers import Number
-from typing import Tuple, List, Union, Callable, Any
+from typing import Tuple, List, Union, Callable, Any, Sequence, Mapping, Dict
 from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
@@ -91,7 +91,8 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
         return val[get_indexing_expression(shape, result_shape)]
 
 
-def extract_dtypes(exprs: List[Union[Array, Number]]) -> List[DtypeOrScalar]:
+def extract_dtypes_or_scalars(
+        exprs: Sequence[Union[Array, Number]]) -> List[DtypeOrScalar]:
     dtypes: List[DtypeOrScalar] = []
     for expr in exprs:
         if isinstance(expr, Array):
@@ -101,6 +102,25 @@ def extract_dtypes(exprs: List[Union[Array, Number]]) -> List[DtypeOrScalar]:
             dtypes.append(expr)
 
     return dtypes
+
+
+def update_bindings_and_get_broadcasted_expr(arr: Union[Array, Number],
+                                             bnd_name: str,
+                                             bindings: Dict[str, Array],
+                                             result_shape: ShapeType
+                                             ) -> ScalarExpression:
+    """
+    Returns an instance of :class:`~pytato.scalar_expr.ScalarExpression` to address
+    *arr* in a :class:`pytato.array.IndexLambda` of shape *result_shape*.
+    """
+
+    if isinstance(arr, Number):
+        return arr
+
+    bindings[bnd_name] = arr
+    return with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
+                                              arr.shape,
+                                              result_shape)
 
 
 def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
@@ -118,24 +138,15 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
     namespace = next(a.namespace for a in [a1, a2] if isinstance(a, Array))
 
     result_shape = get_shape_after_broadcasting([a1, a2])
-    dtypes = extract_dtypes([a1, a2])
+    dtypes = extract_dtypes_or_scalars([a1, a2])
     result_dtype = get_result_type(*dtypes)
 
-    bindings = {}
+    bindings: Dict[str, Array] = {}
 
-    def _update_bindings_and_get_expr(arr: Union[Array, Number],
-                                      bnd_name: str) -> ScalarExpression:
-
-        if isinstance(arr, Number):
-            return arr
-
-        bindings[bnd_name] = arr
-        return with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
-                                                  arr.shape,
-                                                  result_shape)
-
-    expr1 = _update_bindings_and_get_expr(a1, "_in0")
-    expr2 = _update_bindings_and_get_expr(a2, "_in1")
+    expr1 = update_bindings_and_get_broadcasted_expr(a1, "_in0", bindings,
+                                                     result_shape)
+    expr2 = update_bindings_and_get_broadcasted_expr(a2, "_in1", bindings,
+                                                     result_shape)
 
     return IndexLambda(namespace,
                        op(expr1, expr2),

@@ -1957,9 +1957,12 @@ def where(condition: Union[Array, Number],
                                                         arr.shape,
                                                         result_shape)
 
-    expr1 = _update_bindings_and_get_expr(condition, "_in0")
-    expr2 = _update_bindings_and_get_expr(x, "_in1")
-    expr3 = _update_bindings_and_get_expr(y, "_in2")
+    expr1 = utils.update_bindings_and_get_broadcasted_expr(condition, "_in0",
+                                                           bindings, result_shape)
+    expr2 = utils.update_bindings_and_get_broadcasted_expr(x, "_in1", bindings,
+                                                           result_shape)
+    expr3 = utils.update_bindings_and_get_broadcasted_expr(y, "_in2", bindings,
+                                                           result_shape)
 
     return IndexLambda(namespace,
             prim.If(expr1, expr2, expr3),
