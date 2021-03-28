@@ -1911,7 +1911,8 @@ def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
 # {{{ where
 
 def where(condition: Union[Array, Number],
-          x: Union[Array, Number], y: Union[Array, Number]) -> Union[Array, Number]:
+          x: Optional[Union[Array, Number]] = None,
+          y: Optional[Union[Array, Number]] = None) -> Union[Array, Number]:
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
@@ -1920,6 +1921,16 @@ def where(condition: Union[Array, Number],
     if (isinstance(condition, Number) and isinstance(x, Number)
             and isinstance(y, Number)):
         return x if condition else y
+
+    # {{{ raise if single-argument form of pt.where is invoked
+
+    if x is None and y is None:
+        raise ValueError("Pytato does not support data-dependent array shapes.")
+
+    if (x is None) or (y is None):
+        raise ValueError("x and y must be pytato arrays")
+
+    # }}}
 
     namespace = next(a.namespace for a in [condition, x, y] if isinstance(a, Array))
 
