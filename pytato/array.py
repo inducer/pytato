@@ -1944,7 +1944,7 @@ def where(condition: Union[Array, Number],
 
     result_shape = utils.get_shape_after_broadcasting([condition, x, y])
 
-    bindings = {}
+    bindings: Dict[str, Array] = {}
 
     expr1 = utils.update_bindings_and_get_broadcasted_expr(condition, "_in0",
                                                            bindings, result_shape)
