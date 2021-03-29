@@ -68,9 +68,22 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: exp
 .. autofunction:: log
 .. autofunction:: log10
+.. autofunction:: isnan
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: equal
+.. autofunction:: not_equal
+.. autofunction:: less
+.. autofunction:: less_equal
+.. autofunction:: greater
+.. autofunction:: greater_equal
+.. autofunction:: logical_or
+.. autofunction:: logical_and
+.. autofunction:: logical_not
+.. autofunction:: where
+.. autofunction:: maximum
+.. autofunction:: minimum
 
 Supporting Functionality
 ------------------------
@@ -594,36 +607,12 @@ class Array(Taggable):
         # }}}
 
         import pytato.utils as utils
-        result_shape = utils.get_shape_after_broadcasting([self, other])
-        bindings = {"_in0": self}
-        first_expr = utils.with_indices_for_broadcasted_shape(var("_in0"),
-                                                              self.shape,
-                                                              result_shape)
-
-        if isinstance(other, Number):
-            second_expr = other
-            dtype = get_result_type(self.dtype, other)
-        else:
-            assert isinstance(other, Array)
-            if self.namespace is not other.namespace:
-                raise ValueError("Operands must belong to the same namespace.")
-
-            second_expr = utils.with_indices_for_broadcasted_shape(var("_in1"),
-                                                                   other.shape,
-                                                                   result_shape)
-            bindings["_in1"] = other
-            dtype = get_result_type(self.dtype, other.dtype)
-
         if reverse:
-            first_expr, second_expr = second_expr, first_expr
-
-        expr = op(first_expr, second_expr)
-
-        return IndexLambda(self.namespace,
-                expr,
-                shape=result_shape,
-                dtype=dtype,
-                bindings=bindings)
+            return utils.broadcast_binary_op(other, self, op,
+                                             get_result_type)  # type: ignore
+        else:
+            return utils.broadcast_binary_op(self, other, op,
+                                             get_result_type)  # type: ignore
 
     def _unary_op(self, op: Any) -> Array:
         if self.ndim == 0:
@@ -1705,15 +1694,18 @@ def make_data_wrapper(namespace: Namespace,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: Array, func_name: str) -> IndexLambda:
+def _apply_elem_wise_func(x: Array, func_name: str,
+                          ret_dtype: Optional[_dtype_any] = None) -> IndexLambda:
     if x.dtype.kind != "f":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
+    if ret_dtype is None:
+        ret_dtype = x.dtype
 
     expr = prim.Call(
             var(f"pytato.c99.{func_name}"),
             (prim.Subscript(var("in"),
                 tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(x.namespace, expr, x.shape, x.dtype, {"in": x})
+    return IndexLambda(x.namespace, expr, x.shape, ret_dtype, {"in": x})
 
 
 def abs(x: Array) -> IndexLambda:
@@ -1767,6 +1759,10 @@ def log(x: Array) -> IndexLambda:
 def log10(x: Array) -> IndexLambda:
     return _apply_elem_wise_func(x, "log10")
 
+
+def isnan(x: Array) -> IndexLambda:
+    return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
+
 # }}}
 
 
@@ -1803,5 +1799,193 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
     return full(namespace, shape, 1, dtype)  # type: ignore
 
 # }}}
+
+
+# {{{ comparison operator
+
+def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
+             which: str) -> Union[Array, bool]:
+    # https://github.com/python/mypy/issues/3186
+    import pytato.utils as utils
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.Comparison(x, which, y),
+                                     lambda x, y: np.bool8)  # type: ignore
+
+
+def equal(x1: Union[Array, Number],
+          x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 == x2) element-wise.
+    """
+    return _compare(x1, x2, "==")
+
+
+def not_equal(x1: Union[Array, Number],
+              x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 != x2) element-wise.
+    """
+    return _compare(x1, x2, "!=")
+
+
+def less(x1: Union[Array, Number],
+         x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 < x2) element-wise.
+    """
+    return _compare(x1, x2, "<")
+
+
+def less_equal(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 <= x2) element-wise.
+    """
+    return _compare(x1, x2, "<=")
+
+
+def greater(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 > x2) element-wise.
+    """
+    return _compare(x1, x2, ">")
+
+
+def greater_equal(x1: Union[Array, Number],
+                  x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns (x1 >= x2) element-wise.
+    """
+    return _compare(x1, x2, ">=")
+
+# }}}
+
+
+# {{{ logical operations
+
+def logical_or(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical OR of *x1* and *x2*.
+    """
+    # https://github.com/python/mypy/issues/3186
+    import pytato.utils as utils
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.LogicalOr((x, y)),
+                                     lambda x, y: np.bool8)  # type: ignore
+
+
+def logical_and(x1: Union[Array, Number],
+               x2: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical AND of *x1* and *x2*.
+    """
+    # https://github.com/python/mypy/issues/3186
+    import pytato.utils as utils
+    return utils.broadcast_binary_op(x1, x2,
+                                     lambda x, y: prim.LogicalAnd((x, y)),
+                                     lambda x, y: np.bool8)  # type: ignore
+
+
+def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
+    """
+    Returns the element-wise logical NOT of *x*.
+    """
+    if isinstance(x, Number):
+        # https://github.com/python/mypy/issues/3186
+        return np.logical_not(x)  # type: ignore
+
+    from pytato.utils import with_indices_for_broadcasted_shape
+    return IndexLambda(x.namespace,
+                       with_indices_for_broadcasted_shape(prim.Variable("_in0"),
+                                                          x.shape,
+                                                          x.shape),
+                       shape=x.shape,
+                       dtype=np.bool8,
+                       bindings={"_in0": x})
+
+# }}}
+
+
+# {{{ where
+
+def where(condition: Union[Array, Number],
+          x: Optional[Union[Array, Number]] = None,
+          y: Optional[Union[Array, Number]] = None) -> Union[Array, Number]:
+    """
+    Elementwise selector between *x* and *y* depending on *condition*.
+    """
+    import pytato.utils as utils
+
+    if (isinstance(condition, Number) and isinstance(x, Number)
+            and isinstance(y, Number)):
+        return x if condition else y
+
+    # {{{ raise if single-argument form of pt.where is invoked
+
+    if x is None and y is None:
+        raise ValueError("Pytato does not support data-dependent array shapes.")
+
+    if (x is None) or (y is None):
+        raise ValueError("x and y must be pytato arrays")
+
+    # }}}
+
+    namespace = next(a.namespace for a in [condition, x, y] if isinstance(a, Array))
+
+    # {{{ find dtype
+
+    x_dtype = x.dtype if isinstance(x, Array) else np.dtype(type(x))
+    y_dtype = y.dtype if isinstance(y, Array) else np.dtype(type(y))
+    dtype = np.find_common_type([x_dtype, y_dtype], [])
+
+    # }}}
+
+    result_shape = utils.get_shape_after_broadcasting([condition, x, y])
+
+    bindings: Dict[str, Array] = {}
+
+    expr1 = utils.update_bindings_and_get_broadcasted_expr(condition, "_in0",
+                                                           bindings, result_shape)
+    expr2 = utils.update_bindings_and_get_broadcasted_expr(x, "_in1", bindings,
+                                                           result_shape)
+    expr3 = utils.update_bindings_and_get_broadcasted_expr(y, "_in2", bindings,
+                                                           result_shape)
+
+    return IndexLambda(namespace,
+            prim.If(expr1, expr2, expr3),
+            shape=result_shape,
+            dtype=dtype,
+            bindings=bindings)
+
+# }}}
+
+
+# {{{ (max|min)inimum
+
+def maximum(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, Number]:
+    """
+    Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
+    array-like objects that could be broadcasted together. NaNs are propagated.
+    """
+    # https://github.com/python/mypy/issues/3186
+    return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+                 where(greater(x1, x2), x1, x2))  # type: ignore
+
+
+def minimum(x1: Union[Array, Number],
+            x2: Union[Array, Number]) -> Union[Array, Number]:
+    """
+    Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
+    array-like objects that could be broadcasted together. NaNs are propagated.
+    """
+    # https://github.com/python/mypy/issues/3186
+    return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+                 where(less(x1, x2), x1, x2))  # type: ignore
+
+# }}}
+
 
 # vim: foldmethod=marker
