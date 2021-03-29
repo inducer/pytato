@@ -26,7 +26,7 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from numbers import Number
-from typing import Tuple, List, Union, Callable, Any, Sequence, Mapping, Dict
+from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
 from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 
