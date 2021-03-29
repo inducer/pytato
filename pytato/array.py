@@ -1946,17 +1946,6 @@ def where(condition: Union[Array, Number],
 
     bindings = {}
 
-    def _update_bindings_and_get_expr(arr: Union[Array, Number],
-                                      bnd_name: str) -> ScalarExpression:
-
-        if isinstance(arr, Number):
-            return arr
-
-        bindings[bnd_name] = arr
-        return utils.with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
-                                                        arr.shape,
-                                                        result_shape)
-
     expr1 = utils.update_bindings_and_get_broadcasted_expr(condition, "_in0",
                                                            bindings, result_shape)
     expr2 = utils.update_bindings_and_get_broadcasted_expr(x, "_in1", bindings,
