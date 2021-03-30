@@ -105,6 +105,7 @@ Pre-Defined Tags
 .. autoclass:: ImplStored
 .. autoclass:: ImplInlined
 .. autoclass:: ImplDefault
+.. autoclass:: AdditionalOutput
 
 Built-in Expression Nodes
 -------------------------
@@ -738,6 +739,17 @@ class CountNamed(UniqueTag):
     name: str
 
 # }}}
+
+
+@tag_dataclass
+class AdditionalOutput(UniqueTag):
+    """
+    .. attribute:: field
+    .. attribute:: prefix
+    """
+
+    field: object
+    prefix: str
 
 
 # {{{ dict of named arrays
