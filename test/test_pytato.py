@@ -181,11 +181,17 @@ def test_binary_op_dispatch():
     assert x + Foo() == "baz"
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        exec(sys.argv[1])
-    else:
-        from pytest import main
-        main([__file__])
+def test_same_placeholder_name_raises():
+    x = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+    y = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+
+    with pytest.raises(ValueError):
+        pt.generate_loopy(x+y)
+
+    n1 = pt.make_size_param("n")
+    n2 = pt.make_size_param("n")
+    x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
+    with pytest.raises(ValueError):
+        pt.generate_loopy(2*x)
 
 # vim: filetype=pyopencl:fdm=marker
