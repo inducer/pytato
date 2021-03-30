@@ -320,7 +320,6 @@ class Array(Taggable):
 
         Inherits from :class:`pytools.Taggable`.
 
-    .. automethod:: named
     .. automethod:: tagged
     .. automethod:: without_tag
 

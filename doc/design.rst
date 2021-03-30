@@ -154,15 +154,13 @@ Non-design decisions
 Namespace object
 ----------------
 
-In pytato's early days, there used to exist a ``Namespace`` type to
-define a namespace for all input names within an array
-expression. This was however removed in the later versions. As, in the
-process of associating names to array variables it would privately
-hold references to :class:`~pytato.array.InputArgumentBase` variables
-that could no longer be referenced by a user. This made it impossible
-for the garbage collector to deallocate large
-:class:`~pytato.array.DataWrapper`s, unless the namespace itself went
-out-of-scope.
+In pytato's early days, there used to exist a ``Namespace`` type to define a
+namespace for all input names within an array expression. This was however removed
+in the later versions. As, in the process of associating names to array variables it
+would privately hold references to :class:`~pytato.array.InputArgumentBase`
+variables that could no longer be referenced by a user. This made it impossible for
+the garbage collector to deallocate large :class:`~pytato.array.DataWrapper`'s,
+unless the namespace itself went out-of-scope.
 
 Glossary
 ========
