@@ -26,9 +26,40 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from numbers import Number
-from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
-from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar
+from typing import Tuple, List, Union, Dict, Callable, Any, Sequence
+from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
+                          DtypeOrScalar)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
+from pytools import UniqueNameGenerator
+
+
+def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bool:
+    """
+    Returns *True* iff *dim1* and *dim2* are equivalent expressions.
+    """
+    from pymbolic.mapper.distributor import distribute
+    from pymbolic.mapper.substitutor import substitute
+
+    def to_expr(dim: ShapeComponent) -> ScalarExpression:
+        expr, bnds = dim_to_index_lambda_components(dim,
+                                                    UniqueNameGenerator())
+
+        return substitute(expr, {name: prim.Variable(bnd.name)
+                                 for name, bnd in bnds.items()})
+
+    dim1_expr = to_expr(dim1)
+    dim2_expr = to_expr(dim2)
+    # ScalarExpression.__eq__  returns Any
+    return (distribute(dim1_expr-dim2_expr) == 0)  # type: ignore
+
+
+def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
+    """
+    Returns *True* iff *shape1* and *shape2* are equivalent expressions.
+    """
+    return ((len(shape1) == len(shape2))
+            and all(are_shape_components_equal(dim1, dim2)
+                    for dim1, dim2 in zip(shape1, shape2)))
 
 
 def get_shape_after_broadcasting(
@@ -47,11 +78,11 @@ def get_shape_after_broadcasting(
                                 ) -> IntegralScalarExpression:
         result_axis_len = axis_lengths[0]
         for axis_len in axis_lengths[1:]:
-            if axis_len == result_axis_len:
+            if are_shape_components_equal(axis_len, result_axis_len):
                 pass
-            elif axis_len == 1:
+            elif are_shape_components_equal(axis_len, 1):
                 pass
-            elif result_axis_len == 1:
+            elif are_shape_components_equal(result_axis_len, 1):
                 result_axis_len = axis_len
             else:
                 raise ValueError("operands could not be broadcasted together with "
@@ -72,11 +103,10 @@ def get_indexing_expression(shape: ShapeType,
     i_start = len(result_shape) - len(shape)
     indices = []
     for i, (dim1, dim2) in enumerate(zip(shape, result_shape[i_start:])):
-        if dim1 != dim2:
-            assert dim1 == 1
+        if not are_shape_components_equal(dim1, dim2):
+            assert are_shape_components_equal(dim1, 1)
             indices.append(0)
         else:
-            assert dim1 == dim2
             indices.append(prim.Variable(f"_{i+i_start}"))
 
     return tuple(indices)
@@ -153,3 +183,54 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
                        shape=result_shape,
                        dtype=result_dtype,
                        bindings=bindings)
+
+
+# {{{ dim_to_index_lambda_components
+
+from pytato.transform import Mapper
+
+
+class ShapeExpressionMapper(Mapper):
+    """
+    Mapper that takes a shape component and returns it as a scalar expression.
+    """
+    def __init__(self, var_name_gen: UniqueNameGenerator):
+        self.cache: Dict[Array, ScalarExpression] = {}
+        self.var_name_gen = var_name_gen
+        self.bindings: Dict[str, SizeParam] = {}
+
+    def rec(self, expr: Array) -> ScalarExpression:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+        result: Array = super().rec(expr)
+        self.cache[expr] = result
+        return result
+
+    def map_index_lambda(self, expr: IndexLambda) -> ScalarExpression:
+        from pymbolic.mapper.substitutor import substitute
+        return substitute(expr.expr, {name: self.rec(val)
+                                      for name, val in expr.bindings.items()})
+
+    def map_size_param(self, expr: SizeParam) -> ScalarExpression:
+        name = self.var_name_gen("_in")
+        self.bindings[name] = expr
+        return prim.Variable(name)
+
+
+def dim_to_index_lambda_components(expr: ShapeComponent,
+                                   vng: UniqueNameGenerator,
+                                   ) -> Tuple[ScalarExpression,
+                                              Dict[str, SizeParam]]:
+    """
+    Returns the scalar expressions and bindings to use the shape
+    component within an index lambda.
+    """
+    if isinstance(expr, int):
+        return expr, {}
+
+    assert isinstance(expr, Array)
+    mapper = ShapeExpressionMapper(vng)
+    result = mapper(expr)
+    return result, mapper.bindings
+
+# }}}
