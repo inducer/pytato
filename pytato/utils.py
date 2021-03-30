@@ -161,12 +161,6 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
         from pymbolic.mapper.evaluator import evaluate
         return evaluate(op(a1, a2))  # type: ignore
 
-    if isinstance(a1, Array) and isinstance(a2, Array) and (
-            a1.namespace is not a2.namespace):
-        raise ValueError("Operands must belong to the same namespace.")
-
-    namespace = next(a.namespace for a in [a1, a2] if isinstance(a, Array))
-
     result_shape = get_shape_after_broadcasting([a1, a2])
     dtypes = extract_dtypes_or_scalars([a1, a2])
     result_dtype = get_result_type(*dtypes)
@@ -178,8 +172,7 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
     expr2 = update_bindings_and_get_broadcasted_expr(a2, "_in1", bindings,
                                                      result_shape)
 
-    return IndexLambda(namespace,
-                       op(expr1, expr2),
+    return IndexLambda(op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
                        bindings=bindings)

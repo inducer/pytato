@@ -24,12 +24,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Optional
+from typing import Any, Callable, Dict, FrozenSet
 
 from pytato.array import (
-        Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
+        Array, IndexLambda, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase)
+        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -85,8 +85,7 @@ class Mapper:
 
 class CopyMapper(Mapper):
 
-    def __init__(self, namespace: Namespace):
-        self.namespace = namespace
+    def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
 
     def rec(self, expr: Array) -> Array:  # type: ignore
@@ -100,17 +99,17 @@ class CopyMapper(Mapper):
         bindings = {
                 name: self.rec(subexpr)
                 for name, subexpr in expr.bindings.items()}
-        return IndexLambda(namespace=self.namespace,
-                expr=expr.expr,
-                shape=expr.shape,
+        return IndexLambda(expr=expr.expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        return Placeholder(namespace=self.namespace,
-                name=expr.name,
-                shape=expr.shape,
+        return Placeholder(name=expr.name,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -141,14 +140,14 @@ class CopyMapper(Mapper):
                 tags=expr.tags)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        return DataWrapper(namespace=self.namespace,
-                name=expr.name,
+        return DataWrapper(name=expr.name,
                 data=expr.data,
-                shape=expr.shape,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
-        return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
+        return SizeParam(name=expr.name, tags=expr.tags)
 
 
 class DependencyMapper(Mapper):
@@ -172,13 +171,19 @@ class DependencyMapper(Mapper):
 
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
-                                                 for bnd in expr.bindings.values()))
+                                                 for bnd in expr.bindings.values()),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_placeholder(self, expr: Placeholder) -> FrozenSet[Array]:
-        return frozenset([expr])
+        return self.combine(frozenset([expr]),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[Array]:
-        return frozenset([expr])
+        return self.combine(frozenset([expr]),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_size_param(self, expr: SizeParam) -> FrozenSet[Array]:
         return frozenset([expr])
@@ -233,9 +238,9 @@ class WalkMapper(Mapper):
         for child in expr.bindings.values():
             self.rec(child)
 
-        for child in expr.shape:
-            if isinstance(child, Array):
-                self.rec(child)
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
 
         self.post_visit(expr)
 
@@ -243,9 +248,9 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        for child in expr.shape:
-            if isinstance(child, Array):
-                self.rec(child)
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
 
         self.post_visit(expr)
 
