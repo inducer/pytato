@@ -1192,6 +1192,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     :param x1: first argument
     :param x2: second argument
     """
+    from pytato.utils import are_shape_components_equal
     if (
             isinstance(x1, Number)
             or x1.shape == ()
@@ -1202,7 +1203,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if len(x1.shape) > 2 or len(x2.shape) > 2:
         raise NotImplementedError("broadcasting not supported")
 
-    if x1.shape[-1] != x2.shape[0]:
+    if not are_shape_components_equal(x1.shape[-1], x2.shape[0]):
         raise ValueError("dimension mismatch")
 
     return MatrixProduct(x1, x2)
