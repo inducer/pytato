@@ -28,7 +28,6 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-import itertools
 from typing import Callable, Dict, Union, Iterator, List, Mapping
 
 from pytools import UniqueNameGenerator
@@ -198,11 +197,10 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     """
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
-    namespace = outputs.namespace
 
     nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
-    for elem in itertools.chain(namespace.values(), outputs.values()):
+    for elem in outputs.values():
         mapper(elem, nodes)
 
     input_arrays: List[Array] = []
@@ -241,7 +239,6 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
         # Emit output/namespace name mappings.
         _emit_name_cluster(emit, outputs, array_to_id, id_gen, label="Outputs")
-        _emit_name_cluster(emit, namespace, array_to_id, id_gen, label="Namespace")
 
     return emit.get()
 
