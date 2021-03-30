@@ -143,14 +143,13 @@ def test_advection_convergence(order, flux_type):
 
     for nelements in (8, 12, 16, 20):
         discr = DGDiscr1D(0, 2*np.pi, nelements=nelements, nnodes=order)
+        dg_ops = DGOps1D(discr)
         u_initial = np.sin(discr.nodes())
 
-        pt_nelements = pt.make_size_param("nelements")
-        pt_nnodes = pt.make_size_param("nnodes")
-        u = pt.make_placeholder(name="u", shape=(pt_nelements, pt_nnodes),
+        u = pt.make_placeholder(name="u", shape=(dg_ops.nelements, dg_ops.nnodes),
                                 dtype=np.float64)
         op = AdvectionOperator(discr, c=1, flux_type=flux_type,
-                dg_ops=DGOps1D(discr))
+                               dg_ops=dg_ops)
         result = op.apply(u)
 
         prog = pt.generate_loopy(result, cl_device=queue.device)
@@ -181,9 +180,8 @@ def main():
 
     op = AdvectionOperator(discr, c=1, flux_type="central",
                            dg_ops=dg_ops)
-    nelements = dg_ops.nelements
-    nnodes = dg_ops.nnodes
-    u = pt.make_placeholder(name="u", shape=(nelements, nnodes), dtype=np.float64)
+    u = pt.make_placeholder(name="u", shape=(dg_ops.nelements, dg_ops.nnodes),
+                            dtype=np.float64)
     result = op.apply(u)
 
     prog = pt.generate_loopy(result, cl_device=queue.device)
