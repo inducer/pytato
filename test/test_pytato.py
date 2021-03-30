@@ -194,4 +194,12 @@ def test_same_placeholder_name_raises():
     with pytest.raises(ValueError):
         pt.generate_loopy(2*x)
 
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
+
 # vim: filetype=pyopencl:fdm=marker
