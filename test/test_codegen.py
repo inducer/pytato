@@ -624,8 +624,7 @@ def test_call_loopy(ctx_factory):
     loopyfunc = call_loopy(ns, knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z, target=pt.LoopyPyOpenCLTarget(queue))(
-            x=x_in)
+    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
 
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
@@ -658,8 +657,8 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
 
     out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
-    evt, out_dict = pt.generate_loopy(out, target=pt.LoopyPyOpenCLTarget(queue),
-                                      options=lp.Options(return_dict=True))()
+    evt, out_dict = pt.generate_loopy(out, cl_device=queue.device,
+                                      options=lp.Options(return_dict=True))(queue)
     np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
 
@@ -671,7 +670,7 @@ def test_exprs_with_named_arrays(ctx_factory):
     x = pt.make_data_wrapper(ns, x_in)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
     res = 21*y1y2["y1"]
-    evt, (out,) = pt.generate_loopy(res, target=pt.LoopyPyOpenCLTarget(queue))()
+    evt, (out,) = pt.generate_loopy(res, cl_device=queue.device)(queue)
 
     np.testing.assert_allclose(out, 42*x_in)
 
@@ -702,9 +701,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     loopyfunc = call_loopy(ns, knl, bindings={"Y": y, "m": "M", "n": "N"})
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z, target=pt.LoopyPyOpenCLTarget(queue))(
-            x=x_in)
-
+    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
