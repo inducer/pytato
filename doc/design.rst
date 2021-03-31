@@ -80,12 +80,13 @@ Naming
 ------
 
 -   Input arrays, i.e. instances of :class:`~pytato.array.InputArgumentBase`,
-    take ``Optional[str]`` as their names. If the name's not been
+    take ``Optional[str]`` as their names. If the name has not been
     provided, :mod:`pytato` assigns unique names to those arrays
     during lowering to a target IR.
 
 -   No two non-identical array variables referenced in an expression may
-    have the same name. :mod:`pytato` will detect and raise for such uses.
+    have the same name. :mod:`pytato` will detect such uses and raise an error.
+    Here, "identical" is meant in the same-object ``a is b`` sense.
 
 -   The (array) value associated with a name is immutable once evaluated.
     In-place slice assignment may be simulated by returning a new
@@ -148,8 +149,8 @@ Reserved Identifiers
         :attr:`pytato.array.IndexLambda.bindings`.
 
 
-Non-design decisions
-====================
+Lessons learned
+===============
 
 Namespace object
 ----------------
