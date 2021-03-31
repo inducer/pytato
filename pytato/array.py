@@ -1054,7 +1054,6 @@ class InputArgumentBase(Array):
                         verify_existence: bool = True) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
 
-    @memoize_method
     def __hash__(self) -> int:
         return id(self)
 
