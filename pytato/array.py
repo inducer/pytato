@@ -2192,4 +2192,17 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
 # }}}
 
+
+class DistributedSend(Array):
+
+    def __init__(self, data, to_rank: int = 0, tag: str = ""):
+        pass
+
+
+class DistributedRecv(Array):
+
+    def __init__(self, src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=None):
+        pass
+
+
 # vim: foldmethod=marker

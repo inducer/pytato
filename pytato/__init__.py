@@ -44,6 +44,8 @@ from pytato.array import (
         logical_or, logical_and, logical_not,
 
         sum, amax, amin,
+
+        DistributedSend, DistributedRecv, AdditionalOutput
         )
 
 from pytato.target.loopy.codegen import generate_loopy
