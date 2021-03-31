@@ -94,8 +94,7 @@ class CodeGenPreprocessor(CopyMapper):
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
-        if name is None:
-            name = self.var_name_gen("_pt_in")
+        assert name is not None
         return SizeParam(name=name, tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
