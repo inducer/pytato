@@ -4,7 +4,7 @@ import pytato as pt
 
 
 def advect(x, halo):
-    pass
+    return x
 
 
 ns = pt.Namespace()
@@ -18,4 +18,4 @@ halo = pt.DistributedRecv(src_rank=(rank+1) % size, tag="halo", shape=(),
                           dtype=float, tags=pt.AdditionalOutput(bnd, prefix="send"))
 
 y = advect(x, halo)
-pt.generate_loopy({"y": y})
+print(pt.generate_loopy({"y": y}).program)
