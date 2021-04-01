@@ -9,3 +9,4 @@ Reference
 .. automodule:: pytato.target
 .. automodule:: pytato.codegen
 .. automodule:: pytato.visualization
+.. automodule:: pytato.diagnostic

@@ -182,16 +182,17 @@ def test_binary_op_dispatch():
 
 
 def test_same_placeholder_name_raises():
+    from pytato.diagnostic import NameClashError
     x = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
     y = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(NameClashError):
         pt.generate_loopy(x+y)
 
     n1 = pt.make_size_param("n")
     n2 = pt.make_size_param("n")
     x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
-    with pytest.raises(ValueError):
+    with pytest.raises(NameClashError):
         pt.generate_loopy(2*x)
 
 
