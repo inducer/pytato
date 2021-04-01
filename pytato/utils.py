@@ -143,7 +143,7 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         ) -> Union[Array, Number]:
     if isinstance(a1, Number) and isinstance(a2, Number):
-        from pymbolic.mapper.evaluator import evaluate
+        from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
 
     result_shape = get_shape_after_broadcasting([a1, a2])
@@ -182,7 +182,7 @@ class ShapeExpressionMapper(Mapper):
         return result
 
     def map_index_lambda(self, expr: IndexLambda) -> ScalarExpression:
-        from pymbolic.mapper.substitutor import substitute
+        from pytato.scalar_expr import substitute
         return substitute(expr.expr, {name: self.rec(val)
                                       for name, val in expr.bindings.items()})
 
@@ -228,8 +228,7 @@ def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bo
     Returns *True* iff *dim1* and *dim2* are have equal
     :class:`~pytato.array.SizeParam` coefficients in their expressions.
     """
-    from pymbolic.mapper.distributor import distribute
-    from pymbolic.mapper.substitutor import substitute
+    from pytato.scalar_expr import substitute, distribute
 
     def to_expr(dim: ShapeComponent) -> ScalarExpression:
         expr, bnds = dim_to_index_lambda_components(dim,
