@@ -31,35 +31,20 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           DtypeOrScalar)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytools import UniqueNameGenerator
+from pytato.transform import Mapper
 
 
-def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bool:
-    """
-    Returns *True* iff *dim1* and *dim2* are equivalent expressions.
-    """
-    from pymbolic.mapper.distributor import distribute
-    from pymbolic.mapper.substitutor import substitute
+__doc__ = """
+.. currentmodule:: pytato.utils
 
-    def to_expr(dim: ShapeComponent) -> ScalarExpression:
-        expr, bnds = dim_to_index_lambda_components(dim,
-                                                    UniqueNameGenerator())
+Helper routines
+---------------
 
-        return substitute(expr, {name: prim.Variable(bnd.name)
-                                 for name, bnd in bnds.items()})
-
-    dim1_expr = to_expr(dim1)
-    dim2_expr = to_expr(dim2)
-    # ScalarExpression.__eq__  returns Any
-    return (distribute(dim1_expr-dim2_expr) == 0)  # type: ignore
-
-
-def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
-    """
-    Returns *True* iff *shape1* and *shape2* are equivalent expressions.
-    """
-    return ((len(shape1) == len(shape2))
-            and all(are_shape_components_equal(dim1, dim2)
-                    for dim1, dim2 in zip(shape1, shape2)))
+.. autofunction:: are_shape_components_equal
+.. autofunction:: are_shapes_equal
+.. autofunction:: get_shape_after_broadcasting
+.. autofunction:: dim_to_index_lambda_components
+"""
 
 
 def get_shape_after_broadcasting(
@@ -180,9 +165,6 @@ def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
 
 # {{{ dim_to_index_lambda_components
 
-from pytato.transform import Mapper
-
-
 class ShapeExpressionMapper(Mapper):
     """
     Mapper that takes a shape component and returns it as a scalar expression.
@@ -217,6 +199,18 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     """
     Returns the scalar expressions and bindings to use the shape
     component within an index lambda.
+
+    ::
+
+        >>> import pytato as pt
+        >>> from pytato.utils import dim_to_index_lambda_components
+        >>> from pytools import UniqueNameGenerator
+        >>> n = pt.make_size_param("n")
+        >>> expr, bnds = dim_to_index_lambda_components(3*n+8, UniqueNameGenerator())
+        >>> print(expr)
+        3*_in + 8
+        >>> bnds
+        {'_in': <pytato.array.SizeParam at 0x7fc43cb9b160>}
     """
     if isinstance(expr, int):
         return expr, {}
@@ -227,3 +221,32 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     return result, mapper.bindings
 
 # }}}
+
+
+def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bool:
+    """
+    Returns *True* iff *dim1* and *dim2* are equivalent expressions.
+    """
+    from pymbolic.mapper.distributor import distribute
+    from pymbolic.mapper.substitutor import substitute
+
+    def to_expr(dim: ShapeComponent) -> ScalarExpression:
+        expr, bnds = dim_to_index_lambda_components(dim,
+                                                    UniqueNameGenerator())
+
+        return substitute(expr, {name: prim.Variable(bnd.name)
+                                 for name, bnd in bnds.items()})
+
+    dim1_expr = to_expr(dim1)
+    dim2_expr = to_expr(dim2)
+    # ScalarExpression.__eq__  returns Any
+    return (distribute(dim1_expr-dim2_expr) == 0)  # type: ignore
+
+
+def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
+    """
+    Returns *True* iff *shape1* and *shape2* are equivalent expressions.
+    """
+    return ((len(shape1) == len(shape2))
+            and all(are_shape_components_equal(dim1, dim2)
+                    for dim1, dim2 in zip(shape1, shape2)))
