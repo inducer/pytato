@@ -291,8 +291,9 @@ class Array(Taggable):
 
     .. attribute:: shape
 
-        A tuple of integers or :mod:`pymbolic` expressions.  Shape may be (at most
-        affinely) symbolic in the identifiers.
+        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`s.
+        Array-valued shape components may be (at most affinely) symbolic in terms of
+        :class:`~pytato.array.SizeParam`s.
 
         .. note::
 
