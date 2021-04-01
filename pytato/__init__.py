@@ -45,7 +45,7 @@ from pytato.array import (
 
         sum, amax, amin,
 
-        DistributedSend, DistributedRecv, AdditionalOutput
+        make_distributed_send, make_distributed_recv, AdditionalOutput
         )
 
 from pytato.target.loopy.codegen import generate_loopy

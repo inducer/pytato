@@ -744,11 +744,11 @@ class CountNamed(UniqueTag):
 @tag_dataclass
 class AdditionalOutput(UniqueTag):
     """
-    .. attribute:: field
+    .. attribute:: array
     .. attribute:: prefix
     """
 
-    field: object
+    array: object
     prefix: str
 
 
@@ -2193,16 +2193,29 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 # }}}
 
 
+# {{{ Communication nodes
+
+
 class DistributedSend(Array):
 
-    def __init__(self, data, to_rank: int = 0, tag: str = ""):
-        pass
+    def __init__(self, data, dest_rank: int = 0, tag: str = ""):
+        super().__init__()
 
 
 class DistributedRecv(Array):
 
-    def __init__(self, src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=None):
-        pass
+    def __init__(self, src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=frozenset()):
+        super().__init__(tags)
 
+
+def make_distributed_send(data, dest_rank: int = 0, tag: str = ""):
+    return DistributedSend(dest_rank, tag)
+
+
+def make_distributed_recv(src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=frozenset()):
+    return DistributedRecv(src_rank, tag, shape, dtype, tags)
+
+
+# }}}
 
 # vim: foldmethod=marker

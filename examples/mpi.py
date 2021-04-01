@@ -4,7 +4,7 @@ import pytato as pt
 
 
 def advect(x, halo):
-    return x
+    return 4*x
 
 
 ns = pt.Namespace()
@@ -12,9 +12,9 @@ ns = pt.Namespace()
 rank = comm.Get_rank()
 size = comm.Get_size()
 x = pt.make_placeholder(ns, shape=(10,), dtype=float)
-bnd = pt.DistributedSend(x[0], to_rank=(rank-1) % size, tag="halo")
+bnd = pt.make_distributed_send(x[0], dest_rank=(rank-1) % size, tag="halo")
 
-halo = pt.DistributedRecv(src_rank=(rank+1) % size, tag="halo", shape=(),
+halo = pt.make_distributed_recv(src_rank=(rank+1) % size, tag="halo", shape=(),
                           dtype=float, tags=pt.AdditionalOutput(bnd, prefix="send"))
 
 y = advect(x, halo)
