@@ -140,6 +140,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 (in favor of faster execution). Node creation from outside
 :mod:`pytato` should use the following interfaces:
 
+.. class:: ShapeComponent
 .. class:: ConvertibleToShape
 
 .. autofunction:: make_dict_of_named_arrays
@@ -205,12 +206,9 @@ else:
 
 ShapeComponent = Union[int, "Array"]
 ShapeType = Tuple[ShapeComponent, ...]
-# introduced ConvertibleToShapeComponent with the expectation that more object types
-# would be convertible in the future.
-ConvertibleToShapeComponent = ShapeComponent
 ConvertibleToShape = Union[
-    ConvertibleToShapeComponent,
-    Tuple[ConvertibleToShapeComponent, ...]]
+    ShapeComponent,
+    Sequence[ShapeComponent]]
 
 
 def _check_identifier(s: Optional[str]) -> bool:
@@ -227,7 +225,7 @@ def normalize_shape(
         shape: ConvertibleToShape,
         ) -> ShapeType:
     def normalize_shape_component(
-            s: ConvertibleToShapeComponent) -> ShapeComponent:
+            s: ShapeComponent) -> ShapeComponent:
         if isinstance(s, Array):
             from pytato.transform import DependencyMapper
 
