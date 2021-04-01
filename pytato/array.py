@@ -1419,8 +1419,7 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
 
 
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
-    """Make a :class:`DictOfNamedArrays` object and ensures that there's no name
-    collisions among the input arrays of the expressions.
+    """Make a :class:`DictOfNamedArrays` object.
 
     :param data: member keys and arrays
     """
