@@ -235,9 +235,9 @@ def normalize_shape(
             for d in (k for k in DependencyMapper()(s)
                       if isinstance(k, InputArgumentBase)):
                 if not isinstance(d, SizeParam):
-                    raise ValueError("shape expressions can only be in terms of "
-                                     f"SizeParams. Depends on '{d.name}', a "
-                                     "non-SizeParam array.")
+                    raise NotImplementedError("shape expressions can (for now) only "
+                                              "be in terms of SizeParams. Depends on"
+                                              f" '{d.name}', a non-SizeParam array.")
             # TODO: Check affine-ness of the array expression.
         else:
             if not isinstance(s, int):
