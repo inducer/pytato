@@ -225,7 +225,8 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
 
 def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bool:
     """
-    Returns *True* iff *dim1* and *dim2* are equivalent expressions.
+    Returns *True* iff *dim1* and *dim2* are have equal
+    :class:`~pytato.array.SizeParam` coefficients in their expressions.
     """
     from pymbolic.mapper.distributor import distribute
     from pymbolic.mapper.substitutor import substitute
@@ -245,7 +246,9 @@ def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bo
 
 def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
     """
-    Returns *True* iff *shape1* and *shape2* are equivalent expressions.
+    Returns *True* iff *shape1* and *shape2* have the same dimensionality and the
+    correpsonding components are equal as defined by
+    :func:`~pytato.utils.are_shape_components_equal`.
     """
     return ((len(shape1) == len(shape2))
             and all(are_shape_components_equal(dim1, dim2)
