@@ -2204,7 +2204,7 @@ class DistributedSend(Array):
 
 class DistributedRecv(Array):
 
-    def __init__(self, src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=frozenset()):
+    def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(), dtype=float, tags=frozenset()):
         super().__init__(tags)
 
 
