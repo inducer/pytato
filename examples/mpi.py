@@ -19,3 +19,11 @@ halo = pt.make_distributed_recv(src_rank=(rank+1) % size, comm_tag="halo", shape
 
 y = advect(x, halo)
 print(pt.generate_loopy({"y": y}).program)
+
+dot_code = pt.get_dot_graph(y)
+
+from graphviz import Source
+
+src = Source(dot_code)
+
+src.view()
