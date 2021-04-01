@@ -221,7 +221,8 @@ class WalkMapper(Mapper):
     """
     def visit(self, expr: Any) -> bool:
         """
-        Should *expr* be walked over?
+        If returns *True*, *expr* is traversed during the walk.
+        If returns *False*, *expr* is not-traversed as a part of the walk.
         """
         return True
 
