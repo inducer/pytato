@@ -2198,22 +2198,22 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
 class DistributedSend(Array):
 
-    def __init__(self, data, dest_rank: int = 0, tag: str = ""):
+    def __init__(self, data, dest_rank: int = 0, comm_tag: str = ""):
         super().__init__()
 
 
 class DistributedRecv(Array):
 
     def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(), dtype=float, tags=frozenset()):
-        super().__init__(tags)
+        super().__init__()
 
 
-def make_distributed_send(data, dest_rank: int = 0, tag: str = ""):
-    return DistributedSend(dest_rank, tag)
+def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = ""):
+    return DistributedSend(data, dest_rank, comm_tag)
 
 
-def make_distributed_recv(src_rank: int = 0, tag: str = "", shape=(), dtype=float, tags=frozenset()):
-    return DistributedRecv(src_rank, tag, shape, dtype, tags)
+def make_distributed_recv(src_rank: int = 0, comm_tag: str = "", shape=(), dtype=float, tags=frozenset()):
+    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 
 
 # }}}
