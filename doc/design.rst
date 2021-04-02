@@ -163,7 +163,10 @@ Guidelines for tag use:
 - Tags *must not* carry semantic information; i.e. a computation must have the same
   result even if all tags are stripped.
 
-- Tags *may* carry information related to efficient execution.
+- Tags *may* carry information related to efficient execution, i.e. it is
+  permissible that evaluation of the expression is inefficient (even
+  impractically so) without taking the information in the tags into
+  account.
 
 - Tags *should* be descriptive, not prescriptive.
 
