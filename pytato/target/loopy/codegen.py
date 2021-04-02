@@ -461,8 +461,7 @@ class CodeGenMapper(Mapper):
                     named_array = expr[arg.name]
 
                     # stored result for the assignee
-                    result = StoredResult(assignee_name,
-                                          named_array.ndim,
+                    result = StoredResult(assignee_name, named_array.ndim,
                                           frozenset([new_insn_id]))
                     # record the result for the corresponding loopy array
                     state.results[named_array] = result
@@ -471,37 +470,43 @@ class CodeGenMapper(Mapper):
                             named_array)
                 else:
                     assert arg.is_input
-                    assert isinstance(expr.bindings[arg.name], Array)
+                    pt_arg = expr.bindings[arg.name]
+                    assert isinstance(pt_arg, Array)
 
-                    subexpr: Array = expr.bindings[arg.name]  # type: ignore
-
-                    if subexpr in state.results and (
-                            isinstance(state.results[subexpr], StoredResult)):
+                    if pt_arg in state.results and (
+                            isinstance(state.results[pt_arg], StoredResult)):
                         # found a stored result corresponding to the argument, use it
                         stored_result: StoredResult = state.results[  # type: ignore
-                                subexpr]
+                                pt_arg]
                         name = stored_result.name
-                        params.append(_get_sub_array_ref(subexpr, name))
+                        params.append(_get_sub_array_ref(pt_arg, name))
                         depends_on.update(stored_result.depends_on)
                     else:
                         # did not find a stored result for the sub-expression, store
                         # it and then pass it to the call
                         name = state.var_name_gen("_pt_temp")
-                        store_insn_id = add_store(name, subexpr,
-                                self.rec(subexpr, state),
+                        store_insn_id = add_store(name, pt_arg,
+                                self.rec(pt_arg, state),
                                 state, output_to_temporary=True)
                         depends_on.add(store_insn_id)
                         # replace "arg" with the created stored variable
-                        state.results[subexpr] = StoredResult(name, subexpr.ndim,
+                        state.results[pt_arg] = StoredResult(name, pt_arg.ndim,
                                                           frozenset([store_insn_id]))
-                        params.append(_get_sub_array_ref(subexpr, name))
-                        new_tvs[name] = get_loopy_temporary(name, subexpr)
+                        params.append(_get_sub_array_ref(pt_arg, name))
+                        new_tvs[name] = get_loopy_temporary(name, pt_arg)
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
+                pt_arg = expr.bindings[arg.name]
                 loopy_expr_context = LoopyExpressionContext(state,
                         local_namespace={}, num_indices=0)
-                params.append(self.exprgen_mapper(expr.bindings[arg.name],
-                        loopy_expr_context))
+                if isinstance(pt_arg, Array):
+                    assert pt_arg.ndim == 0
+                    params.append(self.rec(pt_arg,
+                                           state).to_loopy_expression(
+                                               (), loopy_expr_context))
+                else:
+                    params.append(self.exprgen_mapper(pt_arg,
+                            loopy_expr_context))
 
         # }}}
 

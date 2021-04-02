@@ -195,8 +195,10 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
                             f"pytato.Array, got {type(bindings[arg.name])}.")
             else:
                 assert isinstance(arg, lp.ValueArg)
-                if not (isinstance(bindings[arg.name], (str,
-                        prim.Expression, Number))):
+                if not (isinstance(bindings[arg.name],
+                                   (str, prim.Expression, Number))
+                        or (isinstance(bindings[arg.name], Array)
+                            and bindings[arg.name].shape == ())):  # type: ignore
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             " number or a scalar expression, got "
                             f"{type(bindings[arg.name])}.")
