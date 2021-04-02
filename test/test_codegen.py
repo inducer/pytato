@@ -705,6 +705,32 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
+def test_call_loopy_with_scalar_array_inputs(ctx_factory):
+    import loopy as lp
+    from numpy.random import default_rng
+    from pytato.loopy import call_loopy
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+    rng = default_rng()
+    x_in = rng.random(size=())
+
+    knl = lp.make_kernel(
+        "{:}",
+        """
+        y = 2*x
+        """)
+
+    ns = pt.Namespace()
+    x = pt.make_placeholder(ns, name="x", shape=(), dtype=float)
+    y = call_loopy(ns, knl, {"x": 3*x})["y"]
+
+    evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
+    np.testing.assert_allclose(out, 6*x_in)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
