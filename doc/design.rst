@@ -19,7 +19,7 @@ TODO
     When this document refers to different ways of expressing a computation
     and transforming between them "without loss of information", what is meant
     is that the transformation is valid
-    
+
     - in both directions, and
     - for all possible inputs (including those with symbolic shapes).
 
@@ -73,7 +73,7 @@ Computation and Results
     Operations that introduce nontrivial mappings on indices (e.g. reshape,
     strided slice, roll) are identified as potential candidates for being captured
     in their own high-level node vs. as an :class:`~pytato.array.IndexLambda`.
-    
+
     Operations that *can* be expressed as :class:`~pytato.array.IndexLambda`
     without loss of information, *should* be expressed that way.
 
@@ -150,6 +150,30 @@ Reserved Identifiers
     -   Identifiers matching the regular expression ``_in[0-9]+``. They are used
         as automatically generated names (if required) in
         :attr:`pytato.array.IndexLambda.bindings`.
+
+Tags
+----
+
+In order to convey information about the computation from DAG construction
+time to processing/transformation/code generation time, each :class:`pytato.Array`
+node may be tagged (via the :attr:`pytato.Array.tags` attribute) with an arbitrary
+number of informational "tags". A tag is any subclass of :class:`pytools.tag.Tag`.
+Guidelines for tag use:
+
+- Tags *must not* carry semantic information; i.e. a computation must have the same
+  result even if all tags are stripped.
+
+- Tags *may* carry information related to efficient execution, i.e. it is
+  permissible that evaluation of the expression is inefficient (even
+  impractically so) without taking the information in the tags into
+  account.
+
+- Tags *should* be descriptive, not prescriptive.
+
+  For example:
+
+  - **Good:** This array is the result of differentiation.
+  - **Bad:** Unroll the loops in the code computing this result.
 
 Glossary
 ========
