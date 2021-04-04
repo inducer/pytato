@@ -356,7 +356,7 @@ def normalize_shape(
 
 SliceItem = Union[int, slice, None, EllipsisType]
 DtypeOrScalar = Union[_dtype_any, ScalarType]
-ArrayLike = Union["Array", ScalarType]
+ArrayOrScalar = Union["Array", ScalarType]
 
 
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
@@ -596,7 +596,7 @@ class Array(Taggable):
 
     def _binary_op(self,
             op: Any,
-            other: ArrayLike,
+            other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
@@ -1695,9 +1695,9 @@ def make_data_wrapper(namespace: Namespace,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: ArrayLike, func_name: str,
+def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
                           ret_dtype: Optional[_dtype_any] = None
-                          ) -> ArrayLike:
+                          ) -> ArrayOrScalar:
     if isinstance(x, SCALAR_CLASSES):
         np_func = getattr(np, func_name)
         return np_func(x)  # type: ignore
@@ -1716,59 +1716,59 @@ def _apply_elem_wise_func(x: ArrayLike, func_name: str,
     return IndexLambda(x.namespace, expr, x.shape, ret_dtype, {"in": x})
 
 
-def abs(x: Array) -> ArrayLike:
+def abs(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "abs")
 
 
-def sin(x: Array) -> ArrayLike:
+def sin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sin")
 
 
-def cos(x: Array) -> ArrayLike:
+def cos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cos")
 
 
-def tan(x: Array) -> ArrayLike:
+def tan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tan")
 
 
-def arcsin(x: Array) -> ArrayLike:
+def arcsin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "asin")
 
 
-def arccos(x: Array) -> ArrayLike:
+def arccos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "acos")
 
 
-def arctan(x: Array) -> ArrayLike:
+def arctan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "atan")
 
 
-def sinh(x: Array) -> ArrayLike:
+def sinh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sinh")
 
 
-def cosh(x: Array) -> ArrayLike:
+def cosh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cosh")
 
 
-def tanh(x: Array) -> ArrayLike:
+def tanh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tanh")
 
 
-def exp(x: Array) -> ArrayLike:
+def exp(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "exp")
 
 
-def log(x: Array) -> ArrayLike:
+def log(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log")
 
 
-def log10(x: Array) -> ArrayLike:
+def log10(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log10")
 
 
-def isnan(x: Array) -> ArrayLike:
+def isnan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
 
 # }}}
@@ -1811,7 +1811,7 @@ def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
 
 # {{{ comparison operator
 
-def _compare(x1: ArrayLike, x2: ArrayLike, which: str) -> Union[Array, bool]:
+def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
@@ -1819,42 +1819,42 @@ def _compare(x1: ArrayLike, x2: ArrayLike, which: str) -> Union[Array, bool]:
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def equal(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 == x2) element-wise.
     """
     return _compare(x1, x2, "==")
 
 
-def not_equal(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def not_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 != x2) element-wise.
     """
     return _compare(x1, x2, "!=")
 
 
-def less(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def less(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 < x2) element-wise.
     """
     return _compare(x1, x2, "<")
 
 
-def less_equal(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def less_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 <= x2) element-wise.
     """
     return _compare(x1, x2, "<=")
 
 
-def greater(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def greater(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 > x2) element-wise.
     """
     return _compare(x1, x2, ">")
 
 
-def greater_equal(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 >= x2) element-wise.
     """
@@ -1865,7 +1865,7 @@ def greater_equal(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
 
 # {{{ logical operations
 
-def logical_or(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical OR of *x1* and *x2*.
     """
@@ -1876,7 +1876,7 @@ def logical_or(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_and(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
+def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical AND of *x1* and *x2*.
     """
@@ -1887,7 +1887,7 @@ def logical_and(x1: ArrayLike, x2: ArrayLike) -> Union[Array, bool]:
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_not(x: ArrayLike) -> Union[Array, bool]:
+def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical NOT of *x*.
     """
@@ -1911,9 +1911,9 @@ def logical_not(x: ArrayLike) -> Union[Array, bool]:
 
 # {{{ where
 
-def where(condition: ArrayLike,
-          x: Optional[ArrayLike] = None,
-          y: Optional[ArrayLike] = None) -> ArrayLike:
+def where(condition: ArrayOrScalar,
+          x: Optional[ArrayOrScalar] = None,
+          y: Optional[ArrayOrScalar] = None) -> ArrayOrScalar:
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
@@ -1965,7 +1965,7 @@ def where(condition: ArrayLike,
 
 # {{{ (max|min)inimum
 
-def maximum(x1: ArrayLike, x2: ArrayLike) -> ArrayLike:
+def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
@@ -1975,7 +1975,7 @@ def maximum(x1: ArrayLike, x2: ArrayLike) -> ArrayLike:
                  where(greater(x1, x2), x1, x2))
 
 
-def minimum(x1: ArrayLike, x2: ArrayLike) -> ArrayLike:
+def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.

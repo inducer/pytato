@@ -26,7 +26,7 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
-from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar, ArrayLike
+from pytato.array import Array, ShapeType, IndexLambda, DtypeOrScalar, ArrayOrScalar
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES)
 
@@ -92,7 +92,7 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
 
 
 def extract_dtypes_or_scalars(
-        exprs: Sequence[ArrayLike]) -> List[DtypeOrScalar]:
+        exprs: Sequence[ArrayOrScalar]) -> List[DtypeOrScalar]:
     dtypes: List[DtypeOrScalar] = []
     for expr in exprs:
         if isinstance(expr, Array):
@@ -104,7 +104,7 @@ def extract_dtypes_or_scalars(
     return dtypes
 
 
-def update_bindings_and_get_broadcasted_expr(arr: ArrayLike,
+def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
                                              bindings: Dict[str, Array],
                                              result_shape: ShapeType
@@ -124,10 +124,10 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayLike,
                                               result_shape)
 
 
-def broadcast_binary_op(a1: ArrayLike, a2: ArrayLike,
+def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
-                        ) -> ArrayLike:
+                        ) -> ArrayOrScalar:
     if isinstance(a1, SCALAR_CLASSES) and isinstance(a2, SCALAR_CLASSES):
         from pymbolic.mapper.evaluator import evaluate
         return evaluate(op(a1, a2))  # type: ignore
