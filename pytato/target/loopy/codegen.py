@@ -39,12 +39,14 @@ if TYPE_CHECKING:
     import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace)
+        SizeParam, InputArgumentBase, MatrixProduct, Placeholder, Namespace,
+        NamedArray)
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
+from pytato.loopy import LoopyFunction
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen
@@ -291,6 +293,9 @@ class CodeGenState:
         else:
             self._program = self._program.with_kernel(kernel)
 
+    def update_program(self, program: lp.Program) -> None:
+        self._program = program
+
 
 class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
@@ -406,6 +411,131 @@ class CodeGenMapper(Mapper):
                 loopy_expr_context)
         state.results[expr] = result
         return result
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
+            state: CodeGenState) -> None:
+        for key in expr:
+            subexpr = expr[key].expr
+            name = state.var_name_gen("_pt_temp")
+            insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
+                    output_to_temporary=True)
+            state.results[subexpr] = state.results[expr[key]] = (
+                    StoredResult(name, subexpr.ndim, frozenset([insn_id])))
+
+    def map_named_array(self, expr: NamedArray,
+            state: CodeGenState) -> ImplementedResult:
+        if expr in state.results:
+            return state.results[expr]
+
+        self.rec(expr.dict_of_named_arrays, state)
+
+        assert expr in state.results
+        return state.results[expr]
+
+    def map_loopy_function(self, expr: LoopyFunction, state: CodeGenState) -> None:
+        from loopy.kernel.instruction import make_assignment
+        from loopy.symbolic import SubArrayRef
+
+        callee_kernel = expr.program[expr.entrypoint]
+
+        state.update_program(lp.merge([state.program, expr.program]))
+
+        domains = []
+
+        def _get_sub_array_ref(array: Array, name: str) -> "lp.symbolic.SubArrayRef":
+            inames = tuple(
+                    state.var_name_gen(f"_{name}_dim{d}")
+                    for d in range(array.ndim))
+
+            domains.append(domain_for_shape(inames, array.shape, {}))
+
+            inames_as_vars = tuple(var(iname) for iname in inames)
+            return SubArrayRef(inames_as_vars,
+                               prim.Subscript(var(name), inames_as_vars))
+
+        assignees = []
+        params = []
+        depends_on: Set[str] = set()
+        new_tvs = {}
+        new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
+
+        for arg in callee_kernel.args:
+            # must traverse in the order of callee's args to generate the correct
+            # assignees order
+            if isinstance(arg, lp.ArrayArg):
+                if arg.is_output:
+                    assignee_name = state.var_name_gen("_pt_temp")
+                    assignees.append(_get_sub_array_ref(expr[arg.name],
+                                                        assignee_name))
+
+                    named_array = expr[arg.name]
+
+                    # stored result for the assignee
+                    result = StoredResult(assignee_name, named_array.ndim,
+                                          frozenset([new_insn_id]))
+                    # record the result for the corresponding loopy array
+                    state.results[named_array] = result
+
+                    new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
+                            named_array)
+                else:
+                    assert arg.is_input
+                    pt_arg = expr.bindings[arg.name]
+                    assert isinstance(pt_arg, Array)
+
+                    if pt_arg in state.results and (
+                            isinstance(state.results[pt_arg], StoredResult)):
+                        # found a stored result corresponding to the argument, use it
+                        stored_result: StoredResult = state.results[  # type: ignore
+                                pt_arg]
+                        name = stored_result.name
+                        params.append(_get_sub_array_ref(pt_arg, name))
+                        depends_on.update(stored_result.depends_on)
+                    else:
+                        # did not find a stored result for the sub-expression, store
+                        # it and then pass it to the call
+                        name = state.var_name_gen("_pt_temp")
+                        store_insn_id = add_store(name, pt_arg,
+                                self.rec(pt_arg, state),
+                                state, output_to_temporary=True)
+                        depends_on.add(store_insn_id)
+                        # replace "arg" with the created stored variable
+                        state.results[pt_arg] = StoredResult(name, pt_arg.ndim,
+                                                          frozenset([store_insn_id]))
+                        params.append(_get_sub_array_ref(pt_arg, name))
+                        new_tvs[name] = get_loopy_temporary(name, pt_arg)
+            else:
+                assert isinstance(arg, lp.ValueArg) and arg.is_input
+                pt_arg = expr.bindings[arg.name]
+                loopy_expr_context = LoopyExpressionContext(state,
+                        local_namespace={}, num_indices=0)
+                if isinstance(pt_arg, Array):
+                    assert pt_arg.ndim == 0
+                    params.append(self.rec(pt_arg,
+                                           state).to_loopy_expression(
+                                               (), loopy_expr_context))
+                else:
+                    params.append(self.exprgen_mapper(pt_arg,
+                            loopy_expr_context))
+
+        # }}}
+
+        new_insn = make_assignment(
+                tuple(assignees),
+                var(expr.entrypoint)(*params),
+                depends_on=frozenset(depends_on),
+                id=new_insn_id)
+
+        # update kernel
+        kernel = state.kernel
+        tvs = state.kernel.temporary_variables.copy()
+        tvs.update(new_tvs)
+
+        kernel = kernel.copy(instructions=kernel.instructions+[new_insn],
+                             temporary_variables=tvs,
+                             domains=kernel.domains+domains)
+
+        state.update_kernel(kernel)
 
 # }}}
 
@@ -607,9 +737,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
 
 def get_loopy_temporary(name: str, expr: Array) -> lp.TemporaryVariable:
-    is_shape_symbolic = not all(isinstance(dim, int) for dim in expr.shape)
-    # Only global variables can have symbolic shape.
-    address_space = lp.AddressSpace.GLOBAL if is_shape_symbolic else lp.auto
+    # always allocating to global address space to avoid stack overflow
+    address_space = lp.AddressSpace.GLOBAL
     return lp.TemporaryVariable(name,
             dtype=expr.dtype,
             shape=expr.shape,
@@ -639,6 +768,8 @@ def rename_reductions(
 
     loopy_expr_context.reduction_bounds = new_reduction_bounds
     return result
+
+# }}}
 
 
 def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
@@ -682,7 +813,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         if cl_device is not None:
             raise TypeError("may not pass both 'target' and 'cl_device'")
 
-    preproc_result = preprocess(orig_outputs)
+    preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
     namespace = outputs.namespace
@@ -707,7 +838,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     # Generate code for outputs.
     for name in compute_order:
-        expr = outputs[name]
+        expr = outputs[name].expr
         insn_id = add_store(name, expr, cg_mapper(expr, state), state)
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
