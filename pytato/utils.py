@@ -209,8 +209,8 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
         >>> expr, bnds = dim_to_index_lambda_components(3*n+8, UniqueNameGenerator())
         >>> print(expr)
         3*_in + 8
-        >>> bnds
-        {'_in': <pytato.array.SizeParam at 0x...>}
+        >>> bnds  # doctest: +ELLIPSIS
+        {'_in': <pytato.array.SizeParam ...>}
     """
     if isinstance(expr, int):
         return expr, {}
