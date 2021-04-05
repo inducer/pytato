@@ -24,12 +24,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Optional
+from typing import Any, Callable, Dict, FrozenSet
 
 from pytato.array import (
-        Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
+        Array, IndexLambda, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase)
+        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -39,7 +39,7 @@ Transforming Computations
 
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
-.. autofunction:: copy_namespace
+.. autoclass:: WalkMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 
@@ -85,8 +85,7 @@ class Mapper:
 
 class CopyMapper(Mapper):
 
-    def __init__(self, namespace: Namespace):
-        self.namespace = namespace
+    def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
 
     def rec(self, expr: Array) -> Array:  # type: ignore
@@ -100,17 +99,17 @@ class CopyMapper(Mapper):
         bindings = {
                 name: self.rec(subexpr)
                 for name, subexpr in expr.bindings.items()}
-        return IndexLambda(namespace=self.namespace,
-                expr=expr.expr,
-                shape=expr.shape,
+        return IndexLambda(expr=expr.expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        return Placeholder(namespace=self.namespace,
-                name=expr.name,
-                shape=expr.shape,
+        return Placeholder(name=expr.name,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -141,14 +140,14 @@ class CopyMapper(Mapper):
                 tags=expr.tags)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        return DataWrapper(namespace=self.namespace,
-                name=expr.name,
+        return DataWrapper(name=expr.name,
                 data=expr.data,
-                shape=expr.shape,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
-        return SizeParam(self.namespace, name=expr.name, tags=expr.tags)
+        return SizeParam(name=expr.name, tags=expr.tags)
 
 
 class DependencyMapper(Mapper):
@@ -172,13 +171,19 @@ class DependencyMapper(Mapper):
 
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(bnd)
-                                                 for bnd in expr.bindings.values()))
+                                                 for bnd in expr.bindings.values()),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_placeholder(self, expr: Placeholder) -> FrozenSet[Array]:
-        return frozenset([expr])
+        return self.combine(frozenset([expr]),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[Array]:
-        return frozenset([expr])
+        return self.combine(frozenset([expr]),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
 
     def map_size_param(self, expr: SizeParam) -> FrozenSet[Array]:
         return frozenset([expr])
@@ -206,62 +211,105 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
 
+
+class WalkMapper(Mapper):
+    """
+    A mapper that walks over all the arrays in a :class:`pytato.array.Array`.
+
+    User may either override the the specific mapper methods in a derived class or
+    override :meth:`WalkMapper.visit` and :meth:`WalkMapper.post_visit`.
+    """
+    def visit(self, expr: Any) -> bool:
+        """
+        If this method returns *True*, *expr* is traversed during the walk.
+        If this method returns *False*, *expr* is not traversed as a part of
+        the walk.
+        """
+        return True
+
+    def post_visit(self, expr: Any) -> None:
+        """
+        Callback after *expr* has been traversed.
+        """
+        pass
+
+    def map_index_lambda(self, expr: IndexLambda) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.bindings.values():
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
+
+        self.post_visit(expr)
+
+    def map_placeholder(self, expr: Placeholder) -> None:
+        if not self.visit(expr):
+            return
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
+
+        self.post_visit(expr)
+
+    map_data_wrapper = map_placeholder
+    map_size_param = map_placeholder
+
+    def map_matrix_product(self, expr: MatrixProduct) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.x1)
+        self.rec(expr.x2)
+
+        self.post_visit(expr)
+
+    def _map_index_remapping_base(self, expr: IndexRemappingBase) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.array)
+        self.post_visit(expr)
+
+    map_roll = _map_index_remapping_base
+    map_axis_permutation = _map_index_remapping_base
+    map_slice = _map_index_remapping_base
+    map_reshape = _map_index_remapping_base
+
+    def map_stack(self, expr: Stack) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.arrays:
+            self.rec(child)
+
+        self.post_visit(expr)
+
+    map_concatenate = map_stack
+
 # }}}
 
 
 # {{{ mapper frontends
 
-def copy_namespace(source_namespace: Namespace,
-        copy_mapper: CopyMapper, only_names: Optional[FrozenSet[str]]) -> Namespace:
-    """Copy the elements of *namespace* into a new namespace.
-
-    :param source_namespace: The namespace to copy
-    :param copy_mapper: A mapper that performs copies into a new namespace
-    :param only_names: Elements of *namespace* that are to be copied into the
-        new namespace. All elements are copied if *only_names=None*,
-    :returns: A new namespace containing copies of the items in *source_namespace*
-    """
-    if only_names is None:
-        only_names = frozenset(source_namespace.keys())
-
-    for name in only_names:
-        mapped_val = copy_mapper(source_namespace[name])
-        if name not in copy_mapper.namespace:
-            copy_mapper.namespace.assign(name, mapped_val)
-    return copy_mapper.namespace
-
-
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
         copy_mapper: CopyMapper) -> DictOfNamedArrays:
     """Copy the elements of a :class:`~pytato.DictOfNamedArrays` into a
-    :class:`~pytato.DictOfNamedArrays` with a new namespace.
+    :class:`~pytato.DictOfNamedArrays`.
 
     :param source_dict: The :class:`~pytato.DictOfNamedArrays` to copy
-    :param copy_mapper: A mapper that performs copies into a new namespace
+    :param copy_mapper: A mapper that performs copies different array types
     :returns: A new :class:`~pytato.DictOfNamedArrays` containing copies of the
         items in *source_dict*
     """
-    from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
-
     if not source_dict:
         return DictOfNamedArrays({})
 
-    # {{{ extract dependencies elements of the namespace
-
-    # https://github.com/python/mypy/issues/2013
-    deps: FrozenSet[Array] = frozenset().union(
-            *list(get_dependencies(source_dict).values()))  # type: ignore
-    dep_names = (frozenset([dep.name
-                            for dep in deps
-                            if isinstance(dep, InputArgumentBase)])
-                 | get_scalar_expr_deps([dep.shape for dep in deps]))
-
-    # }}}
-
-    data = {}
-    copy_namespace(source_dict.namespace, copy_mapper, dep_names)
-    for name, val in source_dict.items():
-        data[name] = copy_mapper(val)
+    data = {name: copy_mapper(val) for name, val in source_dict.items()}
     return DictOfNamedArrays(data)
 
 

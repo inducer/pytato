@@ -51,9 +51,8 @@ Computation and Results
 
     In the case of data-dependent shapes, the shape is expressed in terms of
     scalar (i.e. having a :attr:`Array.shape` of `()`) values
-    with an integral :attr:`Array.dtype` (i.e. having ``dtype.kind == "i"``)
-    referenced by name from the :attr:`Array.namespace`. Such a name
-    marks the boundary between eager and lazy evaluation.
+    with an integral :attr:`Array.dtype` (i.e. having ``dtype.kind == "i"``).
+    Such an expression marks the boundary between eager and lazy evaluation.
 
 -   There is (deliberate) overlap in what various expression nodes can
     express, e.g.
@@ -80,16 +79,14 @@ Computation and Results
 Naming
 ------
 
--   There is (for now) one :class:`~Namespace` per computation "universe" that defines
-    the computational "environment", by mapping :term:`identifier`\ s to :term:`array expression`\ s
-    (note: :class:`DictOfNamedArrays` instances may not be named, but their constituent
-    parts can, by using :class:`pytato.array.AttributeLookup`).
-    Operations involving array expressions not using the same namespace are prohibited.
+-   Input arrays, i.e. instances of :class:`~pytato.array.InputArgumentBase`,
+    take ``Optional[str]`` as their names. If the name has not been
+    provided, :mod:`pytato` assigns unique names to those arrays
+    during lowering to a target IR.
 
--   Names in the :class:`~Namespace` are under user control and unique. I.e.
-    new names in the :class:`~Namespace` that are not a
-    :ref:`reserved_identifier` are not generated automatically without explicit
-    user input.
+-   No two non-identical array variables referenced in an expression may
+    have the same name. :mod:`pytato` will detect such uses and raise an error.
+    Here, "identical" is meant in the same-object ``a is b`` sense.
 
 -   The (array) value associated with a name is immutable once evaluated.
     In-place slice assignment may be simulated by returning a new
@@ -175,6 +172,20 @@ Guidelines for tag use:
   - **Good:** This array is the result of differentiation.
   - **Bad:** Unroll the loops in the code computing this result.
 
+Lessons learned
+===============
+
+Namespace object
+----------------
+
+In pytato's early days, there used to exist a ``Namespace`` type to define a
+namespace for all input names within an array expression. This was however removed
+in the later versions. As, in the process of associating names to array variables it
+would privately hold references to :class:`~pytato.array.InputArgumentBase`
+variables that could no longer be referenced by a user. This made it impossible for
+the garbage collector to deallocate large :class:`~pytato.array.DataWrapper`'s,
+unless the namespace itself went out-of-scope.
+
 Glossary
 ========
 
@@ -190,10 +201,6 @@ Glossary
     identifier
         Any string for which :meth:`str.isidentifier` returns
         *True*. See also :ref:`reserved_identifier`.
-
-    namespace name
-        The name by which an :term:`array expression` is known
-        in a :class:`Namespace`.
 
     placeholder name
         See :attr:`pytato.array.Placeholder.name`.

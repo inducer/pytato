@@ -34,6 +34,11 @@ from pymbolic.mapper.substitutor import (SubstitutionMapper as
         SubstitutionMapperBase)
 from pymbolic.mapper.dependency import (DependencyMapper as
         DependencyMapperBase)
+from pymbolic.mapper.evaluator import (EvaluationMapper as
+        EvaluationMapperBase)
+from pymbolic.mapper.distributor import (DistributeMapper as
+        DistributeMapperBase)
+from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
 
@@ -130,6 +135,18 @@ class DependencyMapper(DependencyMapperBase):
         deps: Set[prim.Variable] = self.rec(expr.expr, *args, **kwargs)
         return deps - set(prim.Variable(iname) for iname in expr.inames)
 
+
+class EvaluationMapper(EvaluationMapperBase):
+    pass
+
+
+class DistributeMapper(DistributeMapperBase):
+    pass
+
+
+class TermCollector(TermCollectorBase):
+    pass
+
 # }}}
 
 
@@ -154,6 +171,22 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     """
     from pymbolic.mapper.substitutor import make_subst_func
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+
+
+def evaluate(expression: Any, context: Mapping[str, Any] = {}) -> Any:
+    """
+    Evaluates *expression* by substituting the variable values as provided in
+    *context*.
+    """
+    return EvaluationMapper(context)(expression)
+
+
+def distribute(expr: Any, parameters: Set[Any] = set(),
+               commutative: bool = True) -> Any:
+    if commutative:
+        return DistributeMapper(TermCollector(parameters))(expr)
+    else:
+        return DistributeMapper(lambda x: x)(expr)
 
 # }}}
 

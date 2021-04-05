@@ -31,27 +31,23 @@ import pytato as pt
 
 
 def test_matmul_input_validation():
-    namespace = pt.Namespace()
-
-    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
-    b = pt.make_placeholder(namespace, name="b", shape=(20, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
+    b = pt.make_placeholder(name="b", shape=(20, 10), dtype=np.float)
 
     with pytest.raises(ValueError):
         a @ b
 
-    c = pt.make_placeholder(namespace, name="c", shape=(), dtype=np.float)
+    c = pt.make_placeholder(name="c", shape=(), dtype=np.float)
     with pytest.raises(ValueError):
         c @ c
 
-    pt.make_size_param(namespace, "n")
-    d = pt.make_placeholder(namespace, name="d", shape="(n, n)", dtype=np.float)
+    n = pt.make_size_param("n")
+    d = pt.make_placeholder(name="d", shape=(n, n), dtype=np.float)
     d @ d
 
 
 def test_roll_input_validation():
-    namespace = pt.Namespace()
-
-    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
     pt.roll(a, 1, axis=0)
 
     with pytest.raises(ValueError):
@@ -62,9 +58,7 @@ def test_roll_input_validation():
 
 
 def test_transpose_input_validation():
-    namespace = pt.Namespace()
-
-    a = pt.make_placeholder(namespace, name="a", shape=(10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
     pt.transpose(a)
 
     with pytest.raises(ValueError):
@@ -78,9 +72,7 @@ def test_transpose_input_validation():
 
 
 def test_slice_input_validation():
-    namespace = pt.Namespace()
-
-    a = pt.make_placeholder(namespace, name="a", shape=(10, 10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float)
 
     a[0]
     a[0, 0]
@@ -94,10 +86,8 @@ def test_slice_input_validation():
 
 
 def test_stack_input_validation():
-    namespace = pt.Namespace()
-
-    x = pt.make_placeholder(namespace, name="x", shape=(10, 10), dtype=np.float)
-    y = pt.make_placeholder(namespace, name="y", shape=(1, 10), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float)
+    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float)
 
     assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
 
@@ -114,9 +104,9 @@ def test_stack_input_validation():
         pt.stack((x, x), axis=3)
 
 
+@pytest.mark.xfail  # Unnamed placeholders should be used via pt.bind
 def test_make_placeholder_noname():
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float)
+    x = pt.make_placeholder(shape=(10, 4), dtype=float)
     y = 2*x
 
     knl = pt.generate_loopy(y).kernel
@@ -126,8 +116,7 @@ def test_make_placeholder_noname():
 
 
 def test_zero_length_arrays():
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, shape=(0, 4), dtype=float)
+    x = pt.make_placeholder(shape=(0, 4), dtype=float)
     y = 2*x
 
     assert y.shape == (0, 4)
@@ -137,10 +126,8 @@ def test_zero_length_arrays():
 
 
 def test_concatenate_input_validation():
-    namespace = pt.Namespace()
-
-    x = pt.make_placeholder(namespace, name="x", shape=(10, 10), dtype=np.float)
-    y = pt.make_placeholder(namespace, name="y", shape=(1, 10), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float)
+    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float)
 
     assert pt.concatenate((x, x, x), axis=0).shape == (30, 10)
     assert pt.concatenate((x, y), axis=0).shape == (11, 10)
@@ -159,9 +146,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    ns = pt.Namespace()
-
-    x = pt.make_placeholder(ns, shape=(3, 3, 4), dtype=np.float)
+    x = pt.make_placeholder(shape=(3, 3, 4), dtype=np.float)
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
@@ -191,10 +176,24 @@ def test_binary_op_dispatch():
 
             return NotImplemented
 
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, name="x", shape=(10,), dtype=float)
+    x = pt.make_placeholder(name="x", shape=(10,), dtype=float)
     assert Foo() + x == "bar"
     assert x + Foo() == "baz"
+
+
+def test_same_placeholder_name_raises():
+    from pytato.diagnostic import NameClashError
+    x = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+    y = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+
+    with pytest.raises(NameClashError):
+        pt.generate_loopy(x+y)
+
+    n1 = pt.make_size_param("n")
+    n2 = pt.make_size_param("n")
+    x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
+    with pytest.raises(NameClashError):
+        pt.generate_loopy(2*x)
 
 
 if __name__ == "__main__":
