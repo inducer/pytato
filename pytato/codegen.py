@@ -328,7 +328,7 @@ class NamesValidityChecker(WalkMapper):
             else:
                 if ary is not expr:
                     from pytato.diagnostic import NameClashError
-                    raise NameClashError("Received 2 separate instances of inputs "
+                    raise NameClashError("Received two separate instances of inputs "
                                          f"named '{expr.name}'.")
 
 
