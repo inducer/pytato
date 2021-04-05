@@ -40,6 +40,7 @@ from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
+import numpy as np
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -53,7 +54,7 @@ Scalar Expressions
     composable and manipulable via :mod:`pymbolic`.
 
     Concretely, this is an alias for
-    ``Union[Number, pymbolic.primitives.Expression]``.
+    ``Union[Number, np.bool_, bool, pymbolic.primitives.Expression]``.
 
 .. autofunction:: parse
 .. autofunction:: get_dependencies
@@ -64,7 +65,9 @@ Scalar Expressions
 # {{{ scalar expressions
 
 IntegralScalarExpression = Union[int, prim.Expression]
-ScalarExpression = Union[Number, prim.Expression]
+ScalarType = Union[Number, np.bool_, bool]
+ScalarExpression = Union[ScalarType, prim.Expression]
+SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
 
 def parse(s: str) -> ScalarExpression:

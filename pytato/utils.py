@@ -26,10 +26,11 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from numbers import Number
-from typing import Tuple, List, Union, Dict, Callable, Any, Sequence
+from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
-                          DtypeOrScalar)
-from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
+                          DtypeOrScalar, ArrayOrScalar)
+from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
+                                SCALAR_CLASSES)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
 
@@ -107,19 +108,19 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
 
 
 def extract_dtypes_or_scalars(
-        exprs: Sequence[Union[Array, Number]]) -> List[DtypeOrScalar]:
+        exprs: Sequence[ArrayOrScalar]) -> List[DtypeOrScalar]:
     dtypes: List[DtypeOrScalar] = []
     for expr in exprs:
         if isinstance(expr, Array):
             dtypes.append(expr.dtype)
         else:
-            assert isinstance(expr, Number)
+            assert isinstance(expr, SCALAR_CLASSES)
             dtypes.append(expr)
 
     return dtypes
 
 
-def update_bindings_and_get_broadcasted_expr(arr: Union[Array, Number],
+def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
                                              bindings: Dict[str, Array],
                                              result_shape: ShapeType
@@ -129,19 +130,20 @@ def update_bindings_and_get_broadcasted_expr(arr: Union[Array, Number],
     *arr* in a :class:`pytato.array.IndexLambda` of shape *result_shape*.
     """
 
-    if isinstance(arr, Number):
+    if isinstance(arr, SCALAR_CLASSES):
         return arr
 
+    assert isinstance(arr, Array)
     bindings[bnd_name] = arr
     return with_indices_for_broadcasted_shape(prim.Variable(bnd_name),
                                               arr.shape,
                                               result_shape)
 
 
-def broadcast_binary_op(a1: Union[Array, Number], a2: Union[Array, Number],
+def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
-                        ) -> Union[Array, Number]:
+                        ) -> ArrayOrScalar:
     if isinstance(a1, Number) and isinstance(a2, Number):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore

@@ -167,7 +167,6 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 # }}}
 
 from functools import partialmethod
-from numbers import Number
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
@@ -179,6 +178,8 @@ from pymbolic import var
 from pytools import memoize_method
 from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
+
+from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES)
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -249,6 +250,7 @@ def normalize_shape(
 
         return s
 
+    from numbers import Number
     if isinstance(shape, (Array, Number)):
         shape = shape,
 
@@ -261,7 +263,8 @@ def normalize_shape(
 # {{{ array inteface
 
 SliceItem = Union[int, slice, None, EllipsisType]
-DtypeOrScalar = Union[_dtype_any, Number]
+DtypeOrScalar = Union[_dtype_any, ScalarType]
+ArrayOrScalar = Union["Array", ScalarType]
 
 
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
@@ -484,13 +487,13 @@ class Array(Taggable):
 
     def _binary_op(self,
             op: Any,
-            other: Union[Array, Number],
+            other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
         # {{{ sanity checks
 
-        if not isinstance(other, (Array, Number)):
+        if not isinstance(other, (Array,) + SCALAR_CLASSES):
             return NotImplemented
 
         # }}}
@@ -1192,9 +1195,9 @@ def matmul(x1: Array, x2: Array) -> Array:
     """
     from pytato.utils import are_shape_components_equal
     if (
-            isinstance(x1, Number)
+            isinstance(x1, SCALAR_CLASSES)
             or x1.shape == ()
-            or isinstance(x2, Number)
+            or isinstance(x2, SCALAR_CLASSES)
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
 
@@ -1486,8 +1489,15 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: Array, func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None) -> IndexLambda:
+def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
+                          ret_dtype: Optional[_dtype_any] = None
+                          ) -> ArrayOrScalar:
+    if isinstance(x, SCALAR_CLASSES):
+        np_func = getattr(np, func_name)
+        return np_func(x)  # type: ignore
+
+    assert isinstance(x, Array)
+
     if x.dtype.kind != "f":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
     if ret_dtype is None:
@@ -1500,59 +1510,59 @@ def _apply_elem_wise_func(x: Array, func_name: str,
     return IndexLambda(expr, x.shape, ret_dtype, {"in": x})
 
 
-def abs(x: Array) -> IndexLambda:
+def abs(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "abs")
 
 
-def sin(x: Array) -> IndexLambda:
+def sin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sin")
 
 
-def cos(x: Array) -> IndexLambda:
+def cos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cos")
 
 
-def tan(x: Array) -> IndexLambda:
+def tan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tan")
 
 
-def arcsin(x: Array) -> IndexLambda:
+def arcsin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "asin")
 
 
-def arccos(x: Array) -> IndexLambda:
+def arccos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "acos")
 
 
-def arctan(x: Array) -> IndexLambda:
+def arctan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "atan")
 
 
-def sinh(x: Array) -> IndexLambda:
+def sinh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sinh")
 
 
-def cosh(x: Array) -> IndexLambda:
+def cosh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cosh")
 
 
-def tanh(x: Array) -> IndexLambda:
+def tanh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tanh")
 
 
-def exp(x: Array) -> IndexLambda:
+def exp(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "exp")
 
 
-def log(x: Array) -> IndexLambda:
+def log(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log")
 
 
-def log10(x: Array) -> IndexLambda:
+def log10(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log10")
 
 
-def isnan(x: Array) -> IndexLambda:
+def isnan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
 
 # }}}
@@ -1560,8 +1570,8 @@ def isnan(x: Array) -> IndexLambda:
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: Number,
-        dtype: Any, order: str = "C") -> Array:
+def full(shape: ConvertibleToShape, fill_value: ScalarType,
+         dtype: Any, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
     """
@@ -1595,8 +1605,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 
 # {{{ comparison operator
 
-def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
-             which: str) -> Union[Array, bool]:
+def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
@@ -1604,48 +1613,42 @@ def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def equal(x1: Union[Array, Number],
-          x2: Union[Array, Number]) -> Union[Array, bool]:
+def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 == x2) element-wise.
     """
     return _compare(x1, x2, "==")
 
 
-def not_equal(x1: Union[Array, Number],
-              x2: Union[Array, Number]) -> Union[Array, bool]:
+def not_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 != x2) element-wise.
     """
     return _compare(x1, x2, "!=")
 
 
-def less(x1: Union[Array, Number],
-         x2: Union[Array, Number]) -> Union[Array, bool]:
+def less(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 < x2) element-wise.
     """
     return _compare(x1, x2, "<")
 
 
-def less_equal(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def less_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 <= x2) element-wise.
     """
     return _compare(x1, x2, "<=")
 
 
-def greater(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, bool]:
+def greater(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 > x2) element-wise.
     """
     return _compare(x1, x2, ">")
 
 
-def greater_equal(x1: Union[Array, Number],
-                  x2: Union[Array, Number]) -> Union[Array, bool]:
+def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 >= x2) element-wise.
     """
@@ -1656,8 +1659,7 @@ def greater_equal(x1: Union[Array, Number],
 
 # {{{ logical operations
 
-def logical_or(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical OR of *x1* and *x2*.
     """
@@ -1668,8 +1670,7 @@ def logical_or(x1: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_and(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical AND of *x1* and *x2*.
     """
@@ -1680,13 +1681,15 @@ def logical_and(x1: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
+def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical NOT of *x*.
     """
-    if isinstance(x, Number):
+    if isinstance(x, SCALAR_CLASSES):
         # https://github.com/python/mypy/issues/3186
         return np.logical_not(x)  # type: ignore
+
+    assert isinstance(x, Array)
 
     from pytato.utils import with_indices_for_broadcasted_shape
     return IndexLambda(with_indices_for_broadcasted_shape(prim.Variable("_in0"),
@@ -1701,17 +1704,13 @@ def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
 
 # {{{ where
 
-def where(condition: Union[Array, Number],
-          x: Optional[Union[Array, Number]] = None,
-          y: Optional[Union[Array, Number]] = None) -> Union[Array, Number]:
+def where(condition: ArrayOrScalar,
+          x: Optional[ArrayOrScalar] = None,
+          y: Optional[ArrayOrScalar] = None) -> ArrayOrScalar:
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
     import pytato.utils as utils
-
-    if (isinstance(condition, Number) and isinstance(x, Number)
-            and isinstance(y, Number)):
-        return x if condition else y
 
     # {{{ raise if single-argument form of pt.where is invoked
 
@@ -1722,6 +1721,10 @@ def where(condition: Union[Array, Number],
         raise ValueError("x and y must be pytato arrays")
 
     # }}}
+
+    if (isinstance(condition, SCALAR_CLASSES) and isinstance(x, SCALAR_CLASSES)
+            and isinstance(y, SCALAR_CLASSES)):
+        return x if condition else y  # type: ignore
 
     # {{{ find dtype
 
@@ -1752,26 +1755,24 @@ def where(condition: Union[Array, Number],
 
 # {{{ (max|min)inimum
 
-def maximum(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, Number]:
+def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
     return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
-                 where(greater(x1, x2), x1, x2))  # type: ignore
+                 where(greater(x1, x2), x1, x2))
 
 
-def minimum(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, Number]:
+def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
     return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
-                 where(less(x1, x2), x1, x2))  # type: ignore
+                 where(less(x1, x2), x1, x2))
 
 # }}}
 

@@ -35,7 +35,7 @@ from pytato.array import (
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
         log10, isnan,
 
-        maximum, minimum,
+        maximum, minimum, where,
 
         full, zeros, ones,
 
@@ -69,7 +69,7 @@ __all__ = (
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan",
 
-        "maximum", "minimum",
+        "maximum", "minimum", "where",
 
         "full", "zeros", "ones",
 
