@@ -200,7 +200,7 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     Returns the scalar expressions and bindings to use the shape
     component within an index lambda.
 
-    ::
+    .. doctest::
 
         >>> import pytato as pt
         >>> from pytato.utils import dim_to_index_lambda_components
@@ -210,7 +210,7 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
         >>> print(expr)
         3*_in + 8
         >>> bnds
-        {'_in': <pytato.array.SizeParam at 0x7fc43cb9b160>}
+        {'_in': <pytato.array.SizeParam at 0x...>}
     """
     if isinstance(expr, int):
         return expr, {}
