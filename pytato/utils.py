@@ -36,8 +36,6 @@ from pytato.transform import Mapper
 
 
 __doc__ = """
-.. currentmodule:: pytato.utils
-
 Helper routines
 ---------------
 

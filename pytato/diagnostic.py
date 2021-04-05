@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 
 __doc__ = """
-.. currentmodule:: pytato.diagnostic
 
 Pytato-specific exceptions
 --------------------------
