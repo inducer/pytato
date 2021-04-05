@@ -1420,7 +1420,6 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
 
 # {{{ make_dict_of_named_arrays
 
-
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
