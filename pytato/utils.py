@@ -202,9 +202,9 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
 
     .. testsetup::
 
-        import pytato as pt
-        from pytato.utils import dim_to_index_lambda_components
-        from pytools import UniqueNameGenerator
+        >>> import pytato as pt
+        >>> from pytato.utils import dim_to_index_lambda_components
+        >>> from pytools import UniqueNameGenerator
 
     .. doctest::
 
