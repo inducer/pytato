@@ -4,8 +4,7 @@ import pytato as pt
 
 
 def advect(x, halo, bnd):
-    return 4*x
-
+    return bnd*x
 
 ns = pt.Namespace()
 
@@ -23,7 +22,5 @@ print(pt.generate_loopy({"y": y}).program)
 dot_code = pt.get_dot_graph(y)
 
 from graphviz import Source
-
 src = Source(dot_code)
-
 src.view()

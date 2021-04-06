@@ -2200,12 +2200,37 @@ class DistributedSend(Array):
 
     def __init__(self, data, dest_rank: int = 0, comm_tag: str = ""):
         super().__init__()
+        self.data = data
+
+    @property
+    def namespace(self):
+        return self.data.namespace
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def dtype(self):
+        return self.data.dtype
 
 
 class DistributedRecv(Array):
 
     def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(), dtype=float, tags=frozenset()):
         super().__init__()
+
+    @property
+    def namespace(self):
+        return self.data.namespace
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def dtype(self):
+        return self.data.dtype
 
 
 def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = ""):
