@@ -2198,6 +2198,9 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
 class DistributedSend(Array):
 
+    _mapper_method = "map_distributed_send"
+    _fields = Array._fields + ("data",)
+
     def __init__(self, data, dest_rank: int = 0, comm_tag: str = ""):
         super().__init__()
         self.data = data
@@ -2216,6 +2219,8 @@ class DistributedSend(Array):
 
 
 class DistributedRecv(Array):
+
+    _mapper_method = "map_distributed_recv"
 
     def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(), dtype=float, tags=frozenset()):
         super().__init__()

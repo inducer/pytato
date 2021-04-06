@@ -30,7 +30,7 @@ from pytato.array import (
         Array, IndexLambda, Namespace, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
         DictOfNamedArrays, Reshape, Concatenate, InputArgumentBase,
-        NamedArray)
+        NamedArray, DistributedSend)
 from pytato.loopy import LoopyFunction
 
 T = TypeVar("T", Array, DictOfNamedArrays)
@@ -164,6 +164,9 @@ class CopyMapper(Mapper):
         return DictOfNamedArrays({key: self.rec(val.expr)
                                   for key, val in expr.items()})
 
+    def map_distributed_send(self, expr: DistributedSend) -> DictOfNamedArrays:
+        return DistributedSend(expr.data)
+
 
 class DependencyMapper(Mapper):
     """
@@ -228,6 +231,9 @@ class DependencyMapper(Mapper):
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary.expr)
                                                  for ary in expr.values()))
+
+    def map_distributed_send(self, expr: DistributedSend) -> DictOfNamedArrays:
+        return self.combine(frozenset([expr]))
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
         from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps

@@ -389,6 +389,11 @@ class CodeGenMapper(Mapper):
         assert expr in state.results
         return state.results[expr]
 
+    def map_distributed_send(self, expr: DistributedSend, state: CodeGenState) -> ImplementedResult:
+        # FIXME: implement this
+        if expr in state.results:
+            return state.results[expr]
+
     def map_loopy_function(self, expr: LoopyFunction, state: CodeGenState) -> None:
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
