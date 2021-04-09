@@ -29,7 +29,8 @@ from typing import Any, Callable, Dict, FrozenSet
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase)
+        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase,
+        DistributedSend)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -226,7 +227,7 @@ class WalkMapper(Mapper):
     User may either override the the specific mapper methods in a derived class or
     override :meth:`WalkMapper.visit` and :meth:`WalkMapper.post_visit`.
     """
-    def visit(self, expr: Any) -> bool:
+    def visit(self, expr: Any, *args: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
         If this method returns *False*, *expr* is not traversed as a part of
@@ -234,69 +235,78 @@ class WalkMapper(Mapper):
         """
         return True
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: Any, *args: Any) -> None:
         """
         Callback after *expr* has been traversed.
         """
         pass
 
-    def map_index_lambda(self, expr: IndexLambda) -> None:
-        if not self.visit(expr):
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for child in expr.bindings.values():
-            self.rec(child)
+            self.rec(child, *args)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                self.rec(dim)
+                self.rec(dim, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
-    def map_placeholder(self, expr: Placeholder) -> None:
-        if not self.visit(expr):
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                self.rec(dim)
+                self.rec(dim, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
     map_data_wrapper = map_placeholder
     map_size_param = map_placeholder
 
-    def map_matrix_product(self, expr: MatrixProduct) -> None:
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
         if not self.visit(expr):
             return
 
-        self.rec(expr.x1)
-        self.rec(expr.x2)
+        self.rec(expr.x1, *args)
+        self.rec(expr.x2, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
-    def _map_index_remapping_base(self, expr: IndexRemappingBase) -> None:
-        if not self.visit(expr):
+    def _map_index_remapping_base(self,
+            expr: IndexRemappingBase, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
-        self.rec(expr.array)
-        self.post_visit(expr)
+        self.rec(expr.array, *args)
+        self.post_visit(expr, *args)
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_slice = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def map_stack(self, expr: Stack) -> None:
-        if not self.visit(expr):
+    def map_stack(self, expr: Stack, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for child in expr.arrays:
-            self.rec(child)
+            self.rec(child, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
     map_concatenate = map_stack
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+        if not self.visit(expr, *args):
+            return
+
+        self.rec(expr.data, *args)
+
+
 
 # }}}
 
