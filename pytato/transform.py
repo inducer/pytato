@@ -88,6 +88,10 @@ class Mapper:
 
 
 class CopyMapper(Mapper):
+    """
+    Maps a :class:`pytato.array.Array` to a deep copy of
+    :class:`pytato.array.Array`.
+    """
 
     def __init__(self, namespace: Namespace):
         self.namespace = namespace
