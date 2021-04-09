@@ -84,6 +84,10 @@ class Mapper:
 
 
 class CopyMapper(Mapper):
+    """
+    Maps a :class:`pytato.array.Array` to a deep copy of
+    :class:`pytato.array.Array`.
+    """
 
     def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
@@ -148,6 +152,9 @@ class CopyMapper(Mapper):
 
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(name=expr.name, tags=expr.tags)
+
+    def map_distributed_send(self, expr: DistributedSend) -> DictOfNamedArrays:
+        return DistributedSend(expr.data)
 
 
 class DependencyMapper(Mapper):

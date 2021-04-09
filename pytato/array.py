@@ -103,6 +103,7 @@ Pre-Defined Tags
 .. autoclass:: ImplStored
 .. autoclass:: ImplInlined
 .. autoclass:: ImplDefault
+.. autoclass:: AdditionalOutput
 
 Built-in Expression Nodes
 -------------------------
@@ -616,6 +617,17 @@ class CountNamed(UniqueTag):
     name: str
 
 # }}}
+
+
+@tag_dataclass
+class AdditionalOutput(UniqueTag):
+    """
+    .. attribute:: array
+    .. attribute:: prefix
+    """
+
+    array: object
+    prefix: str
 
 
 # {{{ dict of named arrays
@@ -1775,5 +1787,54 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 # }}}
 
+
+
+# {{{ Communication nodes
+
+
+class DistributedSend(Array):
+
+    _mapper_method = "map_distributed_send"
+    _fields = Array._fields + ("data",)
+
+    def __init__(self, data, dest_rank: int = 0, comm_tag: str = ""):
+        super().__init__()
+        self.data = data
+
+    @property
+    def namespace(self):
+        return self.data.namespace
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def dtype(self):
+        return self.data.dtype
+
+
+class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
+
+    _fields = Array._fields + ("src_rank", "comm_tag",)
+    _mapper_method = "map_distributed_recv"
+
+    def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(),
+            dtype=float, tags=frozenset()):
+        super().__init__(shape=shape, dtype=dtype, tags=tags)
+        self.src_rank = src_rank
+        self.comm_tag = comm_tag
+
+
+def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = ""):
+    return DistributedSend(data, dest_rank, comm_tag)
+
+
+def make_distributed_recv(src_rank: int = 0, comm_tag: str = "", shape=(),
+        dtype=float, tags=frozenset()):
+    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
+
+
+# }}}
 
 # vim: foldmethod=marker
