@@ -26,6 +26,11 @@ class SendFeederFinder(WalkMapper):
         fed_sends = fed_sends | {expr}
         super().map_distributed_send(expr, fed_sends)
 
+    def map_distributed_recv(self, expr, fed_sends):
+        pass
+        # fed_sends = fed_sends | {expr}
+        # super().map_distributed_send(expr, fed_sends)
+
     def __call__(self, expr):
         return self.rec(expr, set())
 
@@ -47,7 +52,6 @@ def main():
     sff(y)
 
     print(sff.node_to_fed_sends)
-    1/0
     dot_code = pt.get_dot_graph(y)
 
     from graphviz import Source
