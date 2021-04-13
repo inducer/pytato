@@ -306,6 +306,16 @@ class WalkMapper(Mapper):
 
         self.rec(expr.data, *args)
 
+        self.post_visit(expr, *args)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        if not self.visit(expr, *args):
+            return
+
+        self.rec(expr.data, *args)
+
+        self.post_visit(expr, *args)
+
 
 
 # }}}

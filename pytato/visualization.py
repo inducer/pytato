@@ -81,7 +81,7 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
         title = type(expr).__name__
         fields = dict(shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
-                tags=stringify_tags(expr.tags))
+                tags=stringify_tags(expr.tags), address=str(hex(id(expr))))
         edges: Dict[str, Array] = {}
         return DotNodeInfo(title, fields, edges)
 
