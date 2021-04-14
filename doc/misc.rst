@@ -26,6 +26,19 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+Acknowledgments
+===============
+
+Work on pytato was supported in part by
+
+* the Department of Energy, National Nuclear Security Administration,
+  under Award Number DE-NA0003963,
+* the US National Science Foundation under grant numbers SHF-1911019, and OAC-1931577.
+
+The views and opinions expressed herein do not necessarily reflect those of the
+funding agencies.
+
+
 Cross-References for Other Documentation
 ========================================
 .. class:: ellipsis
