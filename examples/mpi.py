@@ -59,26 +59,16 @@ def main():
     sff = SendFeederFinder()
     sff(y)
 
-    # l_sends = set()
-
-    # for x in sff.node_to_fed_sends:
-    #     print(x, sff.node_to_fed_sends[x])
-    #     if len(sff.node_to_fed_sends[x]) > 0:
-    #         l_sends.add(sff.node_to_fed_sends[x].pop())
-
     def partition_sends(node_to_fed_sends):
         sends_to_nodes = {}
 
         for x in node_to_fed_sends:
             if len(sff.node_to_fed_sends[x]) > 0:
-                send = sff.node_to_fed_sends[x].pop()
+                send = next(iter(sff.node_to_fed_sends[x]))
                 sends_to_nodes.setdefault(send, []).append(x)
 
         return sends_to_nodes
-        # print(sends_to_nodes)
-
     print("========")
-    # print(l_sends)
 
     print(partition_sends(sff.node_to_fed_sends))
 
