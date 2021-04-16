@@ -1,11 +1,51 @@
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
 import pytato as pt
-from pytato.transform import WalkMapper
+from pytato.transform import Mapper, WalkMapper
+
+from pytato.array import Array
 
 
 def advect(*args):
     return sum([a for a in args])
+
+
+class GraphToDictMapper(WalkMapper):
+    """
+    .. attribute:: graph_dict
+
+        :class:`dict`, maps each node in the graph to the set of sends that
+        depend on it
+    """
+    def __init__(self):
+        self.graph_dict = {}
+
+    def visit(self, expr, children):
+        self.graph_dict[expr] = children
+        return True
+
+    def map_placeholder(self, expr, children):
+        children = children | {expr}
+        super().map_placeholder(expr, children)
+
+    def map_slice(self, expr, children):
+        children = children | {expr}
+        super().map_slice(expr, children)
+
+    def map_index_lambda(self, expr, children):
+        children = children | {expr}
+        super().map_index_lambda(expr, children)
+
+    def map_distributed_send(self, expr, children):
+        children = children | {expr}
+        super().map_distributed_send(expr, children)
+
+    def map_distributed_recv(self, expr, children):
+        children = children | {expr}
+        super().map_distributed_recv(expr, children)
+
+    def __call__(self, expr):
+        return self.rec(expr, set())
 
 
 class SendFeederFinder(WalkMapper):
@@ -24,7 +64,8 @@ class SendFeederFinder(WalkMapper):
 
     def map_distributed_send(self, expr, fed_sends):
         fed_sends = fed_sends | {expr}
-        super().map_distributed_send(expr, fed_sends)
+        self.rec(expr.data, fed_sends)
+        # super().map_distributed_send(expr, fed_sends)
 
     def map_distributed_recv(self, expr, fed_sends):
         pass
@@ -59,6 +100,13 @@ def main():
     sff = SendFeederFinder()
     sff(y)
 
+    gdm = GraphToDictMapper()
+    gdm(y)
+
+    for k, v in gdm.graph_dict.items():
+        print(k, v)
+    # print(gdm.graph_dict)
+
     def partition_sends(node_to_fed_sends):
         sends_to_nodes = {}
 
@@ -68,15 +116,15 @@ def main():
                 sends_to_nodes.setdefault(send, []).append(x)
 
         return sends_to_nodes
-    print("========")
 
-    print(partition_sends(sff.node_to_fed_sends))
+    # print("========")
+    # print(partition_sends(sff.node_to_fed_sends))
 
     dot_code = pt.get_dot_graph(y)
 
     from graphviz import Source
     src = Source(dot_code)
-    src.view()
+    # src.view()
 
 
 if __name__ == "__main__":
