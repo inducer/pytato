@@ -45,7 +45,7 @@ class GraphToDictMapper(WalkMapper):
         super().map_distributed_recv(expr, children)
 
     def __call__(self, expr):
-        return self.rec(expr, set())
+        return self.rec(expr, set())  # Why can't we use list here?
 
 
 class SendFeederFinder(WalkMapper):
