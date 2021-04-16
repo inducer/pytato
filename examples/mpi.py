@@ -14,8 +14,7 @@ class GraphToDictMapper(WalkMapper):
     """
     .. attribute:: graph_dict
 
-        :class:`dict`, maps each node in the graph to the set of sends that
-        depend on it
+        :class:`dict`, maps each node in the graph to the set of connected nodes
     """
     def __init__(self):
         self.graph_dict = {}
@@ -45,7 +44,7 @@ class GraphToDictMapper(WalkMapper):
         super().map_distributed_recv(expr, children)
 
     def __call__(self, expr):
-        return self.rec(expr, set())  # Why can't we use list here?
+        return self.rec(expr, set())  # Why can't we use ',list()'' here?
 
 
 class SendFeederFinder(WalkMapper):
@@ -104,6 +103,7 @@ def main():
     gdm(y)
 
     for k, v in gdm.graph_dict.items():
+        v.remove(k)
         print(k, v)
     # print(gdm.graph_dict)
 
