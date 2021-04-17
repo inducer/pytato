@@ -84,6 +84,7 @@ class Mapper:
 
 
 class CopyMapper(Mapper):
+    """Performs a deep copy of a :class:`pytato.array.Array`."""
 
     def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
@@ -216,8 +217,11 @@ class WalkMapper(Mapper):
     """
     A mapper that walks over all the arrays in a :class:`pytato.array.Array`.
 
-    User may either override the the specific mapper methods in a derived class or
+    User may override the specific mapper methods in a derived class or
     override :meth:`WalkMapper.visit` and :meth:`WalkMapper.post_visit`.
+
+    .. automethod:: visit
+    .. automethod:: post_visit
     """
     def visit(self, expr: Any) -> bool:
         """
