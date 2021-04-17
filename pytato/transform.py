@@ -217,7 +217,7 @@ class WalkMapper(Mapper):
     """
     A mapper that walks over all the arrays in a :class:`pytato.array.Array`.
 
-    User may override the specific mapper methods in a derived class or
+    Users may override the specific mapper methods in a derived class or
     override :meth:`WalkMapper.visit` and :meth:`WalkMapper.post_visit`.
 
     .. automethod:: visit
