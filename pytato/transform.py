@@ -88,7 +88,6 @@ class CopyMapper(Mapper):
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
     """
-    
 
     def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
