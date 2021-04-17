@@ -3,48 +3,62 @@ comm = MPI.COMM_WORLD
 import pytato as pt
 from pytato.transform import Mapper, WalkMapper
 
-from pytato.array import Array
+from pytato.array import Array, IndexLambda
 
 
 def advect(*args):
     return sum([a for a in args])
 
 
-class GraphToDictMapper(WalkMapper):
+class GraphToDictMapper(Mapper):
     """
     .. attribute:: graph_dict
 
-        :class:`dict`, maps each node in the graph to the set of connected nodes
+        :class:`dict`, maps each node in the graph to the set of directly connected
+        nodes.
     """
     def __init__(self):
         self.graph_dict = {}
 
-    def visit(self, expr, children):
-        self.graph_dict[expr] = children
-        return True
+    def map_placeholder(self, expr, *args):
+        children = set()
 
-    def map_placeholder(self, expr, children):
-        children = children | {expr}
-        super().map_placeholder(expr, children)
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim, *args)
 
-    def map_slice(self, expr, children):
-        children = children | {expr}
-        super().map_slice(expr, children)
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
 
-    def map_index_lambda(self, expr, children):
-        children = children | {expr}
-        super().map_index_lambda(expr, children)
+    def map_slice(self, expr, *args):
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
 
-    def map_distributed_send(self, expr, children):
-        children = children | {expr}
-        super().map_distributed_send(expr, children)
+    def map_index_lambda(self, expr: IndexLambda, *args) -> None:
+        children = set()
 
-    def map_distributed_recv(self, expr, children):
-        children = children | {expr}
-        super().map_distributed_recv(expr, children)
+        for child in expr.bindings.values():
+            children = children | {child}
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim)
+
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+
+    def map_distributed_send(self, expr, *args):
+        self.graph_dict.setdefault(expr.data, set()).add(expr)
+        self.rec(expr.data)
+
+    def map_distributed_recv(self, expr, *args):
+        pass
 
     def __call__(self, expr):
-        return self.rec(expr, set())  # Why can't we use ',list()'' here?
+        return self.rec(expr)
 
 
 class SendFeederFinder(WalkMapper):
@@ -102,8 +116,8 @@ def main():
     gdm = GraphToDictMapper()
     gdm(y)
 
+    print("========")
     for k, v in gdm.graph_dict.items():
-        v.remove(k)
         print(k, v)
     # print(gdm.graph_dict)
 
@@ -124,7 +138,7 @@ def main():
 
     from graphviz import Source
     src = Source(dot_code)
-    # src.view()
+    src.view()
 
 
 if __name__ == "__main__":
