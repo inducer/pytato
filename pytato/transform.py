@@ -84,7 +84,11 @@ class Mapper:
 
 
 class CopyMapper(Mapper):
-    """Performs a deep copy of a :class:`pytato.array.Array`."""
+    """Performs a deep copy of a :class:`pytato.array.Array`.
+    The typical use of this mapper is to override individual ``map_`` methods
+    in subclasses to permit term rewriting on an expression graph.
+    """
+    
 
     def __init__(self) -> None:
         self.cache: Dict[Array, Array] = {}
