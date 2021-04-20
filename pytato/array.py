@@ -1788,7 +1788,6 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 # }}}
 
 
-
 # {{{ Communication nodes
 
 
@@ -1816,23 +1815,24 @@ class DistributedSend(Array):
 
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
-    _fields = Array._fields + ("src_rank", "comm_tag",)
+    _fields = Array._fields + ("src_rank", "comm_tag", "data")
     _mapper_method = "map_distributed_recv"
 
-    def __init__(self, src_rank: int = 0, comm_tag: str = "", shape=(),
+    def __init__(self, data, src_rank: int = 0, comm_tag: str = "", shape=(),
             dtype=float, tags=frozenset()):
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
         self.comm_tag = comm_tag
+        self.data = data
 
 
 def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = ""):
     return DistributedSend(data, dest_rank, comm_tag)
 
 
-def make_distributed_recv(src_rank: int = 0, comm_tag: str = "", shape=(),
+def make_distributed_recv(data, src_rank: int = 0, comm_tag: str = "", shape=(),
         dtype=float, tags=frozenset()):
-    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
+    return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
 
 
 # }}}

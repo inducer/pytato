@@ -77,13 +77,29 @@ class SendFeederFinder(WalkMapper):
 
     def map_distributed_send(self, expr, fed_sends):
         fed_sends = fed_sends | {expr}
-        self.rec(expr.data, fed_sends)
-        # super().map_distributed_send(expr, fed_sends)
+        super().map_distributed_send(expr, fed_sends)
 
-    def map_distributed_recv(self, expr, fed_sends):
-        pass
-        # fed_sends = fed_sends | {expr}
-        # super().map_distributed_recv(expr, fed_sends)
+    def __call__(self, expr):
+        return self.rec(expr, set())
+
+
+class RecvFeedingFinder(WalkMapper):
+    """
+    .. attribute:: node_to_feeding_recvs
+
+        :class:`dict`, maps each node in the graph to the set of recv's that
+        feed it
+    """
+    def __init__(self):
+        self.node_to_feeding_recvs = {}
+
+    def visit(self, expr, receiving_nodes):
+        self.node_to_feeding_recvs[expr] = receiving_nodes
+        return True
+
+    def map_distributed_recv(self, expr, receiving_nodes):
+        receiving_nodes = receiving_nodes | {expr}
+        super().map_distributed_recv(expr, receiving_nodes)
 
     def __call__(self, expr):
         return self.rec(expr, set())
@@ -95,30 +111,37 @@ def main():
     x = pt.make_placeholder(shape=(10,), dtype=float)
     bnd = pt.make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
 
-    halo = pt.make_distributed_recv(src_rank=(rank+1) % size, comm_tag="halo",
+    halo = pt.make_distributed_recv(x[9], src_rank=(rank+1) % size, comm_tag="halo",
             shape=(), dtype=float)
-#            # tags=frozenset({pt.AdditionalOutput(bnd, prefix="send")}))
 
     y = x+bnd+halo
 
     bnd2 = pt.make_distributed_send(y[0], dest_rank=(rank-1) % size, comm_tag="halo")
 
-    halo2 = pt.make_distributed_recv(src_rank=(rank+1) % size, comm_tag="halo",
+    halo2 = pt.make_distributed_recv(y[9], src_rank=(rank+1) % size, comm_tag="halo",
             shape=(), dtype=float)
     y += bnd2 + halo2
-
-    # y = advect(x, halo, bnd)
-    #print(pt.generate_loopy({"y": y}).program)
 
     sff = SendFeederFinder()
     sff(y)
 
-    gdm = GraphToDictMapper()
-    gdm(y)
+    for k, v in sff.node_to_fed_sends.items():
+        print(k, v)
 
     print("========")
-    for k, v in gdm.graph_dict.items():
+
+    rff = RecvFeedingFinder()
+    rff(y)
+
+    for k, v in rff.node_to_feeding_recvs.items():
         print(k, v)
+
+    # gdm = GraphToDictMapper()
+    # gdm(y)
+
+    print("========")
+    # for k, v in gdm.graph_dict.items():
+    #     print(k, v)
     # print(gdm.graph_dict)
 
     def partition_sends(node_to_fed_sends):

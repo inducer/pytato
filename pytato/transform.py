@@ -315,7 +315,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr, *args):
             return
 
-        # self.rec(expr.data, *args)
+        self.rec(expr.data, *args)
 
         self.post_visit(expr, *args)
 
