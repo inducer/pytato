@@ -1801,10 +1801,6 @@ class DistributedSend(Array):
         self.data = data
 
     @property
-    def namespace(self):
-        return self.data.namespace
-
-    @property
     def shape(self):
         return self.data.shape
 
