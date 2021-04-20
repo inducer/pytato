@@ -55,7 +55,8 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.data)
 
     def map_distributed_recv(self, expr, *args):
-        pass
+        self.graph_dict.setdefault(expr.data, set()).add(expr)
+        self.rec(expr.data)
 
     def __call__(self, expr):
         return self.rec(expr)
