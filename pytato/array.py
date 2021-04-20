@@ -1796,16 +1796,16 @@ class DistributedSend(Array):
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data",)
 
-    def __init__(self, data, dest_rank: int = 0, comm_tag: str = ""):
+    def __init__(self, data, dest_rank: int = 0, comm_tag: str = "") -> None:
         super().__init__()
         self.data = data
 
     @property
-    def shape(self):
+    def shape(self) -> ShapeType:
         return self.data.shape
 
     @property
-    def dtype(self):
+    def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
 
@@ -1815,19 +1815,20 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     _mapper_method = "map_distributed_recv"
 
     def __init__(self, data, src_rank: int = 0, comm_tag: str = "", shape=(),
-            dtype=float, tags=frozenset()):
+            dtype=float, tags=frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
         self.comm_tag = comm_tag
         self.data = data
 
 
-def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = ""):
+def make_distributed_send(data, dest_rank: int = 0, comm_tag: str = "") -> \
+         DistributedSend:
     return DistributedSend(data, dest_rank, comm_tag)
 
 
 def make_distributed_recv(data, src_rank: int = 0, comm_tag: str = "", shape=(),
-        dtype=float, tags=frozenset()):
+        dtype=float, tags=frozenset()) -> DistributedRecv:
     return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
 
 

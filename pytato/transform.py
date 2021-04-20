@@ -30,7 +30,7 @@ from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
         DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase,
-        DistributedSend)
+        DistributedSend, DistributedRecv)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -154,7 +154,7 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(name=expr.name, tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend) -> DictOfNamedArrays:
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         return DistributedSend(expr.data)
 
 

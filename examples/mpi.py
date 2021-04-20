@@ -121,41 +121,38 @@ class PartitionFinder(Mapper):
     def check_partition(self, expr1, expr2):
         if (self.node_to_fed_sends[expr1] != self.node_to_fed_sends[expr2] or
              self.node_to_feeding_recvs[expr1] != self.node_to_feeding_recvs[expr2]):
+            print("partition", expr1, expr2)
             return True
+        print("NO partition", expr1, expr2)
         return False
 
     def map_distributed_send(self, expr, *args):
-        if self.check_partition(expr, expr.data):
-            print("partition", expr, expr.data)
+        self.check_partition(expr, expr.data)
+
         self.rec(expr.data)
 
     def map_distributed_recv(self, expr, *args):
-        if self.check_partition(expr, expr.data):
-            print("partition", expr, expr.data)
+        self.check_partition(expr, expr.data)
         self.rec(expr.data)
 
     def map_slice(self, expr, *args):
-        if self.check_partition(expr, expr.array):
-            print("partition", expr, expr.array)
+        self.check_partition(expr, expr.array)
         self.rec(expr.array)
 
     def map_placeholder(self, expr, *args):
         for dim in expr.shape:
             if isinstance(dim, Array):
-                if self.check_partition(expr, dim):
-                    print("partition", expr, dim)
+                self.check_partition(expr, dim)
                 self.rec(dim, *args)
 
     def map_index_lambda(self, expr: IndexLambda, *args) -> None:
         for child in expr.bindings.values():
-            if self.check_partition(expr, child):
-                print("partition", expr, child)
+            self.check_partition(expr, child)
             self.rec(child)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                if self.check_partition(expr, dim):
-                    print("partition", expr, dim)
+                self.check_partition(expr, dim)
                 self.rec(dim)
 
     def __call__(self, expr):
