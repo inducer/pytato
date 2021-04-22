@@ -3,7 +3,7 @@ comm = MPI.COMM_WORLD
 import pytato as pt
 from pytato.transform import Mapper, WalkMapper
 
-from pytato.array import Array, IndexLambda
+from pytato.array import Array, IndexLambda, DistributedRecv, DistributedSend
 
 
 def advect(*args):
@@ -62,6 +62,27 @@ class GraphToDictMapper(Mapper):
         return self.rec(expr)
 
 
+def reverse_graph(graph):
+    result = {}
+
+    for node_key, edges in graph.items():
+        for other_node_key in edges:
+            result.setdefault(other_node_key, set()).add(node_key)
+
+    return result
+
+
+def tag_nodes_with_starting_point(graph, node, starting_point=None, result=None):
+    if result is None:
+        result = {}
+    if starting_point is None:
+        starting_point = node
+
+    result.setdefault(node, set()).add(starting_point)
+    for other_node_key in graph[node]:
+        tag_nodes_with_starting_point(graph, other_node_key, starting_point, result)
+
+
 class SendFeederFinder(WalkMapper):
     """
     .. attribute:: node_to_fed_sends
@@ -106,7 +127,7 @@ class RecvFeedingFinder(WalkMapper):
         return self.rec(expr, set())
 
 
-class PartitionFinder(Mapper):
+class PartitionFinder(CopyMapper):
     """
     .. attribute:: node_to_feeding_recvs
 
@@ -114,9 +135,11 @@ class PartitionFinder(Mapper):
         feed it
     """
 
-    def __init__(self, node_to_fed_sends, node_to_feeding_recvs):
+    def __init__(self, does_edge_cross_partition_boundary: Callable[[Node, Node], bool]):
         self.node_to_feeding_recvs = node_to_feeding_recvs
         self.node_to_fed_sends = node_to_fed_sends
+
+        self.cross_partition_name_to_value = {}
 
     def check_partition(self, expr1, expr2):
         if (self.node_to_fed_sends[expr1] != self.node_to_fed_sends[expr2] or
@@ -146,9 +169,15 @@ class PartitionFinder(Mapper):
                 self.rec(dim, *args)
 
     def map_index_lambda(self, expr: IndexLambda, *args) -> None:
-        for child in expr.bindings.values():
-            self.check_partition(expr, child)
-            self.rec(child)
+        new_bindings = {}
+        for name, child in expr.bindings.values():
+            if self.check_partition(expr, child):
+                name = self.make_new_name()
+                assert name not in self.cross_partition_name_to_value
+                new_bindings[name] = Placeholder(name)
+                self.cross_partition_name_to_value[name] = self.rec(child)
+            else:
+                new_bindings[name] = self.rec(child)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
@@ -184,22 +213,37 @@ def main():
             shape=(), dtype=float)
     y += bnd2 + halo2
 
-    sff = SendFeederFinder()
-    sff(y)
+    if 0:
+        sff = SendFeederFinder()
+        sff(y)
 
-    for k, v in sff.node_to_fed_sends.items():
-        print(k, v)
+        for k, v in sff.node_to_fed_sends.items():
+            print(k, v)
 
-    print("========")
+        print("========")
 
-    rff = RecvFeedingFinder()
-    rff(y)
+        rff = RecvFeedingFinder()
+        rff(y)
 
-    for k, v in rff.node_to_feeding_recvs.items():
-        print(k, v)
+        for k, v in rff.node_to_feeding_recvs.items():
+            print(k, v)
 
-    # gdm = GraphToDictMapper()
-    # gdm(y)
+    gdm = GraphToDictMapper()
+    gdm(y)
+
+    graph = gdm.graph_dict
+    rev_graph = reverse_graph(graph)
+
+    # FIXME: Inefficient... too many traversals
+    for node in graph:
+        node_to_feeding_recvs = {}
+        if isinstance(node, DistributedRecv):
+            tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
+
+    for node in rev_graph:
+        node_to_fed_sends = {}
+        if isinstance(node, DistributedSend):
+            tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
 
     print("========")
     # for k, v in gdm.graph_dict.items():
