@@ -18,7 +18,7 @@ class GraphToDictMapper(Mapper):
     .. attribute:: graph_dict
 
         :class:`dict`, maps each node in the graph to the set of directly connected
-        nodes.
+        nodes, obeying the direction of each edge.
     """
     def __init__(self):
         self.graph_dict = {}
