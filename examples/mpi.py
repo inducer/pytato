@@ -1,4 +1,4 @@
-from mpi4py import MPI
+from mpi4py import MPI  # pylint: disable=import-error
 comm = MPI.COMM_WORLD
 import pytato as pt
 from pytato.transform import Mapper, CopyMapper
@@ -194,7 +194,7 @@ def show_graph(y: Array) -> None:
     """Show the graph."""
     dot_code = pt.get_dot_graph(y)
 
-    from graphviz import Source
+    from graphviz import Source  # pylint: disable=import-error
     src = Source(dot_code)
     src.view()
 
