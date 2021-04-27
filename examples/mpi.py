@@ -212,6 +212,15 @@ class PartitionFinder(CopyMapper):
 # supposed to compute.
 
 
+def show_graph(y: Array) -> None:
+    """Show the graph."""
+    dot_code = pt.get_dot_graph(y)
+
+    from graphviz import Source
+    src = Source(dot_code)
+    src.view()
+
+
 def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
