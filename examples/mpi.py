@@ -109,13 +109,23 @@ def does_edge_cross_partition_boundary(node_to_fed_sends,
 class PartitionFinder(CopyMapper):
     """Find partitions."""
 
-    def __init__(self, does_edge_cross_partition_boundary:
-                                   Callable[[Any, Any], bool]) -> None:
+    def __init__(self, get_partition_id:
+                                   Callable[[Node], PartitionId]) -> None:
         super().__init__()
         self.does_edge_cross_partition_boundary = does_edge_cross_partition_boundary
         self.cross_partition_name_to_value = {}
 
         self.name_index = 0
+
+        # "nodes" of the coarsened graph
+        self.partition_id_to_nodes: Dict[PartitionId, List[Node]] = {}
+
+        # "edges" of the coarsened graph
+        self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
+                List[str]] = {}
+
+    def does_edge_cross_partition_boundary(self, node1, node2):
+        return self.get_partition_id(node1) != self.get_partition_id(node2)
 
     def make_new_name(self):
         self.name_index += 1
@@ -210,6 +220,7 @@ class PartitionFinder(CopyMapper):
                     print("NOPART", new_bindings[name])
 
         return IndexLambda(expr=expr.expr,
+                # FIXME: Do same thing as bindings
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
