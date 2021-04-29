@@ -292,9 +292,11 @@ def main():
                     node_to_feeding_recvs)
 
     pf = PartitionFinder(pfunc)
-    pf(y)
+    new = pf(y)
 
-    show_graph(y)
+    print(new)
+
+    show_graph(new)
 
     print("========")
     print(pf.cross_partition_name_to_value)

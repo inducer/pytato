@@ -157,6 +157,9 @@ class CopyMapper(Mapper):
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         return DistributedSend(expr.data)
 
+    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+        return DistributedRecv(expr.data)
+
 
 class DependencyMapper(Mapper):
     """
@@ -218,6 +221,12 @@ class DependencyMapper(Mapper):
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
+
+    def map_distributed_send(self, expr: DistributedSend) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
 
 
 class WalkMapper(Mapper):
