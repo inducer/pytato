@@ -4,7 +4,7 @@ import pytato as pt
 from pytato.transform import Mapper, CopyMapper
 
 from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
-                          make_placeholder)
+                          make_placeholder, Placeholder, Slice)
 
 from typing import Callable, Any
 
@@ -100,9 +100,9 @@ def does_edge_cross_partition_boundary(node_to_fed_sends,
     """Check if an edge crosses a partition boundary."""
     if (node_to_fed_sends[expr1] != node_to_fed_sends[expr2] or
              node_to_feeding_recvs[expr1] != node_to_feeding_recvs[expr2]):
-        print("CREATE partition", expr1, expr2)
+        # print("CREATE partition", expr1, expr2)
         return True
-    print("NO partition", expr1, expr2)
+    # print("NO partition", expr1, expr2)
     return False
 
 
@@ -127,22 +127,41 @@ class PartitionFinder(CopyMapper):
         return self.does_edge_cross_partition_boundary(expr1, expr2)
 
     def map_distributed_send(self, expr, *args):
-        self.check_partition(expr, expr.data)
-        self.rec(expr.data)
+        if self.check_partition(expr, expr.data):
+            name = self.make_new_name()
+            new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
+                                                  name, tags=expr.data.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.data)
+        else:
+            new_binding = self.rec(expr.data)
+        return DistributedSend(expr.data)
 
     def map_distributed_recv(self, expr, *args):
-        self.check_partition(expr, expr.data)
-        self.rec(expr.data)
+        if self.check_partition(expr, expr.data):
+            name = self.make_new_name()
+            new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
+                                                  name, tags=expr.data.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.data)
+        else:
+            new_binding = self.rec(expr.data)
+
+        return DistributedRecv(new_binding)
 
     def map_slice(self, expr, *args):
-        new_bindings = {}
-        name = self.make_new_name()
         if self.check_partition(expr, expr.array):
-            new_bindings[name] = make_placeholder(expr.array.shape, expr.array.dtype,
+            name = self.make_new_name()
+            new_binding = make_placeholder(expr.array.shape, expr.array.dtype,
                                                   name, tags=expr.array.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
+            print( new_binding)
         else:
-            new_bindings[name] = self.rec(expr.array)
+            new_binding = self.rec(expr.array)
+            print("NOPART", new_binding)
+
+        return Slice(array=new_binding,
+                starts=expr.starts,
+                stops=expr.stops,
+                tags=expr.tags)
 
     def map_placeholder(self, expr, *args):
         new_bindings = {}
@@ -153,8 +172,15 @@ class PartitionFinder(CopyMapper):
                     new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
+                    print(new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
+                    print("NOPART", new_bindings[name])
+
+        return Placeholder(name=expr.name,
+                shape=tuple(new_bindings),
+                dtype=expr.dtype,
+                tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args) -> None:
         new_bindings = {}
@@ -165,8 +191,10 @@ class PartitionFinder(CopyMapper):
                 new_bindings[name] = make_placeholder(child.shape, child.dtype, name,
                                                       tags=child.tags)
                 self.cross_partition_name_to_value[name] = self.rec(child)
+                print(new_bindings[name])
             else:
                 new_bindings[name] = self.rec(child)
+                print("NOPART", new_bindings[name])
 
         for dim in expr.shape:
             if isinstance(dim, Array):
@@ -175,8 +203,18 @@ class PartitionFinder(CopyMapper):
                     new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
+                    print(new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
+
+                    print("NOPART", new_bindings[name])
+
+        return IndexLambda(expr=expr.expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
+                dtype=expr.dtype,
+                bindings=new_bindings,
+                tags=expr.tags)
 
     def __call__(self, expr):
         return self.rec(expr)
