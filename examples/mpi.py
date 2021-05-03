@@ -184,12 +184,11 @@ class PartitionFinder(CopyMapper):
                     new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
-                    print(new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
 
         return Placeholder(name=expr.name,
-                shape=tuple(new_bindings),
+                shape=new_bindings,
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -202,25 +201,22 @@ class PartitionFinder(CopyMapper):
                 new_bindings[name] = make_placeholder(child.shape, child.dtype, name,
                                                       tags=child.tags)
                 self.cross_partition_name_to_value[name] = self.rec(child)
-                print(new_bindings[name])
             else:
                 new_bindings[name] = self.rec(child)
 
+        new_shapes = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
+                    new_shapes[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
-                    print(new_bindings[name])
                 else:
-                    new_bindings[name] = self.rec(dim)
+                    new_shapes[name] = self.rec(dim)
 
         return IndexLambda(expr=expr.expr,
-                # FIXME: Do same thing as bindings
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
+                shape=new_shapes,
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
