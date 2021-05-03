@@ -6,7 +6,8 @@ from pytato.transform import Mapper, CopyMapper
 from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
                           make_placeholder, Placeholder, Slice)
 
-from typing import Callable, Any
+from typing import Callable, Any, Dict, List, Tuple
+from dataclasses import dataclass
 
 
 def advect(*args):
@@ -95,37 +96,43 @@ def tag_nodes_with_starting_point(graph, node, starting_point=None, result=None)
                                           result)
 
 
-def does_edge_cross_partition_boundary(node_to_fed_sends,
-                                       node_to_feeding_recvs, expr1, expr2) -> bool:
-    """Check if an edge crosses a partition boundary."""
-    if (node_to_fed_sends[expr1] != node_to_fed_sends[expr2] or
-             node_to_feeding_recvs[expr1] != node_to_feeding_recvs[expr2]):
-        # print("CREATE partition", expr1, expr2)
-        return True
-    # print("NO partition", expr1, expr2)
-    return False
+@dataclass
+class PartitionId:
+    fed_sends: object
+    feeding_recvs: object
+
+
+def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
+                     PartitionId:
+    return PartitionId(node_to_fed_sends[expr], node_to_feeding_recvs[expr])
 
 
 class PartitionFinder(CopyMapper):
     """Find partitions."""
 
     def __init__(self, get_partition_id:
-                                   Callable[[Node], PartitionId]) -> None:
+                                   Callable[[Any], PartitionId]) -> None:
         super().__init__()
-        self.does_edge_cross_partition_boundary = does_edge_cross_partition_boundary
+        self.get_partition_id = get_partition_id
         self.cross_partition_name_to_value = {}
 
         self.name_index = 0
 
         # "nodes" of the coarsened graph
-        self.partition_id_to_nodes: Dict[PartitionId, List[Node]] = {}
+        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
 
         # "edges" of the coarsened graph
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
-    def does_edge_cross_partition_boundary(self, node1, node2):
-        return self.get_partition_id(node1) != self.get_partition_id(node2)
+    def does_edge_cross_partition_boundary(self, node1, node2) -> bool:
+        res = self.get_partition_id(node1) != self.get_partition_id(node2)
+        if res:
+            print("PART", node1, node2)
+        else:
+            print("NOPART", node1, node2)
+
+        return res
 
     def make_new_name(self):
         self.name_index += 1
@@ -133,21 +140,18 @@ class PartitionFinder(CopyMapper):
         assert res not in self.cross_partition_name_to_value
         return res
 
-    def check_partition(self, expr1, expr2) -> bool:
-        return self.does_edge_cross_partition_boundary(expr1, expr2)
-
     def map_distributed_send(self, expr, *args):
-        if self.check_partition(expr, expr.data):
+        if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
             new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
                                                   name, tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
         else:
             new_binding = self.rec(expr.data)
-        return DistributedSend(expr.data)
+        return DistributedSend(new_binding)
 
     def map_distributed_recv(self, expr, *args):
-        if self.check_partition(expr, expr.data):
+        if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
             new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
                                                   name, tags=expr.data.tags)
@@ -158,15 +162,13 @@ class PartitionFinder(CopyMapper):
         return DistributedRecv(new_binding)
 
     def map_slice(self, expr, *args):
-        if self.check_partition(expr, expr.array):
+        if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
             new_binding = make_placeholder(expr.array.shape, expr.array.dtype,
                                                   name, tags=expr.array.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            print( new_binding)
         else:
             new_binding = self.rec(expr.array)
-            print("NOPART", new_binding)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -178,14 +180,13 @@ class PartitionFinder(CopyMapper):
         for dim in expr.shape:
             if isinstance(dim, Array):
                 name = self.make_new_name()
-                if self.check_partition(expr, dim):
+                if self.does_edge_cross_partition_boundary(expr, dim):
                     new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
                     print(new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
-                    print("NOPART", new_bindings[name])
 
         return Placeholder(name=expr.name,
                 shape=tuple(new_bindings),
@@ -196,7 +197,7 @@ class PartitionFinder(CopyMapper):
         new_bindings = {}
         for child in expr.bindings.values():
             name = self.make_new_name()
-            if self.check_partition(expr, child):
+            if self.does_edge_cross_partition_boundary(expr, child):
 
                 new_bindings[name] = make_placeholder(child.shape, child.dtype, name,
                                                       tags=child.tags)
@@ -204,20 +205,17 @@ class PartitionFinder(CopyMapper):
                 print(new_bindings[name])
             else:
                 new_bindings[name] = self.rec(child)
-                print("NOPART", new_bindings[name])
 
         for dim in expr.shape:
             if isinstance(dim, Array):
                 name = self.make_new_name()
-                if self.check_partition(expr, dim):
+                if self.does_edge_cross_partition_boundary(expr, dim):
                     new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
                     print(new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
-
-                    print("NOPART", new_bindings[name])
 
         return IndexLambda(expr=expr.expr,
                 # FIXME: Do same thing as bindings
@@ -288,7 +286,7 @@ def main():
             tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
 
     from functools import partial
-    pfunc = partial(does_edge_cross_partition_boundary, node_to_fed_sends,
+    pfunc = partial(get_partition_id, node_to_fed_sends,
                     node_to_feeding_recvs)
 
     pf = PartitionFinder(pfunc)
