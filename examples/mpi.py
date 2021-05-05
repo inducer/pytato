@@ -96,7 +96,7 @@ def tag_nodes_with_starting_point(graph, node, starting_point=None, result=None)
                                           result)
 
 
-@dataclass
+@dataclass(frozen=True, eq=True)
 class PartitionId:
     fed_sends: object
     feeding_recvs: object
@@ -104,7 +104,8 @@ class PartitionId:
 
 def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
                      PartitionId:
-    return PartitionId(node_to_fed_sends[expr], node_to_feeding_recvs[expr])
+    return PartitionId(frozenset(node_to_fed_sends[expr]),
+                       frozenset(node_to_feeding_recvs[expr]))
 
 
 class PartitionFinder(CopyMapper):
@@ -125,6 +126,8 @@ class PartitionFinder(CopyMapper):
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
+        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
+
     def does_edge_cross_partition_boundary(self, node1, node2) -> bool:
         res = self.get_partition_id(node1) != self.get_partition_id(node2)
         if res:
@@ -133,6 +136,10 @@ class PartitionFinder(CopyMapper):
             print("NOPART", node1, node2)
 
         return res
+
+    def register_partition_id(self, expr: Array) -> None:
+        pid = self.get_partition_id(expr)
+        self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
 
     def make_new_name(self):
         self.name_index += 1
@@ -146,8 +153,13 @@ class PartitionFinder(CopyMapper):
             new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
                                                   name, tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
+            self.partition_id_to_nodes
+
+
         else:
             new_binding = self.rec(expr.data)
+        self.register_partition_id(new_binding)
+        self.register_partition_id(expr)
         return DistributedSend(new_binding)
 
     def map_distributed_recv(self, expr, *args):
@@ -159,6 +171,8 @@ class PartitionFinder(CopyMapper):
         else:
             new_binding = self.rec(expr.data)
 
+        self.register_partition_id(new_binding)
+        self.register_partition_id(expr)
         return DistributedRecv(new_binding)
 
     def map_slice(self, expr, *args):
@@ -169,6 +183,9 @@ class PartitionFinder(CopyMapper):
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
         else:
             new_binding = self.rec(expr.array)
+
+        self.register_partition_id(new_binding)
+        self.register_partition_id(expr)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -186,6 +203,9 @@ class PartitionFinder(CopyMapper):
                     self.cross_partition_name_to_value[name] = self.rec(dim)
                 else:
                     new_bindings[name] = self.rec(dim)
+                self.register_partition_id(new_bindings[name])
+
+        self.register_partition_id(expr)
 
         return Placeholder(name=expr.name,
                 shape=new_bindings,
@@ -229,8 +249,8 @@ class PartitionFinder(CopyMapper):
 # node_to_feeding_recvs[node1] != node_to_feeding_recvs[node2] If an edge
 # crosses a partition boundary, replace the depended-upon node (that nominally
 # lives in the other partition) with a Placeholder that lives in the current
-# partition. For each partition, collect the placeholder names that it’s
-# supposed to compute.
+# partition. ===========For each partition, collect the placeholder names that it’s
+# supposed to compute.================
 
 
 def show_graph(y: Array) -> None:
