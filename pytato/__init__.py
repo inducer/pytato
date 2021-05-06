@@ -29,6 +29,8 @@ from pytato.array import (
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
+        make_distributed_recv, make_distributed_send,
+        AdditionalOutput,
 
         matmul, roll, transpose, stack, reshape, concatenate,
 
@@ -55,7 +57,8 @@ __all__ = (
         "Placeholder", "IndexLambda",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
-        "make_data_wrapper",
+        "make_data_wrapper", "make_distributed_recv", "make_distributed_send",
+        "AdditionalOutput",
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
 
