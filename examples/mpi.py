@@ -126,7 +126,7 @@ class PartitionFinder(CopyMapper):
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
-        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
+        self.var_name_to_result: Dict[str, Array] = {}
 
     def does_edge_cross_partition_boundary(self, node1, node2) -> bool:
         res = self.get_partition_id(node1) != self.get_partition_id(node2)
@@ -306,7 +306,43 @@ def main():
                     node_to_feeding_recvs)
 
     pf = PartitionFinder(pfunc)
-    new = pf(y)
+    partition_id_to_output_names = {}
+    partition_id_to_input_names = {}
+    partitions = set()
+    for (pid_producer, pid_consumer), var_names in \
+            pf.partition_pair_to_edges.items():
+        partitions.add(pid_producer)
+        partitions.add(pid_consumer)
+        for var_name in var_names:
+            partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
+            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+
+    # pytools.graph
+    topsorted_partitions = topsort(partitions)
+
+    # codegen
+    prg_per_partition = {pid:
+            pt.generate_loopy(
+                pt.DictOfNamedArrays(
+                    {var_name: pf.var_name_to_result[var_name]
+                        for var_name in partition_id_to_output_names[pid]
+                        }))
+            for pid in partitions}
+
+    # execution
+    context = {}
+    for pid in topsorted_partitions:
+        # find names that are needed
+        inputs = {...}
+        context.update(prg_per_partition[f](**inputs))
+
+
+
+
+
+
+
+
 
     print(new)
 
