@@ -258,3 +258,12 @@ def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     from pymbolic.imperative.utils import show_dot
     show_dot(dot_code)
+
+
+def show_graph(y: Array) -> None:
+    """Show a graph with graphviz."""
+    dot_code = get_dot_graph(y)
+
+    from graphviz import Source  # pylint: disable=import-error
+    src = Source(dot_code)
+    src.view()
