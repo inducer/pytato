@@ -1,16 +1,17 @@
 from mpi4py import MPI  # pylint: disable=import-error
 comm = MPI.COMM_WORLD
 import pytato as pt
-from pytato.transform import (Mapper, CopyMapper, GraphToDictMapper, reverse_graph,
+from pytato.distributed import (GraphToDictMapper, reverse_graph,
                               tag_nodes_with_starting_point, PartitionFinder)
 
 from pytato.visualization import show_graph
 
-from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
-                          make_placeholder, Placeholder, Slice)
+# from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
+#                           make_placeholder, Placeholder, Slice)
 
 from typing import Callable, Any, Dict, List, Tuple
 
+from pytato.distributed import DistributedRecv, DistributedSend
 
 
 def advect(*args):
