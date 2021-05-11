@@ -31,10 +31,10 @@ from pymbolic import var
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         DataWrapper, Roll, AxisPermutation, Slice, IndexRemappingBase, Stack,
-        Placeholder, Reshape, Concatenate, Namespace, DataInterface, MatrixProduct)
+        Placeholder, Reshape, Concatenate, DataInterface, MatrixProduct)
 from pytato.target import Target
 from pytato.scalar_expr import ScalarExpression
-from pytato.transform import CopyMapper
+from pytato.transform import CopyMapper, WalkMapper
 from pytato.loopy import LoopyFunction
 import pytools
 import loopy as lp
@@ -92,8 +92,8 @@ class CodeGenPreprocessor(CopyMapper):
     # Stack -> IndexLambda
     # MatrixProduct -> Einsum
 
-    def __init__(self, namespace: Namespace, target: Target):
-        super().__init__(namespace)
+    def __init__(self, target: Target):
+        super().__init__()
         self.target = target
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.kernels_seen: Dict[str, lp.LoopKernel] = {}
@@ -148,11 +148,30 @@ class CodeGenPreprocessor(CopyMapper):
                 bindings=bindings,
                 entrypoint=entrypoint)
 
+    def map_size_param(self, expr: SizeParam) -> Array:
+        name = expr.name
+        assert name is not None
+        return SizeParam(name=name, tags=expr.tags)
+
+    def map_placeholder(self, expr: Placeholder) -> Array:
+        name = expr.name
+        if name is None:
+            name = self.var_name_gen("_pt_in")
+        return Placeholder(name=name,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
+                dtype=expr.dtype,
+                tags=expr.tags)
+
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        self.bound_arguments[expr.name] = expr.data
-        return Placeholder(namespace=self.namespace,
-                name=expr.name,
-                shape=expr.shape,
+        name = expr.name
+        if name is None:
+            name = self.var_name_gen("_pt_in")
+
+        self.bound_arguments[name] = expr.data
+        return Placeholder(name=name,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -186,9 +205,9 @@ class CodeGenPreprocessor(CopyMapper):
         bindings = {f"_in{i}": self.rec(array)
                 for i, array in enumerate(expr.arrays)}
 
-        return IndexLambda(namespace=self.namespace,
-                expr=stack_expr,
-                shape=expr.shape,
+        return IndexLambda(expr=stack_expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings)
 
@@ -231,9 +250,9 @@ class CodeGenPreprocessor(CopyMapper):
         bindings = {f"_in{i}": self.rec(array)
                 for i, array in enumerate(expr.arrays)}
 
-        return IndexLambda(namespace=self.namespace,
-                expr=stack_expr,
-                shape=expr.shape,
+        return IndexLambda(expr=stack_expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings)
 
@@ -262,6 +281,30 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings={"in0": self.rec(expr.x1), "in1": self.rec(expr.x2)})
 
+    def map_roll(self, expr: Roll) -> Array:
+        from pytato.utils import dim_to_index_lambda_components
+
+        index_expr = var("_in0")
+        indices = [var(f"_{d}") for d in range(expr.ndim)]
+        axis = expr.axis
+        axis_len_expr, bindings = dim_to_index_lambda_components(
+            expr.shape[axis],
+            UniqueNameGenerator({"_in0"}))
+
+        indices[axis] = (indices[axis] - expr.shift) % axis_len_expr
+
+        if indices:
+            index_expr = index_expr[tuple(indices)]
+
+        bindings["_in0"] = expr.array  # type: ignore
+
+        return IndexLambda(expr=index_expr,
+                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                                       for s in expr.shape),
+                           dtype=expr.dtype,
+                           bindings={name: self.rec(bnd)
+                                     for name, bnd in bindings.items()})
+
     # {{{ index remapping (roll, axis permutation, slice)
 
     def handle_index_remapping(self,
@@ -275,17 +318,11 @@ class CodeGenPreprocessor(CopyMapper):
 
         array = self.rec(expr.array)
 
-        return IndexLambda(namespace=self.namespace,
-                expr=index_expr,
-                shape=expr.shape,
+        return IndexLambda(expr=index_expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=dict(_in0=array))
-
-    def _indices_for_roll(self, expr: Roll) -> SymbolicIndex:
-        indices = [var(f"_{d}") for d in range(expr.ndim)]
-        axis = expr.axis
-        indices[axis] = (indices[axis] - expr.shift) % expr.shape[axis]
-        return tuple(indices)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
         indices = [None] * expr.ndim
@@ -298,25 +335,28 @@ class CodeGenPreprocessor(CopyMapper):
 
     def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
         newstrides = [1]  # reshaped array strides
-        for axis_len in reversed(expr.shape[1:]):
-            newstrides.insert(0, newstrides[0]*axis_len)
+        for new_axis_len in reversed(expr.shape[1:]):
+            assert isinstance(new_axis_len, int)
+            newstrides.insert(0, newstrides[0]*new_axis_len)
 
         flattened_idx = sum(prim.Variable(f"_{i}")*stride
                             for i, stride in enumerate(newstrides))
 
         oldstrides = [1]  # input array strides
         for axis_len in reversed(expr.array.shape[1:]):
+            assert isinstance(axis_len, int)
             oldstrides.insert(0, oldstrides[0]*axis_len)
 
+        assert isinstance(expr.array.shape[-1], int)
         oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
-        for axis_len in reversed(expr.array.shape[:-1]):
-            oldsizetills.insert(0, oldsizetills[0]*axis_len)
+        for old_axis_len in reversed(expr.array.shape[:-1]):
+            assert isinstance(old_axis_len, int)
+            oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
 
         return tuple(((flattened_idx % sizetill) // stride)
                      for stride, sizetill in zip(oldstrides, oldsizetills))
 
     # https://github.com/python/mypy/issues/8619
-    map_roll = partialmethod(handle_index_remapping, _indices_for_roll)  # type: ignore  # noqa
     map_axis_permutation = (
             partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
     map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
@@ -350,6 +390,38 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
     return outputs
 
 
+# {{{ input naming check
+
+class NamesValidityChecker(WalkMapper):
+    def __init__(self) -> None:
+        self.name_to_input: Dict[str, InputArgumentBase] = {}
+
+    def post_visit(self, expr: Any) -> None:
+        if isinstance(expr, InputArgumentBase):
+            if expr.name is None:
+                # Name to be automatically assigned
+                return
+
+            try:
+                ary = self.name_to_input[expr.name]
+            except KeyError:
+                self.name_to_input[expr.name] = expr
+            else:
+                if ary is not expr:
+                    from pytato.diagnostic import NameClashError
+                    raise NameClashError("Received two separate instances of inputs "
+                                         f"named '{expr.name}'.")
+
+
+def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
+    name_validation_mapper = NamesValidityChecker()
+
+    for ary in exprs.values():
+        name_validation_mapper(ary)
+
+# }}}
+
+
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class PreprocessResult:
     outputs: DictOfNamedArrays
@@ -360,6 +432,8 @@ class PreprocessResult:
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays, get_dependencies
+
+    check_validity_of_outputs(outputs)
 
     # {{{ compute the order in which the outputs must be computed
 
@@ -384,7 +458,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor(Namespace(), target)
+    mapper = CodeGenPreprocessor()
 
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 

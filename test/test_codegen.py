@@ -55,8 +55,7 @@ def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    namespace = pt.Namespace()
-    x = Placeholder(namespace, "x", (5,), np.int)
+    x = Placeholder("x", (5,), np.int)
     prog = pt.generate_loopy(x * x, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
@@ -67,8 +66,7 @@ def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    namespace = pt.Namespace()
-    x = Placeholder(namespace, "x", (), np.int)
+    x = Placeholder("x", (), np.int)
     prog = pt.generate_loopy(x, cl_device=queue.device)
     x_in = np.array(1)
     _, (x_out,) = prog(queue, x=x_in)
@@ -81,9 +79,8 @@ def test_size_param(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    namespace = pt.Namespace()
-    n = pt.make_size_param(namespace, name="n")
-    pt.make_placeholder(namespace, name="x", shape="(n,)", dtype=np.int)
+    n = pt.make_size_param(name="n")
+    pt.make_placeholder(name="x", shape=n, dtype=np.int)
     prog = pt.generate_loopy(n, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(queue, x=x_in)
@@ -103,9 +100,8 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
     x1_in = get_array(x1_ndim)
     x2_in = get_array(x2_ndim)
 
-    namespace = pt.Namespace()
-    x1 = pt.make_data_wrapper(namespace, x1_in)
-    x2 = pt.make_data_wrapper(namespace, x2_in)
+    x1 = pt.make_data_wrapper(x1_in)
+    x2 = pt.make_data_wrapper(x2_in)
     prog = pt.generate_loopy(x1 @ x2, cl_device=queue.device)
     _, (out,) = prog(queue)
 
@@ -117,18 +113,16 @@ def test_data_wrapper(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     # Without name/shape
-    namespace = pt.Namespace()
     x_in = np.array([1, 2, 3, 4, 5])
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
     prog = pt.generate_loopy(x, cl_device=queue.device)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
 
     # With name/shape
-    namespace = pt.Namespace()
     x_in = np.array([[1, 2], [3, 4], [5, 6]])
-    pt.make_size_param(namespace, "n")
-    x = pt.make_data_wrapper(namespace, x_in, name="x", shape="(n, 2)")
+    n = pt.make_size_param("n")
+    x = pt.make_data_wrapper(x_in, name="x", shape=(n, 2))
     prog = pt.generate_loopy(x, cl_device=queue.device)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
@@ -138,9 +132,8 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    namespace = pt.Namespace()
-    x = Placeholder(namespace, "x", (5,), np.int)
-    y = Placeholder(namespace, "y", (5,), np.int)
+    x = Placeholder("x", (5,), np.int)
+    y = Placeholder("y", (5,), np.int)
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
@@ -167,9 +160,8 @@ def test_roll(ctx_factory, shift, axis):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    namespace = pt.Namespace()
-    pt.make_size_param(namespace, "n")
-    x = pt.make_placeholder(namespace, name="x", shape=("n", "n"), dtype=np.float)
+    n = pt.make_size_param("n")
+    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float)
 
     x_in = np.arange(1., 10.).reshape(3, 3)
     assert_allclose_to_numpy(pt.roll(x, shift=shift, axis=axis),
@@ -192,8 +184,7 @@ def test_axis_permutation(ctx_factory, axes):
 
     x_in = rng.random(size=shape)
 
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
     assert_allclose_to_numpy(pt.transpose(x, axes), queue)
 
 
@@ -207,8 +198,7 @@ def test_transpose(ctx_factory):
     rng = default_rng()
     x_in = rng.random(size=shape)
 
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
     assert_allclose_to_numpy(x.T, queue)
 
 
@@ -249,7 +239,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     y_orig = np.array([1, 2, 3, 4, 5])
 
     for first_dtype in (int, float, complex):
-        namespace = pt.Namespace()
         x_in = first_dtype(x_orig)
 
         if first_dtype == complex and not_valid_in_complex:
@@ -259,7 +248,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
         for dtype in ARITH_DTYPES:
             if dtype in "FDG" and not_valid_in_complex:
                 continue
-            y = pt.make_data_wrapper(namespace,
+            y = pt.make_data_wrapper(
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = pt_op(x_in, y)
 
@@ -309,15 +298,14 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
         if first_dtype in "FDG" and not_valid_in_complex:
             continue
 
-        namespace = pt.Namespace()
         x_in = x_orig.astype(first_dtype)
-        x = pt.make_data_wrapper(namespace, x_in, name="x")
+        x = pt.make_data_wrapper(x_in, name="x")
 
         exprs = {}
         for dtype in ARITH_DTYPES:
             if dtype in "FDG" and not_valid_in_complex:
                 continue
-            y = pt.make_data_wrapper(namespace,
+            y = pt.make_data_wrapper(
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = pt_op(x, y)
 
@@ -344,12 +332,11 @@ def test_unary_arith(ctx_factory, which):
     op = getattr(operator, which)
 
     x_orig = np.array([1, 2, 3, 4, 5])
-    namespace = pt.Namespace()
 
     exprs = {}
     for dtype in ARITH_DTYPES:
         exprs[dtype] = op(
-                pt.make_data_wrapper(namespace, x_orig.astype(dtype)))
+                pt.make_data_wrapper(x_orig.astype(dtype)))
 
     prog = pt.generate_loopy(exprs, cl_device=queue.device)
 
@@ -386,8 +373,7 @@ def test_slice(ctx_factory, shape):
     rng = default_rng()
 
     x_in = rng.random(size=shape)
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
 
     outputs = {}
     ref_outputs = {}
@@ -420,9 +406,8 @@ def test_stack(ctx_factory, input_dims):
     x_in = rng.random(size=shape)
     y_in = rng.random(size=shape)
 
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
-    y = pt.make_data_wrapper(namespace, y_in)
+    x = pt.make_data_wrapper(x_in)
+    y = pt.make_data_wrapper(y_in)
 
     for axis in range(0, 1 + input_dims):
         assert_allclose_to_numpy(pt.stack((x, y), axis=axis), queue)
@@ -438,10 +423,9 @@ def test_concatenate(ctx_factory):
     x1_in = rng.random(size=(3, 11, 3))
     x2_in = rng.random(size=(3, 22, 3))
 
-    namespace = pt.Namespace()
-    x0 = pt.make_data_wrapper(namespace, x0_in)
-    x1 = pt.make_data_wrapper(namespace, x1_in)
-    x2 = pt.make_data_wrapper(namespace, x2_in)
+    x0 = pt.make_data_wrapper(x0_in)
+    x1 = pt.make_data_wrapper(x1_in)
+    x2 = pt.make_data_wrapper(x2_in)
 
     assert_allclose_to_numpy(pt.concatenate((x0, x1, x2), axis=1), queue)
 
@@ -463,15 +447,13 @@ def test_reshape(ctx_factory, oldshape, newshape):
     rng = default_rng()
     x_in = rng.random(size=oldshape)
 
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
 
     assert_allclose_to_numpy(pt.reshape(x, newshape=newshape), queue)
 
 
 def test_dict_of_named_array_codegen_avoids_recomputation():
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, shape=(10, 4), dtype=float, name="x")
+    x = pt.make_placeholder(shape=(10, 4), dtype=float, name="x")
     y = 2*x
     z = y + 4*x
 
@@ -484,13 +466,12 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
 def test_dict_to_loopy_kernel(ctx_factory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    ns = pt.Namespace()
 
     from numpy.random import default_rng
     rng = default_rng()
     x_in = rng.random(10)
 
-    x = pt.make_data_wrapper(ns, x_in)
+    x = pt.make_data_wrapper(x_in)
     y = 2*x
     z = 3*x
 
@@ -502,9 +483,8 @@ def test_dict_to_loopy_kernel(ctx_factory):
 
 def test_only_deps_as_knl_args():
     # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, name="x", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(ns, name="y", shape=(10, 4), dtype=float)  # noqa:F841
+    x = pt.make_placeholder(name="x", shape=(10, 4), dtype=float)
+    y = pt.make_placeholder(name="y", shape=(10, 4), dtype=float)  # noqa:F841
 
     z = 2*x
     knl = pt.generate_loopy(z).kernel
@@ -524,8 +504,7 @@ def test_math_functions(ctx_factory, dtype, function_name):
     rng = default_rng()
     x_in = rng.random(size=(10, 4)).astype(dtype)
 
-    namespace = pt.Namespace()
-    x = pt.make_data_wrapper(namespace, x_in)
+    x = pt.make_data_wrapper(x_in)
     pt_func = getattr(pt, function_name)
     np_func = getattr(np, function_name)
 
@@ -538,13 +517,12 @@ def test_math_functions(ctx_factory, dtype, function_name):
 def test_full_zeros_ones(ctx_factory, dtype):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    ns = pt.Namespace()
 
-    _, (z,) = pt.generate_loopy(pt.zeros(ns, 10, dtype),
+    _, (z,) = pt.generate_loopy(pt.zeros(10, dtype),
             cl_device=queue.device)(queue)
-    _, (o,) = pt.generate_loopy(pt.ones(ns, 10, dtype),
+    _, (o,) = pt.generate_loopy(pt.ones(10, dtype),
             cl_device=queue.device)(queue)
-    _, (t,) = pt.generate_loopy(pt.full(ns, 10, 2, dtype),
+    _, (t,) = pt.generate_loopy(pt.full(10, 2, dtype),
             cl_device=queue.device)(queue)
 
     for ary in (z, o, t):
@@ -558,8 +536,7 @@ def test_full_zeros_ones(ctx_factory, dtype):
 def test_passsing_bound_arguments_raises(ctx_factory):
     queue = cl.CommandQueue(ctx_factory())
 
-    ns = pt.Namespace()
-    x = pt.make_data_wrapper(ns, np.ones(10), name="x")
+    x = pt.make_data_wrapper(np.ones(10), name="x")
     prg = pt.generate_loopy(42*x, cl_device=queue.device)
 
     with pytest.raises(ValueError):
@@ -581,16 +558,14 @@ def test_broadcasting(ctx_factory, shape1, shape2):
 
     queue = cl.CommandQueue(ctx_factory())
 
-    ns = pt.Namespace()
-
     rng = default_rng()
     n = rng.integers(20, 40)
+    pt_n = pt.make_size_param("n")
 
     x_in = rng.random(evaluate(shape1, {"n": n})).astype(np.int8)
     y_in = rng.random(evaluate(shape2, {"n": n})).astype(np.int8)
-    pt.make_size_param(ns, "n")
-    x = pt.make_data_wrapper(ns, x_in, shape=shape1)
-    y = pt.make_data_wrapper(ns, y_in, shape=shape2)
+    x = pt.make_data_wrapper(x_in, shape=evaluate(shape1, {"n": pt_n}))
+    y = pt.make_data_wrapper(y_in, shape=evaluate(shape2, {"n": pt_n}))
 
     prg = pt.generate_loopy(x+y, cl_device=queue.device)
 
@@ -619,9 +594,8 @@ def test_maximum_minimum(ctx_factory, which):
     x1_in = _get_rand_with_nans((10, 4))
     x2_in = _get_rand_with_nans((10, 4))
 
-    namespace = pt.Namespace()
-    x1 = pt.make_data_wrapper(namespace, x1_in)
-    x2 = pt.make_data_wrapper(namespace, x2_in)
+    x1 = pt.make_data_wrapper(x1_in)
+    x2 = pt.make_data_wrapper(x2_in)
     pt_func = getattr(pt, which)
     np_func = getattr(np, which)
 

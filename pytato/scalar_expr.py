@@ -27,16 +27,23 @@ THE SOFTWARE.
 from numbers import Number
 from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple
 
+from enum import Enum
+
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
         SubstitutionMapperBase)
 from pymbolic.mapper.dependency import (DependencyMapper as
         DependencyMapperBase)
-from dataclasses import dataclass, field
+from pymbolic.mapper.evaluator import (EvaluationMapper as
+        EvaluationMapperBase)
+from pymbolic.mapper.distributor import (DistributeMapper as
+        DistributeMapperBase)
+from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
-import math
-from enum import Enum
+import numpy as np
+
+from dataclasses import dataclass, field
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -50,7 +57,7 @@ Scalar Expressions
     composable and manipulable via :mod:`pymbolic`.
 
     Concretely, this is an alias for
-    ``Union[Number, pymbolic.primitives.Expression]``.
+    ``Union[Number, np.bool_, bool, pymbolic.primitives.Expression]``.
 
 .. autofunction:: parse
 .. autofunction:: get_dependencies
@@ -61,7 +68,9 @@ Scalar Expressions
 # {{{ scalar expressions
 
 IntegralScalarExpression = Union[int, prim.Expression]
-ScalarExpression = Union[Number, prim.Expression]
+ScalarType = Union[Number, np.bool_, bool]
+ScalarExpression = Union[ScalarType, prim.Expression]
+SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
 
 def parse(s: str) -> ScalarExpression:
@@ -93,6 +102,18 @@ class DependencyMapper(DependencyMapperBase):
             self.rec(expr.inner_expr),
             set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
+
+class EvaluationMapper(EvaluationMapperBase):
+    pass
+
+
+class DistributeMapper(DistributeMapperBase):
+    pass
+
+
+class TermCollector(TermCollectorBase):
+    pass
+
 # }}}
 
 
@@ -117,6 +138,22 @@ def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     """
     from pymbolic.mapper.substitutor import make_subst_func
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+
+
+def evaluate(expression: Any, context: Mapping[str, Any] = {}) -> Any:
+    """
+    Evaluates *expression* by substituting the variable values as provided in
+    *context*.
+    """
+    return EvaluationMapper(context)(expression)
+
+
+def distribute(expr: Any, parameters: Set[Any] = set(),
+               commutative: bool = True) -> Any:
+    if commutative:
+        return DistributeMapper(TermCollector(parameters))(expr)
+    else:
+        return DistributeMapper(lambda x: x)(expr)
 
 # }}}
 

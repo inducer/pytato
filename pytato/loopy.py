@@ -31,7 +31,7 @@ import pymbolic.primitives as prim
 from loopy.types import NumpyType
 from typing import Dict, Optional, Any, Union
 from numbers import Number
-from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType,
+from pytato.array import (DictOfNamedArrays, Array, ShapeType,
         NamedArray, normalize_shape, ConvertibleToShape)
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
         IntegralScalarExpression)

@@ -17,12 +17,9 @@ GRAPH_SVG = "graph.svg"
 
 
 def main():
-    ns = pt.Namespace()
-
-    pt.make_size_param(ns, "n")
-    array = pt.make_placeholder(ns, name="array", shape="n", dtype=np.float)
+    n = pt.make_size_param("n")
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float)
     stack = pt.stack([array, 2*array, array + 6])
-    ns.assign("stack", stack)
     result = stack @ stack.T
 
     dot_code = pt.get_dot_graph(result)

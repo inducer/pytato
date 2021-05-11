@@ -11,12 +11,9 @@ Notation convention for operator shapes
 * n - number of volume degrees of freedom per element
 """
 
-import functools
+from functools import cached_property
 
 import pytato as pt
-
-
-memoized = functools.lru_cache(maxsize=None)
 
 
 def ortholegvander(x, deg):
@@ -55,8 +52,7 @@ class DGDiscr1D(object):
         self.nelements = nelements
         self.nnodes = nnodes
 
-    @property
-    @memoized
+    @cached_property
     def ref_nodes(self):
         """Return reference nodes for a single element.
 
@@ -65,8 +61,7 @@ class DGDiscr1D(object):
         nodes, _ = leg.leggauss(self.nnodes)
         return nodes
 
-    @property
-    @memoized
+    @cached_property
     def ref_weights(self):
         """Return reference quadrature weights for a single element.
 
@@ -99,8 +94,7 @@ class DGDiscr1D(object):
         radii = (self.elements[:, 1] - self.elements[:, 0]) / 2
         return ((self.ref_nodes[:, np.newaxis] * radii) + centers).T.ravel()
 
-    @property
-    @memoized
+    @cached_property
     def vdm(self):
         """Return the elementwise Vandermonde (modal-to-nodal) matrix.
 
@@ -108,8 +102,7 @@ class DGDiscr1D(object):
         """
         return ortholegvander(self.ref_nodes, self.nnodes - 1)
 
-    @property
-    @memoized
+    @cached_property
     def _ref_mass(self):
         """Return the (volume) mass matrix for the reference element.
 
@@ -117,8 +110,7 @@ class DGDiscr1D(object):
         """
         return la.inv(self.vdm @ self.vdm.T)
 
-    @property
-    @memoized
+    @cached_property
     def mass(self):
         """Return the elementwise volume mass matrix.
 
@@ -127,8 +119,7 @@ class DGDiscr1D(object):
         h = (self.right - self.left) / self.nelements
         return (h/2) * self._ref_mass
 
-    @property
-    @memoized
+    @cached_property
     def inv_mass(self):
         """Return the inverse of the elementwise volume mass matrix.
 
@@ -136,8 +127,7 @@ class DGDiscr1D(object):
         """
         return la.inv(self.mass)
 
-    @property
-    @memoized
+    @cached_property
     def face_mass(self):
         """Return the face mass matrix.
 
@@ -148,8 +138,7 @@ class DGDiscr1D(object):
         """
         return self.interp.T.copy()
 
-    @property
-    @memoized
+    @cached_property
     def diff(self):
         """Return the elementwise differentiation matrix.
 
@@ -162,8 +151,7 @@ class DGDiscr1D(object):
         Vr = np.vstack(VrT).T  # noqa: N806
         return Vr @ la.inv(self.vdm)
 
-    @property
-    @memoized
+    @cached_property
     def stiffness(self):
         """Return the stiffness matrix.
 
@@ -171,8 +159,7 @@ class DGDiscr1D(object):
         """
         return (self._ref_mass @ self.diff)
 
-    @property
-    @memoized
+    @cached_property
     def interp(self):
         """Return the volume-to-face interpolation matrix.
 
@@ -180,8 +167,7 @@ class DGDiscr1D(object):
         """
         return ortholegvander([-1, 1], self.nnodes - 1) @ la.inv(self.vdm)
 
-    @property
-    @memoized
+    @cached_property
     def elements(self):
         """Return the list of elements, each given by their left/right boundaries.
 
@@ -356,46 +342,55 @@ class DGOps1DRef(AbstractDGOps1D):
         return result
 
 
-def matrix_getter(name, shape):
-
-    def getter(self):
-        data = getattr(self.discr, name)
-        return pt.make_data_wrapper(self.namespace, data, name=name, shape=shape)
-
-    return property(memoized(getter))
-
-
 class DGOps1D(AbstractDGOps1D):
 
     @AbstractDGOps1D.array_ops.getter
     def array_ops(self):
         return pt
 
-    def __init__(self, discr, namespace):
+    def __init__(self, discr):
         self.discr = discr
-        self.namespace = namespace
 
-    _normals = matrix_getter("normals", "(nelements, 2)")
-    _interp_mat = matrix_getter("interp", "(2, nnodes)")
-    _inv_mass_mat = matrix_getter("inv_mass", "(nnodes, nnodes)")
-    _stiffness_mat = matrix_getter("stiffness", "(nnodes, nnodes)")
-    _face_mass_mat = matrix_getter("face_mass", "(nnodes, 2)")
+    nelements = pt.make_size_param("nelements")
+    nnodes = pt.make_size_param("nnodes")
 
-    @AbstractDGOps1D.normals.getter
+    # {{{ DG data
+
+    @cached_property
     def normals(self):
-        return self._normals
+        return pt.make_data_wrapper(self.discr.normals, shape=(self.nelements, 2))
+
+    @cached_property
+    def interp_mat(self):
+        return pt.make_data_wrapper(self.discr.interp, shape=(2, self.nnodes))
+
+    @cached_property
+    def inv_mass_mat(self):
+        return pt.make_data_wrapper(self.discr.inv_mass, shape=(self.nnodes,
+                                                                self.nnodes))
+
+    @cached_property
+    def stiffness_mat(self):
+        return pt.make_data_wrapper(self.discr.stiffness, shape=(self.nnodes,
+                                                                 self.nnodes))
+
+    @cached_property
+    def face_mass_mat(self):
+        return pt.make_data_wrapper(self.discr.face_mass, shape=(self.nnodes, 2))
+
+    # }}}
 
     def interp(self, vec):
-        return pt.matmul(self._interp_mat, vec.T).T
+        return pt.matmul(self.interp_mat, vec.T).T
 
     def inv_mass(self, vec):
-        return pt.matmul(self._inv_mass_mat, vec.T).T
+        return pt.matmul(self.inv_mass_mat, vec.T).T
 
     def stiffness(self, vec):
-        return pt.matmul(self._stiffness_mat, vec.T).T
+        return pt.matmul(self.stiffness_mat, vec.T).T
 
     def face_mass(self, vec):
-        return pt.matmul(self._face_mass_mat, vec.T).T
+        return pt.matmul(self.face_mass_mat, vec.T).T
 
     def face_swap(self, vec):
         return pt.stack(

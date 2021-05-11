@@ -33,17 +33,16 @@ from pymbolic import var
 
 from typing import (
         Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable,
-        TYPE_CHECKING)
+        TYPE_CHECKING, Any, List)
 
 if TYPE_CHECKING:
     import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, Placeholder, Namespace,
-        NamedArray)
+        SizeParam, InputArgumentBase, MatrixProduct, Placeholder)
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
-from pytato.transform import Mapper
+from pytato.transform import Mapper, WalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyFunction
@@ -133,10 +132,7 @@ class LoopyExpressionContext(object):
             dataclasses.field(default_factory=dict)
 
     def lookup(self, name: str) -> Array:
-        try:
-            return self.local_namespace[name]
-        except KeyError:
-            return self.state.namespace[name]
+        return self.local_namespace[name]
 
     @property
     def depends_on(self) -> FrozenSet[str]:
@@ -248,10 +244,6 @@ class SubstitutionRuleResult(ImplementedResult):
 class CodeGenState:
     """A container for data kept by :class:`CodeGenMapper`.
 
-    .. attribute:: namespace
-
-        The (global) namespace
-
     .. attribute:: _program
 
         The partial :class:`loopy.LoopKernel` or :class:`loopy.Program` being built.
@@ -266,7 +258,6 @@ class CodeGenState:
 
     .. automethod:: update_kernel
     """
-    namespace: Mapping[str, Array]
     _program: Union["lp.Program", lp.LoopKernel]
     results: Dict[Array, ImplementedResult]
 
@@ -322,7 +313,7 @@ class CodeGenMapper(Mapper):
         arg = lp.ValueArg(expr.name, dtype=expr.dtype)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
-
+        assert expr.name is not None
         result = StoredResult(expr.name, expr.ndim, frozenset())
         state.results[expr] = result
         return result
@@ -332,22 +323,16 @@ class CodeGenMapper(Mapper):
         if expr in state.results:
             return state.results[expr]
 
-        shape_context = LoopyExpressionContext(state, num_indices=0)
-        shape = []
-        for component in expr.shape:
-            shape.append(self.exprgen_mapper(component, shape_context))
-            # Data-dependent shape: Not supported yet.
-            assert not shape_context.depends_on
-            assert not shape_context.reduction_bounds
+        shape = shape_to_scalar_expression(expr.shape, self, state)
 
         arg = lp.GlobalArg(expr.name,
-                shape=tuple(shape),
+                shape=shape,
                 dtype=expr.dtype,
                 order="C",
                 is_output_only=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
-
+        assert expr.name is not None
         result = StoredResult(expr.name, expr.ndim, frozenset())
         state.results[expr] = result
         return result
@@ -362,10 +347,13 @@ class CodeGenMapper(Mapper):
         loopy_expr_context = LoopyExpressionContext(state,
                 local_namespace=expr.bindings,
                 num_indices=expr.ndim)
-        loopy_expr = self.exprgen_mapper(expr.expr, loopy_expr_context)
+
+        loopy_expr_context.reduction_bounds["_r0"] = (0,
+                shape_to_scalar_expression(expr.x2.shape, self, state)[0])
 
         result = InlinedResult.from_loopy_expression(loopy_expr,
                 loopy_expr_context)
+
         state.results[expr] = result
         return result
 
@@ -523,13 +511,15 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         assert isinstance(expr.aggregate, prim.Variable)
         result: ImplementedResult = self.codegen_mapper(
                 expr_context.lookup(expr.aggregate.name), expr_context.state)
-        return result.to_loopy_expression(expr.index, expr_context)
+        return result.to_loopy_expression(self.rec(expr.index, expr_context),
+                                          expr_context)
 
     # TODO: map_reduction()
 
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        match = ELWISE_INDEX_RE.fullmatch(expr.name)
+
+        match = INDEX_RE.fullmatch(expr.name)
         if match:
             # Found an index of the form _0, _1, ...
             index = int(match.group(1))
@@ -601,8 +591,25 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
 # {{{ utils
 
+def shape_to_scalar_expression(shape: ShapeType,
+                               cgen_mapper: CodeGenMapper,
+                               state: CodeGenState
+                               ) -> Tuple[ScalarExpression, ...]:
+    shape_context = LoopyExpressionContext(state, num_indices=0)
+    result: List[ScalarExpression] = []
+    for component in shape:
+        if isinstance(component, int):
+            result.append(component)
+        else:
+            assert isinstance(component, Array)
+            result.append(
+                cgen_mapper(component, state).to_loopy_expression((), shape_context))
+
+    return tuple(result)
+
+
 def domain_for_shape(dim_names: Tuple[str, ...],
-         shape: ShapeType,
+         shape: Tuple[ScalarExpression, ...],
          reductions: Dict[str, Tuple[ScalarExpression, ScalarExpression]],
          ) -> isl.BasicSet:  # noqa
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
@@ -666,7 +673,8 @@ def domain_for_shape(dim_names: Tuple[str, ...],
 
 
 def add_store(name: str, expr: Array, result: ImplementedResult,
-       state: CodeGenState, output_to_temporary: bool = False) -> str:
+              state: CodeGenState, cgen_mapper: CodeGenMapper,
+              output_to_temporary: bool = False) -> str:
     """Add an instruction that stores to a variable in the kernel.
 
     :param name: name of the output array, which is created
@@ -703,16 +711,17 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
             id=insn_id,
             within_inames=frozenset(inames),
             depends_on=loopy_expr_context.depends_on)
+    shape = shape_to_scalar_expression(expr.shape, cgen_mapper, state)
 
     # Get the domain.
-    domain = domain_for_shape(inames, expr.shape,
-            loopy_expr_context.reduction_bounds)
+    domain = domain_for_shape(inames, shape,
+                              loopy_expr_context.reduction_bounds)
 
     # Update the kernel.
     kernel = state.kernel
 
     if output_to_temporary:
-        tvar = get_loopy_temporary(name, expr)
+        tvar = get_loopy_temporary(name, expr, cgen_mapper, state)
         temporary_variables = kernel.temporary_variables.copy()
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
@@ -720,7 +729,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 instructions=kernel.instructions + [insn])
     else:
         arg = lp.GlobalArg(name,
-                shape=expr.shape,
+                shape=shape,
                 dtype=expr.dtype,
                 order="C",
                 is_output_only=True)
@@ -732,12 +741,14 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     return insn_id
 
 
-def get_loopy_temporary(name: str, expr: Array) -> lp.TemporaryVariable:
-    # always allocating to global address space to avoid stack overflow
-    address_space = lp.AddressSpace.GLOBAL
+def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
+                        state: CodeGenState) -> lp.TemporaryVariable:
+    is_shape_symbolic = not all(isinstance(dim, int) for dim in expr.shape)
+    # Only global variables can have symbolic shape.
+    address_space = lp.AddressSpace.GLOBAL if is_shape_symbolic else lp.auto
     return lp.TemporaryVariable(name,
+            shape=shape_to_scalar_expression(expr.shape, cgen_mapper, state),
             dtype=expr.dtype,
-            shape=expr.shape,
             address_space=address_space)
 
 
@@ -768,7 +779,7 @@ def rename_reductions(
 # }}}
 
 
-def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
+def get_initial_codegen_state(target: LoopyTarget,
         options: lp.Options) -> CodeGenState:
     kernel = lp.make_kernel("{:}", [],
             name="_pt_kernel",
@@ -776,9 +787,22 @@ def get_initial_codegen_state(namespace: Namespace, target: LoopyTarget,
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    return CodeGenState(namespace=namespace,
-            _program=kernel,
+    return CodeGenState(_program=kernel,
             results=dict())
+
+
+class InputNameRecorder(WalkMapper):
+    def __init__(self, state: CodeGenState) -> None:
+        super().__init__()
+        self.state = state
+        self.already_visited: Set[InputArgumentBase] = set()
+
+    def post_visit(self, expr: Any) -> None:
+        if (isinstance(expr, InputArgumentBase)
+                and expr not in self.already_visited):
+            assert expr.name is not None
+            self.state.var_name_gen.add_names([expr.name])
+            self.already_visited.add(expr)
 
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
@@ -812,30 +836,27 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
-    namespace = outputs.namespace
 
     if options is None and result_is_dict:
         options = lp.Options(return_dict=True)
 
-    state = get_initial_codegen_state(namespace, target, options)
+    state = get_initial_codegen_state(target, options)
+    input_name_recorder = InputNameRecorder(state)
 
-    # Reserve names of input and output arguments.
-    for val in namespace.values():
-        if isinstance(val, InputArgumentBase):
-            state.var_name_gen.add_name(val.name)
+    for name in compute_order:
+        expr = outputs[name]
+        # Reserve names of input and output arguments.
+        input_name_recorder(expr)
+
     state.var_name_gen.add_names(outputs)
 
-    # Generate code for graph nodes.
     cg_mapper = CodeGenMapper()
-    for name, val in sorted(namespace.items(),
-                            key=lambda x: x[0]  # lexicographic order of names
-                            ):
-        _ = cg_mapper(val, state)
 
     # Generate code for outputs.
     for name in compute_order:
         expr = outputs[name].expr
         insn_id = add_store(name, expr, cg_mapper(expr, state), state)
+
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 

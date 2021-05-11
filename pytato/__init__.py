@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        Namespace, Array, DictOfNamedArrays, Placeholder, IndexLambda,
+        Array, DictOfNamedArrays, Placeholder, IndexLambda,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -35,7 +35,7 @@ from pytato.array import (
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
         log10, isnan,
 
-        maximum, minimum,
+        maximum, minimum, where,
 
         full, zeros, ones,
 
@@ -52,7 +52,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
-        "Namespace", "Array", "DictOfNamedArrays",
+        "Array", "DictOfNamedArrays",
         "Placeholder", "IndexLambda",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
@@ -70,7 +70,7 @@ __all__ = (
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan",
 
-        "maximum", "minimum",
+        "maximum", "minimum", "where",
 
         "full", "zeros", "ones",
 

@@ -5,7 +5,7 @@ import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
                           AxisPermutation, Slice, DataWrapper, Reshape,
-                          Concatenate, Namespace)
+                          Concatenate)
 
 
 class NumpyBasedEvaluator(Mapper):
@@ -13,9 +13,8 @@ class NumpyBasedEvaluator(Mapper):
     Mapper to return the result according to an eager evaluation array package
     *np*.
     """
-    def __init__(self, np: Any, namespace: Namespace, placeholders):
+    def __init__(self, np: Any, placeholders):
         self.np = np
-        self.namespace = namespace
         self.placeholders = placeholders
         super().__init__()
 
@@ -23,7 +22,7 @@ class NumpyBasedEvaluator(Mapper):
         return self.placeholders[expr]
 
     def map_data_wrapper(self, expr: DataWrapper) -> Any:
-        return self.namespace[expr.name].data
+        return expr.data
 
     def map_matrix_product(self, expr: MatrixProduct) -> Any:
         return self.np.dot(self.rec(expr.x1), self.rec(expr.x2))
@@ -61,7 +60,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     :arg queue: An instance of :class:`pyopencl.CommandQueue` to which the
         generated kernel must be enqueued.
     """
-    np_result = NumpyBasedEvaluator(numpy, expr.namespace, parameters)(expr)
+    np_result = NumpyBasedEvaluator(numpy, parameters)(expr)
     prog = pt.generate_loopy(expr, cl_device=queue.device)
 
     evt, (pt_result,) = prog(queue, **{placeholder.name: data

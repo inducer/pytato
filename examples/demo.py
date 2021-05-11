@@ -1,9 +1,8 @@
 import numpy as np
 import pytato as pt
 
-ns = pt.Namespace()
-pt.make_size_param(ns, "n")
-a = pt.make_placeholder(ns, name="a", shape="n,n", dtype=np.float64)
+n = pt.make_size_param("n")
+a = pt.make_placeholder(name="a", shape=(n, n), dtype=np.float64)
 
 a2a = a@(2*a)
 aat = a@a.T

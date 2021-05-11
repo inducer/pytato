@@ -40,7 +40,6 @@ __doc__ = """
 Array Interface
 ---------------
 
-.. autoclass:: Namespace
 .. autoclass:: Array
 .. autoclass:: DictOfNamedArrays
 
@@ -142,6 +141,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 (in favor of faster execution). Node creation from outside
 :mod:`pytato` should use the following interfaces:
 
+.. class:: ShapeComponent
 .. class:: ConvertibleToShape
 
 .. autofunction:: make_dict_of_named_arrays
@@ -156,10 +156,6 @@ Aliases
 canonicalize type references. Once Sphinx 4.0 is released, we should use the
 ``:canonical:`` option here.)
 
-.. class:: Namespace
-
-    Should be referenced as :class:`pytato.Namespace`.
-
 .. class:: Array
 
     Should be referenced as :class:`pytato.Array`.
@@ -172,7 +168,6 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 # }}}
 
 from functools import partialmethod
-from numbers import Number
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
@@ -181,13 +176,14 @@ from typing import (
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
-from pytools import is_single_valued, memoize_method, UniqueNameGenerator
+from pytools import memoize_method
 from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
 import pytato.scalar_expr as scalar_expr
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 import re
+from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES)
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -210,155 +206,56 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
-
-# {{{ namespace
-
-class Namespace(Mapping[str, "Array"]):
-    # Possible future extension: .parent attribute
-    r"""
-    Represents a mapping from :term:`identifier` strings to
-    :term:`array expression`\ s or *None*, where *None* indicates that the name
-    may not be used.  (:class:`pytato.array.Placeholder` instances register
-    their names in this way to avoid ambiguity.)
-
-    .. attribute:: name_gen
-    .. automethod:: __contains__
-    .. automethod:: __getitem__
-    .. automethod:: __iter__
-    .. automethod:: __len__
-    .. automethod:: assign
-    .. automethod:: copy
-    .. automethod:: ref
-    """
-    name_gen: UniqueNameGenerator
-
-    def __init__(self) -> None:
-        self._symbol_table: Dict[str, Array] = {}
-        self.name_gen = UniqueNameGenerator()
-
-    def __contains__(self, name: object) -> bool:
-        return name in self._symbol_table
-
-    def __getitem__(self, name: str) -> Array:
-        item = self._symbol_table[name]
-        return item
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._symbol_table)
-
-    def __len__(self) -> int:
-        return len(self._symbol_table)
-
-    def copy(self) -> Namespace:
-        from pytato.transform import CopyMapper, copy_namespace
-        return copy_namespace(self, CopyMapper(Namespace()), only_names=None)
-
-    def assign(self, name: str, value: Array) -> str:
-        """Declare a new array.
-
-        :param name: a Python identifier
-        :param value: the array object
-
-        :returns: *name*
-        """
-        if name in self._symbol_table:
-            raise ValueError(f"'{name}' is already assigned")
-        if not self.name_gen.is_name_conflicting(name):
-            self.name_gen.add_name(name)
-        self._symbol_table[name] = value
-
-        return name
-
-    def ref(self, name: str) -> Array:
-        """
-        :returns: An :term:`array expression` referring to *name*.
-        """
-
-        value = self[name]
-
-        var_ref = prim.Variable(name)
-        if value.shape:
-            var_ref = var_ref[tuple("_%d" % i for i in range(len(value.shape)))]
-
-        return IndexLambda(
-                self, expr=var_ref, shape=value.shape,
-                dtype=value.dtype)
-
-    def remove_out_of_scope_data_wrappers(self) -> None:
-        import sys
-        data_wrappers = {name
-                         for name in self
-                         if (isinstance(self[name], DataWrapper)
-                             and name.startswith("_pt"))}
-        out_of_scope_dws = {name
-                            for name in data_wrappers
-                            if sys.getrefcount(self[name]) <= 2}
-        for k in out_of_scope_dws:
-            del self._symbol_table[k]
-
-# }}}
-
-
 # {{{ shape
 
-ShapeType = Tuple[IntegralScalarExpression, ...]
-ConvertibleToShapeComponent = Union[int, prim.Expression, str]
+ShapeComponent = Union[int, "Array"]
+ShapeType = Tuple[ShapeComponent, ...]
 ConvertibleToShape = Union[
-        str,
-        IntegralScalarExpression,
-        Tuple[ConvertibleToShapeComponent, ...]]
+    ShapeComponent,
+    Sequence[ShapeComponent]]
 
 
-def _check_identifier(s: str, ns: Optional[Namespace] = None) -> bool:
+def _check_identifier(s: Optional[str]) -> bool:
+    if s is None:
+        return True
+
     if not s.isidentifier():
         raise ValueError(f"'{s}' is not a valid identifier")
-
-    if ns is not None:
-        if s not in ns:
-            raise ValueError(f"'{s}' is not known in the namespace")
 
     return True
 
 
-class _ShapeChecker(scalar_expr.WalkMapper):
-    def __init__(self, ns: Optional[Namespace] = None):
-        super().__init__()
-        self.ns = ns
-
-    def map_variable(self, expr: prim.Variable) -> None:
-        _check_identifier(expr.name, self.ns)
-        super().map_variable(expr)
-
-
 def normalize_shape(
         shape: ConvertibleToShape,
-        ns: Optional[Namespace] = None
         ) -> ShapeType:
-    """
-    :param ns: if a namespace is given, extra checks are performed to
-               ensure that expressions are well-defined.
-    """
     def normalize_shape_component(
-            s: ConvertibleToShapeComponent) -> ScalarExpression:
-        if isinstance(s, str):
-            s = scalar_expr.parse(s)
+            s: ShapeComponent) -> ShapeComponent:
+        if isinstance(s, Array):
+            from pytato.transform import DependencyMapper
 
-        if isinstance(s, int):
+            if s.shape != ():
+                raise ValueError("array valued shapes must be scalars")
+
+            for d in (k for k in DependencyMapper()(s)
+                      if isinstance(k, InputArgumentBase)):
+                if not isinstance(d, SizeParam):
+                    raise NotImplementedError("shape expressions can (for now) only "
+                                              "be in terms of SizeParams. Depends on"
+                                              f" '{d.name}', a non-SizeParam array.")
+            # TODO: Check affine-ness of the array expression.
+        else:
+            if not isinstance(s, int):
+                raise TypeError("array dimension can be an int or pytato.Array. "
+                                f"Got {type(s)}.")
+            assert isinstance(s, int)
             if s < 0:
                 raise ValueError(f"size parameter must be nonnegative (got '{s}')")
 
-        elif isinstance(s, prim.Expression):
-            # TODO: check expression affine-ness
-            _ShapeChecker()(s)
-
         return s
 
-    if isinstance(shape, str):
-        shape = scalar_expr.parse(shape)
-
     from numbers import Number
-    if isinstance(shape, (Number, prim.Expression)):
-        shape = (shape,)
+    if isinstance(shape, (Array, Number)):
+        shape = shape,
 
     # https://github.com/python/mypy/issues/3186
     return tuple(normalize_shape_component(s) for s in shape)  # type: ignore
@@ -369,7 +266,8 @@ def normalize_shape(
 # {{{ array inteface
 
 SliceItem = Union[int, slice, None, EllipsisType]
-DtypeOrScalar = Union[_dtype_any, Number]
+DtypeOrScalar = Union[_dtype_any, ScalarType]
+ArrayOrScalar = Union["Array", ScalarType]
 
 
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
@@ -397,18 +295,11 @@ class Array(Taggable):
 
     FIXME: Point out our equivalent for :mod:`numpy`'s ``==``.
 
-    .. attribute:: namespace
-
-        A (mutable) instance of :class:`~pytato.Namespace` containing the
-        names used in the computation. All arrays in a
-        computation share the same namespace.
-
     .. attribute:: shape
 
-        Identifiers (:class:`pymbolic.primitives.Variable`) refer to names from
-        :attr:`namespace`.  A tuple of integers or :mod:`pymbolic` expressions.
-        Shape may be (at most affinely) symbolic in these
-        identifiers.
+        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`s.
+        Array-valued shape components may be (at most affinely) symbolic in terms of
+        :class:`~pytato.array.SizeParam`s.
 
         .. note::
 
@@ -434,7 +325,6 @@ class Array(Taggable):
 
         Inherits from :class:`pytools.Taggable`.
 
-    .. automethod:: named
     .. automethod:: tagged
     .. automethod:: without_tag
 
@@ -465,24 +355,17 @@ class Array(Taggable):
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
     @property
-    def namespace(self) -> Namespace:
-        raise NotImplementedError
-
-    @property
     def shape(self) -> ShapeType:
         raise NotImplementedError
 
     @property
-    def size(self) -> ScalarExpression:
+    def size(self) -> ShapeComponent:
         from pytools import product
-        return product(self.shape)
+        return product(self.shape)  # type: ignore
 
     @property
     def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
-
-    def named(self, name: str) -> Array:
-        return self.namespace.ref(self.namespace.assign(name, self))
 
     def __getitem__(self,
             slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
@@ -559,8 +442,7 @@ class Array(Taggable):
                 expr = expr[tuple(indices)]
 
             # FIXME: Flatten into a single IndexLambda
-            return IndexLambda(self.namespace,
-                    expr,
+            return IndexLambda(expr,
                     shape=tuple(shape),
                     dtype=self.dtype,
                     bindings=dict(_in0=slice_))
@@ -590,7 +472,6 @@ class Array(Taggable):
             return True
         return (
                 isinstance(other, type(self))
-                and self.namespace is other.namespace
                 and all(
                     getattr(self, field) == getattr(other, field)
                     for field in self._fields))
@@ -609,13 +490,13 @@ class Array(Taggable):
 
     def _binary_op(self,
             op: Any,
-            other: Union[Array, Number],
+            other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
             reverse: bool = False) -> Array:
 
         # {{{ sanity checks
 
-        if not isinstance(other, (Array, Number)):
+        if not isinstance(other, (Array,) + SCALAR_CLASSES):
             return NotImplemented
 
         # }}}
@@ -636,7 +517,7 @@ class Array(Taggable):
             expr = op(var("_in0")[indices])
 
         bindings = dict(_in0=self)
-        return IndexLambda(self.namespace,
+        return IndexLambda(
                 expr,
                 shape=self.shape,
                 dtype=self.dtype,
@@ -766,10 +647,6 @@ class NamedArray(Array):
     def dtype(self) -> np.dtype[Any]:
         return self.expr.dtype
 
-    @property
-    def namespace(self) -> Namespace:
-        return self.dict_of_named_arrays.namespace
-
 
 class DictOfNamedArrays(Mapping[str, NamedArray]):
     """A container that maps valid Python identifiers
@@ -793,10 +670,6 @@ class DictOfNamedArrays(Mapping[str, NamedArray]):
         self._named_arrays = {name: NamedArray(self, name)
                               for name in data}
         self._data = data
-
-    @property
-    def namespace(self) -> Namespace:
-        return next(iter(self._data.values())).namespace
 
     def __contains__(self, name: object) -> bool:
         return name in self.namespace
@@ -826,16 +699,13 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     :class:`~pymbolic.primitives.Variable`\ s with names ``_1``,
     ``_2``, and so on.
 
-    .. attribute:: namespace
-
     .. attribute:: expr
 
         A scalar-valued :mod:`pymbolic` expression such as
         ``a[_1] + b[_2, _1]``.
 
         Identifiers in the expression are resolved, in
-        order, by lookups in :attr:`bindings`, then in
-        :attr:`namespace`.
+        order, by lookups in :attr:`bindings`.
 
         Scalar functions in this expression must
         be identified by a dotted name representing
@@ -849,14 +719,12 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
         expressions available for use in
         :attr:`expr`.
 
-    .. automethod:: is_reference
     """
 
     _fields = Array._fields + ("expr", "bindings")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
-            namespace: Namespace,
             expr: prim.Expression,
             shape: ShapeType,
             dtype: np.dtype[Any],
@@ -868,44 +736,8 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
         super().__init__(shape=shape, dtype=dtype, tags=tags)
 
-        self._namespace = namespace
         self.expr = expr
         self.bindings = bindings
-
-    @property
-    def namespace(self) -> Namespace:
-        return self._namespace
-
-    @memoize_method
-    def is_reference(self) -> bool:
-        # FIXME: Do we want a specific 'reference' node to make all this
-        # checking unnecessary?
-
-        if isinstance(self.expr, prim.Subscript):
-            assert isinstance(self.expr.aggregate, prim.Variable)
-            name = self.expr.aggregate.name
-            index = self.expr.index
-        elif isinstance(self.expr, prim.Variable):
-            name = self.expr.aggregate.name
-            index = ()
-        else:
-            return False
-
-        if index != tuple(var("_%d" % i) for i in range(len(self.shape))):
-            return False
-
-        try:
-            val = self.namespace[name]
-        except KeyError:
-            assert name in self.bindings
-            return False
-
-        if self.shape != val.shape:
-            return False
-        if self.dtype != val.dtype:
-            return False
-
-        return True
 
 # }}}
 
@@ -944,10 +776,6 @@ class MatrixProduct(Array):
         super().__init__(tags)
         self.x1 = x1
         self.x2 = x2
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.x1.namespace
 
     @property
     def shape(self) -> ShapeType:
@@ -1000,10 +828,6 @@ class Stack(Array):
         self.axis = axis
 
     @property
-    def namespace(self) -> Namespace:
-        return self.arrays[0].namespace
-
-    @property
     def dtype(self) -> np.dtype[Any]:
         return cast(_dtype_any,
                 np.result_type(*(arr.dtype for arr in self.arrays)))
@@ -1042,10 +866,6 @@ class Concatenate(Array):
         super().__init__(tags)
         self.arrays = arrays
         self.axis = axis
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.arrays[0].namespace
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -1105,10 +925,6 @@ class IndexRemappingBase(Array):
     @property
     def dtype(self) -> np.dtype[Any]:
         return self.array.dtype
-
-    @property
-    def namespace(self) -> Namespace:
-        return self.array.namespace
 
 # }}}
 
@@ -1254,15 +1070,12 @@ class InputArgumentBase(Array):
     .. attribute:: name
 
         The name by which a value is supplied for the argument once computation
-        begins.
-
-        The name is also implicitly :meth:`~pytato.Namespace.assign`\ ed in the
-        :class:`~pytato.Namespace`.
+        begins. If None, a unique name will be assigned during code-generation.
 
     .. note::
 
-        Creating multiple instances of any input argument with the same name
-        and within the same :class:`~pytato.Namespace` is not allowed.
+        Creating multiple instances of any input argument with the
+        same name in an expression is not allowed.
     """
 
     # The name uniquely identifies this object in the namespace. Therefore,
@@ -1270,22 +1083,10 @@ class InputArgumentBase(Array):
     _fields = ("name",)
 
     def __init__(self,
-            namespace: Namespace,
-            name: str,
+            name: Optional[str],
             tags: TagsType = frozenset()):
-        if name is None:
-            raise ValueError("Must have explicit name")
-
-        # Publish our name to the namespace.
-        namespace.assign(name, self)
-
-        self._namespace = namespace
         super().__init__(tags=tags)
         self.name = name
-
-    @property
-    def namespace(self) -> Namespace:
-        return self._namespace
 
     def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
@@ -1293,6 +1094,12 @@ class InputArgumentBase(Array):
     def without_tags(self, tags: TagOrIterableType,
                         verify_existence: bool = True) -> InputArgumentBase:
         raise ValueError("Cannot modify tags")
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __eq__(self, other: Any) -> bool:
+        return self is other
 
 # }}}
 
@@ -1335,12 +1142,11 @@ class DataWrapper(InputArgumentBase):
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
-            namespace: Namespace,
-            name: str,
+            name: Optional[str],
             data: DataInterface,
             shape: ShapeType,
             tags: TagsType = frozenset()):
-        super().__init__(namespace, name, tags=tags)
+        super().__init__(name, tags=tags)
 
         self.data = data
         self._shape = shape
@@ -1369,8 +1175,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     _mapper_method = "map_placeholder"
 
     def __init__(self,
-            namespace: Namespace,
-            name: str,
+            name: Optional[str],
             shape: ShapeType,
             dtype: np.dtype[Any],
             tags: TagsType = frozenset()):
@@ -1379,7 +1184,6 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
         """
         super().__init__(shape=shape,
                 dtype=dtype,
-                namespace=namespace,
                 name=name,
                 tags=tags)
 
@@ -1414,20 +1218,18 @@ def matmul(x1: Array, x2: Array) -> Array:
     :param x1: first argument
     :param x2: second argument
     """
+    from pytato.utils import are_shape_components_equal
     if (
-            isinstance(x1, Number)
+            isinstance(x1, SCALAR_CLASSES)
             or x1.shape == ()
-            or isinstance(x2, Number)
+            or isinstance(x2, SCALAR_CLASSES)
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
-
-    if x1.namespace is not x2.namespace:
-        raise ValueError("namespace mismatch")
 
     if len(x1.shape) > 2 or len(x2.shape) > 2:
         raise NotImplementedError("broadcasting not supported")
 
-    if x1.shape[-1] != x2.shape[0]:
+    if not are_shape_components_equal(x1.shape[-1], x2.shape[0]):
         raise ValueError("dimension mismatch")
 
     return MatrixProduct(x1, x2)
@@ -1495,12 +1297,13 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     :param axis: the position of the new axis, which will have length
         *len(arrays)*
     """
+    from pytato.utils import are_shapes_equal
 
     if not arrays:
         raise ValueError("need at least one array to stack")
 
     for array in arrays[1:]:
-        if array.shape != arrays[0].shape:
+        if not are_shapes_equal(array.shape, arrays[0].shape):
             raise ValueError("arrays must have the same shape")
 
     if not (0 <= axis <= arrays[0].ndim):
@@ -1527,10 +1330,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not arrays:
         raise ValueError("need at least one array to stack")
 
-    if not all(array.namespace is arrays[0].namespace for array in arrays):
-        raise ValueError("arrays must belong to the same namespace.")
-
-    def shape_except_axis(ary: Array) -> Tuple[int, ...]:
+    def shape_except_axis(ary: Array) -> ShapeType:
         return ary.shape[:axis] + ary.shape[axis+1:]
 
     for array in arrays[1:]:
@@ -1643,26 +1443,24 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
     return Reshape(array, tuple(newshape_explicit), order)
 
 
+# {{{ make_dict_of_named_arrays
+
 def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
-    """Make a :class:`DictOfNamedArrays` object and ensure that all arrays
-    share the same namespace.
+    """Make a :class:`DictOfNamedArrays` object.
 
     :param data: member keys and arrays
     """
-    if not is_single_valued(ary.namespace for ary in data.values()):
-        raise ValueError("arrays do not have same namespace")
-
     return DictOfNamedArrays(data)
 
+# }}}
 
-def make_placeholder(namespace: Namespace,
-        shape: ConvertibleToShape,
+
+def make_placeholder(shape: ConvertibleToShape,
         dtype: Any,
         name: Optional[str] = None,
         tags: TagsType = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
-    :param namespace:  namespace of the placeholder array
     :param name:       name of the placeholder array, generated automatically
                        if not given
     :param shape:      shape of the placeholder array
@@ -1670,74 +1468,61 @@ def make_placeholder(namespace: Namespace,
                        (must be convertible to :class:`numpy.dtype`)
     :param tags:       implementation tags
     """
-    if name is None:
-        name = namespace.name_gen("_pt_in")
-
-    if not name.isidentifier():
-        raise ValueError(f"'{name}' is not a Python identifier")
-
-    shape = normalize_shape(shape, namespace)
+    _check_identifier(name)
+    shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
 
-    return Placeholder(namespace, name, shape, dtype, tags)
+    return Placeholder(name, shape, dtype, tags)
 
 
-def make_size_param(namespace: Namespace,
-        name: str,
+def make_size_param(name: str,
         tags: TagsType = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
     sizes.
 
-    :param namespace:  namespace
     :param name:       name
     :param tags:       implementation tags
     """
-    if name is None:
-        raise ValueError("SizeParam instances must have a name")
-
-    if not name.isidentifier():
-        raise ValueError(f"'{name}' is not a Python identifier")
-
-    return SizeParam(namespace, name, tags=tags)
+    _check_identifier(name)
+    return SizeParam(name, tags=tags)
 
 
-def make_data_wrapper(namespace: Namespace,
-        data: DataInterface,
+def make_data_wrapper(data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
         tags: TagsType = frozenset()) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
-    :param namespace:  namespace
     :param data:       an instance obeying the :class:`DataInterface`
     :param name:       an optional name, generated automatically if not given
     :param shape:      optional shape of the array, inferred from *data* if not given
     :param tags:       implementation tags
     """
-    namespace.remove_out_of_scope_data_wrappers()
-
-    if name is None:
-        name = namespace.name_gen("_pt_data")
-
-    if not name.isidentifier():
-        raise ValueError(f"'{name}' is not a Python identifier")
+    _check_identifier(name)
 
     if shape is None:
         shape = data.shape
 
-    shape = normalize_shape(shape, namespace)
+    shape = normalize_shape(shape)
 
-    return DataWrapper(namespace, name, data, shape, tags)
+    return DataWrapper(name, data, shape, tags)
 
 # }}}
 
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: Array, func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None) -> IndexLambda:
+def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
+                          ret_dtype: Optional[_dtype_any] = None
+                          ) -> ArrayOrScalar:
+    if isinstance(x, SCALAR_CLASSES):
+        np_func = getattr(np, func_name)
+        return np_func(x)  # type: ignore
+
+    assert isinstance(x, Array)
+
     if x.dtype.kind != "f":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
     if ret_dtype is None:
@@ -1747,62 +1532,62 @@ def _apply_elem_wise_func(x: Array, func_name: str,
             var(f"pytato.c99.{func_name}"),
             (prim.Subscript(var("in"),
                 tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(x.namespace, expr, x.shape, ret_dtype, {"in": x})
+    return IndexLambda(expr, x.shape, ret_dtype, {"in": x})
 
 
-def abs(x: Array) -> IndexLambda:
+def abs(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "abs")
 
 
-def sin(x: Array) -> IndexLambda:
+def sin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sin")
 
 
-def cos(x: Array) -> IndexLambda:
+def cos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cos")
 
 
-def tan(x: Array) -> IndexLambda:
+def tan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tan")
 
 
-def arcsin(x: Array) -> IndexLambda:
+def arcsin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "asin")
 
 
-def arccos(x: Array) -> IndexLambda:
+def arccos(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "acos")
 
 
-def arctan(x: Array) -> IndexLambda:
+def arctan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "atan")
 
 
-def sinh(x: Array) -> IndexLambda:
+def sinh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sinh")
 
 
-def cosh(x: Array) -> IndexLambda:
+def cosh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "cosh")
 
 
-def tanh(x: Array) -> IndexLambda:
+def tanh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "tanh")
 
 
-def exp(x: Array) -> IndexLambda:
+def exp(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "exp")
 
 
-def log(x: Array) -> IndexLambda:
+def log(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log")
 
 
-def log10(x: Array) -> IndexLambda:
+def log10(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "log10")
 
 
-def isnan(x: Array) -> IndexLambda:
+def isnan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
 
 # }}}
@@ -1810,43 +1595,42 @@ def isnan(x: Array) -> IndexLambda:
 
 # {{{ full
 
-def full(namespace: Namespace, shape: ConvertibleToShape, fill_value: Number,
-        dtype: Any, order: str = "C") -> Array:
+def full(shape: ConvertibleToShape, fill_value: ScalarType,
+         dtype: Any, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
     """
     if order != "C":
         raise ValueError("Only C-ordered arrays supported for now.")
 
-    shape = normalize_shape(shape, namespace)
+    shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
-    return IndexLambda(namespace, dtype.type(fill_value), shape, dtype, {})
+    return IndexLambda(dtype.type(fill_value), shape, dtype, {})
 
 
-def zeros(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
+def zeros(shape: ConvertibleToShape, dtype: Any = float,
         order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to 0.
     """
     # https://github.com/python/mypy/issues/3186
-    return full(namespace, shape, 0, dtype)  # type: ignore
+    return full(shape, 0, dtype)  # type: ignore
 
 
-def ones(namespace: Namespace, shape: ConvertibleToShape, dtype: Any = float,
+def ones(shape: ConvertibleToShape, dtype: Any = float,
         order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to 1.
     """
     # https://github.com/python/mypy/issues/3186
-    return full(namespace, shape, 1, dtype)  # type: ignore
+    return full(shape, 1, dtype)  # type: ignore
 
 # }}}
 
 
 # {{{ comparison operator
 
-def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
-             which: str) -> Union[Array, bool]:
+def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
@@ -1854,48 +1638,42 @@ def _compare(x1: Union[Array, Number], x2: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def equal(x1: Union[Array, Number],
-          x2: Union[Array, Number]) -> Union[Array, bool]:
+def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 == x2) element-wise.
     """
     return _compare(x1, x2, "==")
 
 
-def not_equal(x1: Union[Array, Number],
-              x2: Union[Array, Number]) -> Union[Array, bool]:
+def not_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 != x2) element-wise.
     """
     return _compare(x1, x2, "!=")
 
 
-def less(x1: Union[Array, Number],
-         x2: Union[Array, Number]) -> Union[Array, bool]:
+def less(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 < x2) element-wise.
     """
     return _compare(x1, x2, "<")
 
 
-def less_equal(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def less_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 <= x2) element-wise.
     """
     return _compare(x1, x2, "<=")
 
 
-def greater(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, bool]:
+def greater(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 > x2) element-wise.
     """
     return _compare(x1, x2, ">")
 
 
-def greater_equal(x1: Union[Array, Number],
-                  x2: Union[Array, Number]) -> Union[Array, bool]:
+def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns (x1 >= x2) element-wise.
     """
@@ -1906,8 +1684,7 @@ def greater_equal(x1: Union[Array, Number],
 
 # {{{ logical operations
 
-def logical_or(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical OR of *x1* and *x2*.
     """
@@ -1918,8 +1695,7 @@ def logical_or(x1: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_and(x1: Union[Array, Number],
-               x2: Union[Array, Number]) -> Union[Array, bool]:
+def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical AND of *x1* and *x2*.
     """
@@ -1930,17 +1706,18 @@ def logical_and(x1: Union[Array, Number],
                                      lambda x, y: np.bool8)  # type: ignore
 
 
-def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
+def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
     """
     Returns the element-wise logical NOT of *x*.
     """
-    if isinstance(x, Number):
+    if isinstance(x, SCALAR_CLASSES):
         # https://github.com/python/mypy/issues/3186
         return np.logical_not(x)  # type: ignore
 
+    assert isinstance(x, Array)
+
     from pytato.utils import with_indices_for_broadcasted_shape
-    return IndexLambda(x.namespace,
-                       with_indices_for_broadcasted_shape(prim.Variable("_in0"),
+    return IndexLambda(with_indices_for_broadcasted_shape(prim.Variable("_in0"),
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
@@ -1952,17 +1729,13 @@ def logical_not(x: Union[Array, Number]) -> Union[Array, bool]:
 
 # {{{ where
 
-def where(condition: Union[Array, Number],
-          x: Optional[Union[Array, Number]] = None,
-          y: Optional[Union[Array, Number]] = None) -> Union[Array, Number]:
+def where(condition: ArrayOrScalar,
+          x: Optional[ArrayOrScalar] = None,
+          y: Optional[ArrayOrScalar] = None) -> ArrayOrScalar:
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
     import pytato.utils as utils
-
-    if (isinstance(condition, Number) and isinstance(x, Number)
-            and isinstance(y, Number)):
-        return x if condition else y
 
     # {{{ raise if single-argument form of pt.where is invoked
 
@@ -1974,7 +1747,9 @@ def where(condition: Union[Array, Number],
 
     # }}}
 
-    namespace = next(a.namespace for a in [condition, x, y] if isinstance(a, Array))
+    if (isinstance(condition, SCALAR_CLASSES) and isinstance(x, SCALAR_CLASSES)
+            and isinstance(y, SCALAR_CLASSES)):
+        return x if condition else y  # type: ignore
 
     # {{{ find dtype
 
@@ -1995,8 +1770,7 @@ def where(condition: Union[Array, Number],
     expr3 = utils.update_bindings_and_get_broadcasted_expr(y, "_in2", bindings,
                                                            result_shape)
 
-    return IndexLambda(namespace,
-            prim.If(expr1, expr2, expr3),
+    return IndexLambda(prim.If(expr1, expr2, expr3),
             shape=result_shape,
             dtype=dtype,
             bindings=bindings)
@@ -2006,26 +1780,24 @@ def where(condition: Union[Array, Number],
 
 # {{{ (max|min)inimum
 
-def maximum(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, Number]:
+def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise maximum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
     return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
-                 where(greater(x1, x2), x1, x2))  # type: ignore
+                 where(greater(x1, x2), x1, x2))
 
 
-def minimum(x1: Union[Array, Number],
-            x2: Union[Array, Number]) -> Union[Array, Number]:
+def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     """
     Returns the elementwise minimum of *x1*, *x2*. *x1*, *x2* being
     array-like objects that could be broadcasted together. NaNs are propagated.
     """
     # https://github.com/python/mypy/issues/3186
     return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
-                 where(less(x1, x2), x1, x2))  # type: ignore
+                 where(less(x1, x2), x1, x2))
 
 # }}}
 
