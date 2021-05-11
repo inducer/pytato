@@ -31,7 +31,8 @@ from pymbolic import var
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         DataWrapper, Roll, AxisPermutation, Slice, IndexRemappingBase, Stack,
-        Placeholder, Reshape, Concatenate, DataInterface, MatrixProduct)
+        Placeholder, Reshape, Concatenate, DataInterface, MatrixProduct,
+        InputArgumentBase)
 from pytato.target import Target
 from pytato.scalar_expr import ScalarExpression
 from pytato.transform import CopyMapper, WalkMapper

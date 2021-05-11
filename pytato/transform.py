@@ -333,6 +333,23 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
+    def map_named_array(self, expr: NamedArray) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.dict_of_named_arrays)
+
+        self.post_visit(expr)
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        if not self.visit(expr):
+            return
+
+        for ary in expr.values():
+            self.rec(ary.expr)
+
+        self.post_visit(expr)
+
     map_concatenate = map_stack
 
 # }}}
