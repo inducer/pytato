@@ -32,7 +32,7 @@ from pymbolic import var
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         DataWrapper, Roll, AxisPermutation, Slice, IndexRemappingBase, Stack,
         Placeholder, Reshape, Concatenate, DataInterface, MatrixProduct,
-        InputArgumentBase)
+        InputArgumentBase, SizeParam)
 from pytato.target import Target
 from pytato.scalar_expr import ScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
@@ -276,7 +276,7 @@ class CodeGenPreprocessor(CopyMapper):
                 x1*x2,
                 ReductionOp.SUM,
                 {"_r0": (0, expr.x1.shape[-1])})
-        return IndexLambda(namespace=self.namespace,
+        return IndexLambda(
                 expr=inner_expr,
                 shape=expr.shape,
                 dtype=expr.dtype,
@@ -459,7 +459,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor()
+    mapper = CodeGenPreprocessor(target)
 
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 
