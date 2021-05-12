@@ -669,7 +669,7 @@ class DictOfNamedArrays(Mapping[str, NamedArray]):
         self._data = data
 
     def __contains__(self, name: object) -> bool:
-        return name in self.namespace
+        return name in self._named_arrays
 
     def __getitem__(self, name: str) -> NamedArray:
         return self._named_arrays[name]

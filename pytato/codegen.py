@@ -32,7 +32,8 @@ from pymbolic import var
 from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
-                          Concatenate, DataInterface, SizeParam, InputArgumentBase)
+                          Concatenate, DataInterface, SizeParam,
+                          InputArgumentBase)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
 from pytato.target import Target
@@ -90,10 +91,11 @@ class CodeGenPreprocessor(CopyMapper):
     # Stack -> IndexLambda
     # MatrixProduct -> Einsum
 
-    def __init__(self) -> None:
+    def __init__(self, target: Target) -> None:
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
+        self.target = target
         self.kernels_seen: Dict[str, lp.LoopKernel] = {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
@@ -156,10 +158,9 @@ class CodeGenPreprocessor(CopyMapper):
                            else subexpr)
                     for name, subexpr in expr.bindings.items()}
 
-        return LoopyFunction(namespace=self.namespace,
-                program=program,
-                bindings=bindings,
-                entrypoint=entrypoint)
+        return LoopyFunction(program=program,
+                             bindings=bindings,  # type: ignore
+                             entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name

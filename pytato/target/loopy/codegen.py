@@ -408,7 +408,7 @@ class CodeGenMapper(Mapper):
             subexpr = expr[key].expr
             name = state.var_name_gen("_pt_temp")
             insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
-                    output_to_temporary=True)
+                    output_to_temporary=True, cgen_mapper=self)
             state.results[subexpr] = state.results[expr[key]] = (
                     StoredResult(name, subexpr.ndim, frozenset([insn_id])))
 
@@ -437,7 +437,10 @@ class CodeGenMapper(Mapper):
                     state.var_name_gen(f"_{name}_dim{d}")
                     for d in range(array.ndim))
 
-            domains.append(domain_for_shape(inames, array.shape, {}))
+            domains.append(domain_for_shape(inames,
+                                            shape_to_scalar_expression(array.shape,
+                                                                       self, state),
+                                            {}))
 
             inames_as_vars = tuple(var(iname) for iname in inames)
             return SubArrayRef(inames_as_vars,
@@ -467,7 +470,8 @@ class CodeGenMapper(Mapper):
                     state.results[named_array] = result
 
                     new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
-                            named_array)
+                                                                 named_array,
+                                                                 self, state)
                 else:
                     assert arg.is_input
                     pt_arg = expr.bindings[arg.name]
@@ -487,13 +491,15 @@ class CodeGenMapper(Mapper):
                         name = state.var_name_gen("_pt_temp")
                         store_insn_id = add_store(name, pt_arg,
                                 self.rec(pt_arg, state),
-                                state, output_to_temporary=True)
+                                state, output_to_temporary=True,
+                                cgen_mapper=self)
                         depends_on.add(store_insn_id)
                         # replace "arg" with the created stored variable
                         state.results[pt_arg] = StoredResult(name, pt_arg.ndim,
                                                           frozenset([store_insn_id]))
                         params.append(_get_sub_array_ref(pt_arg, name))
-                        new_tvs[name] = get_loopy_temporary(name, pt_arg)
+                        new_tvs[name] = get_loopy_temporary(name, pt_arg,
+                                                            self, state)
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
                 pt_arg = expr.bindings[arg.name]
@@ -505,8 +511,7 @@ class CodeGenMapper(Mapper):
                                            state).to_loopy_expression(
                                                (), loopy_expr_context))
                 else:
-                    params.append(self.exprgen_mapper(pt_arg,
-                            loopy_expr_context))
+                    params.append(self.exprgen_mapper(pt_arg, loopy_expr_context))
 
         # }}}
 
@@ -849,7 +854,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     input_name_recorder = InputNameRecorder(state)
 
     for name in compute_order:
-        expr = outputs[name]
+        expr = outputs[name].expr
         # Reserve names of input and output arguments.
         input_name_recorder(expr)
 

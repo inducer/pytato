@@ -31,10 +31,8 @@ import pymbolic.primitives as prim
 from loopy.types import NumpyType
 from typing import Dict, Optional, Any, Union
 from numbers import Number
-from pytato.array import (DictOfNamedArrays, Namespace, Array, ShapeType,
-        NamedArray, normalize_shape, ConvertibleToShape)
-from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
-        IntegralScalarExpression)
+from pytato.array import DictOfNamedArrays, Array, ShapeType, NamedArray
+from pytato.scalar_expr import SubstitutionMapper, ScalarExpression
 from pytools import memoize_method
 from pytools.tag import TagsType
 
@@ -56,16 +54,14 @@ class LoopyFunction(DictOfNamedArrays):
     _mapper_method = "map_loopy_function"
 
     def __init__(self,
-            namespace: Namespace,
             program: "lp.Program",
-            bindings: Dict[str, Union[Array, IntegralScalarExpression, Number]],
+            bindings: Dict[str, Union[Array, Number]],
             entrypoint: str):
         super().__init__({})
 
         self.program = program
         self.bindings = bindings
         self.entrypoint = entrypoint
-        self._namespace = namespace
 
         entry_kernel = program[entrypoint]
 
@@ -77,10 +73,6 @@ class LoopyFunction(DictOfNamedArrays):
     def to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
         from pymbolic.mapper.substitutor import make_subst_func
         return SubstitutionMapper(make_subst_func(self.bindings))(expr)
-
-    @property
-    def namespace(self) -> Namespace:
-        return self._namespace
 
     @property
     def entry_kernel(self) -> lp.LoopKernel:
@@ -138,9 +130,9 @@ class LoopyFunctionResult(NamedArray):
             raise NotImplementedError(f"Unknown dtype type '{dtype}'")
 
 
-def call_loopy(namespace: Namespace, program: "lp.Program",
-        bindings: Dict[str, Union[Array, ConvertibleToShape, Number]],
-        entrypoint: Optional[str] = None) -> LoopyFunction:
+def call_loopy(program: "lp.Program",
+               bindings: Dict[str, Union[Array, Number]],
+               entrypoint: Optional[str] = None) -> LoopyFunction:
     """
     Operates a general :class:`loopy.Program` on the array inputs as specified
     by *bindings*.
@@ -174,7 +166,7 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
     if any([arg.is_input and arg.is_output
             for arg in program[entrypoint].args]):
         # Pytato DAG cannot have stateful nodes.
-        raise ValueError("Cannot have a kernel that writes to inputs.")
+        raise ValueError("Cannot call a kernel with side-effects.")
 
     for name in bindings:
         if name not in program[entrypoint].arg_dict:
@@ -195,17 +187,12 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
                             f"pytato.Array, got {type(bindings[arg.name])}.")
             else:
                 assert isinstance(arg, lp.ValueArg)
-                if not (isinstance(bindings[arg.name],
-                                   (str, prim.Expression, Number))
+                if not (isinstance(bindings[arg.name], Number)
                         or (isinstance(bindings[arg.name], Array)
                             and bindings[arg.name].shape == ())):  # type: ignore
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             " number or a scalar expression, got "
                             f"{type(bindings[arg.name])}.")
-
-                if isinstance(bindings[arg.name], str):
-                    bindings[arg.name] = normalize_shape(bindings[arg.name],
-                            namespace)[0]
 
     # }}}
 
@@ -232,7 +219,7 @@ def call_loopy(namespace: Namespace, program: "lp.Program",
 
     program = program.with_entrypoints(frozenset())
 
-    return LoopyFunction(namespace, program, bindings, entrypoint)
+    return LoopyFunction(program, bindings, entrypoint)
 
 
 # vim: fdm=marker

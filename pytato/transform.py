@@ -173,9 +173,8 @@ class DependencyMapper(Mapper):
     :class:`pytato.array.Array`'s it depends on.
     """
 
-    def __init__(self, namespace: Namespace) -> None:
+    def __init__(self) -> None:
         self.cache: Dict[Union[Array, DictOfNamedArrays], R] = {}
-        self.namespace = namespace
 
     def rec(self, expr: Union[Array, DictOfNamedArrays]) -> R:  # type: ignore
         if expr in self.cache:
@@ -238,18 +237,9 @@ class DependencyMapper(Mapper):
                                                  for ary in expr.values()))
 
     def map_loopy_function(self, expr: LoopyFunction) -> R:
-        from pytato.scalar_expr import get_dependencies as get_scalar_expr_deps
-
-        # https://github.com/python/mypy/issues/2013
-        scalar_deps = frozenset().union(*(get_scalar_expr_deps(ary)  # type: ignore
-                                          for ary in expr.bindings.values()
-                                          if not isinstance(ary, Array))
-                                        )
-
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.bindings.values()
-                                                 if isinstance(ary, Array)),
-                            frozenset([self.namespace[dep] for dep in scalar_deps]))
+                                                 if isinstance(ary, Array)))
 
 # }}}
 
@@ -336,6 +326,32 @@ class WalkMapper(Mapper):
 
     map_concatenate = map_stack
 
+    def map_loopy_function(self, expr: LoopyFunction) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.bindings.values():
+            if isinstance(child, Array):
+                self.rec(child)
+
+        self.post_visit(expr)
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr._data.values():
+            self.rec(child)
+
+        self.post_visit(expr)
+
+    def map_named_array(self, expr: NamedArray) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.dict_of_named_arrays)
+        self.post_visit(expr)
+
 # }}}
 
 
@@ -354,14 +370,14 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     if not source_dict:
         return DictOfNamedArrays({})
 
-    data = {name: copy_mapper(val) for name, val in source_dict.items()}
+    data = {name: copy_mapper(val.expr) for name, val in source_dict.items()}
     return DictOfNamedArrays(data)
 
 
 def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     """Returns the dependencies of each named array in *expr*.
     """
-    dep_mapper = DependencyMapper(expr.namespace)
+    dep_mapper = DependencyMapper()
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 

@@ -45,7 +45,7 @@ import pymbolic.primitives as p
 
 def does_lpy_support_knl_callables():
     try:
-        import loopy.program  # noqa
+        from loopy import TranslationUnit  # noqa: F401
         return True
     except ImportError:
         return False
@@ -610,9 +610,8 @@ def test_call_loopy(ctx_factory):
     from pytato.loopy import call_loopy
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
-    ns = pt.Namespace()
     x_in = np.random.rand(10, 4)
-    x = pt.make_placeholder(ns, shape=(10, 4), dtype=np.float, name="x")
+    x = pt.make_placeholder(shape=(10, 4), dtype=np.float, name="x")
     y = 2*x
 
     knl = lp.make_function(
@@ -621,7 +620,7 @@ def test_call_loopy(ctx_factory):
             Z[i] = 10*sum(j, Y[i, j])
             """, name="callee")
 
-    loopyfunc = call_loopy(ns, knl, bindings={"Y": y}, entrypoint="callee")
+    loopyfunc = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
     evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
@@ -649,11 +648,9 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
             y[i] = 3*x[i]
             """, name="callee")
 
-    ns = pt.Namespace()
-
-    u = pt.make_data_wrapper(ns, u_in)
-    cuatro_u = 2*call_loopy(ns, twice, {"x": u}, "callee")["y"]
-    nueve_u = 3*call_loopy(ns, thrice, {"x": u}, "callee")["y"]
+    u = pt.make_data_wrapper(u_in)
+    cuatro_u = 2*call_loopy(twice, {"x": u}, "callee")["y"]
+    nueve_u = 3*call_loopy(thrice, {"x": u}, "callee")["y"]
 
     out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
@@ -665,9 +662,8 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
 
 def test_exprs_with_named_arrays(ctx_factory):
     queue = cl.CommandQueue(ctx_factory())
-    ns = pt.Namespace()
     x_in = np.random.rand(10, 4)
-    x = pt.make_data_wrapper(ns, x_in)
+    x = pt.make_data_wrapper(x_in)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
     res = 21*y1y2["y1"]
     evt, (out,) = pt.generate_loopy(res, cl_device=queue.device)(queue)
@@ -685,11 +681,9 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
 
     queue = cl.CommandQueue(ctx_factory())
 
-    ns = pt.Namespace()
-
-    pt.make_size_param(ns, "M")
-    pt.make_size_param(ns, "N")
-    x = pt.make_placeholder(ns, shape="(M, N)", dtype=np.float, name="x")
+    m = pt.make_size_param("M")
+    n = pt.make_size_param("N")
+    x = pt.make_placeholder(shape=(m, n), dtype=np.float, name="x")
     y = 3*x
 
     knl = lp.make_kernel(
@@ -698,7 +692,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
             Z[i] = 7*sum(j, Y[i, j])
             """, name="callee", lang_version=(2018, 2))
 
-    loopyfunc = call_loopy(ns, knl, bindings={"Y": y, "m": "M", "n": "N"})
+    loopyfunc = call_loopy(knl, bindings={"Y": y, "m": m, "n": n})
     z = loopyfunc["Z"]
 
     evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
@@ -723,9 +717,8 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
         y = 2*x
         """)
 
-    ns = pt.Namespace()
-    x = pt.make_placeholder(ns, name="x", shape=(), dtype=float)
-    y = call_loopy(ns, knl, {"x": 3*x})["y"]
+    x = pt.make_placeholder(name="x", shape=(), dtype=float)
+    y = call_loopy(knl, {"x": 3*x})["y"]
 
     evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
