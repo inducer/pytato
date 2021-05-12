@@ -449,8 +449,9 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
 
-        updated_bounds = {unique_names_mapping[k].name: v
-                for k, v in expr.bounds.items()}
+        updated_bounds = {unique_names_mapping[k].name: self.rec(v,
+                                                                 expr_context)
+                          for k, v in expr.bounds.items()}
         domain = domain_for_shape((), shape=(), reductions=updated_bounds)
         rule_name = state.var_name_gen("_pt_subst")
         args = tuple(state.var_name_gen(f"i{i}")
