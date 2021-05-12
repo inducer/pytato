@@ -83,6 +83,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: where
 .. autofunction:: maximum
 .. autofunction:: minimum
+.. autofunction:: sum
 
 Supporting Functionality
 ------------------------
@@ -170,7 +171,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING)
+        Protocol, Sequence, cast, TYPE_CHECKING, List)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -179,7 +180,9 @@ from pytools import memoize_method
 from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES)
+from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
+                                ScalarExpression, Reduce, ReductionOp)
+import re
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -871,7 +874,11 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
+        from functools import reduce
+        import operator
+
+        common_axis_len = reduce(operator.add, (ary.shape[self.axis]
+                                                for ary in self.arrays))
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
@@ -1793,5 +1800,154 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 # }}}
 
+
+# {{{ make_index_lambda
+
+INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
+
+
+def make_index_lambda(
+        expression: Union[str, ScalarExpression],
+        bindings: Dict[str, Array],
+        shape: ShapeType,
+        dtype: Any) -> IndexLambda:
+    if isinstance(expression, str):
+        raise NotImplementedError("Sorry the developers were too lazy to implement"
+                " a parser.")
+
+    # {{{ sanity checks
+
+    from pytato.scalar_expr import get_dependencies
+    unknown_dep = get_dependencies(expression) - set(bindings)
+    for dep in unknown_dep:
+        if not INDEX_RE.fullmatch(dep):
+            raise ValueError(f"Unknown variable '{dep}' in the expression.")
+
+    # }}}
+
+    return IndexLambda(expr=expression,
+                       bindings=bindings,
+                       shape=shape,
+                       dtype=dtype)
+
+# }}}
+
+
+# {{{ reductions
+
+def _preprocess_reduction_axes(
+        shape: ShapeType,
+        reduction_axes: Optional[Union[int, Tuple[int]]]
+        ) -> Tuple[ShapeType, Tuple[int, ...]]:
+    if reduction_axes is None:
+        return (), tuple(range(len(shape)))
+
+    if isinstance(reduction_axes, int):
+        reduction_axes = reduction_axes,
+
+    if not isinstance(reduction_axes, tuple):
+        raise TypeError("Reduction axes expected to be of type 'NoneType', 'int'"
+                f" or 'tuple'. (Got {type(reduction_axes)})")
+
+    for axis in reduction_axes:
+        if not (0 <= axis < len(shape)):
+            raise ValueError(f"{axis} is out of bounds for array of dimension"
+                    f" {len(shape)}.")
+
+    new_shape = []
+
+    for i, axis_len in enumerate(shape):
+        if i not in reduction_axes:
+            new_shape.append(axis_len)
+
+    return tuple(new_shape), reduction_axes
+
+
+def _get_reduction_indices_bounds(shape: ShapeType,
+        axes: Tuple[int, ...]) -> Tuple[
+                List[ScalarExpression],
+                Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
+
+    indices: List[prim.Variable] = []
+    redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+
+    n_out_dims = 0
+    n_redn_dims = 0
+    for idim, axis_len in enumerate(shape):
+        if idim in axes:
+            idx = f"_r{n_redn_dims}"
+            indices.append(prim.Variable(idx))
+            redn_bounds[idx] = (0, axis_len)
+            n_redn_dims += 1
+        else:
+            indices.append(prim.Variable(f"_{n_out_dims}"))
+            n_out_dims += 1
+
+    return indices, redn_bounds
+
+
+def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(
+            Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                ReductionOp.SUM,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
+
+def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(
+            Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                ReductionOp.MAX,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
+
+def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input arrays.
+    """
+    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(
+            Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                ReductionOp.MIN,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
+
+# }}}
 
 # vim: foldmethod=marker
