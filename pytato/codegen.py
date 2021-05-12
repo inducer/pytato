@@ -32,10 +32,14 @@ from pymbolic import var
 from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
-                          Concatenate, DataInterface, SizeParam, InputArgumentBase)
+                          Concatenate, DataInterface, SizeParam,
+                          InputArgumentBase)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
+from pytato.target import Target
+from pytato.loopy import LoopyFunction
 from pytools import UniqueNameGenerator
+import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
 
@@ -87,10 +91,12 @@ class CodeGenPreprocessor(CopyMapper):
     # Stack -> IndexLambda
     # MatrixProduct -> Einsum
 
-    def __init__(self) -> None:
+    def __init__(self, target: Target) -> None:
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
+        self.target = target
+        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -106,6 +112,55 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
+
+    def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
+        from pytato.target.loopy import LoopyTarget
+        if not isinstance(self.target, LoopyTarget):
+            raise ValueError("Got a LoopyFunction for a non-loopy target.")
+        program = expr.program.copy(target=self.target.get_loopy_target())
+        namegen = UniqueNameGenerator(set(self.kernels_seen))
+        entrypoint = expr.entrypoint
+
+        # {{{ eliminate callable name collision
+
+        for name, clbl in program.callables_table.items():
+            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+                if name in self.kernels_seen and (
+                        program[name] != self.kernels_seen[name]):
+                    # callee name collision => must rename
+
+                    # {{{ see if it's one of the other kernels
+
+                    for other_knl in self.kernels_seen.values():
+                        if other_knl.copy(name=name) == program[name]:
+                            new_name = other_knl.name
+                            break
+                    else:
+                        # didn't find any other equivalent kernel, rename to
+                        # something unique
+                        new_name = namegen(name)
+
+                    # }}}
+
+                    if name == entrypoint:
+                        # if the colliding name is the entrypoint, then rename the
+                        # entrypoint as well.
+                        entrypoint = new_name
+
+                    program = lp.rename_callable(program, name, new_name)
+                    name = new_name
+
+                self.kernels_seen[name] = program[name]
+
+        # }}}
+
+        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+                           else subexpr)
+                    for name, subexpr in expr.bindings.items()}
+
+        return LoopyFunction(program=program,
+                             bindings=bindings,  # type: ignore
+                             entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name
@@ -348,7 +403,7 @@ class PreprocessResult:
     bound_arguments: Dict[str, DataInterface]
 
 
-def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
+def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays, get_dependencies
 
@@ -364,12 +419,12 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
     deps = get_dependencies(outputs)
 
     # only look for dependencies between the outputs
-    deps = {name: (val & frozenset(outputs.values()))
+    deps = {name: (val & frozenset(out.expr for out in outputs.values()))
             for name, val in deps.items()}
 
     # represent deps in terms of output names
-    output_to_name = {output: name for name, output in outputs.items()}
-    dag = {name: (frozenset([output_to_name[output] for output in val])
+    output_expr_to_name = {output.expr: name for name, output in outputs.items()}
+    dag = {name: (frozenset([output_expr_to_name[output] for output in val])
                   - frozenset([name]))
            for name, val in deps.items()}
 
@@ -377,7 +432,7 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor()
+    mapper = CodeGenPreprocessor(target)
 
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 

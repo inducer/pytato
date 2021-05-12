@@ -620,7 +620,32 @@ class CountNamed(UniqueTag):
 
 # {{{ dict of named arrays
 
-class DictOfNamedArrays(Mapping[str, Array]):
+class NamedArray(Array):
+    _fields = Array._fields + ("dict_of_named_arrays", "name")
+    _mapper_method = "map_named_array"
+
+    def __init__(self,
+            dict_of_named_arrays: DictOfNamedArrays,
+            name: str,
+            tags: TagsType = frozenset()) -> None:
+        super().__init__(tags=tags)
+        self.dict_of_named_arrays = dict_of_named_arrays
+        self.name = name
+
+    @property
+    def expr(self) -> Array:
+        return self.dict_of_named_arrays._data[self.name]
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.expr.shape
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return self.expr.dtype
+
+
+class DictOfNamedArrays(Mapping[str, NamedArray]):
     """A container that maps valid Python identifiers
     to instances of :class:`Array`. May occur as a result
     type of array computations.
@@ -636,21 +661,28 @@ class DictOfNamedArrays(Mapping[str, Array]):
         This container deliberately does not implement
         arithmetic.
     """
+    _mapper_method = "map_dict_of_named_arrays"
 
     def __init__(self, data: Dict[str, Array]):
+        self._named_arrays = {name: NamedArray(self, name)
+                              for name in data}
         self._data = data
 
     def __contains__(self, name: object) -> bool:
-        return name in self._data
+        return name in self._named_arrays
 
-    def __getitem__(self, name: str) -> Array:
-        return self._data[name]
+    def __getitem__(self, name: str) -> NamedArray:
+        return self._named_arrays[name]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+        return iter(self._named_arrays)
 
     def __len__(self) -> int:
-        return len(self._data)
+        return len(self._named_arrays)
+
+    @memoize_method
+    def __hash__(self) -> int:
+        return hash(frozenset(self._data.items()))
 
 # }}}
 
@@ -1167,20 +1199,6 @@ class SizeParam(InputArgumentBase):
     @property
     def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
-
-# }}}
-
-
-# {{{ loopy function
-
-class LoopyFunction(DictOfNamedArrays):
-    """
-    .. note::
-
-        This should allow both a locally stored kernel
-        and one that's obtained by importing a dotted
-        name.
-    """
 
 # }}}
 
