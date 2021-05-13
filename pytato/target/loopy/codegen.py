@@ -427,7 +427,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     def map_reduce(self, expr: scalar_expr.Reduce,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         from pymbolic.mapper.substitutor import make_subst_func
-        from loopy.symbolic import Reduction
+        from loopy.symbolic import Reduction as LoopyReduction
         from loopy.library.reduction import parse_reduction_op
         state = expr_context.state
 
