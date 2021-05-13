@@ -171,6 +171,14 @@ class PartitionFinder(CopyMapper):
 
         return res
 
+    def set_partition_edge(self, expr1, expr2):
+        pid1 = self.get_partition_id(expr1)
+        pid2 = self.get_partition_id(expr2)
+        print(pid1, pid2)
+        # FIXME?
+        self.partition_pair_to_edges.setdefault(tuple((pid1, pid2)), list()).append(expr1.name)
+
+
     def register_partition_id(self, expr: Array) -> None:
         # return
         print('reg', expr)
@@ -275,6 +283,8 @@ class PartitionFinder(CopyMapper):
                 new_bindings[name] = self.rec(child)
                 self.register_partition_id(new_bindings[name])
 
+            self.set_partition_edge(expr, child)
+
         new_shapes = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
@@ -287,6 +297,8 @@ class PartitionFinder(CopyMapper):
                 else:
                     new_shapes[name] = self.rec(dim)
                     self.register_partition_id(new_shapes[name])
+
+                self.set_partition_edge(expr, dim)
 
 
         return IndexLambda(expr=expr.expr,
