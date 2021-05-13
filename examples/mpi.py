@@ -29,6 +29,7 @@ class PartitionId:
 
 def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
                      PartitionId:
+    # print(node_to_fed_sends)
     return PartitionId(frozenset(node_to_fed_sends[expr]),
                        frozenset(node_to_feeding_recvs[expr]))
 
@@ -78,19 +79,22 @@ def main():
 
     pf = PartitionFinder(pfunc)
     new = pf(y)
-    # partition_id_to_output_names = {}
-    # partition_id_to_input_names = {}
-    # partitions = set()
-    # for (pid_producer, pid_consumer), var_names in \
-    #         pf.partition_pair_to_edges.items():
-    #     partitions.add(pid_producer)
-    #     partitions.add(pid_consumer)
-    #     for var_name in var_names:
-    #         partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
-    #         partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+    partition_id_to_output_names = {}
+    partition_id_to_input_names = {}
+    partitions = set()
+    for (pid_producer, pid_consumer), var_names in \
+            pf.partition_pair_to_edges.items():
+        partitions.add(pid_producer)
+        partitions.add(pid_consumer)
+        for var_name in var_names:
+            partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
+            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
 
-    # pytools.graph
-    # topsorted_partitions = topsort(partitions)
+    print(node_to_fed_sends)
+
+    from pytools.graph import compute_topological_order
+
+    topsorted_partitions = compute_topological_order(partitions)
 
     # # codegen
     # prg_per_partition = {pid:
@@ -110,9 +114,9 @@ def main():
 
 
 
-    print(new)
+    print(partitions)
 
-    show_graph(y)
+    # show_graph(y)
 
     print("========")
     print(pf.cross_partition_name_to_value)
