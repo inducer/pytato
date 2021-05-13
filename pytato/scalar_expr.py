@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple, Dict
+from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple, Dict, Type
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -42,7 +42,6 @@ import pymbolic.primitives as prim
 import numpy as np
 from dataclasses import dataclass, field
 import math
-from enum import Enum
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -157,33 +156,60 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 # }}}
 
 
-class ReductionOp(Enum):
-    MAX = "max"
-    MIN = "min"
-    SUM = "sum"
-    PRODUCT = "product"
+class ReductionOp:
+    @property
+    def value(self) -> str:
+        raise NotImplementedError
 
     @property
     def neutral_element(self) -> Number:
-        if self.value == "max":
-            neutral = -math.inf
-        elif self.value == "min":
-            neutral = math.inf
-        elif self.value == "sum":
-            neutral = 0
-        elif self.value == "product":
-            neutral = 1
-        else:
-            raise NotImplementedError(f"Unknown reduction op {self}.")
+        raise NotImplementedError
 
-        # https://github.com/python/mypy/issues/3186
-        return neutral   # type: ignore
+
+class ReductionOpMAX(ReductionOp):
+    @property
+    def value(self) -> str:
+        return "max"
+
+    @property
+    def neutral_element(self) -> Number:
+        return -math.inf  # type: ignore
+
+
+class ReductionOpMIN(ReductionOp):
+    @property
+    def value(self) -> str:
+        return "min"
+
+    @property
+    def neutral_element(self) -> Number:
+        return math.inf  # type: ignore
+
+
+class ReductionOpSUM(ReductionOp):
+    @property
+    def value(self) -> str:
+        return "sum"
+
+    @property
+    def neutral_element(self) -> Number:
+        return 0  # type: ignore
+
+
+class ReductionOpPRODUCT(ReductionOp):
+    @property
+    def value(self) -> str:
+        return "product"
+
+    @property
+    def neutral_element(self) -> Number:
+        return 1  # type: ignore
 
 
 @dataclass
 class Reduce(prim.Expression):
     inner_expr: ScalarExpression
-    op: ReductionOp
+    op: Type[ReductionOp]
     bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]]
     neutral_element: Optional[ScalarExpression] = None
     mapper_method: str = field(init=False, default="map_reduce")
