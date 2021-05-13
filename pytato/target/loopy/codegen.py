@@ -359,7 +359,7 @@ class CodeGenMapper(Mapper):
 # {{{ inlined expression gen mapper
 
 ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
-REDN_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
+REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
 
 
 class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
