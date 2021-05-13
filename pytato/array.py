@@ -171,7 +171,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List)
+        Protocol, Sequence, cast, TYPE_CHECKING)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -1847,10 +1847,10 @@ def _preprocess_reduction_axes(
 
 def _get_reduction_indices_bounds(shape: ShapeType,
         axes: Tuple[int, ...]) -> Tuple[
-                List[ScalarExpression],
+                Sequence[ScalarExpression],
                 Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
 
-    indices: List[prim.Variable] = []
+    indices: Sequence[prim.Variable] = []
     redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
 
     n_out_dims = 0
