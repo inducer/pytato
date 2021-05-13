@@ -1872,7 +1872,7 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     Sums array *a*'s elements along the *axis* axes.
 
     :arg axis: The axes along which the elements are to be sum-reduced.
-        Defaults to all axes of the input arrays.
+        Defaults to all axes of the input array.
     """
     new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
     del axis
