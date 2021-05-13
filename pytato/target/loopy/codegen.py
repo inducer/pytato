@@ -445,7 +445,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                                   reduction_bounds=expr.bounds))
         inner_expr = SubstitutionMapper(
                 make_subst_func(unique_names_mapping))(inner_expr)
-        inner_expr = Reduction(parse_reduction_op(expr.op.value),
+        inner_expr = LoopyReduction(parse_reduction_op(expr.op.value),
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
 
