@@ -1890,9 +1890,9 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
-    Sums array *a*'s elements along the *axis* axes.
+    Returns the max of array *a*'s elements along the *axis* axes.
 
-    :arg axis: The axes along which the elements are to be sum-reduced.
+    :arg axis: The axes along which the elements are to be max-reduced.
         Defaults to all axes of the input array.
     """
     new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
@@ -1911,9 +1911,9 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
 def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
-    Sums array *a*'s elements along the *axis* axes.
+    Returns the min of array *a*'s elements along the *axis* axes.
 
-    :arg axis: The axes along which the elements are to be sum-reduced.
+    :arg axis: The axes along which the elements are to be min-reduced.
         Defaults to all axes of the input array.
     """
     new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
