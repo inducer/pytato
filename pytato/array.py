@@ -1794,8 +1794,7 @@ def make_index_lambda(
         shape: ShapeType,
         dtype: Any) -> IndexLambda:
     if isinstance(expression, str):
-        raise NotImplementedError("Sorry the developers were too lazy to implement"
-                " a parser.")
+        raise NotImplementedError
 
     # {{{ sanity checks
 
