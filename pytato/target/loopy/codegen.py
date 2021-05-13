@@ -396,7 +396,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             expr_context: LoopyExpressionContext) -> ScalarExpression:
 
         elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
-        redn_match = REDN_INDEX_RE.fullmatch(expr.name)
+        redn_match = REDUCTION_INDEX_RE.fullmatch(expr.name)
         if elw_match:
             # Found an index of the form _0, _1, ...
             index = int(elw_match.group(1))
