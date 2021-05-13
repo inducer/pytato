@@ -166,6 +166,12 @@ class CopyMapper(Mapper):
         return DictOfNamedArrays({key: self.rec(val.expr)
                                   for key, val in expr.items()})
 
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        return DistributedSend(expr.data)
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+        return DistributedRecv(expr.data)
+
 
 class DependencyMapper(Mapper):
     """
@@ -241,6 +247,12 @@ class DependencyMapper(Mapper):
                                                  for ary in expr.bindings.values()
                                                  if isinstance(ary, Array)))
 
+    def map_distributed_send(self, expr: DistributedSend) -> R:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> R:
+        return self.combine(frozenset([expr]), self.rec(expr.array))
+
 # }}}
 
 
@@ -254,7 +266,7 @@ class WalkMapper(Mapper):
     .. automethod:: visit
     .. automethod:: post_visit
     """
-    def visit(self, expr: Any) -> bool:
+    def visit(self, expr: Any, *args: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
         If this method returns *False*, *expr* is not traversed as a part of
@@ -262,67 +274,68 @@ class WalkMapper(Mapper):
         """
         return True
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: Any, *args: Any) -> None:
         """
         Callback after *expr* has been traversed.
         """
         pass
 
-    def map_index_lambda(self, expr: IndexLambda) -> None:
-        if not self.visit(expr):
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for child in expr.bindings.values():
-            self.rec(child)
+            self.rec(child, *args)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                self.rec(dim)
+                self.rec(dim, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
-    def map_placeholder(self, expr: Placeholder) -> None:
-        if not self.visit(expr):
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                self.rec(dim)
+                self.rec(dim, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
     map_data_wrapper = map_placeholder
     map_size_param = map_placeholder
 
-    def map_matrix_product(self, expr: MatrixProduct) -> None:
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
         if not self.visit(expr):
             return
 
-        self.rec(expr.x1)
-        self.rec(expr.x2)
+        self.rec(expr.x1, *args)
+        self.rec(expr.x2, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
-    def _map_index_remapping_base(self, expr: IndexRemappingBase) -> None:
-        if not self.visit(expr):
+    def _map_index_remapping_base(self,
+            expr: IndexRemappingBase, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
-        self.rec(expr.array)
-        self.post_visit(expr)
+        self.rec(expr.array, *args)
+        self.post_visit(expr, *args)
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_slice = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def map_stack(self, expr: Stack) -> None:
-        if not self.visit(expr):
+    def map_stack(self, expr: Stack, *args: Any) -> None:
+        if not self.visit(expr, *args):
             return
 
         for child in expr.arrays:
-            self.rec(child)
+            self.rec(child, *args)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args)
 
     map_concatenate = map_stack
 
@@ -351,6 +364,22 @@ class WalkMapper(Mapper):
 
         self.rec(expr.dict_of_named_arrays)
         self.post_visit(expr)
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+        if not self.visit(expr, *args):
+            return
+
+        self.rec(expr.data, *args)
+
+        self.post_visit(expr, *args)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        if not self.visit(expr, *args):
+            return
+
+        self.rec(expr.data, *args)
+
+        self.post_visit(expr, *args)
 
 # }}}
 
@@ -382,5 +411,6 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 # }}}
+
 
 # vim: foldmethod=marker

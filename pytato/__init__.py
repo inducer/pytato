@@ -29,6 +29,7 @@ from pytato.array import (
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
+        AdditionalOutput,
 
         matmul, roll, transpose, stack, reshape, concatenate,
 
@@ -47,6 +48,8 @@ from pytato.array import (
 
         )
 
+from pytato.distributed import make_distributed_send, make_distributed_recv
+
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
@@ -57,7 +60,8 @@ __all__ = (
         "Placeholder", "IndexLambda",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
-        "make_data_wrapper",
+        "make_data_wrapper", "make_distributed_recv", "make_distributed_send",
+        "AdditionalOutput",
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
 
