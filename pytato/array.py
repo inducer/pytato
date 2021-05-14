@@ -1787,7 +1787,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 # {{{ make_index_lambda
 
-INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
+REDUCTION_INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
 
 def make_index_lambda(
@@ -1803,7 +1803,7 @@ def make_index_lambda(
     from pytato.scalar_expr import get_dependencies
     unknown_dep = get_dependencies(expression) - set(bindings)
     for dep in unknown_dep:
-        if not INDEX_RE.fullmatch(dep):
+        if not REDUCTION_INDEX_RE.fullmatch(dep):
             raise ValueError(f"Unknown variable '{dep}' in the expression.")
 
     # }}}
