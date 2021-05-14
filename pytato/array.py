@@ -171,7 +171,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List)
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Type)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -181,8 +181,9 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression, Reduce, ReductionOpSUM,
-                                ReductionOpMAX, ReductionOpMIN, ReductionOpPRODUCT)
+                                ScalarExpression, Reduce, ReductionOp,
+                                ReductionOpSUM, ReductionOpMAX,
+                                ReductionOpMIN, ReductionOpPRODUCT)
 import re
 
 
@@ -1868,13 +1869,8 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     return indices, redn_bounds
 
 
-def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
-    """
-    Sums array *a*'s elements along the *axis* axes.
-
-    :arg axis: The axes along which the elements are to be sum-reduced.
-        Defaults to all axes of the input array.
-    """
+def _reduction_lambda(op: Type[ReductionOp], a: Array,
+                      axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
@@ -1882,11 +1878,21 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     return make_index_lambda(
             Reduce(
                 prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOpSUM,
+                op,
                 redn_bounds),
             {"in": a},
             new_shape,
             a.dtype)
+
+
+def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Sums array *a*'s elements along the *axis* axes.
+
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input array.
+    """
+    return _reduction_lambda(ReductionOpSUM, a, axis)
 
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1896,18 +1902,7 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be max-reduced.
         Defaults to all axes of the input array.
     """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
-
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOpMAX,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+    return _reduction_lambda(ReductionOpMAX, a, axis)
 
 
 def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1917,18 +1912,7 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be min-reduced.
         Defaults to all axes of the input array.
     """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
-
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOpMIN,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+    return _reduction_lambda(ReductionOpMIN, a, axis)
 
 
 def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1938,18 +1922,7 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
     """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
-
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOpPRODUCT,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+    return _reduction_lambda(ReductionOpPRODUCT, a, axis)
 
 # }}}
 
