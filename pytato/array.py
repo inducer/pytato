@@ -1871,7 +1871,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
 
 def _reduction_lambda(op: Type[ReductionOp], a: Array,
                       axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
+    new_shape, axes = _normalize_reduction_axes(a.shape, axis)
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
 
