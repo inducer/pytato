@@ -1818,7 +1818,7 @@ def make_index_lambda(
 
 # {{{ reductions
 
-def _preprocess_reduction_axes(
+def _normalize_reduction_axes(
         shape: ShapeType,
         reduction_axes: Optional[Union[int, Tuple[int]]]
         ) -> Tuple[ShapeType, Tuple[int, ...]]:
