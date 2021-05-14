@@ -81,7 +81,13 @@ def parse(s: str) -> ScalarExpression:
 # {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
-    pass
+    def map_reduce(self, expr: Reduce) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.inner_expr)
+
+        self.post_visit(expr)
 
 
 class IdentityMapper(IdentityMapperBase):
