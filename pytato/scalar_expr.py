@@ -157,9 +157,7 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 
 
 class ReductionOp:
-    @property
-    def value(self) -> str:
-        raise NotImplementedError
+    value = None
 
     @property
     def neutral_element(self) -> Number:
@@ -167,9 +165,7 @@ class ReductionOp:
 
 
 class ReductionOpMAX(ReductionOp):
-    @property
-    def value(self) -> str:
-        return "max"
+    value = "max"
 
     @property
     def neutral_element(self) -> Number:
@@ -177,9 +173,7 @@ class ReductionOpMAX(ReductionOp):
 
 
 class ReductionOpMIN(ReductionOp):
-    @property
-    def value(self) -> str:
-        return "min"
+    value = "min"
 
     @property
     def neutral_element(self) -> Number:
@@ -187,9 +181,7 @@ class ReductionOpMIN(ReductionOp):
 
 
 class ReductionOpSUM(ReductionOp):
-    @property
-    def value(self) -> str:
-        return "sum"
+    value ="sum"
 
     @property
     def neutral_element(self) -> Number:
