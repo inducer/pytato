@@ -157,7 +157,7 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 
 
 class ReductionOp:
-    value = None
+    value: Optional[str] = None
 
     @property
     def neutral_element(self) -> Number:
@@ -181,7 +181,7 @@ class ReductionOpMIN(ReductionOp):
 
 
 class ReductionOpSUM(ReductionOp):
-    value ="sum"
+    value = "sum"
 
     @property
     def neutral_element(self) -> Number:
@@ -189,9 +189,7 @@ class ReductionOpSUM(ReductionOp):
 
 
 class ReductionOpPRODUCT(ReductionOp):
-    @property
-    def value(self) -> str:
-        return "product"
+    value = "product"
 
     @property
     def neutral_element(self) -> Number:
