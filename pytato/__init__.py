@@ -43,7 +43,7 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
-        sum, amax, amin,
+        sum, amax, amin, prod
 
         )
 
