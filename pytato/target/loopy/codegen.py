@@ -428,7 +428,6 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         from pymbolic.mapper.substitutor import make_subst_func
         from loopy.symbolic import Reduction as LoopyReduction
-        from loopy.library.reduction import parse_reduction_op
         state = expr_context.state
 
         unique_names_mapping = {
@@ -445,7 +444,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                                   reduction_bounds=expr.bounds))
         inner_expr = SubstitutionMapper(
                 make_subst_func(unique_names_mapping))(inner_expr)
-        inner_expr = LoopyReduction(parse_reduction_op(expr.op.value),
+        inner_expr = LoopyReduction(expr.op.value,
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
 
