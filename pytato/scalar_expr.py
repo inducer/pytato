@@ -41,7 +41,6 @@ from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
 from dataclasses import dataclass, field
-import math
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -161,36 +160,39 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 
 # }}}
 
-from loopy.library.reduction import (SumReductionOperation, MinReductionOperation, MaxReductionOperation, ProductReductionOperation, ReductionOperation)
+
+from loopy.library.reduction import (SumReductionOperation, MinReductionOperation,
+     MaxReductionOperation, ProductReductionOperation, ReductionOperation)
 
 from pymbolic import var
+
 
 class ReductionOpMAX(MaxReductionOperation):
     value = "max"
 
-    def neutral_element(self, dtype, callables_table, target) -> Number:
-        return -var("INFINITY"), callables_table  # type: ignore
+    def neutral_element(self, dtype, callables_table, target):  # type: ignore
+        return -var("INFINITY"), callables_table
 
 
 class ReductionOpMIN(MinReductionOperation):
     value = "min"
 
-    def neutral_element(self, dtype, callables_table, target) -> Number:
-        return var("INFINITY"), callables_table  # type: ignore
+    def neutral_element(self, dtype, callables_table, target):  # type: ignore
+        return var("INFINITY"), callables_table
 
 
 class ReductionOpSUM(SumReductionOperation):
     value = "sum"
 
-    def neutral_element(self, dtype, callables_table, target) -> Number:
-        return 0, callables_table  # type: ignore
+    def neutral_element(self, dtype, callables_table, target):  # type: ignore
+        return 0, callables_table
 
 
 class ReductionOpPRODUCT(ProductReductionOperation):
     value = "product"
 
-    def neutral_element(self, dtype, callables_table, target) -> Number:
-        return 1, callables_table  # type: ignore
+    def neutral_element(self, dtype, callables_table, target):  # type: ignore
+        return 1, callables_table
 
 
 @dataclass

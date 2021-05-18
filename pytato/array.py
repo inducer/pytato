@@ -1870,7 +1870,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     return indices, redn_bounds
 
 
-def _reduction_lambda(op: Type[ReductionOp], a: Array,
+def _reduction_lambda(op: Type[Any], a: Array,
                       axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     new_shape, axes = _normalize_reduction_axes(a.shape, axis)
     del axis
