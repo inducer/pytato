@@ -181,7 +181,7 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression, Reduce, ReductionOp,
+                                ScalarExpression, Reduce,
                                 ReductionOpSUM, ReductionOpMAX,
                                 ReductionOpMIN, ReductionOpPRODUCT)
 import re

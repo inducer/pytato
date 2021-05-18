@@ -161,51 +161,42 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 
 # }}}
 
+from loopy.library.reduction import (SumReductionOperation, MinReductionOperation, MaxReductionOperation, ProductReductionOperation, ReductionOperation)
 
-class ReductionOp:
-    value: Optional[str] = None
+from pymbolic import var
 
-    @property
-    def neutral_element(self) -> Number:
-        raise NotImplementedError
-
-
-class ReductionOpMAX(ReductionOp):
+class ReductionOpMAX(MaxReductionOperation):
     value = "max"
 
-    @property
-    def neutral_element(self) -> Number:
-        return -math.inf  # type: ignore
+    def neutral_element(self, dtype, callables_table, target) -> Number:
+        return -var("INFINITY"), callables_table  # type: ignore
 
 
-class ReductionOpMIN(ReductionOp):
+class ReductionOpMIN(MinReductionOperation):
     value = "min"
 
-    @property
-    def neutral_element(self) -> Number:
-        return math.inf  # type: ignore
+    def neutral_element(self, dtype, callables_table, target) -> Number:
+        return var("INFINITY"), callables_table  # type: ignore
 
 
-class ReductionOpSUM(ReductionOp):
+class ReductionOpSUM(SumReductionOperation):
     value = "sum"
 
-    @property
-    def neutral_element(self) -> Number:
-        return 0  # type: ignore
+    def neutral_element(self, dtype, callables_table, target) -> Number:
+        return 0, callables_table  # type: ignore
 
 
-class ReductionOpPRODUCT(ReductionOp):
+class ReductionOpPRODUCT(ProductReductionOperation):
     value = "product"
 
-    @property
-    def neutral_element(self) -> Number:
-        return 1  # type: ignore
+    def neutral_element(self, dtype, callables_table, target) -> Number:
+        return 1, callables_table  # type: ignore
 
 
 @dataclass
 class Reduce(prim.Expression):
     inner_expr: ScalarExpression
-    op: Type[ReductionOp]
+    op: Type[ReductionOperation]
     bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]]
     neutral_element: Optional[ScalarExpression] = None
     mapper_method: str = field(init=False, default="map_reduce")

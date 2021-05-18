@@ -362,11 +362,14 @@ ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
 REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
+
+from pytato.scalar_expr import (ReductionOpSUM, ReductionOpMAX,
+                                ReductionOpMIN, ReductionOpPRODUCT)
 PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
-    "sum": "sum",
-    "product": "product",
-    "max": "max",
-    "min": "min",
+    "sum": ReductionOpSUM,
+    "product": ReductionOpPRODUCT,
+    "max": ReductionOpMAX,
+    "min": ReductionOpMIN,
 }
 
 
@@ -458,7 +461,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                               "Supported types are "
                              f"{PYTATO_REDUCTION_TO_LOOPY_REDUCTION.keys()}.")
 
-        loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op.value]
+        loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op.value]()
         inner_expr = LoopyReduction(loopy_redn,
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
