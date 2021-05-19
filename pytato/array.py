@@ -181,9 +181,7 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression, Reduce,
-                                ReductionOpSUM, ReductionOpMAX,
-                                ReductionOpMIN, ReductionOpPRODUCT)
+                                ScalarExpression, Reduce)
 import re
 
 
@@ -1893,7 +1891,7 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be sum-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda(ReductionOpSUM, a, axis)
+    return _reduction_lambda("sum", a, axis)
 
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1903,7 +1901,7 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be max-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda(ReductionOpMAX, a, axis)
+    return _reduction_lambda("max", a, axis)
 
 
 def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1913,7 +1911,7 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be min-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda(ReductionOpMIN, a, axis)
+    return _reduction_lambda("min", a, axis)
 
 
 def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1923,7 +1921,7 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda(ReductionOpPRODUCT, a, axis)
+    return _reduction_lambda("product", a, axis)
 
 # }}}
 

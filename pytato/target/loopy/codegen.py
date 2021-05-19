@@ -362,14 +362,11 @@ ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
 REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
-
-from pytato.scalar_expr import (ReductionOpSUM, ReductionOpMAX,
-                                ReductionOpMIN, ReductionOpPRODUCT)
 PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
-    "sum": ReductionOpSUM,
-    "product": ReductionOpPRODUCT,
-    "max": ReductionOpMAX,
-    "min": ReductionOpMIN,
+    "sum": "sum",
+    "product": "product",
+    "max": "max",
+    "min": "min",
 }
 
 
@@ -442,7 +439,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         state = expr_context.state
 
         unique_names_mapping = {
-                old_name: prim.Variable(state.var_name_gen(f"_pt_{expr.op.value}")
+                old_name: prim.Variable(state.var_name_gen(f"_pt_{expr.op}")
                                         + old_name)
                 for old_name in expr.bounds}
 
@@ -456,12 +453,12 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         inner_expr = SubstitutionMapper(
                 make_subst_func(unique_names_mapping))(inner_expr)
 
-        if expr.op.value not in PYTATO_REDUCTION_TO_LOOPY_REDUCTION:
-            raise ValueError(f"Unsupported reduction type '{expr.op.value}'. "
+        if expr.op not in PYTATO_REDUCTION_TO_LOOPY_REDUCTION:
+            raise ValueError(f"Unsupported reduction type '{expr.op}'. "
                               "Supported types are "
                              f"{PYTATO_REDUCTION_TO_LOOPY_REDUCTION.keys()}.")
 
-        loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op.value]()
+        loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
         inner_expr = LoopyReduction(loopy_redn,
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
