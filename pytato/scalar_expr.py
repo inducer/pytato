@@ -128,7 +128,6 @@ def get_dependencies(expression: Any) -> FrozenSet[str]:
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
     """
-    # FIXME: composite_leaves is unused?
     mapper = DependencyMapper(composite_leaves=False)
     return frozenset(dep.name for dep in mapper(expression))
 
