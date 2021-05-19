@@ -228,7 +228,7 @@ class CodeGenPreprocessor(CopyMapper):
 
     def map_matrix_product(self, expr: MatrixProduct) -> Array:
         from pytato.utils import dim_to_index_lambda_components
-        from pytato.scalar_expr import Reduce, ReductionOpSUM
+        from pytato.scalar_expr import Reduce
 
         x1 = prim.Subscript(prim.Variable("in0"),
                 (tuple(prim.Variable(f"_{i}")
@@ -250,7 +250,7 @@ class CodeGenPreprocessor(CopyMapper):
 
         inner_expr = Reduce(
                 x1*x2,
-                ReductionOpSUM,
+                "sum",
                 {"_r0": (0, redn_bound)})
         return IndexLambda(
                 expr=inner_expr,

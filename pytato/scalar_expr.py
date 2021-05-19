@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Optional, Tuple, Dict, Type
+from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Dict
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -165,7 +165,7 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 @dataclass
 class Reduce(prim.Expression):
     inner_expr: ScalarExpression
-    op: Type[ReductionOperation]
+    op: str
     bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]]
     mapper_method: str = field(init=False, default="map_reduce")
 
@@ -179,7 +179,7 @@ class Reduce(prim.Expression):
         bounds_expr = " and ".join(f"{lb}<={key}<{ub}"
                 for key, (lb, ub) in self.bounds.items())
         bounds_expr = "{" + bounds_expr + "}"
-        return (f"{self.op.value}({bounds_expr}, {self.inner_expr})")
+        return (f"{self.op}({bounds_expr}, {self.inner_expr})")
 
 
 # vim: foldmethod=marker

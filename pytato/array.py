@@ -171,7 +171,7 @@ from functools import partialmethod
 import operator
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Type)
+        Protocol, Sequence, cast, TYPE_CHECKING, List)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -1868,7 +1868,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     return indices, redn_bounds
 
 
-def _reduction_lambda(op: Type[Any], a: Array,
+def _reduction_lambda(op: str, a: Array,
                       axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     new_shape, axes = _normalize_reduction_axes(a.shape, axis)
     del axis
