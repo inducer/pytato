@@ -109,7 +109,7 @@ class DependencyMapper(DependencyMapperBase):
         if self.ignore_deps and self.ignore_deps.fullmatch(str(expr)):
             return set()
         else:
-            return {expr}
+            return super().map_variable(expr)
 
     def map_reduce(self, expr: Reduce,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
