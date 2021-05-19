@@ -25,7 +25,8 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Dict
+from typing import (Any, Union, Mapping, FrozenSet, Set, Tuple, Dict, Optional,
+                    Pattern)
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -99,6 +100,17 @@ class SubstitutionMapper(SubstitutionMapperBase):
 
 class DependencyMapper(DependencyMapperBase):
 
+    def __init__(self, ignore_deps: Optional[Pattern[str]] = None, **kwargs: bool) \
+            -> None:
+        super().__init__(**kwargs)
+        self.ignore_deps = ignore_deps
+
+    def map_variable(self, expr: prim.Variable) -> Set[prim.Variable]:
+        if self.ignore_deps and self.ignore_deps.fullmatch(str(expr)):
+            return set()
+        else:
+            return {expr}
+
     def map_reduce(self, expr: Reduce,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
         return self.combine([  # type: ignore
@@ -122,13 +134,16 @@ class TermCollector(TermCollectorBase):
 
 # {{{ mapper frontends
 
-def get_dependencies(expression: Any) -> FrozenSet[str]:
+def get_dependencies(expression: Any, ignore_deps: Optional[Pattern[str]] = None) \
+        -> FrozenSet[str]:
     """Return the set of variable names in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
+    :param ignore_deps: A regex pattern to remove variables that match
+        the pattern
     """
-    mapper = DependencyMapper(composite_leaves=False)
+    mapper = DependencyMapper(ignore_deps=ignore_deps, composite_leaves=False)
     return frozenset(dep.name for dep in mapper(expression))
 
 

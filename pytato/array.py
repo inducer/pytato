@@ -1799,10 +1799,11 @@ def make_index_lambda(
     # {{{ sanity checks
 
     from pytato.scalar_expr import get_dependencies
-    unknown_dep = get_dependencies(expression) - set(bindings)
+    unknown_dep = (get_dependencies(expression, ignore_deps=REDUCTION_INDEX_RE)
+                   - set(bindings))
+
     for dep in unknown_dep:
-        if not REDUCTION_INDEX_RE.fullmatch(dep):
-            raise ValueError(f"Unknown variable '{dep}' in the expression.")
+        raise ValueError(f"Unknown variable '{dep}' in the expression.")
 
     # }}}
 
