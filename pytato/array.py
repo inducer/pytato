@@ -55,6 +55,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: stack
 .. autofunction:: concatenate
 .. autofunction:: abs
+.. autofunction:: sqrt
 .. autofunction:: sin
 .. autofunction:: cos
 .. autofunction:: tan
@@ -1536,6 +1537,10 @@ def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
 
 def abs(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "abs")
+
+
+def sqrt(x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func(x, "sqrt")
 
 
 def sin(x: Array) -> ArrayOrScalar:
