@@ -1861,7 +1861,8 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, redn_bounds
+    from pyrsistent import pmap
+    return indices, pmap(redn_bounds)
 
 
 def _reduction_lambda(op: str, a: Array,

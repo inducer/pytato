@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Dict
+from typing import Any, Union, Mapping, FrozenSet, Set, Tuple
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -37,10 +37,11 @@ from pymbolic.mapper.evaluator import (EvaluationMapper as
         EvaluationMapperBase)
 from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
+from pymbolic.mapper.stringifier import (StringifyMapper as
+        StringifyMapperBase)
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
-from dataclasses import dataclass, field
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -129,6 +130,18 @@ class DistributeMapper(DistributeMapperBase):
 class TermCollector(TermCollectorBase):
     pass
 
+
+class StringifyMapper(StringifyMapperBase):
+    def map_reduce(self, expr, enclosing_prec, *args) -> str:
+        from pymbolic.mapper.stringifier import (
+                PREC_COMPARISON as PC,
+                PREC_NONE as PN)
+        bounds_expr = " and ".join(
+                f"{self.rec(lb, PC)}<={name}<{self.rec(ub, PC)}"
+                for name, (lb, ub) in expr.bounds.items())
+        bounds_expr = "{" + bounds_expr + "}"
+        return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
+
 # }}}
 
 
@@ -173,24 +186,42 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 # }}}
 
 
-@dataclass
-class Reduce(prim.Expression):
+# {{{ custom scalar expression nodes
+
+class ExpressionBase(prim.Expression):
+    def make_stringifier(self, originating_stringifier=None):
+        return StringifyMapper()
+
+
+class Reduce(ExpressionBase):
+    """
+    .. attribute:: inner_expr
+
+        A :class:`ScalarExpression` to be reduced over.
+
+    .. attribute:: op
+
+        One of ``"sum"``, ``"product"``, ``"max"``, ``"min"``.
+
+    .. attribute:: bounds
+
+        A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
+        identifying half-open bounds intervals.  Must be hashable.
+    """
     inner_expr: ScalarExpression
     op: str
-    bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]]
-    mapper_method: str = field(init=False, default="map_reduce")
+    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
-    def __hash__(self) -> int:
-        return hash((self.inner_expr,
-                self.op,
-                tuple(self.bounds.keys()),
-                tuple(self.bounds.values())))
+    def __init__(self, inner_expr, op, bounds):
+        self.inner_expr = inner_expr
+        self.op = op
+        self.bounds = bounds
 
-    def __str__(self) -> str:
-        bounds_expr = " and ".join(f"{lb}<={key}<{ub}"
-                for key, (lb, ub) in self.bounds.items())
-        bounds_expr = "{" + bounds_expr + "}"
-        return (f"{self.op}({bounds_expr}, {self.inner_expr})")
+    def __getinitargs__(self):
+        return (self.inner_expr, self.op, self.bounds)
 
+    mapper_method = "map_reduce"
+
+# }}}
 
 # vim: foldmethod=marker
