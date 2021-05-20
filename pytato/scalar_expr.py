@@ -214,6 +214,8 @@ class Reduce(ExpressionBase):
 
     def __init__(self, inner_expr: ScalarExpression, op: str, bounds: Any) -> None:
         self.inner_expr = inner_expr
+        if op not in ["sum", "product", "max", "min"]:
+            raise ValueError(f"unsupported op: {op}")
         self.op = op
         self.bounds = bounds
 
