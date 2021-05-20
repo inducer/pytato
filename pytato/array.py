@@ -1821,7 +1821,9 @@ def _normalize_reduction_axes(
         shape: ShapeType,
         reduction_axes: Optional[Union[int, Tuple[int]]]
         ) -> Tuple[ShapeType, Tuple[int, ...]]:
-    """Removes the reduction axes from shape and normalizes it to a tuple."""
+    """Accepts the *shape* of the array to be reduced over, removes the (given) *reduction_axes*
+    from shape and normalizes the result to be a tuple.
+    """
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
 
