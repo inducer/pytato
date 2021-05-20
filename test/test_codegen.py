@@ -486,7 +486,7 @@ def test_only_deps_as_knl_args():
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
-    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10"))
+    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
