@@ -449,7 +449,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                                   _depends_on=expr_context.depends_on,
                                   local_namespace=expr_context.local_namespace,
                                   num_indices=expr_context.num_indices,
-                                  reduction_bounds=expr.bounds))
+                                  reduction_bounds=expr.bounds))  # type: ignore
         inner_expr = SubstitutionMapper(
                 make_subst_func(unique_names_mapping))(inner_expr)
 

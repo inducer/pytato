@@ -1867,7 +1867,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             n_out_dims += 1
 
     from pyrsistent import pmap
-    return indices, pmap(redn_bounds)
+    return indices, pmap(redn_bounds)  # type: ignore
 
 
 def _reduction_lambda(op: str, a: Array,

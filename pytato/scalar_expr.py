@@ -132,7 +132,7 @@ class TermCollector(TermCollectorBase):
 
 
 class StringifyMapper(StringifyMapperBase):
-    def map_reduce(self, expr, enclosing_prec, *args) -> str:
+    def map_reduce(self, expr: Any, enclosing_prec: Any, *args: Any) -> str:
         from pymbolic.mapper.stringifier import (
                 PREC_COMPARISON as PC,
                 PREC_NONE as PN)
@@ -189,7 +189,7 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 # {{{ custom scalar expression nodes
 
 class ExpressionBase(prim.Expression):
-    def make_stringifier(self, originating_stringifier=None):
+    def make_stringifier(self, originating_stringifier: Any = None) -> str:
         return StringifyMapper()
 
 
@@ -212,12 +212,12 @@ class Reduce(ExpressionBase):
     op: str
     bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
-    def __init__(self, inner_expr, op, bounds):
+    def __init__(self, inner_expr: ScalarExpression, op: str, bounds: Any) -> None:
         self.inner_expr = inner_expr
         self.op = op
         self.bounds = bounds
 
-    def __getinitargs__(self):
+    def __getinitargs__(self) -> Tuple[ScalarExpression, str, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
     mapper_method = "map_reduce"
