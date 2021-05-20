@@ -182,7 +182,6 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
-import re
 
 
 # {{{ get a type variable that represents the type of '...'
@@ -1785,9 +1784,6 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 # {{{ make_index_lambda
 
-REDUCTION_INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
-
-
 def make_index_lambda(
         expression: Union[str, ScalarExpression],
         bindings: Dict[str, Array],
@@ -1799,8 +1795,7 @@ def make_index_lambda(
     # {{{ sanity checks
 
     from pytato.scalar_expr import get_dependencies
-    unknown_dep = (get_dependencies(expression, ignore_deps=REDUCTION_INDEX_RE)
-                   - set(bindings))
+    unknown_dep = get_dependencies(expression) - set(bindings)
 
     for dep in unknown_dep:
         raise ValueError(f"Unknown variable '{dep}' in the expression.")
