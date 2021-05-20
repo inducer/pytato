@@ -1849,7 +1849,13 @@ def _get_reduction_indices_bounds(shape: ShapeType,
         axes: Tuple[int, ...]) -> Tuple[
                 Sequence[ScalarExpression],
                 Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
-
+    """Given *shape* and reduction axes *axes*, produce a list of inames
+    ``indices`` named appropriately for reduction inames.
+    Also fill a dictionary with bounds for reduction inames
+    ``redn_bounds = {red_iname: (lower_bound, upper_bound)}``,
+    where the bounds are given as a Python-style half-open interval.
+    :returns: ``indices, redn_bounds``
+    """
     indices: List[prim.Variable] = []
     redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
 
