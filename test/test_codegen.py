@@ -611,7 +611,7 @@ def test_call_loopy(ctx_factory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     x_in = np.random.rand(10, 4)
-    x = pt.make_placeholder(shape=(10, 4), dtype=np.float, name="x")
+    x = pt.make_placeholder(shape=(10, 4), dtype=np.float64, name="x")
     y = 2*x
 
     knl = lp.make_function(
@@ -683,7 +683,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
 
     m = pt.make_size_param("M")
     n = pt.make_size_param("N")
-    x = pt.make_placeholder(shape=(m, n), dtype=np.float, name="x")
+    x = pt.make_placeholder(shape=(m, n), dtype=np.float64, name="x")
     y = 3*x
 
     knl = lp.make_kernel(
