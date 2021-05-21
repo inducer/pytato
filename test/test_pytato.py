@@ -31,23 +31,23 @@ import pytato as pt
 
 
 def test_matmul_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
-    b = pt.make_placeholder(name="b", shape=(20, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
+    b = pt.make_placeholder(name="b", shape=(20, 10), dtype=np.float64)
 
     with pytest.raises(ValueError):
         a @ b
 
-    c = pt.make_placeholder(name="c", shape=(), dtype=np.float)
+    c = pt.make_placeholder(name="c", shape=(), dtype=np.float64)
     with pytest.raises(ValueError):
         c @ c
 
     n = pt.make_size_param("n")
-    d = pt.make_placeholder(name="d", shape=(n, n), dtype=np.float)
+    d = pt.make_placeholder(name="d", shape=(n, n), dtype=np.float64)
     d @ d
 
 
 def test_roll_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
     pt.roll(a, 1, axis=0)
 
     with pytest.raises(ValueError):
@@ -58,7 +58,7 @@ def test_roll_input_validation():
 
 
 def test_transpose_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
     pt.transpose(a)
 
     with pytest.raises(ValueError):
@@ -72,7 +72,7 @@ def test_transpose_input_validation():
 
 
 def test_slice_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float)
+    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float64)
 
     a[0]
     a[0, 0]
@@ -86,8 +86,8 @@ def test_slice_input_validation():
 
 
 def test_stack_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
+    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
 
     assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
 
@@ -126,8 +126,8 @@ def test_zero_length_arrays():
 
 
 def test_concatenate_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
+    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
 
     assert pt.concatenate((x, x, x), axis=0).shape == (30, 10)
     assert pt.concatenate((x, y), axis=0).shape == (11, 10)
@@ -146,7 +146,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    x = pt.make_placeholder(shape=(3, 3, 4), dtype=np.float)
+    x = pt.make_placeholder(shape=(3, 3, 4), dtype=np.float64)
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
