@@ -161,7 +161,7 @@ def test_roll(ctx_factory, shift, axis):
     queue = cl.CommandQueue(cl_ctx)
 
     n = pt.make_size_param("n")
-    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float64)
 
     x_in = np.arange(1., 10.).reshape(3, 3)
     assert_allclose_to_numpy(pt.roll(x, shift=shift, axis=axis),
