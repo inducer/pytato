@@ -85,6 +85,9 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: maximum
 .. autofunction:: minimum
 .. autofunction:: sum
+.. autofunction:: amin
+.. autofunction:: amax
+.. autofunction:: prod
 
 Supporting Functionality
 ------------------------
