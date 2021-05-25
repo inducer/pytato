@@ -1874,7 +1874,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    from pyrsistent import pmap
+    from pyrsistent import pmap  # type: ignore
     return indices, pmap(redn_bounds)  # type: ignore
 
 
