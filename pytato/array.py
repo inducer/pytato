@@ -845,11 +845,7 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        from functools import reduce
-        import operator
-
-        common_axis_len = reduce(operator.add, (ary.shape[self.axis]
-                                                for ary in self.arrays))
+        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
