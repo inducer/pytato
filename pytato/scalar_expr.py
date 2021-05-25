@@ -219,6 +219,12 @@ class Reduce(ExpressionBase):
         self.op = op
         self.bounds = bounds
 
+    def __hash__(self) -> int:
+        return hash((self.inner_expr,
+                self.op,
+                tuple(self.bounds.keys()),
+                tuple(self.bounds.values())))
+
     def __getinitargs__(self) -> Tuple[ScalarExpression, str, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
