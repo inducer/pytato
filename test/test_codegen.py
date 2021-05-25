@@ -596,13 +596,14 @@ def test_maximum_minimum(ctx_factory, which):
 
 
 @pytest.mark.parametrize("axis", (None, 1, 0))
-@pytest.mark.parametrize("redn", ("sum", "amax", "amin"))
-def test_reductions(ctx_factory, axis, redn):
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
+@pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
+def test_reductions(ctx_factory, axis, redn, shape):
     queue = cl.CommandQueue(ctx_factory())
 
     from numpy.random import default_rng
     rng = default_rng()
-    x_in = rng.random(size=(10, 4))
+    x_in = rng.random(size=shape)
 
     x = pt.make_data_wrapper(x_in)
     np_func = getattr(np, redn)
