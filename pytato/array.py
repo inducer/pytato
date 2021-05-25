@@ -1820,8 +1820,17 @@ def _normalize_reduction_axes(
         shape: ShapeType,
         reduction_axes: Optional[Union[int, Tuple[int]]]
         ) -> Tuple[ShapeType, Tuple[int, ...]]:
-    """Accepts the *shape* of the array to be reduced over, removes the (given)
-    *reduction_axes* from shape and normalizes the result to be a tuple.
+    """
+    Returns a :class:`tuple` of ``(new_shape, normalized_redn_axes)``, where
+    *new_shape* is the shape of the ndarray after the axes corresponding to
+    *reduction_axes* are reduced and *normalized_redn_axes* is a :class:`tuple`
+    of axes indices over which reduction is to be performed.
+
+    :arg reduction_axes: Axes over which reduction is to be performed. Format
+        of this reduction axes is typically seen in user-facing reduction
+        procedures. If *reduction_axes* is None => the reduction must be
+        performed over all the array's axes.
+    :arg shape: Shape of the nd-array over which reduction is to be
     """
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
