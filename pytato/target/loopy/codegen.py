@@ -398,8 +398,6 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         return result.to_loopy_expression(self.rec(expr.index, expr_context),
                                           expr_context)
 
-    # TODO: map_reduction()
-
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
 
