@@ -762,8 +762,16 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
+    # Why call make_reduction_inames_unique?
+    # Consider pt.generate_loopy(pt.sum(x) + pt.sum(x)), the generated program
+    # would be a single instruction with rhs: `_pt_subst() + _pt_subst()`.
+    # The result of pt.sum(x) is cached => same instance of InlinedResult is
+    # emitted for both invocations and we would be required to avoid such
+    # reduction iname collisions.
+    program = lp.make_reduction_inames_unique(state.program)
+
     return target.bind_program(
-            program=lp.make_reduction_inames_unique(state.program),
+            program=program,
             bound_arguments=preproc_result.bound_arguments)
 
 # }}}
