@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Tuple
+from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Optional
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -42,6 +42,7 @@ from pymbolic.mapper.stringifier import (StringifyMapper as
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
+import re
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -98,16 +99,27 @@ class SubstitutionMapper(SubstitutionMapperBase):
     pass
 
 
-class DependencyMapper(DependencyMapperBase):
+IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
-    def __init__(self, **kwargs: bool) -> None:
-        super().__init__(**kwargs)
-        # Ignore dependencies from reductions
-        import re
-        self.ignore_deps = re.compile("_r?(0|([1-9][0-9]*))")
+
+class DependencyMapper(DependencyMapperBase):
+    def __init__(self, *,
+                 include_idx_lambda_indices: bool = False,
+                 include_subscripts: bool = True,
+                 include_lookups: bool = True,
+                 include_calls: bool = True,
+                 include_cses: bool = False,
+                 composite_leaves: Optional[bool] = None) -> None:
+        super().__init__(include_subscripts=include_subscripts,
+                         include_lookups=include_lookups,
+                         include_calls=include_calls,
+                         include_cses=include_cses,
+                         composite_leaves=composite_leaves)
+        self.include_idx_lambda_indices = include_idx_lambda_indices
 
     def map_variable(self, expr: prim.Variable) -> Set[prim.Variable]:
-        if self.ignore_deps.fullmatch(str(expr)):
+        if ((not self.include_idx_lambda_indices)
+                and IDX_LAMBDA_RE.fullmatch(str(expr))):
             return set()
         else:
             return super().map_variable(expr)  # type: ignore
@@ -120,15 +132,23 @@ class DependencyMapper(DependencyMapperBase):
 
 
 class EvaluationMapper(EvaluationMapperBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        # TODO: not trivial to evaluate symbolic reduction nodes
+        raise NotImplementedError()
 
 
 class DistributeMapper(DistributeMapperBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        # TODO: not trivial to distribute symbolic reduction nodes
+        raise NotImplementedError()
 
 
 class TermCollector(TermCollectorBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError()
 
 
 class StringifyMapper(StringifyMapperBase):

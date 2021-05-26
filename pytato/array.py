@@ -845,7 +845,10 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
+        from functools import reduce
+        # avoiding 'sum' to avoid collision with 'pt.sum'
+        common_axis_len = reduce(lambda a, b: a+b, (ary.shape[self.axis]
+                                                    for ary in self.arrays))
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
@@ -1871,6 +1874,11 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     n_redn_dims = 0
     for idim, axis_len in enumerate(shape):
         if idim in axes:
+            if not isinstance(axis_len, int):
+                # TODO: add bindings for shape array expressions
+                raise NotImplementedError("Parametric shapes for reduction axes"
+                                          " not yet supported.")
+
             idx = f"_r{n_redn_dims}"
             indices.append(prim.Variable(idx))
             redn_bounds[idx] = (0, axis_len)
@@ -1879,12 +1887,19 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    from pyrsistent import pmap  # type: ignore
-    return indices, pmap(redn_bounds)
+    from pyrsistent import pmap
+    return indices, pmap(redn_bounds)  # type: ignore
 
 
-def _reduction_lambda(op: str, a: Array,
+def _make_reduction_lambda(op: str, a: Array,
                       axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Return a :class:`IndexLambda` that performs reduction over the *axis* axes
+    of *a* with the reduction op *op*.
+
+    :arg axis: The axes over which the reduction is to be performed. If axis is
+        None => perform reduction over all of *a*'s axes.
+    """
     new_shape, axes = _normalize_reduction_axes(a.shape, axis)
     del axis
     indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
@@ -1906,7 +1921,7 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be sum-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda("sum", a, axis)
+    return _make_reduction_lambda("sum", a, axis)
 
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1916,7 +1931,7 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be max-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda("max", a, axis)
+    return _make_reduction_lambda("max", a, axis)
 
 
 def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1926,7 +1941,7 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be min-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda("min", a, axis)
+    return _make_reduction_lambda("min", a, axis)
 
 
 def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
@@ -1936,7 +1951,7 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
     """
-    return _reduction_lambda("product", a, axis)
+    return _make_reduction_lambda("product", a, axis)
 
 # }}}
 
