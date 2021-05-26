@@ -432,6 +432,12 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
     def map_reduce(self, expr: scalar_expr.Reduce,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
+        # pt.Reduce expressions are lowered to loopy by creating a substitution
+        # rule for the reduction expression and then calling the substitution
+        # rule. This is done to avoid allocating a temporary for the reduction
+        # result, and, as of this writing loopy does not support indexing into
+        # the reduction expression node.
+
         from pymbolic.mapper.substitutor import make_subst_func
         from loopy.symbolic import Reduction as LoopyReduction
         state = expr_context.state
