@@ -452,9 +452,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                 make_subst_func(unique_names_mapping))(inner_expr)
 
         if expr.op not in PYTATO_REDUCTION_TO_LOOPY_REDUCTION:
-            raise ValueError(f"Unsupported reduction type '{expr.op}'. "
-                              "Supported types are "
-                             f"{PYTATO_REDUCTION_TO_LOOPY_REDUCTION.keys()}.")
+            raise NotImplementedError(expr.op)
 
         loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
         inner_expr = LoopyReduction(loopy_redn,
