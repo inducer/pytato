@@ -1897,6 +1897,10 @@ def _make_reduction_lambda(op: str, a: Array,
     Return a :class:`IndexLambda` that performs reduction over the *axis* axes
     of *a* with the reduction op *op*.
 
+    :arg op: The reduction operation to perform.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
     :arg axis: The axes over which the reduction is to be performed. If axis is
         None => perform reduction over all of *a*'s axes.
     """
@@ -1918,6 +1922,8 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Sums array *a*'s elements along the *axis* axes.
 
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
     :arg axis: The axes along which the elements are to be sum-reduced.
         Defaults to all axes of the input array.
     """
@@ -1927,6 +1933,8 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Returns the max of array *a*'s elements along the *axis* axes.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
 
     :arg axis: The axes along which the elements are to be max-reduced.
         Defaults to all axes of the input array.
@@ -1938,6 +1946,8 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Returns the min of array *a*'s elements along the *axis* axes.
 
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
     :arg axis: The axes along which the elements are to be min-reduced.
         Defaults to all axes of the input array.
     """
@@ -1947,6 +1957,8 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Returns the product of array *a*'s elements along the *axis* axes.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
 
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
