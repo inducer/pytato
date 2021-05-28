@@ -34,9 +34,8 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-                . ci-support.sh
+                curl -L -O -k https://tiker.net/ci-support-v0
+                . ci-support-v0
                 build_py_project_in_conda_env
                 run_pylint "$(basename $GITHUB_REPOSITORY)" test/test_*.py examples
 
@@ -68,7 +67,6 @@ jobs:
         -   name: "Main Script"
             run: |
                 sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
-                CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
 
@@ -83,9 +81,8 @@ jobs:
         -   name: "Main Script"
             run: |
                 sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
-                CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-                . ci-support.sh
+                curl -L -O -k https://tiker.net/ci-support-v0
+                . ci-support-v0
                 build_py_project_in_conda_env
                 run_examples
 
@@ -100,10 +97,9 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
-                CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 ./.ci-support/fix-code-for-docs.sh
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-                . ci-support.sh
+                curl -L -O -k https://tiker.net/ci-support-v0
+                . ci-support-v0
                 build_py_project_in_conda_env
                 # Circular references in type hints. Sphinx currently doesn't deal well with those.
                 # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
