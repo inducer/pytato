@@ -11,12 +11,14 @@ for axis in (None, 1, 0):
 
         x = pt.make_data_wrapper(x_in)
 
+        x2 = x.T @ x
+
         np_func = getattr(np, redn)
         pt_func = getattr(pt, redn)
-        prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
+        prg = pt.generate_loopy(pt_func(x2, axis=axis), cl_device=queue.device)
 
         evt, (out,) = prg(queue)
         evt.wait()
 
         print("redn =", redn, ", axis =", axis, ", max error =",
-              np.amax(abs(out - np_func(x_in, axis))))
+              np.amax(abs(out - np_func(x_in.T @ x_in, axis))))
