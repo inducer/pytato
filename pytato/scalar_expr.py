@@ -25,9 +25,8 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set
+from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Optional
 
-from loopy.symbolic import Reduction
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
@@ -38,9 +37,12 @@ from pymbolic.mapper.evaluator import (EvaluationMapper as
         EvaluationMapperBase)
 from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
+from pymbolic.mapper.stringifier import (StringifyMapper as
+        StringifyMapperBase)
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
+import re
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -80,85 +82,101 @@ def parse(s: str) -> ScalarExpression:
 # {{{ mapper classes
 
 class WalkMapper(WalkMapperBase):
-
-    def map_reduction(self, expr: Reduction, *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr, *args, **kwargs):
+    def map_reduce(self, expr: Reduce) -> None:
+        if not self.visit(expr):
             return
 
-        self.rec(expr.expr, *args, **kwargs)
+        self.rec(expr.inner_expr)
+
+        self.post_visit(expr)
 
 
 class IdentityMapper(IdentityMapperBase):
-
-    def map_reduction(self, expr: Reduction,
-            *args: Any, **kwargs: Any) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.rec(prim.Variable(iname), *args, **kwargs)
-            if not isinstance(new_iname, prim.Variable):
-                raise ValueError(
-                        f"reduction iname {iname} can only be renamed"
-                        " to another iname")
-            new_inames.append(new_iname.name)
-
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr, *args, **kwargs),
-                allow_simultaneous=expr.allow_simultaneous)
+    pass
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
+    pass
 
-    def map_reduction(self, expr: Reduction) -> Reduction:
-        new_inames = []
-        for iname in expr.inames:
-            new_iname = self.subst_func(iname)
-            if new_iname is None:
-                new_iname = prim.Variable(iname)
-            else:
-                if not isinstance(new_iname, prim.Variable):
-                    raise ValueError(
-                            f"reduction iname {iname} can only be renamed"
-                            " to another iname")
-            new_inames.append(new_iname.name)
 
-        return Reduction(expr.operation,
-                tuple(new_inames),
-                self.rec(expr.expr),
-                allow_simultaneous=expr.allow_simultaneous)
+IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
 
 class DependencyMapper(DependencyMapperBase):
+    def __init__(self, *,
+                 include_idx_lambda_indices: bool = True,
+                 include_subscripts: bool = True,
+                 include_lookups: bool = True,
+                 include_calls: bool = True,
+                 include_cses: bool = False,
+                 composite_leaves: Optional[bool] = None) -> None:
+        super().__init__(include_subscripts=include_subscripts,
+                         include_lookups=include_lookups,
+                         include_calls=include_calls,
+                         include_cses=include_cses,
+                         composite_leaves=composite_leaves)
+        self.include_idx_lambda_indices = include_idx_lambda_indices
 
-    def map_reduction(self, expr: Reduction,
+    def map_variable(self, expr: prim.Variable) -> Set[prim.Variable]:
+        if ((not self.include_idx_lambda_indices)
+                and IDX_LAMBDA_RE.fullmatch(str(expr))):
+            return set()
+        else:
+            return super().map_variable(expr)  # type: ignore
+
+    def map_reduce(self, expr: Reduce,
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
-        deps: Set[prim.Variable] = self.rec(expr.expr, *args, **kwargs)
-        return deps - set(prim.Variable(iname) for iname in expr.inames)
+        return self.combine([  # type: ignore
+            self.rec(expr.inner_expr),
+            set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
 
 class EvaluationMapper(EvaluationMapperBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        # TODO: not trivial to evaluate symbolic reduction nodes
+        raise NotImplementedError()
 
 
 class DistributeMapper(DistributeMapperBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        # TODO: not trivial to distribute symbolic reduction nodes
+        raise NotImplementedError()
 
 
 class TermCollector(TermCollectorBase):
-    pass
+
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError()
+
+
+class StringifyMapper(StringifyMapperBase):
+    def map_reduce(self, expr: Any, enclosing_prec: Any, *args: Any) -> str:
+        from pymbolic.mapper.stringifier import (
+                PREC_COMPARISON as PC,
+                PREC_NONE as PN)
+        bounds_expr = " and ".join(
+                f"{self.rec(lb, PC)}<={name}<{self.rec(ub, PC)}"
+                for name, (lb, ub) in expr.bounds.items())
+        bounds_expr = "{" + bounds_expr + "}"
+        return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
 
 # }}}
 
 
 # {{{ mapper frontends
 
-def get_dependencies(expression: Any) -> FrozenSet[str]:
+def get_dependencies(expression: Any,
+        include_idx_lambda_indices: bool = True) -> FrozenSet[str]:
     """Return the set of variable names in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
     """
-    mapper = DependencyMapper(composite_leaves=False)
+    mapper = DependencyMapper(
+            composite_leaves=False,
+            include_idx_lambda_indices=include_idx_lambda_indices)
     return frozenset(dep.name for dep in mapper(expression))
 
 
@@ -190,5 +208,51 @@ def distribute(expr: Any, parameters: Set[Any] = set(),
 
 # }}}
 
+
+# {{{ custom scalar expression nodes
+
+class ExpressionBase(prim.Expression):
+    def make_stringifier(self, originating_stringifier: Any = None) -> str:
+        return StringifyMapper()
+
+
+class Reduce(ExpressionBase):
+    """
+    .. attribute:: inner_expr
+
+        A :class:`ScalarExpression` to be reduced over.
+
+    .. attribute:: op
+
+        One of ``"sum"``, ``"product"``, ``"max"``, ``"min"``.
+
+    .. attribute:: bounds
+
+        A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
+        identifying half-open bounds intervals.  Must be hashable.
+    """
+    inner_expr: ScalarExpression
+    op: str
+    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
+
+    def __init__(self, inner_expr: ScalarExpression, op: str, bounds: Any) -> None:
+        self.inner_expr = inner_expr
+        if op not in ["sum", "product", "max", "min"]:
+            raise ValueError(f"unsupported op: {op}")
+        self.op = op
+        self.bounds = bounds
+
+    def __hash__(self) -> int:
+        return hash((self.inner_expr,
+                self.op,
+                tuple(self.bounds.keys()),
+                tuple(self.bounds.values())))
+
+    def __getinitargs__(self) -> Tuple[ScalarExpression, str, Any]:
+        return (self.inner_expr, self.op, self.bounds)
+
+    mapper_method = "map_reduce"
+
+# }}}
 
 # vim: foldmethod=marker
