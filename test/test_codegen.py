@@ -723,6 +723,25 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
 
+@pytest.mark.parametrize("axis", (None, 1, 0))
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
+@pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
+def test_reductions(ctx_factory, axis, redn, shape):
+    queue = cl.CommandQueue(ctx_factory())
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=shape)
+
+    x = pt.make_data_wrapper(x_in)
+    np_func = getattr(np, redn)
+    pt_func = getattr(pt, redn)
+    prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
+
+    evt, (out,) = prg(queue)
+
+    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-15)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

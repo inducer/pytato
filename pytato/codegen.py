@@ -33,7 +33,8 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase)
+                          InputArgumentBase, MatrixProduct)
+
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
 from pytato.target import Target
@@ -84,6 +85,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Slice`            :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -278,6 +280,39 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings={name: self.rec(bnd)
                                      for name, bnd in bindings.items()})
+
+    def map_matrix_product(self, expr: MatrixProduct) -> Array:
+        from pytato.utils import dim_to_index_lambda_components
+        from pytato.scalar_expr import Reduce
+
+        x1 = prim.Subscript(prim.Variable("in0"),
+                (tuple(prim.Variable(f"_{i}")
+                      for i in range(len(expr.x1.shape)-1))
+                 + (prim.Variable("_r0"),))
+                )
+        x2_i_start = len(expr.x1.shape) - 1
+
+        x2 = prim.Subscript(prim.Variable("in1"),
+                (prim.Variable("_r0"),)
+                + tuple(prim.Variable(f"_{i+x2_i_start}")
+                        for i in range(len(expr.x2.shape)-1)))
+        namegen = UniqueNameGenerator({"in0", "in1"})
+        redn_bound, redn_bound_bindings = dim_to_index_lambda_components(
+                expr.x1.shape[-1], namegen)
+        bindings = {k: self.rec(v) for k, v in redn_bound_bindings.items()}
+        bindings["in0"] = self.rec(expr.x1)
+        bindings["in1"] = self.rec(expr.x2)
+
+        inner_expr = Reduce(
+                x1*x2,
+                "sum",
+                {"_r0": (0, redn_bound)})
+        return IndexLambda(
+                expr=inner_expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
+                dtype=expr.dtype,
+                bindings=bindings)
 
     # {{{ index remapping (roll, axis permutation, slice)
 
