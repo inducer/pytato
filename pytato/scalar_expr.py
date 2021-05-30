@@ -104,7 +104,7 @@ IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
 class DependencyMapper(DependencyMapperBase):
     def __init__(self, *,
-                 include_idx_lambda_indices: bool = False,
+                 include_idx_lambda_indices: bool = True,
                  include_subscripts: bool = True,
                  include_lookups: bool = True,
                  include_calls: bool = True,
@@ -167,13 +167,16 @@ class StringifyMapper(StringifyMapperBase):
 
 # {{{ mapper frontends
 
-def get_dependencies(expression: Any) -> FrozenSet[str]:
+def get_dependencies(expression: Any,
+        include_idx_lambda_indices: bool = True) -> FrozenSet[str]:
     """Return the set of variable names in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
     """
-    mapper = DependencyMapper(composite_leaves=False)
+    mapper = DependencyMapper(
+            composite_leaves=False,
+            include_idx_lambda_indices=include_idx_lambda_indices)
     return frozenset(dep.name for dep in mapper(expression))
 
 

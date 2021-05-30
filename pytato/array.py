@@ -1800,7 +1800,8 @@ def make_index_lambda(
     # {{{ sanity checks
 
     from pytato.scalar_expr import get_dependencies
-    unknown_dep = get_dependencies(expression) - set(bindings)
+    unknown_dep = (get_dependencies(expression, include_idx_lambda_indices=False)
+            - set(bindings))
 
     for dep in unknown_dep:
         raise ValueError(f"Unknown variable '{dep}' in the expression.")
