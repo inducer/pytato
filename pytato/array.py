@@ -1827,11 +1827,11 @@ def _normalize_reduction_axes(
     *reduction_axes* are reduced and *normalized_redn_axes* is a :class:`tuple`
     of axes indices over which reduction is to be performed.
 
-    :arg reduction_axes: Axes over which reduction is to be performed. Format
-        of this reduction axes is typically seen in user-facing reduction
-        procedures. If *reduction_axes* is None => the reduction must be
-        performed over all the array's axes.
-    :arg shape: Shape of the nd-array over which reduction is to be
+    :arg reduction_axes: Axis indices over which reduction is to be performed.
+        If *reduction_axes* is None, the reduction is performed over all
+        axes.
+    :arg shape: Shape of the array over which reduction is to be
+        performed
     """
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
@@ -1902,7 +1902,7 @@ def _make_reduction_lambda(op: str, a: Array,
     :arg a: The :class:`pytato.Array` on which to perform the reduction.
 
     :arg axis: The axes over which the reduction is to be performed. If axis is
-        None => perform reduction over all of *a*'s axes.
+        *None*, perform reduction over all of *a*'s axes.
     """
     new_shape, axes = _normalize_reduction_axes(a.shape, axis)
     del axis
