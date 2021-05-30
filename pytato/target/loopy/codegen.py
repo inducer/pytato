@@ -69,13 +69,10 @@ __doc__ = """
 """
 
 
-# {{{ loopy-specific mappers
-
-class SubstitutionMapper(scalar_expr.SubstitutionMapper,
-        lp.symbolic.SubstitutionMapper):  # type: ignore
-    pass
-
-# }}}
+def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
+    from loopy.symbolic import SubstitutionMapper
+    from pymbolic.mapper.substitutor import make_subst_func
+    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
 # {{{ generated array expressions
@@ -226,8 +223,7 @@ class InlinedResult(ImplementedResult):
             expr_context.reduction_bounds[new_name] = bounds
 
         expr_context.update_depends_on(self.depends_on)
-
-        return scalar_expr.substitute(self.expr, substitutions)
+        return loopy_substitute(self.expr, substitutions)
 
 
 class SubstitutionRuleResult(ImplementedResult):
@@ -432,19 +428,12 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
     def map_reduce(self, expr: scalar_expr.Reduce,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
-        # pt.Reduce expressions are lowered to loopy by creating a substitution
-        # rule for the reduction expression and then calling the substitution
-        # rule. This is done to avoid allocating a temporary for the reduction
-        # result, and, as of this writing loopy does not support indexing into
-        # the reduction expression node.
-
-        from pymbolic.mapper.substitutor import make_subst_func
         from loopy.symbolic import Reduction as LoopyReduction
         state = expr_context.state
 
         unique_names_mapping = {
-                old_name: prim.Variable(state.var_name_gen(f"_pt_{expr.op}")
-                                        + old_name)
+                old_name: prim.Variable(
+                    state.var_name_gen(f"_pt_{expr.op}" + old_name))
                 for old_name in expr.bounds}
 
         inner_expr = self.rec(expr.inner_expr,
@@ -454,42 +443,24 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                                   local_namespace=expr_context.local_namespace,
                                   num_indices=expr_context.num_indices,
                                   reduction_bounds=expr.bounds))  # type: ignore
-        inner_expr = SubstitutionMapper(
-                make_subst_func(unique_names_mapping))(inner_expr)
+        inner_expr = loopy_substitute(inner_expr, unique_names_mapping)
 
-        if expr.op not in PYTATO_REDUCTION_TO_LOOPY_REDUCTION:
+        try:
+            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
+        except KeyError:
             raise NotImplementedError(expr.op)
 
-        loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
         inner_expr = LoopyReduction(loopy_redn,
                 tuple(v.name for v in unique_names_mapping.values()),
                 inner_expr)
 
-        updated_bounds = {unique_names_mapping[k].name: self.rec(v,
-                                                                 expr_context)
-                          for k, v in expr.bounds.items()}
-        domain = domain_for_shape((), shape=(), reductions=updated_bounds)
-        rule_name = state.var_name_gen("_pt_subst")
-        args = tuple(state.var_name_gen(f"i{i}")
-                     for i in range(expr_context.num_indices))
-
-        subst_rule = lp.SubstitutionRule(
-                rule_name,
-                args,
-                SubstitutionMapper(make_subst_func({
-                    f"_{i}": prim.Variable(args[i])
-                    for i in range(expr_context.num_indices)}))(inner_expr))
-
+        domain = domain_for_shape((), shape=(), reductions={
+            unique_names_mapping[redn_iname].name: self.rec(bounds, expr_context)
+            for redn_iname, bounds in expr.bounds.items()})
         kernel = state.kernel
-        new_substitutions = kernel.substitutions.copy()
-        new_substitutions[rule_name] = subst_rule
-        kernel = kernel.copy(
-                domains=kernel.domains+[domain],
-                substitutions=new_substitutions)
-        state.update_kernel(kernel)
-        return prim.Call(prim.Variable(rule_name),
-                tuple(prim.Variable(f"_{i}")
-                      for i in range(expr_context.num_indices)))
+        state.update_kernel(kernel.copy(domains=kernel.domains+[domain]))
+
+        return inner_expr
 
 # }}}
 
@@ -672,7 +643,7 @@ def rename_reductions(
             loopy_expr_context.reduction_bounds,
             map(var, new_reduction_inames)))
 
-    result = scalar_expr.substitute(loopy_expr, substitutions)
+    result = loopy_substitute(loopy_expr, substitutions)
 
     new_reduction_bounds = {
             substitutions[old_iname].name: bounds
