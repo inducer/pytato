@@ -723,6 +723,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
 
+
 @pytest.mark.parametrize("axis", (None, 1, 0))
 @pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
 @pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])

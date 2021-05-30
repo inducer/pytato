@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, MatrixProduct, Placeholder, NamedArray)
+        SizeParam, InputArgumentBase, Placeholder, NamedArray)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
