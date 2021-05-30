@@ -46,7 +46,7 @@ def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int)
+    x = Placeholder("x", (5,), np.int64)
     prog = pt.generate_loopy(x * x, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
@@ -57,7 +57,7 @@ def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (), np.int)
+    x = Placeholder("x", (), np.int64)
     prog = pt.generate_loopy(x, cl_device=queue.device)
     x_in = np.array(1)
     _, (x_out,) = prog(queue, x=x_in)
@@ -71,7 +71,7 @@ def test_size_param(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     n = pt.make_size_param(name="n")
-    pt.make_placeholder(name="x", shape=n, dtype=np.int)
+    pt.make_placeholder(name="x", shape=n, dtype=np.int64)
     prog = pt.generate_loopy(n, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(queue, x=x_in)
@@ -123,8 +123,8 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int)
-    y = Placeholder("y", (5,), np.int)
+    x = Placeholder("x", (5,), np.int64)
+    y = Placeholder("y", (5,), np.int64)
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
