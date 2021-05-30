@@ -1886,8 +1886,8 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             n_out_dims += 1
 
     from pyrsistent import pmap
-    # type-ignoring because mypy cannot figure out the complicated
-    # not-implemented-error exit
+
+    # insufficient type annotation in pyrsistent
     return indices, pmap(redn_bounds)  # type: ignore
 
 
