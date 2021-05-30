@@ -741,7 +741,7 @@ def test_reductions(ctx_factory, axis, redn, shape):
 
     evt, (out,) = prg(queue)
 
-    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-15)
+    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-14)
 
 
 if __name__ == "__main__":
