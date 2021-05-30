@@ -763,7 +763,7 @@ class MatrixProduct(Array):
         elif self.x1.ndim == 2 and self.x2.ndim == 2:
             return (self.x1.shape[0], self.x2.shape[1])
 
-        assert False
+        raise AssertionError()
 
     @property
     def dtype(self) -> np.dtype[Any]:

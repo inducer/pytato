@@ -180,26 +180,32 @@ def get_dependencies(expression: Any,
     return frozenset(dep.name for dep in mapper(expression))
 
 
-def substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
+def substitute(expression: Any,
+        variable_assigments: Optional[Mapping[str, Any]]) -> Any:
     """Perform variable substitution in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
     :param variable_assigments: A mapping from variable names to substitutions
     """
+    if variable_assigments is None:
+        variable_assigments = {}
+
     from pymbolic.mapper.substitutor import make_subst_func
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
-def evaluate(expression: Any, context: Mapping[str, Any] = {}) -> Any:
+def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> Any:
     """
     Evaluates *expression* by substituting the variable values as provided in
     *context*.
     """
+    if context is None:
+        context = {}
     return EvaluationMapper(context)(expression)
 
 
-def distribute(expr: Any, parameters: Set[Any] = set(),
+def distribute(expr: Any, parameters: FrozenSet[Any] = frozenset(),
                commutative: bool = True) -> Any:
     if commutative:
         return DistributeMapper(TermCollector(parameters))(expr)
