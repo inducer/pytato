@@ -34,6 +34,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                sed -i "s/loopy.git/loopy.git@kernel_callables_v3-edit2/g" requirements.txt
                 curl -L -O -k https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
