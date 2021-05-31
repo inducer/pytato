@@ -64,9 +64,12 @@ Flake8:
 
 
 Mypy:
-  script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-mypy.sh
-  - ". ./prepare-and-run-mypy.sh python3 mypy"
+  script: |
+    curl -L -O https://tiker.net/ci-support-v0
+    . ./ci-support-v0
+    build_py_project_in_venv
+    python -m pip install mypy
+    ./run-mypy.sh
   tags:
   - python3
   except:

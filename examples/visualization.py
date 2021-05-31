@@ -18,7 +18,7 @@ GRAPH_SVG = "graph.svg"
 
 def main():
     n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float)
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
     result = stack @ stack.T
 

@@ -34,7 +34,7 @@ from pytato.array import (
         matmul, roll, transpose, stack, reshape, concatenate,
 
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
-        log10, isnan,
+        log10, isnan, sqrt,
 
         maximum, minimum, where,
 
@@ -44,7 +44,7 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
-        sum, amax, amin,
+        sum, amax, amin, prod,
 
         )
 
@@ -73,7 +73,7 @@ __all__ = (
 
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
-        "tanh", "exp", "log", "log10", "isnan",
+        "tanh", "exp", "log", "log10", "isnan", "sqrt",
 
         "maximum", "minimum", "where",
 
@@ -83,8 +83,6 @@ __all__ = (
 
         "logical_or", "logical_and", "logical_not",
 
-        "sum",
-
-        "sum", "amax", "amin",
+        "sum", "amax", "amin", "prod",
 
 )

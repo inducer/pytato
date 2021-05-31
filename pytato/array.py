@@ -55,6 +55,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: stack
 .. autofunction:: concatenate
 .. autofunction:: abs
+.. autofunction:: sqrt
 .. autofunction:: sin
 .. autofunction:: cos
 .. autofunction:: tan
@@ -84,6 +85,9 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: maximum
 .. autofunction:: minimum
 .. autofunction:: sum
+.. autofunction:: amin
+.. autofunction:: amax
+.. autofunction:: prod
 
 Supporting Functionality
 ------------------------
@@ -181,8 +185,8 @@ from pytools import memoize_method
 from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
     TagsType, tag_dataclass)
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression, Reduce, ReductionOp)
+from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES, ScalarExpression, Reduce)
+
 import re
 
 
@@ -804,7 +808,7 @@ class MatrixProduct(Array):
         elif self.x1.ndim == 2 and self.x2.ndim == 2:
             return (self.x1.shape[0], self.x2.shape[1])
 
-        assert False
+        raise AssertionError()
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -886,11 +890,8 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        from functools import reduce
-        import operator
-
-        common_axis_len = reduce(operator.add, (ary.shape[self.axis]
-                                                for ary in self.arrays))
+        from builtins import sum as _sum
+        common_axis_len = _sum(ary.shape[self.axis] for ary in self.arrays)
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
@@ -1550,6 +1551,10 @@ def abs(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "abs")
 
 
+def sqrt(x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func(x, "sqrt")
+
+
 def sin(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sin")
 
@@ -1815,25 +1820,22 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 # {{{ make_index_lambda
 
-INDEX_RE = re.compile("_r?(0|([1-9][0-9]*))")
-
-
 def make_index_lambda(
         expression: Union[str, ScalarExpression],
         bindings: Dict[str, Array],
         shape: ShapeType,
         dtype: Any) -> IndexLambda:
     if isinstance(expression, str):
-        raise NotImplementedError("Sorry the developers were too lazy to implement"
-                " a parser.")
+        raise NotImplementedError
 
     # {{{ sanity checks
 
     from pytato.scalar_expr import get_dependencies
-    unknown_dep = get_dependencies(expression) - set(bindings)
+    unknown_dep = (get_dependencies(expression, include_idx_lambda_indices=False)
+            - set(bindings))
+
     for dep in unknown_dep:
-        if not INDEX_RE.fullmatch(dep):
-            raise ValueError(f"Unknown variable '{dep}' in the expression.")
+        raise ValueError(f"Unknown variable '{dep}' in the expression.")
 
     # }}}
 
@@ -1847,10 +1849,22 @@ def make_index_lambda(
 
 # {{{ reductions
 
-def _preprocess_reduction_axes(
+def _normalize_reduction_axes(
         shape: ShapeType,
         reduction_axes: Optional[Union[int, Tuple[int]]]
         ) -> Tuple[ShapeType, Tuple[int, ...]]:
+    """
+    Returns a :class:`tuple` of ``(new_shape, normalized_redn_axes)``, where
+    *new_shape* is the shape of the ndarray after the axes corresponding to
+    *reduction_axes* are reduced and *normalized_redn_axes* is a :class:`tuple`
+    of axes indices over which reduction is to be performed.
+
+    :arg reduction_axes: Axis indices over which reduction is to be performed.
+        If *reduction_axes* is None, the reduction is performed over all
+        axes.
+    :arg shape: Shape of the array over which reduction is to be
+        performed
+    """
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
 
@@ -1866,20 +1880,23 @@ def _preprocess_reduction_axes(
             raise ValueError(f"{axis} is out of bounds for array of dimension"
                     f" {len(shape)}.")
 
-    new_shape = []
-
-    for i, axis_len in enumerate(shape):
-        if i not in reduction_axes:
-            new_shape.append(axis_len)
-
-    return tuple(new_shape), reduction_axes
+    new_shape = tuple([axis_len
+        for i, axis_len in enumerate(shape)
+        if i not in reduction_axes])
+    return new_shape, reduction_axes
 
 
 def _get_reduction_indices_bounds(shape: ShapeType,
         axes: Tuple[int, ...]) -> Tuple[
-                List[ScalarExpression],
+                Sequence[ScalarExpression],
                 Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
-
+    """Given *shape* and reduction axes *axes*, produce a list of inames
+    ``indices`` named appropriately for reduction inames.
+    Also fill a dictionary with bounds for reduction inames
+    ``redn_bounds = {red_iname: (lower_bound, upper_bound)}``,
+    where the bounds are given as a Python-style half-open interval.
+    :returns: ``indices, redn_bounds``
+    """
     indices: List[prim.Variable] = []
     redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
 
@@ -1887,6 +1904,11 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     n_redn_dims = 0
     for idim, axis_len in enumerate(shape):
         if idim in axes:
+            if not isinstance(axis_len, int):
+                # TODO: add bindings for shape array expressions
+                raise NotImplementedError("Parametric shapes for reduction axes"
+                                          " not yet supported.")
+
             idx = f"_r{n_redn_dims}"
             indices.append(prim.Variable(idx))
             redn_bounds[idx] = (0, axis_len)
@@ -1895,70 +1917,85 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, redn_bounds
+    from pyrsistent import pmap
+
+    # insufficient type annotation in pyrsistent
+    return indices, pmap(redn_bounds)  # type: ignore
+
+
+def _make_reduction_lambda(op: str, a: Array,
+                      axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Return a :class:`IndexLambda` that performs reduction over the *axis* axes
+    of *a* with the reduction op *op*.
+
+    :arg op: The reduction operation to perform.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes over which the reduction is to be performed. If axis is
+        *None*, perform reduction over all of *a*'s axes.
+    """
+    new_shape, axes = _normalize_reduction_axes(a.shape, axis)
+    del axis
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+
+    return make_index_lambda(
+            Reduce(
+                prim.Subscript(prim.Variable("in"), tuple(indices)),
+                op,
+                redn_bounds),
+            {"in": a},
+            new_shape,
+            a.dtype)
 
 
 def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
     Sums array *a*'s elements along the *axis* axes.
 
-    :arg axis: The axes along which the elements are to be sum-reduced.
-        Defaults to all axes of the input arrays.
-    """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
 
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOp.SUM,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+    :arg axis: The axes along which the elements are to be sum-reduced.
+        Defaults to all axes of the input array.
+    """
+    return _make_reduction_lambda("sum", a, axis)
 
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
-    Sums array *a*'s elements along the *axis* axes.
+    Returns the max of array *a*'s elements along the *axis* axes.
 
-    :arg axis: The axes along which the elements are to be sum-reduced.
-        Defaults to all axes of the input arrays.
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes along which the elements are to be max-reduced.
+        Defaults to all axes of the input array.
     """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
-
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOp.MAX,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+    return _make_reduction_lambda("max", a, axis)
 
 
 def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     """
-    Sums array *a*'s elements along the *axis* axes.
+    Returns the min of array *a*'s elements along the *axis* axes.
 
-    :arg axis: The axes along which the elements are to be sum-reduced.
-        Defaults to all axes of the input arrays.
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes along which the elements are to be min-reduced.
+        Defaults to all axes of the input array.
     """
-    new_shape, axes = _preprocess_reduction_axes(a.shape, axis)
-    del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, axes)
+    return _make_reduction_lambda("min", a, axis)
 
-    return make_index_lambda(
-            Reduce(
-                prim.Subscript(prim.Variable("in"), tuple(indices)),
-                ReductionOp.MIN,
-                redn_bounds),
-            {"in": a},
-            new_shape,
-            a.dtype)
+
+def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Returns the product of array *a*'s elements along the *axis* axes.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes along which the elements are to be product-reduced.
+        Defaults to all axes of the input array.
+    """
+    return _make_reduction_lambda("product", a, axis)
 
 # }}}
 
