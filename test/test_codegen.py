@@ -46,7 +46,7 @@ def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int)
+    x = Placeholder("x", (5,), np.int64)
     prog = pt.generate_loopy(x * x, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
@@ -57,7 +57,7 @@ def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (), np.int)
+    x = Placeholder("x", (), np.int64)
     prog = pt.generate_loopy(x, cl_device=queue.device)
     x_in = np.array(1)
     _, (x_out,) = prog(queue, x=x_in)
@@ -71,7 +71,7 @@ def test_size_param(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     n = pt.make_size_param(name="n")
-    pt.make_placeholder(name="x", shape=n, dtype=np.int)
+    pt.make_placeholder(name="x", shape=n, dtype=np.int64)
     prog = pt.generate_loopy(n, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(queue, x=x_in)
@@ -123,8 +123,8 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int)
-    y = Placeholder("y", (5,), np.int)
+    x = Placeholder("x", (5,), np.int64)
+    y = Placeholder("y", (5,), np.int64)
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
@@ -152,7 +152,7 @@ def test_roll(ctx_factory, shift, axis):
     queue = cl.CommandQueue(cl_ctx)
 
     n = pt.make_size_param("n")
-    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float)
+    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float64)
 
     x_in = np.arange(1., 10.).reshape(3, 3)
     assert_allclose_to_numpy(pt.roll(x, shift=shift, axis=axis),
@@ -486,7 +486,7 @@ def test_only_deps_as_knl_args():
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
-    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10"))
+    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -593,6 +593,26 @@ def test_maximum_minimum(ctx_factory, which):
     _, (y,) = pt.generate_loopy(pt_func(x1, x2),
                                 cl_device=queue.device)(queue)
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
+
+
+@pytest.mark.parametrize("axis", (None, 1, 0))
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
+@pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
+def test_reductions(ctx_factory, axis, redn, shape):
+    queue = cl.CommandQueue(ctx_factory())
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=shape)
+
+    x = pt.make_data_wrapper(x_in)
+    np_func = getattr(np, redn)
+    pt_func = getattr(pt, redn)
+    prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
+
+    evt, (out,) = prg(queue)
+
+    assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-14)
 
 
 if __name__ == "__main__":

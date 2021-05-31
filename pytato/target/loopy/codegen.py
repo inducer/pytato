@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, MatrixProduct, Placeholder)
+        SizeParam, InputArgumentBase, Placeholder)
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper, WalkMapper
@@ -67,6 +67,12 @@ __doc__ = """
 .. autofunction:: normalize_outputs
 .. autofunction:: get_initial_codegen_state
 """
+
+
+def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
+    from loopy.symbolic import SubstitutionMapper
+    from pymbolic.mapper.substitutor import make_subst_func
+    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
 # {{{ generated array expressions
@@ -217,8 +223,7 @@ class InlinedResult(ImplementedResult):
             expr_context.reduction_bounds[new_name] = bounds
 
         expr_context.update_depends_on(self.depends_on)
-
-        return scalar_expr.substitute(self.expr, substitutions)
+        return loopy_substitute(self.expr, substitutions)
 
 
 class SubstitutionRuleResult(ImplementedResult):
@@ -324,60 +329,6 @@ class CodeGenMapper(Mapper):
         state.results[expr] = result
         return result
 
-    def map_matrix_product(self, expr: MatrixProduct,
-            state: CodeGenState) -> ImplementedResult:
-        if expr in state.results:
-            return state.results[expr]
-
-        x1_result = self.rec(expr.x1, state)
-        x2_result = self.rec(expr.x2, state)
-
-        loopy_expr_context = LoopyExpressionContext(state,
-                num_indices=expr.ndim)
-
-        loopy_expr_context.reduction_bounds["_r0"] = (0,
-                shape_to_scalar_expression(expr.x2.shape, self, state)[0])
-
-        # Figure out inames.
-        x1_inames = []
-        for i in range(expr.x1.ndim):
-            if i == expr.x1.ndim - 1:
-                x1_inames.append(var("_r0"))
-            else:
-                x1_inames.append(var(f"_{i}"))
-        x2_inames = []
-        for i in range(expr.x2.ndim):
-            if i == 0:
-                x2_inames.append(var("_r0"))
-            else:
-                offset = i + len(x1_inames) - 2
-                x2_inames.append(var(f"_{offset}"))
-
-        inner_expr = x1_result.to_loopy_expression(
-                tuple(x1_inames), loopy_expr_context)
-        inner_expr *= x2_result.to_loopy_expression(
-                tuple(x2_inames), loopy_expr_context)
-
-        import loopy.library.reduction as red
-        loopy_expr = lp.Reduction(
-                operation=red.parse_reduction_op("sum"),
-                inames=("_r0",),
-                expr=inner_expr,
-                allow_simultaneous=False)
-
-        inlined_result = InlinedResult.from_loopy_expression(loopy_expr,
-                loopy_expr_context)
-
-        output_name = state.var_name_gen("matmul")
-
-        insn_id = add_store(output_name, expr, inlined_result, state,
-                            self, output_to_temporary=True)
-
-        result = StoredResult(output_name, expr.ndim, frozenset([insn_id]))
-
-        state.results[expr] = result
-        return result
-
     def map_index_lambda(self, expr: IndexLambda,
             state: CodeGenState) -> ImplementedResult:
         if expr in state.results:
@@ -403,7 +354,16 @@ class CodeGenMapper(Mapper):
 
 # {{{ inlined expression gen mapper
 
-INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
+ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
+REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
+
+# Maps Pytato reduction types to the corresponding Loopy reduction types.
+PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
+    "sum": "sum",
+    "product": "product",
+    "max": "max",
+    "min": "min",
+}
 
 
 class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
@@ -434,17 +394,20 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         return result.to_loopy_expression(self.rec(expr.index, expr_context),
                                           expr_context)
 
-    # TODO: map_reduction()
-
     def map_variable(self, expr: prim.Variable,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
 
-        match = INDEX_RE.fullmatch(expr.name)
-        if match:
+        elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
+        redn_match = REDUCTION_INDEX_RE.fullmatch(expr.name)
+        if elw_match:
             # Found an index of the form _0, _1, ...
-            index = int(match.group(1))
+            index = int(elw_match.group(1))
             if not (0 <= index < expr_context.num_indices):
                 raise ValueError(f"invalid index encountered: _{index}")
+            return expr
+        elif redn_match:
+            if expr.name not in expr_context.reduction_bounds:
+                raise ValueError(f"invalid index encountered: '{expr}'.")
             return expr
         else:
             array = expr_context.lookup(expr.name)
@@ -462,6 +425,42 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                              self.rec(expr.parameters, expr_context))
 
         return super().map_call(expr, expr_context)
+
+    def map_reduce(self, expr: scalar_expr.Reduce,
+            expr_context: LoopyExpressionContext) -> ScalarExpression:
+        from loopy.symbolic import Reduction as LoopyReduction
+        state = expr_context.state
+
+        unique_names_mapping = {
+                old_name: prim.Variable(
+                    state.var_name_gen(f"_pt_{expr.op}" + old_name))
+                for old_name in expr.bounds}
+
+        inner_expr = self.rec(expr.inner_expr,
+                              LoopyExpressionContext(
+                                  state=state,
+                                  _depends_on=expr_context.depends_on,
+                                  local_namespace=expr_context.local_namespace,
+                                  num_indices=expr_context.num_indices,
+                                  reduction_bounds=expr.bounds))  # type: ignore
+        inner_expr = loopy_substitute(inner_expr, unique_names_mapping)
+
+        try:
+            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
+        except KeyError:
+            raise NotImplementedError(expr.op)
+
+        inner_expr = LoopyReduction(loopy_redn,
+                tuple(v.name for v in unique_names_mapping.values()),
+                inner_expr)
+
+        domain = domain_for_shape((), shape=(), reductions={
+            unique_names_mapping[redn_iname].name: self.rec(bounds, expr_context)
+            for redn_iname, bounds in expr.bounds.items()})
+        kernel = state.kernel
+        state.update_kernel(kernel.copy(domains=kernel.domains+[domain]))
+
+        return inner_expr
 
 # }}}
 
@@ -644,7 +643,7 @@ def rename_reductions(
             loopy_expr_context.reduction_bounds,
             map(var, new_reduction_inames)))
 
-    result = scalar_expr.substitute(loopy_expr, substitutions)
+    result = loopy_substitute(loopy_expr, substitutions)
 
     new_reduction_bounds = {
             substitutions[old_iname].name: bounds
@@ -734,8 +733,16 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
+    # Why call make_reduction_inames_unique?
+    # Consider pt.generate_loopy(pt.sum(x) + pt.sum(x)), the generated program
+    # would be a single instruction with rhs: `_pt_subst() + _pt_subst()`.
+    # The result of pt.sum(x) is cached => same instance of InlinedResult is
+    # emitted for both invocations and we would be required to avoid such
+    # reduction iname collisions.
+    program = lp.make_reduction_inames_unique(state.program)
+
     return target.bind_program(
-            program=state.program,
+            program=program,
             bound_arguments=preproc_result.bound_arguments)
 
 # }}}

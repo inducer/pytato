@@ -1,4 +1,4 @@
-from typing import (Any, Dict)
+from typing import Any, Dict, Optional
 import pyopencl as cl
 import numpy
 import pytato as pt
@@ -51,7 +51,7 @@ class NumpyBasedEvaluator(Mapper):
 
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
-                              parameters: Dict[Placeholder, Any] = {},
+                              parameters: Optional[Dict[Placeholder, Any]] = None,
                               rtol=1e-7):
     """
     Raises an :class:`AssertionError`, if there is a discrepancy between *expr*
@@ -60,6 +60,9 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     :arg queue: An instance of :class:`pyopencl.CommandQueue` to which the
         generated kernel must be enqueued.
     """
+    if parameters is None:
+        parameters = {}
+
     np_result = NumpyBasedEvaluator(numpy, parameters)(expr)
     prog = pt.generate_loopy(expr, cl_device=queue.device)
 

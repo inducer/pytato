@@ -33,7 +33,11 @@ setup(
         "Topic :: Software Development :: Libraries",
     ],
     python_requires="~=3.8",
-    install_requires=["loopy>=2020.2", "pytools>=2021.1"],
+    install_requires=[
+        "loopy>=2020.2",
+        "pytools>=2021.1",
+        "pyrsistent"
+        ],
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
     url="https://github.com/inducer/pytato",
     author_email="inform@tiker.net",
