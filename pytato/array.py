@@ -1504,7 +1504,7 @@ def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
 
     assert isinstance(x, Array)
 
-    if x.dtype.kind != "f":
+    if x.dtype.kind != "f" and x.dtype.kind != "c":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
     if ret_dtype is None:
         ret_dtype = x.dtype
