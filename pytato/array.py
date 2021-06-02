@@ -1517,12 +1517,8 @@ def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
 
 
 def abs(x: Array) -> ArrayOrScalar:
-    if x.dtype == np.complex64:
-        result_dtype = np.float32
-    elif x.dtype == np.complex128:
-        result_dtype = np.float64
-    elif x.dtype == np.complex256:
-        result_dtype = np.float128
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
     else:
         result_dtype = x.dtype
 

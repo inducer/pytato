@@ -491,8 +491,8 @@ def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    if dtype == np.complex128 and function_name in ["arcsin", "arccos",
-                                                    "arctan", "log10"]:
+    if np.dtype(dtype).kind == "c" and function_name in ["arcsin", "arccos",
+                                                         "arctan", "log10"]:
         pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng
