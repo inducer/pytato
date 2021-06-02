@@ -484,12 +484,16 @@ def test_only_deps_as_knl_args():
     assert "y" not in knl.arg_dict
 
 
-@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
+
+    if dtype == np.complex128 and function_name in ["arcsin", "arccos",
+                                                    "arctan", "log10"]:
+        pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng
     rng = default_rng()
