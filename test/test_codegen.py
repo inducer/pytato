@@ -505,7 +505,10 @@ def test_math_functions(ctx_factory, dtype, function_name):
 
     _, (y,) = pt.generate_loopy(pt_func(x),
             cl_device=queue.device)(queue)
-    np.testing.assert_allclose(y, np_func(x_in), rtol=1e-6)
+
+    y_np = np_func(x_in)
+    np.testing.assert_allclose(y, y_np, rtol=1e-6)
+    assert y.dtype == y_np.dtype
 
 
 @pytest.mark.parametrize("dtype", (np.int32, np.int64, np.float32, np.float64))
