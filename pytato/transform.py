@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, FrozenSet
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack,
         Roll, AxisPermutation, Slice, DataWrapper, SizeParam,
-        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase)
+        DictOfNamedArrays, Reshape, Concatenate, IndexRemappingBase, Einsum)
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -153,6 +153,9 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(name=expr.name, tags=expr.tags)
 
+    def map_einsum(self, expr: Einsum) -> Array:
+        return Einsum(spec=expr.spec, spec_args=expr.spec_args)
+
 
 class DependencyMapper(Mapper):
     """
@@ -214,6 +217,10 @@ class DependencyMapper(Mapper):
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
+
+    def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
+        return self.combine(frozenset([expr]), *(self.rec(ary)
+                                                 for ary in expr.spec_args))
 
 
 class WalkMapper(Mapper):
@@ -297,6 +304,15 @@ class WalkMapper(Mapper):
         self.post_visit(expr)
 
     map_concatenate = map_stack
+
+    def map_einsum(self, expr: Einsum) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.spec_args:
+            self.rec(child)
+
+        self.post_visit(expr)
 
 # }}}
 

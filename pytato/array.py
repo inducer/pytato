@@ -717,7 +717,31 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
 class Einsum(Array):
     """
+    An Einsum expression.
     """
+    _fields = Array._fields + ("spec", "spec_args")
+    _mapper_method = "map_einsum"
+
+    def __init__(self, spec: str, spec_args: Sequence[Array], tags: TagsType = frozenset()):
+        super().__init__(tags)
+        self.spec = spec
+        self.spec_args = spec_args
+
+        # # FIXME: maybe factor this out of loopy?
+        # import loopy as lp
+        # self.knl = lp.make_einsum(spec, spec_args)
+
+    @property
+    def shape(self) -> ShapeType:
+        return ()
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return ()
+
+
+def make_einsum(spec, spec_args) -> Einsum:
+    return Einsum(spec, spec_args)
 
 # }}}
 
