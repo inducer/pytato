@@ -33,7 +33,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, MatrixProduct)
+                          InputArgumentBase, MatrixProduct, Einsum)
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
 from pytools import UniqueNameGenerator
@@ -264,13 +264,12 @@ class CodeGenPreprocessor(CopyMapper):
         from pytato.scalar_expr import Reduce
 
         inner_expr = Reduce(
-                tuple(a for a in expr.spec_args), #FIXME
+                tuple(a for a in expr.spec_args),  # FIXME
                 "sum",
                 {})
 
         bindings = {f"_in{i}": self.rec(array)
                 for i, array in enumerate(expr.spec_args)}
-
 
         return IndexLambda(expr=inner_expr,
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
