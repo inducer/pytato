@@ -722,7 +722,8 @@ class Einsum(Array):
     _fields = Array._fields + ("spec", "spec_args")
     _mapper_method = "map_einsum"
 
-    def __init__(self, spec: str, spec_args: Sequence[Array], tags: TagsType = frozenset()):
+    def __init__(self, spec: str, spec_args: Sequence[Array],
+                 tags: TagsType = frozenset()):
         super().__init__(tags)
         self.spec = spec
         self.spec_args = spec_args
