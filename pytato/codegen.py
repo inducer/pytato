@@ -82,6 +82,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -254,6 +255,24 @@ class CodeGenPreprocessor(CopyMapper):
                 {"_r0": (0, redn_bound)})
         return IndexLambda(
                 expr=inner_expr,
+                shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                            for s in expr.shape),
+                dtype=expr.dtype,
+                bindings=bindings)
+
+    def map_einsum(self, expr: Einsum) -> Array:
+        from pytato.scalar_expr import Reduce
+
+        inner_expr = Reduce(
+                tuple(a for a in expr.spec_args), #FIXME
+                "sum",
+                {})
+
+        bindings = {f"_in{i}": self.rec(array)
+                for i, array in enumerate(expr.spec_args)}
+
+
+        return IndexLambda(expr=inner_expr,
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
