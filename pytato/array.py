@@ -734,14 +734,14 @@ class Einsum(Array):
 
     @property
     def shape(self) -> ShapeType:
-        return ()
+        return self.spec_args[0].shape
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return ()
+        return self.spec_args[0].dtype
 
 
-def make_einsum(spec, spec_args) -> Einsum:
+def make_einsum(spec: str, spec_args: Sequence[Array],) -> Einsum:
     return Einsum(spec, spec_args)
 
 # }}}
