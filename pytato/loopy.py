@@ -47,9 +47,10 @@ __doc__ = """
 """
 
 
-class LoopyFunction(DictOfNamedArrays):
+class LoopyCall(DictOfNamedArrays):
     """
-    Call to a :mod:`loopy` program.
+    An array expression node representing a call to an entrypoint in a
+    :mod:`loopy` translation unit.
     """
     _mapper_method = "map_loopy_function"
 
@@ -98,6 +99,7 @@ class LoopyFunction(DictOfNamedArrays):
 class LoopyFunctionResult(NamedArray):
     """
     Named array for :class:`LoopyFunction`'s result.
+    Inherits from :class:`~pytato.array.NamedArray`.
     """
     def __init__(self,
             dict_of_named_arrays: LoopyFunction,
@@ -120,14 +122,7 @@ class LoopyFunctionResult(NamedArray):
     def dtype(self) -> np.dtype[Any]:
         loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
                 self.name]
-        dtype = loopy_arg.dtype
-
-        if isinstance(dtype, np.dtype):
-            return dtype
-        elif isinstance(dtype, NumpyType):
-            return np.dtype(dtype.numpy_dtype)
-        else:
-            raise NotImplementedError(f"Unknown dtype type '{dtype}'")
+        return loopy_arg.dtype.numpy_dtype
 
 
 def call_loopy(program: "lp.Program",
@@ -139,7 +134,7 @@ def call_loopy(program: "lp.Program",
 
     Restrictions on the structure of ``program[entrypoint]``:
 
-    * array arguments of ``program[entrypoint]`` should either be either
+    * array arguments of ``program[entrypoint]`` must either be either
       input-only or output-only.
     * all input-only arguments of ``program[entrypoint]`` must appear in
       *bindings*.
