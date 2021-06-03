@@ -1504,7 +1504,7 @@ def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
 
     assert isinstance(x, Array)
 
-    if x.dtype.kind != "f":
+    if x.dtype.kind != "f" and x.dtype.kind != "c":
         raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
     if ret_dtype is None:
         ret_dtype = x.dtype
@@ -1517,7 +1517,12 @@ def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
 
 
 def abs(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "abs")
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        result_dtype = x.dtype
+
+    return _apply_elem_wise_func(x, "abs", ret_dtype=result_dtype)
 
 
 def sqrt(x: Array) -> ArrayOrScalar:
