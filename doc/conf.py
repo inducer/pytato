@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = "Pytato"
-copyright = "2020, Andreas Klöckner, Matt Wala, Xiaoyu Wei"
-author = "Andreas Klöckner, Matt Wala, Xiaoyu Wei"
+copyright = "2020, Pytato Contributors"
+author = "Pytato Contributors"
 
 
 # -- General configuration ---------------------------------------------------
@@ -67,3 +67,6 @@ intersphinx_mapping = {
     "https://documen.tician.de/sumpy/": None,
     "https://documen.tician.de/islpy/": None,
 }
+
+import sys
+sys.PYTATO_BUILDING_SPHINX_DOCS = True

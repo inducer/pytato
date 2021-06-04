@@ -41,7 +41,9 @@ Array Interface
 ---------------
 
 .. autoclass:: Array
+.. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
+.. autoclass:: AbstractResultWithNamedArrays
 
 NumPy-Like Interface
 --------------------
@@ -115,10 +117,8 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
-.. autoclass:: LoopyFunction
 .. autoclass:: Stack
 .. autoclass:: Concatenate
-.. autoclass:: AttributeLookup
 
 Index Remapping
 ^^^^^^^^^^^^^^^
@@ -153,29 +153,22 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
-Aliases
--------
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-(This section exists because Sphinx, our documentation tool, can't (yet)
-canonicalize type references. Once Sphinx 4.0 is released, we should use the
-``:canonical:`` option here.)
+.. class:: T_co
 
-.. class:: Array
-
-    Should be referenced as :class:`pytato.Array`.
-
-.. class:: DictOfNamedArrays
-
-    Should be referenced as :class:`pytato.DictOfNamedArrays`.
+    A covariant type variable used in, e.g. :meth:`pytools.tag.Taggable.copy`.
 """
 
 # }}}
 
+from abc import ABC, abstractmethod
 from functools import partialmethod
 import operator
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List)
+        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -283,7 +276,7 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[A
 
 
 class Array(Taggable):
-    """
+    r"""
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
     compatibility, though not at all costs.
@@ -300,9 +293,9 @@ class Array(Taggable):
 
     .. attribute:: shape
 
-        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`s.
+        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`\ s.
         Array-valued shape components may be (at most affinely) symbolic in terms of
-        :class:`~pytato.array.SizeParam`s.
+        :class:`~pytato.array.SizeParam`\ s.
 
         .. note::
 
@@ -326,10 +319,10 @@ class Array(Taggable):
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
 
-        Inherits from :class:`pytools.Taggable`.
+        Inherits from :class:`pytools.tag.Taggable`.
 
     .. automethod:: tagged
-    .. automethod:: without_tag
+    .. automethod:: without_tags
 
     Array interface:
 
@@ -626,37 +619,103 @@ class CountNamed(UniqueTag):
 
 # {{{ dict of named arrays
 
-class DictOfNamedArrays(Mapping[str, Array]):
-    """A container that maps valid Python identifiers
-    to instances of :class:`Array`. May occur as a result
-    type of array computations.
+class NamedArray(Array):
+    """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
+    back to thecontaining instance as well as the name by which *self* is
+    known there.
+
+    .. automethod:: __init__
+    """
+    _fields = Array._fields + ("_container", "name")
+    _mapper_method = "map_named_array"
+
+    def __init__(self,
+            container: AbstractResultWithNamedArrays,
+            name: str,
+            tags: TagsType = frozenset()) -> None:
+        super().__init__(tags=tags)
+        self._container = container
+        self.name = name
+
+    @property
+    def expr(self) -> Array:
+        if isinstance(self._container, DictOfNamedArrays):
+            return self._container._data[self.name]
+        else:
+            raise TypeError("only permitted when container is a DictOfNamedArrays")
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.expr.shape
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return self.expr.dtype
+
+
+class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
+    r"""An abstract array computation that results in multiple :class:`Array`\ s,
+    each named. The way in which the values of these arrays are computed
+    is determined by concrete subclasses of this class, e.g.
+    :class:`pytato.loopy.LoopyCall` or :class:`DictOfNamedArrays`.
 
     .. automethod:: __init__
     .. automethod:: __contains__
     .. automethod:: __getitem__
-    .. automethod:: __iter__
     .. automethod:: __len__
 
     .. note::
 
-        This container deliberately does not implement
-        arithmetic.
+        This container deliberately does not implement arithmetic.
     """
 
-    def __init__(self, data: Dict[str, Array]):
+    _mapper_method: ClassVar[str]
+
+    @abstractmethod
+    def __contains__(self, name: object) -> bool:
+        pass
+
+    @abstractmethod
+    def __getitem__(self, name: str) -> NamedArray:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+class DictOfNamedArrays(AbstractResultWithNamedArrays):
+    """A container of named results, each of which can be computed as an
+    array expression provided to the constructor.
+
+    Implements :class:`AbstractResultWithNamedArrays`.
+
+    .. automethod:: __init__
+    """
+
+    _mapper_method = "map_dict_of_named_arrays"
+
+    def __init__(self, data: Mapping[str, Array]):
+        super().__init__()
         self._data = data
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self._data.items()))
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
-    def __getitem__(self, name: str) -> Array:
-        return self._data[name]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+    @memoize_method
+    def __getitem__(self, name: str) -> NamedArray:
+        if name not in self._data:
+            raise KeyError(name)
+        return NamedArray(self, name)
 
     def __len__(self) -> int:
         return len(self._data)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
 # }}}
 
@@ -851,20 +910,6 @@ class Concatenate(Array):
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
                 + self.arrays[0].shape[self.axis+1:])
-
-# }}}
-
-
-# {{{ attribute lookup
-
-class AttributeLookup(Array):
-    """An expression node to extract an array from a :class:`DictOfNamedArrays`.
-
-    .. warning::
-
-        Not yet implemented.
-    """
-    pass
 
 # }}}
 
@@ -1174,20 +1219,6 @@ class SizeParam(InputArgumentBase):
     @property
     def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
-
-# }}}
-
-
-# {{{ loopy function
-
-class LoopyFunction(DictOfNamedArrays):
-    """
-    .. note::
-
-        This should allow both a locally stored kernel
-        and one that's obtained by importing a dotted
-        name.
-    """
 
 # }}}
 
