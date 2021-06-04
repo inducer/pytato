@@ -36,9 +36,9 @@ Generating code
 .. automodule:: pytato.target.loopy.codegen
 """
 
+import sys
 from dataclasses import dataclass
 
-import typing
 from typing import Any, Mapping, Optional, Union
 
 from pytato.target import Target, BoundProgram
@@ -46,9 +46,10 @@ from pytato.target import Target, BoundProgram
 import loopy
 
 
-if typing.TYPE_CHECKING:
-    # Imports skipped for efficiency.  FIXME: Neither of these work as type
-    # stubs are not present. Types are here only as documentation.
+# set in doc/conf.py
+if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
+    # Avoid import unless building docs to avoid creating a hard
+    # dependency on pyopencl, when Loopy can run fine without.
     import pyopencl
 
 

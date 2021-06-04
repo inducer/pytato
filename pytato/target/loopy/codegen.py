@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys
 import dataclasses
 import islpy as isl
 import loopy as lp
@@ -33,10 +34,8 @@ from pymbolic import var
 
 from typing import (
         Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set, Callable,
-        TYPE_CHECKING, Any, List)
+        Any, List)
 
-if TYPE_CHECKING:
-    import pyopencl
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
         SizeParam, InputArgumentBase, Placeholder, NamedArray)
@@ -47,6 +46,12 @@ from pytato.transform import Mapper, WalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
+
+# set in doc/conf.py
+if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
+    # Avoid import unless building docs to avoid creating a hard
+    # dependency on pyopencl, when Loopy can run fine without.
+    import pyopencl
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen

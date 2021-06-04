@@ -102,7 +102,5 @@ jobs:
                 curl -L -O -k https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
-                # Circular references in type hints. Sphinx currently doesn't deal well with those.
-                # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
-                build_docs --no-check
+                build_docs
 

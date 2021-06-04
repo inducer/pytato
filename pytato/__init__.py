@@ -25,7 +25,8 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, IndexLambda, NamedArray,
+        Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
+        IndexLambda, NamedArray,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,

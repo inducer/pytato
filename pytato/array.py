@@ -43,6 +43,7 @@ Array Interface
 .. autoclass:: Array
 .. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
+.. autoclass:: AbstractResultWithNamedArrays
 
 NumPy-Like Interface
 --------------------
@@ -152,20 +153,12 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
-Aliases
--------
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-(This section exists because Sphinx, our documentation tool, can't (yet)
-canonicalize type references. Once Sphinx 4.0 is released, we should use the
-``:canonical:`` option here.)
+.. class:: T_co
 
-.. class:: Array
-
-    Should be referenced as :class:`pytato.Array`.
-
-.. class:: DictOfNamedArrays
-
-    Should be referenced as :class:`pytato.DictOfNamedArrays`.
+    A covariant type variable used in, e.g. :meth:`pytools.tag.Taggable.copy`.
 """
 
 # }}}
@@ -326,7 +319,7 @@ class Array(Taggable):
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
 
-        Inherits from :class:`pytools.Taggable`.
+        Inherits from :class:`pytools.tag.Taggable`.
 
     .. automethod:: tagged
     .. automethod:: without_tags
