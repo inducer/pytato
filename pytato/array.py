@@ -628,7 +628,8 @@ class CountNamed(UniqueTag):
 # {{{ dict of named arrays
 
 class NamedArray(Array):
-    """A dictionary of Named Arrays.
+    """An entry in a :class:`DictOfNamedArrays`. Holds a reference back to the
+    containing instance as well as the name by which *self* is known there.
 
     .. automethod:: __init__
     """
