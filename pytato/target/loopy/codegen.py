@@ -243,7 +243,8 @@ class CodeGenState:
 
     .. attribute:: _program
 
-        The partial :class:`loopy.LoopKernel` or :class:`loopy.Program` being built.
+        The partial :class:`loopy.LoopKernel` or :class:`loopy.TranslationUnit`
+        being built.
 
     .. attribute:: results
 
@@ -255,7 +256,7 @@ class CodeGenState:
 
     .. automethod:: update_kernel
     """
-    _program: Union["lp.Program", lp.LoopKernel]
+    _program: Union["lp.TranslationUnit", lp.LoopKernel]
     results: Dict[Array, ImplementedResult]
 
     var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
@@ -825,12 +826,12 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     :param result: Outputs of the computation.
     :param target: Code generation target.
     :param options: Code generation options for the kernel.
-    :returns: A :class:`pytato.program.BoundProgram` wrapping the generated
+    :returns: A :class:`pytato.target.BoundProgram` wrapping the generated
         :mod:`loopy` program.
 
-    If *result* is a :class:`dict` or a :class:`DictOfNamedArrays` and *options*
-    is not supplied, then the Loopy option :attr:`~loopy.Options.return_dict`
-    will be set to *True*.
+    If *result* is a :class:`dict` or a :class:`pytato.DictOfNamedArrays` and
+    *options* is not supplied, then the Loopy option
+    :attr:`~loopy.Options.return_dict` will be set to *True*.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))

@@ -140,10 +140,10 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     * if *translation_unit* has been declared with multiple entrypoints,
       *entrypoint* can not be *None*.
 
+    :arg translation_unit: the translation unit to call.
     :arg bindings: mapping from argument names of ``translation_unit[entrypoint]``
       to :class:`pytato.array.Array`.
-    :arg results: names of ``translation_unit[entrypoint]`` argument names that
-      have to be returned from the call.
+    :arg entrypoint: the entrypoint of the ``translation_unit`` parameter.
     """
     if entrypoint is None:
         if len(translation_unit.entrypoints) != 1:
