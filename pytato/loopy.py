@@ -126,7 +126,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
                bindings: Dict[str, Union[Array, Number]],
                entrypoint: Optional[str] = None) -> LoopyCall:
     """
-    Operates a general :class:`loopy.TranslationUnit` on the array inputs as
+    Invokes an entry point of a :class:`loopy.TranslationUnit` on the array inputs as
     specified by *bindings*.
 
     Restrictions on the structure of ``translation_unit[entrypoint]``:
