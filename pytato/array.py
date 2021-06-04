@@ -186,7 +186,8 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
-
+import re
+from pyrsistent import pmap
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -715,34 +716,201 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
 # {{{ einsum
 
+
+class EinsumIndexDescriptor:
+    pass
+
+
+@dataclass
+class ElementwiseAxis(EinsumIndexDescriptor):
+    dim: int
+
+
+@dataclass
+class ReductionAxis(EinsumIndexDescriptor):
+    id: int
+
+
 class Einsum(Array):
     """
     An Einsum expression.
+
+    .. attribute:: access_descriptors
+
+        A :class:`tuple` of *access_descriptor* for each *arg* in
+        :attr:`Einsum.args`. An *access_descriptor* is a tuple of
+        :class:`EinsumIndexDescriptor` denoting how each axis of the
+        argument will be operated in the einstein summation.
+
+    .. attribute:: args
+
+       A :class:`tuple` of array over which the einstein summation is being
+       performed.
     """
-    _fields = Array._fields + ("spec", "spec_args")
+    _fields = Array._fields + ("index_expressions", "args")
     _mapper_method = "map_einsum"
 
-    def __init__(self, spec: str, spec_args: Sequence[Array],
+    def __init__(self,
+                 access_descriptors: Tuple[Tuple[EinsumIndexDescriptor]],
+                 args: Tuple[Array],
                  tags: TagsType = frozenset()):
         super().__init__(tags)
-        self.spec = spec
-        self.spec_args = spec_args
-
-        # # FIXME: maybe factor this out of loopy?
-        # import loopy as lp
-        # self.knl = lp.make_einsum(spec, spec_args)
+        self.access_descriptors = access_descriptors
+        self.args = args
 
     @property
+    @memoize_method
     def shape(self) -> ShapeType:
+        iaxis_to_len = {}
+
+        for access_descr, arg in zip(self.index_expressions):
+            for axis_op in access_descr:
+                if isinstance(axis_op, ElementwiseAxis):
+                    if axis_op.dim in iaxis_to_len:
+                        assert arg.shape[axis_op.dim] == iaxis_to_len[axis_op.dim]
+                    else:
+                        iaxis_to_len[axis_op.dim] = arg.shape[axis_op.dim]
+
         return self.spec_args[0].shape
 
     @property
+    @property
     def dtype(self) -> np.dtype[Any]:
-        return self.spec_args[0].dtype
+        if len(self.args) == 1:
+            return self.spec_args[0].dtype
+        else:
+            from functools import reduce
+            import operator.mul
+            # preferring this over invoking np.combine_types as pytato might
+            # choose to shift from numpy's binary ops' types
+            return reduce(operator.mul, (make_placeholder(shape=(),
+                                                          dtype=arg.dtype)
+                                         for arg in self.args)).dtype
 
 
-def make_einsum(spec: str, spec_args: Sequence[Array],) -> Einsum:
-    return Einsum(spec, spec_args)
+EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|?P<ellipsis>\.\.\.)\s*")
+
+
+def _validate_no_output_spec_single_ary_einsum(subscript: str,
+                                               ary: Array):
+    result = []
+    acc = subscript
+
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                result.append(match.groupdict("alpha"))
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span[0] == 0
+            acc = acc[match.span[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(idx for idx in result if idx == ...):
+        raise ValueError(f"'{subscript}' contains multiple ellipsis"
+                         ": illegal.")
+
+
+def _normalize_einsum_out_subscript(subscript: str) -> Dict[str,
+                                                            ElementwiseAxis]:
+
+    normalized_indices: List[str] = []
+    acc = subscript
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict("alpha"))
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span[0] == 0
+            acc = acc[match.span[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(set(normalized_indices) != len(normalized_indices)):
+        raise ValueError("Used an input more than once to refer to the"
+                         f" output axis in '{subscript}")
+
+    return {idx: ElementwiseAxis(i)
+            for i, idx in enumerate(normalized_indices)}
+
+
+def _normalize_einsum_in_subscript(subscript: str,
+                                   index_to_elem_axis: Dict[str,
+                                                           ElementwiseAxis],
+                                   index_to_redn_axis
+                                   ) -> Tuple[EinsumIndexDescriptor]:
+
+    normalized_indices: List[str] = []
+    acc = subscript
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict("alpha"))
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span[0] == 0
+            acc = acc[match.span[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(set(normalized_indices) != len(normalized_indices)):
+        raise ValueError("Used an input more than once to refer to the"
+                         f" output axis in '{subscript}")
+
+    # TODO: make a tuple of access descriptors from normalized_indices.
+    raise NotImplementedError("")
+
+    return {idx: ElementwiseAxis(i)
+            for i, idx in enumerate(normalized_indices)}
+
+
+
+def einsum(subscripts: str, *operands: Array) -> Einsum:
+    if len(operands) == 0:
+        raise ValueError("must specify at least one operand")
+
+    if "->" not in subscripts:
+        if len(operands) == 1:
+            return Einsum((tuple(ElementwiseAxis(i)
+                                 for i in range(operands[0].ndim)),),
+                          operands)
+        else:
+            # => eveything is reduced
+            subscripts = f"{subscripts} ->"
+
+    in_spec, out_spec = subscripts.split("->")
+
+    in_specs = in_spec.split(",")
+
+    if len(operands) != len(in_specs):
+        raise ValueError(
+            f"Number of operands should match the number "
+            f"of arg specs: '{in_specs}'. Length of operands is {len(operands)}; "
+            f"expecting {len(in_specs)} operands."
+        )
+
+    out_indices_to_axes = _normalize_einsum_out_subscript(out_spec)
+    reduction_axes = pmap({})
+    access_descriptors = []
+
+    for in_spec in in_specs:
+        access_descriptor, reduction_axes = (
+            _normalize_einsum_in_subscript(out_indices_to_axes,
+                                           reduction_axes))
+        access_descriptors.append(access_descriptor)
+
+    return Einsum(access_descriptors, operands)
 
 # }}}
 
