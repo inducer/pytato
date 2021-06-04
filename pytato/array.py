@@ -118,7 +118,6 @@ Built-in Expression Nodes
 .. autoclass:: MatrixProduct
 .. autoclass:: Stack
 .. autoclass:: Concatenate
-.. autoclass:: AttributeLookup
 
 Index Remapping
 ^^^^^^^^^^^^^^^
@@ -889,20 +888,6 @@ class Concatenate(Array):
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
                 + self.arrays[0].shape[self.axis+1:])
-
-# }}}
-
-
-# {{{ attribute lookup
-
-class AttributeLookup(Array):
-    """An expression node to extract an array from a :class:`DictOfNamedArrays`.
-
-    .. warning::
-
-        Not yet implemented.
-    """
-    pass
 
 # }}}
 
