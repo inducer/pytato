@@ -261,21 +261,60 @@ class CodeGenPreprocessor(CopyMapper):
                 bindings=bindings)
 
     def map_einsum(self, expr: Einsum) -> Array:
+        import operator
+        from functools import reduce
         from pytato.scalar_expr import Reduce
+        from pytato.utils import dim_to_index_lambda_components
+        from pytato.array import ElementwiseAxis, ReductionAxis
 
-        inner_expr = Reduce(
-                tuple(a for a in expr.spec_args),  # FIXME
-                "sum",
-                {})
+        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+        args_as_pym_expr: List[prim.Subscript] = []
+        namegen = UniqueNameGenerator(set(bindings))
 
-        bindings = {f"_in{i}": self.rec(array)
-                for i, array in enumerate(expr.spec_args)}
+        # {{{ add bindings coming from the shape expressions
+
+        for access_descr, (iarg, arg) in zip(expr.access_descriptors,
+                                            enumerate(expr.args)):
+            subscript_indices = []
+            for iaxis, axis in enumerate(access_descr):
+                if isinstance(axis, ElementwiseAxis):
+                    subscript_indices.append(prim.Variable(f"_{axis.dim}"))
+                else:
+                    assert isinstance(axis, ReductionAxis)
+                    redn_idx_name = f"_r{axis.dim}"
+                    if redn_idx_name not in redn_bounds:
+                        # convert the ShapeComponent to a ScalarExpression
+                        redn_bound, redn_bound_bindings = (
+                            dim_to_index_lambda_components(
+                                arg.shape[iaxis], namegen))
+                        redn_bound_bindings = {
+                            k: self.rec(v)
+                            for k, v in redn_bound_bindings.items()}
+                        redn_bounds[redn_idx_name] = (0, redn_bound)
+
+                        bindings.update(redn_bound_bindings)
+
+                    subscript_indices.append(prim.Variable(redn_idx_name))
+
+            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
+                                                   tuple(subscript_indices)))
+
+        # }}}
+
+        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
+                            args_as_pym_expr[0])
+
+        if redn_bounds:
+            inner_expr = Reduce(inner_expr,
+                                "sum",
+                                redn_bounds)
 
         return IndexLambda(expr=inner_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=bindings)
+                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                                       for s in expr.shape),
+                           dtype=expr.dtype,
+                           bindings=bindings)
 
     # {{{ index remapping (roll, axis permutation, slice)
 
