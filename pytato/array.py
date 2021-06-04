@@ -773,12 +773,13 @@ class Einsum(Array):
 
         for access_descr, arg in zip(self.access_descriptors,
                                      self.args):
-            for axis_op in access_descr:
+            assert arg.ndim == len(access_descr)
+            for arg_axis_len, axis_op in zip(arg.shape, access_descr):
                 if isinstance(axis_op, ElementwiseAxis):
                     if axis_op.dim in iaxis_to_len:
-                        assert arg.shape[axis_op.dim] == iaxis_to_len[axis_op.dim]
+                        assert arg.shape[axis_op.dim] == arg_axis_len
                     else:
-                        iaxis_to_len[axis_op.dim] = arg.shape[axis_op.dim]
+                        iaxis_to_len[axis_op.dim] = arg_axis_len
 
         assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
         return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
