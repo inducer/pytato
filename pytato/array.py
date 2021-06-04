@@ -187,7 +187,7 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
 import re
-from pyrsistent import pmap
+from pyrsistent import pmap, PMap
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -843,10 +843,17 @@ def _normalize_einsum_out_subscript(subscript: str) -> Dict[str,
 
 
 def _normalize_einsum_in_subscript(subscript: str,
-                                   index_to_elem_axis: Dict[str,
-                                                           ElementwiseAxis],
-                                   index_to_redn_axis
-                                   ) -> Tuple[EinsumIndexDescriptor]:
+                                   in_operand: Array,
+                                   out_operand: Array,
+                                   index_to_elem_axis: Mapping[str,
+                                                               ElementwiseAxis],
+                                   index_to_redn_axis: PMap[str,
+                                                            ReductionAxis],
+                                   redn_axis_lengths: PMap[str,
+                                                           ScalarExpression],
+                                   ) -> Tuple[Tuple[EinsumIndexDescriptor],
+                                              PMap[str, ReductionAxis],
+                                              PMap[str, ScalarExpression]]:
 
     normalized_indices: List[str] = []
     acc = subscript
@@ -864,16 +871,38 @@ def _normalize_einsum_in_subscript(subscript: str,
             raise ValueError(f"Cannot parse '{acc}' in provided einsum"
                              f" '{subscript}'.")
 
-    if len(set(normalized_indices) != len(normalized_indices)):
-        raise ValueError("Used an input more than once to refer to the"
-                         f" output axis in '{subscript}")
+    if len(normalized_indices) != in_operand.ndim:
+        raise ValueError(f"Subscript '{subscript}' doesn't match the dimensionality "
+                         f"of corresponding operand ({in_operand.ndim}).")
 
-    # TODO: make a tuple of access descriptors from normalized_indices.
-    raise NotImplementedError("")
+    result = []
 
-    return {idx: ElementwiseAxis(i)
-            for i, idx in enumerate(normalized_indices)}
+    for iaxis, index_char in normalized_indices:
+        in_axis_len = in_operand.shape[iaxis]
+        if index_char in index_to_elem_axis:
+            out_axis_len = out_operand.shape[index_to_elem_axis[index_char].dim]
+            if (in_axis_len != out_axis_len):
+                raise ValueError(f"Got conflicting lengths for index '{index_char}'."
+                                 f" Conflicting lengths -- input: {in_axis_len},"
+                                 f" output: {out_axis_len}.")
+            result.append(index_to_elem_axis[index_char])
+        elif index_char in index_to_redn_axis:
+            redn_axis_len = redn_axis_lengths[index_char]
+            if (in_axis_len != redn_axis_len):
+                raise ValueError(f"Got conflicting lengths for index '{index_char}'."
+                                 f" Conflicting lengths -- {in_axis_len},"
+                                 f" {redn_axis_len}.")
+            result.append(index_to_redn_axis[index_char])
+        else:
+            # TODO make a new redn axis here...
+            redn_axis_lengths = redn_axis_lengths.set(index_char, in_axis_len)
+            redn_axis = ReductionAxis(len(index_to_redn_axis))
+            index_to_redn_axis = index_to_redn_axis.set(index_char, redn_axis)
+            result.append(redn_axis)
 
+    return (result,
+            index_to_redn_axis,
+            redn_axis_lengths)
 
 
 def einsum(subscripts: str, *operands: Array) -> Einsum:
