@@ -57,17 +57,14 @@ class LoopyCall(DictOfNamedArrays):
             translation_unit: "lp.TranslationUnit",
             bindings: Dict[str, Union[Array, Number]],
             entrypoint: str):
-        super().__init__({})
+        entry_kernel = translation_unit[entrypoint]
+        super().__init__({name: LoopyCallResult(self, name)
+                              for name, lp_arg in entry_kernel.arg_dict.items()
+                              if lp_arg.is_output})
 
         self.translation_unit = translation_unit
         self.bindings = bindings
         self.entrypoint = entrypoint
-
-        entry_kernel = translation_unit[entrypoint]
-
-        self._named_arrays = {name: LoopyCallResult(self, name)
-                              for name, lp_arg in entry_kernel.arg_dict.items()
-                              if lp_arg.is_output}
 
     @memoize_method
     def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
