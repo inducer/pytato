@@ -620,8 +620,9 @@ class CountNamed(UniqueTag):
 # {{{ dict of named arrays
 
 class NamedArray(Array):
-    """An entry in a :class:`DictOfNamedArrays`. Holds a reference back to the
-    containing instance as well as the name by which *self* is known there.
+    """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
+    back to thecontaining instance as well as the name by which *self* is
+    known there.
 
     .. automethod:: __init__
     """
@@ -656,7 +657,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
     is determined by concrete subclasses of this class, e.g.
-    :class:`pytato.loopy.LoopyCall`.
+    :class:`pytato.loopy.LoopyCall` or :class:`DictOfNamedArrays`.
 
     .. automethod:: __init__
     .. automethod:: __contains__
