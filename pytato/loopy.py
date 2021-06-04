@@ -116,10 +116,10 @@ class LoopyCallResult(NamedArray):
         return shape
 
     @property
-    def dtype(self) -> Any:
+    def dtype(self) -> np.dtype[Any]:
         loopy_arg = self.dict_of_named_arrays._entry_kernel.arg_dict[  # type:ignore
                 self.name]
-        return loopy_arg.dtype.numpy_dtype
+        return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 
 def call_loopy(translation_unit: "lp.TranslationUnit",
