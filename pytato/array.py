@@ -727,10 +727,16 @@ class EinsumIndexDescriptor:
 class ElementwiseAxis(EinsumIndexDescriptor):
     dim: int
 
+    def __hash__(self) -> int:
+        return hash((type(self), self.dim))
+
 
 @dataclass
 class ReductionAxis(EinsumIndexDescriptor):
-    id: int
+    dim: int
+
+    def __hash__(self) -> int:
+        return hash((type(self), self.dim))
 
 
 class Einsum(Array):
@@ -749,7 +755,7 @@ class Einsum(Array):
        A :class:`tuple` of array over which the einstein summation is being
        performed.
     """
-    _fields = Array._fields + ("index_expressions", "args")
+    _fields = Array._fields + ("access_descriptors", "args")
     _mapper_method = "map_einsum"
 
     def __init__(self,
@@ -765,7 +771,8 @@ class Einsum(Array):
     def shape(self) -> ShapeType:
         iaxis_to_len = {}
 
-        for access_descr, arg in zip(self.index_expressions):
+        for access_descr, arg in zip(self.access_descriptors,
+                                     self.args):
             for axis_op in access_descr:
                 if isinstance(axis_op, ElementwiseAxis):
                     if axis_op.dim in iaxis_to_len:
@@ -773,21 +780,24 @@ class Einsum(Array):
                     else:
                         iaxis_to_len[axis_op.dim] = arg.shape[axis_op.dim]
 
-        return self.spec_args[0].shape
+        assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
+        return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
 
     @property
-    @property
+    @memoize_method
     def dtype(self) -> np.dtype[Any]:
-        if len(self.args) == 1:
-            return self.spec_args[0].dtype
-        else:
-            from functools import reduce
-            import operator.mul
-            # preferring this over invoking np.combine_types as pytato might
-            # choose to shift from numpy's binary ops' types
-            return reduce(operator.mul, (make_placeholder(shape=(),
-                                                          dtype=arg.dtype)
-                                         for arg in self.args)).dtype
+        from functools import reduce
+        import operator
+
+        def _scalar_placeholder_like(ary):
+            return make_placeholder(shape=(),
+                                    dtype=ary.dtype)
+
+        # preferring this over invoking np.combine_types as pytato might
+        # choose to shift from numpy's binary ops' types
+        return reduce(operator.mul, (_scalar_placeholder_like(arg)
+                                     for arg in self.args[1:]),
+                      _scalar_placeholder_like(self.args[0])).dtype
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
@@ -939,7 +949,7 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
                                            index_to_axis_length))
         access_descriptors.append(access_descriptor)
 
-    return Einsum(access_descriptors, operands)
+    return Einsum(tuple(access_descriptors), operands)
 
 # }}}
 
