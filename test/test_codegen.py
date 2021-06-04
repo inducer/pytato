@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
-__copyright__ = "Copyright (C) 2020 Andreas Kloeckner"
+__copyright__ = """Copyright (C) 2020-2021 Andreas Kloeckner
+Copyright (C) 2021 University of Illinois Board of Trustees
+Copyright (C) 2021 Matthias Diener
+Copyright (C) 2021 Kaushik Kulkarni
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -620,6 +624,47 @@ def test_reductions(ctx_factory, axis, redn, shape):
     evt, (out,) = prg(queue)
 
     assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-14)
+
+
+@pytest.mark.parametrize("spec,argshapes", ([("im,mj,km->ijk",
+                                              [(3, 3)]*3),
+
+                                             ("ik,kj->ij",  # A @ B
+                                              [(4, 3), (3, 5)]),
+
+                                             ("ij,ij->ij",  # A * B
+                                              [(4, 4)]*2),
+
+                                             ("ij,ji->ij",  # A * B.T
+                                              [(4, 4)]*2),
+
+                                             ("ij,kj->ik",  # inner(A, B)
+                                              [(4, 4)]*2),
+
+                                             ("ij,j->j",    # A @ x
+                                              [(4, 4), (4,)]),
+
+                                             ("ij->ij",  # identity
+                                              [(10, 4)]),
+
+                                             ("ij->ji",  # transpose
+                                              [(10, 4)]),
+
+                                             ("ii->i",  # diag
+                                              [(5, 5)]),
+                                             ]))
+def test_einsum(ctx_factory, spec, argshapes):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    np_operands = [np.random.rand(*argshape) for argshape in argshapes]
+    pt_operands = [pt.make_data_wrapper(x_in) for x_in in np_operands]
+
+    np_out = np.einsum(spec, *np_operands)
+    pt_expr = pt.einsum(spec, *pt_operands)
+
+    _, (pt_out,) = pt.generate_loopy(pt_expr, cl_device=queue.device)(queue)
+    np.testing.assert_allclose(np_out, pt_out)
 
 
 if __name__ == "__main__":
