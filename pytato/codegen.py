@@ -115,7 +115,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_loopy_function(self, expr: LoopyCall) -> LoopyCall:
+    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
         if not isinstance(self.target, LoopyTarget):
             raise ValueError("Got a LoopyCall for a non-loopy target.")

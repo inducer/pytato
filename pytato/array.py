@@ -170,11 +170,12 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 
 # }}}
 
+from abc import ABC, abstractmethod
 from functools import partialmethod
 import operator
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List)
+        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -631,20 +632,23 @@ class NamedArray(Array):
 
     .. automethod:: __init__
     """
-    _fields = Array._fields + ("dict_of_named_arrays", "name")
+    _fields = Array._fields + ("_container", "name")
     _mapper_method = "map_named_array"
 
     def __init__(self,
-            dict_of_named_arrays: DictOfNamedArrays,
+            container: AbstractResultWithNamedArrays,
             name: str,
             tags: TagsType = frozenset()) -> None:
         super().__init__(tags=tags)
-        self.dict_of_named_arrays = dict_of_named_arrays
+        self._container = container
         self.name = name
 
     @property
     def expr(self) -> Array:
-        return self.dict_of_named_arrays._data[self.name]
+        if isinstance(self._container, DictOfNamedArrays):
+            return self._container._data[self.name]
+        else:
+            raise TypeError("only permitted when container is a DictOfNamedArrays")
 
     @property
     def shape(self) -> ShapeType:
@@ -655,45 +659,69 @@ class NamedArray(Array):
         return self.expr.dtype
 
 
-class DictOfNamedArrays(Mapping[str, NamedArray]):
-    """A container that maps valid Python identifiers
-    to instances of :class:`NamedArray`. May occur as a result
-    type of array computations.
+class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
+    r"""An abstract array computation that results in multiple :class:`Array`\ s,
+    each named. The way in which the values of these arrays are computed
+    is determined by concrete subclasses of this class, e.g.
+    :class:`pytato.loopy.LoopyCall`.
 
     .. automethod:: __init__
     .. automethod:: __contains__
     .. automethod:: __getitem__
-    .. automethod:: __iter__
     .. automethod:: __len__
 
     .. note::
 
-        This container deliberately does not implement
-        arithmetic.
+        This container deliberately does not implement arithmetic.
     """
+
+    _mapper_method: ClassVar[str]
+
+    @abstractmethod
+    def __contains__(self, name: object) -> bool:
+        pass
+
+    @abstractmethod
+    def __getitem__(self, name: str) -> NamedArray:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+class DictOfNamedArrays(AbstractResultWithNamedArrays):
+    """A container of named results, each of which can be computed as an
+    array expression provided to the constructor.
+
+    Implements :class:`AbstractResultWithNamedArrays`.
+
+    .. automethod:: __init__
+    """
+
     _mapper_method = "map_dict_of_named_arrays"
 
-    def __init__(self, data: Dict[str, Array]):
-        self._named_arrays = {name: NamedArray(self, name)
-                              for name in data}
-        # kept around mainly for efficient __hash__
+    def __init__(self, data: Mapping[str, Array]):
+        super().__init__()
         self._data = data
 
-    def __contains__(self, name: object) -> bool:
-        return name in self._named_arrays
-
-    def __getitem__(self, name: str) -> NamedArray:
-        return self._named_arrays[name]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._named_arrays)
-
-    def __len__(self) -> int:
-        return len(self._named_arrays)
-
-    @memoize_method
     def __hash__(self) -> int:
         return hash(frozenset(self._data.items()))
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._data
+
+    @memoize_method
+    def __getitem__(self, name: str) -> NamedArray:
+        if name not in self._data:
+            raise KeyError(name)
+        return NamedArray(self, name)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
 # }}}
 

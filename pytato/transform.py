@@ -29,11 +29,13 @@ from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
+        AbstractResultWithNamedArrays,
         Reshape, Concatenate, NamedArray, IndexRemappingBase)
 from pytato.loopy import LoopyCall
 
-T = TypeVar("T", Array, DictOfNamedArrays)
-R = FrozenSet[Union[Array, DictOfNamedArrays]]
+T = TypeVar("T", Array, AbstractResultWithNamedArrays)
+ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+R = FrozenSet[ArrayOrNames]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -93,8 +95,7 @@ class CopyMapper(Mapper):
     """
 
     def __init__(self) -> None:
-        self.cache: Dict[Union[Array, DictOfNamedArrays],
-                Union[Array, DictOfNamedArrays]] = {}
+        self.cache: Dict[ArrayOrNames, ArrayOrNames] = {}
 
     def rec(self, expr: T) -> T:  # type: ignore
         if expr in self.cache:
@@ -158,8 +159,7 @@ class CopyMapper(Mapper):
         return SizeParam(name=expr.name, tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> NamedArray:
-        return type(expr)(self.rec(expr.dict_of_named_arrays),
-                          expr.name)
+        return type(expr)(self.rec(expr._container), expr.name)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -174,9 +174,9 @@ class DependencyMapper(Mapper):
     """
 
     def __init__(self) -> None:
-        self.cache: Dict[Union[Array, DictOfNamedArrays], R] = {}
+        self.cache: Dict[ArrayOrNames, R] = {}
 
-    def rec(self, expr: Union[Array, DictOfNamedArrays]) -> R:  # type: ignore
+    def rec(self, expr: ArrayOrNames) -> R:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
         result: R = super().rec(expr)  # type:ignore
@@ -230,13 +230,13 @@ class DependencyMapper(Mapper):
                                                  for ary in expr.arrays))
 
     def map_named_array(self, expr: NamedArray) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.dict_of_named_arrays))
+        return self.combine(frozenset([expr]), self.rec(expr._container))
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary.expr)
                                                  for ary in expr.values()))
 
-    def map_loopy_function(self, expr: LoopyCall) -> R:
+    def map_loopy_call(self, expr: LoopyCall) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.bindings.values()
                                                  if isinstance(ary, Array)))
@@ -326,7 +326,7 @@ class WalkMapper(Mapper):
 
     map_concatenate = map_stack
 
-    def map_loopy_function(self, expr: LoopyCall) -> None:
+    def map_loopy_call(self, expr: LoopyCall) -> None:
         if not self.visit(expr):
             return
 
@@ -349,7 +349,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        self.rec(expr.dict_of_named_arrays)
+        self.rec(expr._container)
         self.post_visit(expr)
 
 # }}}

@@ -28,9 +28,9 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import pymbolic.primitives as prim
-from typing import Dict, Optional, Any, Union
+from typing import Dict, Optional, Any, Union, Iterator
 from numbers import Number
-from pytato.array import DictOfNamedArrays, Array, ShapeType, NamedArray
+from pytato.array import AbstractResultWithNamedArrays, Array, ShapeType, NamedArray
 from pytato.scalar_expr import SubstitutionMapper, ScalarExpression
 from pytools import memoize_method
 from pytools.tag import TagsType
@@ -46,19 +46,20 @@ __doc__ = """
 """
 
 
-class LoopyCall(DictOfNamedArrays):
+class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
-    _mapper_method = "map_loopy_function"
+    _mapper_method = "map_loopy_call"
 
     def __init__(self,
             translation_unit: "lp.TranslationUnit",
             bindings: Dict[str, Union[Array, Number]],
             entrypoint: str):
         entry_kernel = translation_unit[entrypoint]
-        super().__init__({name: LoopyCallResult(self, name)
+        super().__init__()
+        self._result_names = frozenset({name
                               for name, lp_arg in entry_kernel.arg_dict.items()
                               if lp_arg.is_output})
 
@@ -78,6 +79,21 @@ class LoopyCall(DictOfNamedArrays):
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
                      self.entrypoint))
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._result_names
+
+    @memoize_method
+    def __getitem__(self, name: str) -> LoopyCallResult:
+        if name not in self._result_names:
+            raise KeyError(name)
+        return LoopyCallResult(self, name)
+
+    def __len__(self) -> int:
+        return len(self._result_names)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._result_names)
 
     def __eq__(self, other: Any) -> bool:
         if self is other:
@@ -99,25 +115,25 @@ class LoopyCallResult(NamedArray):
     Inherits from :class:`~pytato.array.NamedArray`.
     """
     def __init__(self,
-            dict_of_named_arrays: LoopyCall,
+            loopy_call: LoopyCall,
             name: str,
             tags: TagsType = frozenset()) -> None:
-        super().__init__(dict_of_named_arrays, name, tags=tags)
+        super().__init__(loopy_call, name, tags=tags)
 
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
     @property
     def shape(self) -> ShapeType:
-        loopy_arg = self.dict_of_named_arrays._entry_kernel.arg_dict[  # type:ignore
+        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
                 self.name]
-        shape: ShapeType = self.dict_of_named_arrays._to_pytato(  # type:ignore
+        shape: ShapeType = self._container._to_pytato(  # type:ignore
                 loopy_arg.shape)
         return shape
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        loopy_arg = self.dict_of_named_arrays._entry_kernel.arg_dict[  # type:ignore
+        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
                 self.name]
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 

@@ -370,12 +370,12 @@ class CodeGenMapper(Mapper):
         if expr in state.results:
             return state.results[expr]
 
-        self.rec(expr.dict_of_named_arrays, state)
+        self.rec(expr._container, state)
 
         assert expr in state.results
         return state.results[expr]
 
-    def map_loopy_function(self, expr: LoopyCall, state: CodeGenState) -> None:
+    def map_loopy_call(self, expr: LoopyCall, state: CodeGenState) -> None:
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
