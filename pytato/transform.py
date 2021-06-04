@@ -30,7 +30,7 @@ from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
         Reshape, Concatenate, NamedArray, IndexRemappingBase)
-from pytato.loopy import LoopyFunction
+from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, DictOfNamedArrays)
 R = FrozenSet[Union[Array, DictOfNamedArrays]]
@@ -236,7 +236,7 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), *(self.rec(ary.expr)
                                                  for ary in expr.values()))
 
-    def map_loopy_function(self, expr: LoopyFunction) -> R:
+    def map_loopy_function(self, expr: LoopyCall) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.bindings.values()
                                                  if isinstance(ary, Array)))
@@ -326,7 +326,7 @@ class WalkMapper(Mapper):
 
     map_concatenate = map_stack
 
-    def map_loopy_function(self, expr: LoopyFunction) -> None:
+    def map_loopy_function(self, expr: LoopyCall) -> None:
         if not self.visit(expr):
             return
 

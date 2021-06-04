@@ -28,7 +28,6 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import pymbolic.primitives as prim
-from loopy.types import NumpyType
 from typing import Dict, Optional, Any, Union
 from numbers import Number
 from pytato.array import DictOfNamedArrays, Array, ShapeType, NamedArray
@@ -39,9 +38,9 @@ from pytools.tag import TagsType
 __doc__ = """
 .. currentmodule:: pytato.loopy
 
-.. autoclass:: LoopyFunction
+.. autoclass:: LoopyCall
 
-.. autoclass:: LoopyFunctionResult
+.. autoclass:: LoopyCallResult
 
 .. autofunction:: call_loopy
 """
@@ -55,54 +54,55 @@ class LoopyCall(DictOfNamedArrays):
     _mapper_method = "map_loopy_function"
 
     def __init__(self,
-            program: "lp.Program",
+            translation_unit: "lp.TranslationUnit",
             bindings: Dict[str, Union[Array, Number]],
             entrypoint: str):
         super().__init__({})
 
-        self.program = program
+        self.translation_unit = translation_unit
         self.bindings = bindings
         self.entrypoint = entrypoint
 
-        entry_kernel = program[entrypoint]
+        entry_kernel = translation_unit[entrypoint]
 
-        self._named_arrays = {name: LoopyFunctionResult(self, name)
+        self._named_arrays = {name: LoopyCallResult(self, name)
                               for name, lp_arg in entry_kernel.arg_dict.items()
                               if lp_arg.is_output}
 
     @memoize_method
-    def to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
+    def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
         from pymbolic.mapper.substitutor import make_subst_func
         return SubstitutionMapper(make_subst_func(self.bindings))(expr)
 
     @property
-    def entry_kernel(self) -> lp.LoopKernel:
-        return self.program[self.entrypoint]
+    def _entry_kernel(self) -> lp.LoopKernel:
+        return self.translation_unit[self.entrypoint]
 
     def __hash__(self) -> int:
-        return hash((self.program, tuple(self.bindings.items()), self.entrypoint))
+        return hash((self.translation_unit, tuple(self.bindings.items()),
+                     self.entrypoint))
 
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
 
-        if not isinstance(other, LoopyFunction):
+        if not isinstance(other, LoopyCall):
             return False
 
         if ((self.entrypoint == other.entrypoint)
              and (self.bindings == other.bindings)
-             and (self.program == other.program)):
+             and (self.translation_unit == other.translation_unit)):
             return True
         return False
 
 
-class LoopyFunctionResult(NamedArray):
+class LoopyCallResult(NamedArray):
     """
-    Named array for :class:`LoopyFunction`'s result.
+    Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
     def __init__(self,
-            dict_of_named_arrays: LoopyFunction,
+            dict_of_named_arrays: LoopyCall,
             name: str,
             tags: TagsType = frozenset()) -> None:
         super().__init__(dict_of_named_arrays, name, tags=tags)
@@ -112,66 +112,66 @@ class LoopyFunctionResult(NamedArray):
 
     @property
     def shape(self) -> ShapeType:
-        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
+        loopy_arg = self.dict_of_named_arrays._entry_kernel.arg_dict[  # type:ignore
                 self.name]
-        shape: ShapeType = self.dict_of_named_arrays.to_pytato(  # type:ignore
+        shape: ShapeType = self.dict_of_named_arrays._to_pytato(  # type:ignore
                 loopy_arg.shape)
         return shape
 
     @property
-    def dtype(self) -> np.dtype[Any]:
-        loopy_arg = self.dict_of_named_arrays.entry_kernel.arg_dict[  # type:ignore
+    def dtype(self) -> Any:
+        loopy_arg = self.dict_of_named_arrays._entry_kernel.arg_dict[  # type:ignore
                 self.name]
         return loopy_arg.dtype.numpy_dtype
 
 
-def call_loopy(program: "lp.Program",
+def call_loopy(translation_unit: "lp.TranslationUnit",
                bindings: Dict[str, Union[Array, Number]],
-               entrypoint: Optional[str] = None) -> LoopyFunction:
+               entrypoint: Optional[str] = None) -> LoopyCall:
     """
-    Operates a general :class:`loopy.Program` on the array inputs as specified
-    by *bindings*.
+    Operates a general :class:`loopy.TranslationUnit` on the array inputs as
+    specified by *bindings*.
 
-    Restrictions on the structure of ``program[entrypoint]``:
+    Restrictions on the structure of ``translation_unit[entrypoint]``:
 
-    * array arguments of ``program[entrypoint]`` must either be either
+    * array arguments of ``translation_unit[entrypoint]`` must either be either
       input-only or output-only.
-    * all input-only arguments of ``program[entrypoint]`` must appear in
+    * all input-only arguments of ``translation_unit[entrypoint]`` must appear in
       *bindings*.
-    * all output-only arguments of ``program[entrypoint]`` must appear in
-      *bindings*.
-    * if *program* has been declared with multiple entrypoints, *entrypoint*
-      can not be *None*.
+    * all output-only arguments of ``translation_unit[entrypoint]`` must appear
+      in *bindings*.
+    * if *translation_unit* has been declared with multiple entrypoints,
+      *entrypoint* can not be *None*.
 
-    :arg bindings: mapping from argument names of ``program[entrypoint]`` to
-        :class:`pytato.array.Array`.
-    :arg results: names of ``program[entrypoint]`` argument names that have to
-        be returned from the call.
+    :arg bindings: mapping from argument names of ``translation_unit[entrypoint]``
+    to :class:`pytato.array.Array`.
+    :arg results: names of ``translation_unit[entrypoint]`` argument names that
+    have to be returned from the call.
     """
     if entrypoint is None:
-        if len(program.entrypoints) != 1:
+        if len(translation_unit.entrypoints) != 1:
             raise ValueError("cannot infer entrypoint")
 
-        entrypoint, = program.entrypoints
+        entrypoint, = translation_unit.entrypoints
 
-    program = program.with_entrypoints(entrypoint)
+    translation_unit = translation_unit.with_entrypoints(entrypoint)
 
     # {{{ sanity checks
 
     if any([arg.is_input and arg.is_output
-            for arg in program[entrypoint].args]):
+            for arg in translation_unit[entrypoint].args]):
         # Pytato DAG cannot have stateful nodes.
         raise ValueError("Cannot call a kernel with side-effects.")
 
     for name in bindings:
-        if name not in program[entrypoint].arg_dict:
+        if name not in translation_unit[entrypoint].arg_dict:
             raise ValueError(f"Kernel '{entrypoint}' got an unexpected input: "
                     f"'{name}'.")
-        if program[entrypoint].arg_dict[name].is_output:
+        if translation_unit[entrypoint].arg_dict[name].is_output:
             raise ValueError(f"Kernel '{entrypoint}' got an output arg '{name}' "
                     f"as input.")
 
-    for arg in program[entrypoint].args:
+    for arg in translation_unit[entrypoint].args:
         if arg.is_input:
             if arg.name not in bindings:
                 raise ValueError(f"Kernel '{entrypoint}' expects an input"
@@ -191,30 +191,30 @@ def call_loopy(program: "lp.Program",
 
     # }}}
 
-    # {{{ infer types of the program
+    # {{{ infer types of the translation_unit
 
     for name, ary in bindings.items():
         if isinstance(ary, Array):
-            program = lp.add_dtypes(program, {name: ary.dtype})
+            translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})
         elif isinstance(ary, prim.Expression):
-            program = lp.add_dtypes(program, {name: np.intp})
+            translation_unit = lp.add_dtypes(translation_unit, {name: np.intp})
         else:
             assert isinstance(ary, Number)
-            program = lp.add_dtypes(program, {name: type(ary)})
+            translation_unit = lp.add_dtypes(translation_unit, {name: type(ary)})
 
-    program = lp.infer_unknown_types(program)
-
-    # }}}
-
-    # {{{ infer shapes of the program
-
-    program = lp.infer_arg_descr(program)
+    translation_unit = lp.infer_unknown_types(translation_unit)
 
     # }}}
 
-    program = program.with_entrypoints(frozenset())
+    # {{{ infer shapes of the translation_unit
 
-    return LoopyFunction(program, bindings, entrypoint)
+    translation_unit = lp.infer_arg_descr(translation_unit)
+
+    # }}}
+
+    translation_unit = translation_unit.with_entrypoints(frozenset())
+
+    return LoopyCall(translation_unit, bindings, entrypoint)
 
 
 # vim: fdm=marker

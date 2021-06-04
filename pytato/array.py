@@ -41,6 +41,7 @@ Array Interface
 ---------------
 
 .. autoclass:: Array
+.. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
 
 NumPy-Like Interface
@@ -115,7 +116,7 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
-.. autoclass:: LoopyFunction
+.. autoclass:: LoopyCall
 .. autoclass:: Stack
 .. autoclass:: Concatenate
 .. autoclass:: AttributeLookup
@@ -627,6 +628,10 @@ class CountNamed(UniqueTag):
 # {{{ dict of named arrays
 
 class NamedArray(Array):
+    """A dictionary of Named Arrays.
+
+    .. automethod:: __init__
+    """
     _fields = Array._fields + ("dict_of_named_arrays", "name")
     _mapper_method = "map_named_array"
 
@@ -653,7 +658,7 @@ class NamedArray(Array):
 
 class DictOfNamedArrays(Mapping[str, NamedArray]):
     """A container that maps valid Python identifiers
-    to instances of :class:`Array`. May occur as a result
+    to instances of :class:`NamedArray`. May occur as a result
     type of array computations.
 
     .. automethod:: __init__
@@ -672,6 +677,7 @@ class DictOfNamedArrays(Mapping[str, NamedArray]):
     def __init__(self, data: Dict[str, Array]):
         self._named_arrays = {name: NamedArray(self, name)
                               for name in data}
+        # kept around mainly for efficient __hash__
         self._data = data
 
     def __contains__(self, name: object) -> bool:

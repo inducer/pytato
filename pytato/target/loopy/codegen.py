@@ -46,7 +46,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper, WalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
-from pytato.loopy import LoopyFunction
+from pytato.loopy import LoopyCall
 
 __doc__ = """
 .. currentmodule:: pytato.target.loopy.codegen
@@ -374,13 +374,13 @@ class CodeGenMapper(Mapper):
         assert expr in state.results
         return state.results[expr]
 
-    def map_loopy_function(self, expr: LoopyFunction, state: CodeGenState) -> None:
+    def map_loopy_function(self, expr: LoopyCall, state: CodeGenState) -> None:
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
-        callee_kernel = expr.program[expr.entrypoint]
+        callee_kernel = expr.translation_unit[expr.entrypoint]
 
-        state.update_program(lp.merge([state.program, expr.program]))
+        state.update_program(lp.merge([state.program, expr.translation_unit]))
 
         domains = []
 

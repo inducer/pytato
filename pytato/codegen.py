@@ -38,7 +38,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
 from pytato.target import Target
-from pytato.loopy import LoopyFunction
+from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
@@ -115,26 +115,27 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_loopy_function(self, expr: LoopyFunction) -> LoopyFunction:
+    def map_loopy_function(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
         if not isinstance(self.target, LoopyTarget):
-            raise ValueError("Got a LoopyFunction for a non-loopy target.")
-        program = expr.program.copy(target=self.target.get_loopy_target())
+            raise ValueError("Got a LoopyCall for a non-loopy target.")
+        translation_unit = expr.translation_unit.copy(
+                                        target=self.target.get_loopy_target())
         namegen = UniqueNameGenerator(set(self.kernels_seen))
         entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
 
-        for name, clbl in program.callables_table.items():
+        for name, clbl in translation_unit.callables_table.items():
             if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
                 if name in self.kernels_seen and (
-                        program[name] != self.kernels_seen[name]):
+                        translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
 
                     # {{{ see if it's one of the other kernels
 
                     for other_knl in self.kernels_seen.values():
-                        if other_knl.copy(name=name) == program[name]:
+                        if other_knl.copy(name=name) == translation_unit[name]:
                             new_name = other_knl.name
                             break
                     else:
@@ -149,10 +150,11 @@ class CodeGenPreprocessor(CopyMapper):
                         # entrypoint as well.
                         entrypoint = new_name
 
-                    program = lp.rename_callable(program, name, new_name)
+                    translation_unit = lp.rename_callable(
+                                            translation_unit, name, new_name)
                     name = new_name
 
-                self.kernels_seen[name] = program[name]
+                self.kernels_seen[name] = translation_unit[name]
 
         # }}}
 
@@ -160,7 +162,7 @@ class CodeGenPreprocessor(CopyMapper):
                            else subexpr)
                     for name, subexpr in expr.bindings.items()}
 
-        return LoopyFunction(program=program,
+        return LoopyCall(translation_unit=translation_unit,
                              bindings=bindings,  # type: ignore
                              entrypoint=entrypoint)
 
