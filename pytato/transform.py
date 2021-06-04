@@ -154,7 +154,8 @@ class CopyMapper(Mapper):
         return SizeParam(name=expr.name, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
-        return Einsum(spec=expr.spec, spec_args=expr.spec_args)
+        return Einsum(expr.access_descriptors,
+                      tuple(self.rec(arg) for arg in expr.args))
 
 
 class DependencyMapper(Mapper):
@@ -220,7 +221,7 @@ class DependencyMapper(Mapper):
 
     def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
         return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.spec_args))
+                                                 for ary in expr.args))
 
 
 class WalkMapper(Mapper):
@@ -309,8 +310,12 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        for child in expr.spec_args:
+        for child in expr.args:
             self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
 
         self.post_visit(expr)
 
