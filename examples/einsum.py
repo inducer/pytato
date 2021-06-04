@@ -14,11 +14,9 @@ b_in = np.random.rand(n, n)
 a = pt.make_data_wrapper(a_in)
 b = pt.make_data_wrapper(b_in)
 
-args = (a, b)
-
-prg = pt.generate_loopy(pt.make_einsum(spec, args), cl_device=queue.device)
+prg = pt.generate_loopy(pt.einsum(spec, a, b), cl_device=queue.device)
 
 evt, (out,) = prg(queue)
-ans = np.einsum(spec, a, b)
+ans = np.einsum(spec, a_in, b_in)
 
 assert np.linalg.norm(out - ans) <= 1e-15
