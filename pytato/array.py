@@ -853,6 +853,7 @@ def _normalize_einsum_in_subscript(subscript: str,
                                    ) -> Tuple[Tuple[EinsumIndexDescriptor],
                                               PMap[str, EinsumIndexDescriptor],
                                               PMap[str, ShapeComponent]]:
+    from pytato.utils import are_shape_components_equal
 
     normalized_indices: List[str] = []
     acc = subscript
@@ -881,7 +882,8 @@ def _normalize_einsum_in_subscript(subscript: str,
         if index_char in index_to_descr:
             if index_char in index_to_axis_length:
                 seen_axis_len = index_to_axis_length[index_char]
-                if in_axis_len != seen_axis_len:
+                if not are_shape_components_equal(in_axis_len,
+                                                  seen_axis_len):
                     raise ValueError(f"Got conflicting lengths for '{index_char}'"
                                      f" -- {in_axis_len}, {seen_axis_len}.")
             else:
