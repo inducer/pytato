@@ -55,7 +55,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
-        "Array", "DictOfNamedArrays",
+        "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
