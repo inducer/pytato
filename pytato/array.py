@@ -173,6 +173,7 @@ canonicalize type references. Once Sphinx 4.0 is released, we should use the
 
 from functools import partialmethod
 import operator
+from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List)
@@ -203,6 +204,7 @@ else:
     EllipsisType = type(Ellipsis)
 
 # }}}
+
 
 if TYPE_CHECKING:
     _dtype_any = np.dtype[Any]
@@ -788,13 +790,13 @@ class Einsum(Array):
                                          for arg in self.args)).dtype
 
 
-EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|?P<ellipsis>\.\.\.)\s*")
+EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
 
 
 def _validate_no_output_spec_single_ary_einsum(subscript: str,
                                                ary: Array):
     result = []
-    acc = subscript
+    acc = subscript.strip()
 
     while acc:
         match = EINSUM_FIRST_INDEX.match(acc)
@@ -804,8 +806,8 @@ def _validate_no_output_spec_single_ary_einsum(subscript: str,
             else:
                 assert "ellipsis" in match.groupdict()
                 raise NotImplementedError("Broadcasting in einsums not supported")
-            assert match.span[0] == 0
-            acc = acc[match.span[-1]:]
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
         else:
             raise ValueError(f"Cannot parse '{acc}' in provided einsum"
                              f" '{subscript}'.")
@@ -815,7 +817,7 @@ def _validate_no_output_spec_single_ary_einsum(subscript: str,
                          ": illegal.")
 
 
-def _normalize_einsum_out_subscript(subscript: str) -> Dict[str,
+def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
                                                             ElementwiseAxis]:
 
     normalized_indices: List[str] = []
@@ -824,36 +826,33 @@ def _normalize_einsum_out_subscript(subscript: str) -> Dict[str,
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
             if "alpha" in match.groupdict():
-                normalized_indices.append(match.groupdict("alpha"))
+                normalized_indices.append(match.groupdict()["alpha"])
             else:
                 assert "ellipsis" in match.groupdict()
                 raise NotImplementedError("Broadcasting in einsums not supported")
-            assert match.span[0] == 0
-            acc = acc[match.span[-1]:]
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
         else:
             raise ValueError(f"Cannot parse '{acc}' in provided einsum"
                              f" '{subscript}'.")
 
-    if len(set(normalized_indices) != len(normalized_indices)):
+    if len(set(normalized_indices)) != len(normalized_indices):
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
-    return {idx: ElementwiseAxis(i)
-            for i, idx in enumerate(normalized_indices)}
+    return pmap({idx: ElementwiseAxis(i)
+                 for i, idx in enumerate(normalized_indices)})
 
 
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
-                                   out_operand: Array,
-                                   index_to_elem_axis: Mapping[str,
-                                                               ElementwiseAxis],
-                                   index_to_redn_axis: PMap[str,
-                                                            ReductionAxis],
-                                   redn_axis_lengths: PMap[str,
-                                                           ScalarExpression],
+                                   index_to_descr: PMap[str,
+                                                        ElementwiseAxis],
+                                   index_to_axis_length: PMap[str,
+                                                               ShapeComponent],
                                    ) -> Tuple[Tuple[EinsumIndexDescriptor],
-                                              PMap[str, ReductionAxis],
-                                              PMap[str, ScalarExpression]]:
+                                              PMap[str, EinsumIndexDescriptor],
+                                              PMap[str, ShapeComponent]]:
 
     normalized_indices: List[str] = []
     acc = subscript
@@ -861,12 +860,12 @@ def _normalize_einsum_in_subscript(subscript: str,
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
             if "alpha" in match.groupdict():
-                normalized_indices.append(match.groupdict("alpha"))
+                normalized_indices.append(match.groupdict()["alpha"])
             else:
                 assert "ellipsis" in match.groupdict()
                 raise NotImplementedError("Broadcasting in einsums not supported")
-            assert match.span[0] == 0
-            acc = acc[match.span[-1]:]
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
         else:
             raise ValueError(f"Cannot parse '{acc}' in provided einsum"
                              f" '{subscript}'.")
@@ -875,34 +874,31 @@ def _normalize_einsum_in_subscript(subscript: str,
         raise ValueError(f"Subscript '{subscript}' doesn't match the dimensionality "
                          f"of corresponding operand ({in_operand.ndim}).")
 
-    result = []
+    in_operand_axis_descrs = []
 
-    for iaxis, index_char in normalized_indices:
+    for iaxis, index_char in enumerate(normalized_indices):
         in_axis_len = in_operand.shape[iaxis]
-        if index_char in index_to_elem_axis:
-            out_axis_len = out_operand.shape[index_to_elem_axis[index_char].dim]
-            if (in_axis_len != out_axis_len):
-                raise ValueError(f"Got conflicting lengths for index '{index_char}'."
-                                 f" Conflicting lengths -- input: {in_axis_len},"
-                                 f" output: {out_axis_len}.")
-            result.append(index_to_elem_axis[index_char])
-        elif index_char in index_to_redn_axis:
-            redn_axis_len = redn_axis_lengths[index_char]
-            if (in_axis_len != redn_axis_len):
-                raise ValueError(f"Got conflicting lengths for index '{index_char}'."
-                                 f" Conflicting lengths -- {in_axis_len},"
-                                 f" {redn_axis_len}.")
-            result.append(index_to_redn_axis[index_char])
+        if index_char in index_to_descr:
+            if index_char in index_to_axis_length:
+                seen_axis_len = index_to_axis_length[index_char]
+                if in_axis_len != seen_axis_len:
+                    raise ValueError(f"Got conflicting lengths for '{index_char}'"
+                                     f" -- {in_axis_len}, {seen_axis_len}.")
+            else:
+                index_to_axis_length = index_to_axis_length.set(index_char,
+                                                                in_axis_len)
         else:
-            # TODO make a new redn axis here...
-            redn_axis_lengths = redn_axis_lengths.set(index_char, in_axis_len)
-            redn_axis = ReductionAxis(len(index_to_redn_axis))
-            index_to_redn_axis = index_to_redn_axis.set(index_char, redn_axis)
-            result.append(redn_axis)
+            redn_sr_no = len([descr for descr in index_to_descr.values()
+                              if isinstance(descr, ReductionAxis)])
+            redn_axis_descr = ReductionAxis(redn_sr_no)
+            index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
+            index_to_axis_length = index_to_axis_length.set(index_char,
+                                                             in_axis_len)
 
-    return (result,
-            index_to_redn_axis,
-            redn_axis_lengths)
+        in_operand_axis_descrs.append(index_to_descr[index_char])
+
+    return (tuple(in_operand_axis_descrs),
+            index_to_descr, index_to_axis_length)
 
 
 def einsum(subscripts: str, *operands: Array) -> Einsum:
@@ -929,14 +925,16 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
             f"expecting {len(in_specs)} operands."
         )
 
-    out_indices_to_axes = _normalize_einsum_out_subscript(out_spec)
-    reduction_axes = pmap({})
+    index_to_descr = _normalize_einsum_out_subscript(out_spec)
+    index_to_axis_length = pmap()
     access_descriptors = []
 
-    for in_spec in in_specs:
-        access_descriptor, reduction_axes = (
-            _normalize_einsum_in_subscript(out_indices_to_axes,
-                                           reduction_axes))
+    for in_spec, in_operand in zip(in_specs, operands):
+        access_descriptor, index_to_descr, index_to_axis_length = (
+            _normalize_einsum_in_subscript(in_spec,
+                                           in_operand,
+                                           index_to_descr,
+                                           index_to_axis_length))
         access_descriptors.append(access_descriptor)
 
     return Einsum(access_descriptors, operands)
