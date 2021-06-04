@@ -116,7 +116,6 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
-.. autoclass:: LoopyCall
 .. autoclass:: Stack
 .. autoclass:: Concatenate
 .. autoclass:: AttributeLookup
@@ -284,7 +283,7 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[A
 
 
 class Array(Taggable):
-    """
+    r"""
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
     compatibility, though not at all costs.
@@ -301,9 +300,9 @@ class Array(Taggable):
 
     .. attribute:: shape
 
-        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`s.
+        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`\ s.
         Array-valued shape components may be (at most affinely) symbolic in terms of
-        :class:`~pytato.array.SizeParam`s.
+        :class:`~pytato.array.SizeParam`\ s.
 
         .. note::
 

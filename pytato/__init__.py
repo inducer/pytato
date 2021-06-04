@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, IndexLambda,
+        Array, DictOfNamedArrays, Placeholder, IndexLambda, NamedArray,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -47,6 +47,7 @@ from pytato.array import (
 
         )
 
+from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
@@ -54,7 +55,7 @@ from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
         "Array", "DictOfNamedArrays",
-        "Placeholder", "IndexLambda",
+        "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper",

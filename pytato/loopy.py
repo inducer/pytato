@@ -141,9 +141,9 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
       *entrypoint* can not be *None*.
 
     :arg bindings: mapping from argument names of ``translation_unit[entrypoint]``
-    to :class:`pytato.array.Array`.
+      to :class:`pytato.array.Array`.
     :arg results: names of ``translation_unit[entrypoint]`` argument names that
-    have to be returned from the call.
+      have to be returned from the call.
     """
     if entrypoint is None:
         if len(translation_unit.entrypoints) != 1:
