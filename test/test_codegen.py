@@ -781,6 +781,9 @@ def test_reductions(ctx_factory, axis, redn, shape):
 
                                              ("ii->i",  # diag
                                               [(5, 5)]),
+
+                                             (" ij ->  ",  # np.sum
+                                              [(10, 4)]),
                                              ]))
 def test_einsum(ctx_factory, spec, argshapes):
     ctx = ctx_factory()

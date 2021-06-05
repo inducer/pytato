@@ -891,7 +891,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
     """
 
     normalized_indices: List[str] = []
-    acc = subscript
+    acc = subscript.strip()
     while acc:
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
@@ -945,7 +945,7 @@ def _normalize_einsum_in_subscript(subscript: str,
     from pytato.utils import are_shape_components_equal
 
     normalized_indices: List[str] = []
-    acc = subscript
+    acc = subscript.strip()
     while acc:
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
