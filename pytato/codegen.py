@@ -345,12 +345,10 @@ class CodeGenPreprocessor(CopyMapper):
                         redn_bound, redn_bound_bindings = (
                             dim_to_index_lambda_components(
                                 arg.shape[iaxis], namegen))
-                        redn_bound_bindings = {
-                            k: self.rec(v)
-                            for k, v in redn_bound_bindings.items()}
                         redn_bounds[redn_idx_name] = (0, redn_bound)
 
-                        bindings.update(redn_bound_bindings)
+                        bindings.update({k: self.rec(v)
+                                         for k, v in redn_bound_bindings.items()})
 
                     subscript_indices.append(prim.Variable(redn_idx_name))
 
