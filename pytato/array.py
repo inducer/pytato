@@ -883,10 +883,11 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
 
     .. doctest::
 
-        >>> _normalize_einsum_out_subscript("kij")
-        pmap({'i': ElementwiseAxis(dim=1),
-              'j': ElementwiseAxis(dim=2),
-              'k': ElementwiseAxis(dim=0)})
+        >>> result = _normalize_einsum_out_subscript("kij")
+        >>> sorted(result.keys())
+        ['i', 'j', 'k']
+        >>> result["i"], result["j"], result["k"]
+        (ElementwiseAxis(dim=1), ElementwiseAxis(dim=2), ElementwiseAxis(dim=0))
     """
 
     normalized_indices: List[str] = []
