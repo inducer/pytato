@@ -7,6 +7,7 @@ Reference
 .. automodule:: pytato.scalar_expr
 .. automodule:: pytato.transform
 .. automodule:: pytato.target
+.. automodule:: pytato.loopy
 .. automodule:: pytato.codegen
 .. automodule:: pytato.visualization
 .. automodule:: pytato.utils

@@ -39,11 +39,20 @@ import pyopencl.tools as cl_tools  # noqa
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pytest  # noqa
+from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
 import pytato as pt
 from pytato.array import Placeholder
 from testlib import assert_allclose_to_numpy
 import pymbolic.primitives as p
+
+
+def does_lpy_support_knl_callables():
+    try:
+        from loopy import TranslationUnit  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def test_basic_codegen(ctx_factory):
@@ -604,6 +613,126 @@ def test_maximum_minimum(ctx_factory, which):
     _, (y,) = pt.generate_loopy(pt_func(x1, x2),
                                 cl_device=queue.device)(queue)
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
+
+
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
+def test_call_loopy(ctx_factory):
+    from pytato.loopy import call_loopy
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    x_in = np.random.rand(10, 4)
+    x = pt.make_placeholder(shape=(10, 4), dtype=np.float64, name="x")
+    y = 2*x
+
+    knl = lp.make_function(
+            "{[i, j]: 0<=i<10 and 0<=j<4}",
+            """
+            Z[i] = 10*sum(j, Y[i, j])
+            """, name="callee")
+
+    loopyfunc = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
+    z = loopyfunc["Z"]
+
+    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
+
+    assert (z_out == 40*(x_in.sum(axis=1))).all()
+
+
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
+def test_call_loopy_with_same_callee_names(ctx_factory):
+    from pytato.loopy import call_loopy
+
+    queue = cl.CommandQueue(ctx_factory())
+
+    u_in = np.random.rand(10)
+    twice = lp.make_function(
+            "{[i]: 0<=i<10}",
+            """
+            y[i] = 2*x[i]
+            """, name="callee")
+
+    thrice = lp.make_function(
+            "{[i]: 0<=i<10}",
+            """
+            y[i] = 3*x[i]
+            """, name="callee")
+
+    u = pt.make_data_wrapper(u_in)
+    cuatro_u = 2*call_loopy(twice, {"x": u}, "callee")["y"]
+    nueve_u = 3*call_loopy(thrice, {"x": u}, "callee")["y"]
+
+    out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
+
+    evt, out_dict = pt.generate_loopy(out, cl_device=queue.device,
+                                      options=lp.Options(return_dict=True))(queue)
+    np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
+    np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
+
+
+def test_exprs_with_named_arrays(ctx_factory):
+    queue = cl.CommandQueue(ctx_factory())
+    x_in = np.random.rand(10, 4)
+    x = pt.make_data_wrapper(x_in)
+    y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
+    res = 21*y1y2["y1"]
+    evt, (out,) = pt.generate_loopy(res, cl_device=queue.device)(queue)
+
+    np.testing.assert_allclose(out, 42*x_in)
+
+
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
+def test_call_loopy_with_parametric_sizes(ctx_factory):
+
+    x_in = np.random.rand(10, 4)
+
+    from pytato.loopy import call_loopy
+
+    queue = cl.CommandQueue(ctx_factory())
+
+    m = pt.make_size_param("M")
+    n = pt.make_size_param("N")
+    x = pt.make_placeholder(shape=(m, n), dtype=np.float64, name="x")
+    y = 3*x
+
+    knl = lp.make_kernel(
+            "{[i, j]: 0<=i<m and 0<=j<n}",
+            """
+            Z[i] = 7*sum(j, Y[i, j])
+            """, name="callee", lang_version=(2018, 2))
+
+    loopyfunc = call_loopy(knl, bindings={"Y": y, "m": m, "n": n})
+    z = loopyfunc["Z"]
+
+    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
+    np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
+
+
+@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
+        " support calling kernels")
+def test_call_loopy_with_scalar_array_inputs(ctx_factory):
+    import loopy as lp
+    from numpy.random import default_rng
+    from pytato.loopy import call_loopy
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+    rng = default_rng()
+    x_in = rng.random(size=())
+
+    knl = lp.make_kernel(
+        "{:}",
+        """
+        y = 2*x
+        """)
+
+    x = pt.make_placeholder(name="x", shape=(), dtype=float)
+    y = call_loopy(knl, {"x": 3*x})["y"]
+
+    evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
+    np.testing.assert_allclose(out, 6*x_in)
 
 
 @pytest.mark.parametrize("axis", (None, 1, 0))
