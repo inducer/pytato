@@ -233,7 +233,7 @@ class DependencyMapper(Mapper):
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
 
-    def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
+    def map_einsum(self, expr: Einsum) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.args))
 
