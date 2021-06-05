@@ -879,7 +879,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
 
     .. testsetup::
 
-        >>> from pytato.utils import _normalize_einsum_out_subscript
+        >>> from pytato.array import _normalize_einsum_out_subscript
 
     .. doctest::
 
@@ -1551,6 +1551,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.stack(arrays, axis=0).shape
        (4, 3)
@@ -1580,6 +1581,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.concatenate(arrays, axis=0).shape
        (12,)
