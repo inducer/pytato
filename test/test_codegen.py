@@ -793,6 +793,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     pt_expr = pt.einsum(spec, *pt_operands)
 
     _, (pt_out,) = pt.generate_loopy(pt_expr, cl_device=queue.device)(queue)
+    assert np_out.shape == pt_out.shape
     np.testing.assert_allclose(np_out, pt_out)
 
 
