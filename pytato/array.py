@@ -90,6 +90,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: amin
 .. autofunction:: amax
 .. autofunction:: prod
+.. autofunction:: einsum
 
 Supporting Functionality
 ------------------------
@@ -152,6 +153,13 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
+
+Internal API
+------------
+
+.. autoclass:: EinsumAxisDescriptor
+.. autoclass:: ElementwiseAxis
+.. autoclass:: ReductionAxis
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -777,25 +785,22 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
 # {{{ einsum
 
-
-class EinsumIndexDescriptor:
+class EinsumAxisDescriptor:
+    """
+    Records the access pattern of iterating over an array's axis in a
+    :class:`Einsum`.
+    """
     pass
 
 
-@dataclass
-class ElementwiseAxis(EinsumIndexDescriptor):
+@dataclass(eq=True, frozen=True)
+class ElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
-    def __hash__(self) -> int:
-        return hash((type(self), self.dim))
 
-
-@dataclass
-class ReductionAxis(EinsumIndexDescriptor):
+@dataclass(eq=True, frozen=True)
+class ReductionAxis(EinsumAxisDescriptor):
     dim: int
-
-    def __hash__(self) -> int:
-        return hash((type(self), self.dim))
 
 
 class Einsum(Array):
@@ -806,7 +811,7 @@ class Einsum(Array):
 
         A :class:`tuple` of *access_descriptor* for each *arg* in
         :attr:`Einsum.args`. An *access_descriptor* is a tuple of
-        :class:`EinsumIndexDescriptor` denoting how each axis of the
+        :class:`EinsumAxisDescriptor` denoting how each axis of the
         argument will be operated in the einstein summation.
 
     .. attribute:: args
@@ -818,14 +823,15 @@ class Einsum(Array):
     _mapper_method = "map_einsum"
 
     def __init__(self,
-                 access_descriptors: Tuple[Tuple[EinsumIndexDescriptor]],
-                 args: Tuple[Array],
+                 access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
+                 args: Tuple[Array, ...],
                  tags: TagsType = frozenset()):
         super().__init__(tags)
         self.access_descriptors = access_descriptors
         self.args = args
 
-    @property
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
     @memoize_method
     def shape(self) -> ShapeType:
         iaxis_to_len = {}
@@ -843,13 +849,14 @@ class Einsum(Array):
         assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
         return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
 
-    @property
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
     @memoize_method
     def dtype(self) -> np.dtype[Any]:
         from functools import reduce
         import operator
 
-        def _scalar_placeholder_like(ary):
+        def _scalar_placeholder_like(ary: Array) -> Placeholder:
             return make_placeholder(shape=(),
                                     dtype=ary.dtype)
 
@@ -863,32 +870,24 @@ class Einsum(Array):
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
 
 
-def _validate_no_output_spec_single_ary_einsum(subscript: str,
-                                               ary: Array):
-    result = []
-    acc = subscript.strip()
-
-    while acc:
-        match = EINSUM_FIRST_INDEX.match(acc)
-        if match:
-            if "alpha" in match.groupdict():
-                result.append(match.groupdict("alpha"))
-            else:
-                assert "ellipsis" in match.groupdict()
-                raise NotImplementedError("Broadcasting in einsums not supported")
-            assert match.span()[0] == 0
-            acc = acc[match.span()[-1]:]
-        else:
-            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
-                             f" '{subscript}'.")
-
-    if len(idx for idx in result if idx == ...):
-        raise ValueError(f"'{subscript}' contains multiple ellipsis"
-                         ": illegal.")
-
-
 def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
-                                                            ElementwiseAxis]:
+                                                            EinsumAxisDescriptor]:
+    """
+    Normalizes the output subscript of an einsum (provided in the explicit
+    mode). Returns a mapping from index name to an instance of
+    :class:`ElementwiseAxis`.
+
+    .. testsetup::
+
+        >>> from pytato.utils import _normalize_einsum_out_subscript
+
+    .. doctest::
+
+        >>> _normalize_einsum_out_subscript("kij")
+        pmap({'i': ElementwiseAxis(dim=1),
+              'j': ElementwiseAxis(dim=2),
+              'k': ElementwiseAxis(dim=0)})
+    """
 
     normalized_indices: List[str] = []
     acc = subscript
@@ -917,12 +916,31 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
                                    index_to_descr: PMap[str,
-                                                        ElementwiseAxis],
+                                                        EinsumAxisDescriptor],
                                    index_to_axis_length: PMap[str,
                                                                ShapeComponent],
-                                   ) -> Tuple[Tuple[EinsumIndexDescriptor],
-                                              PMap[str, EinsumIndexDescriptor],
+                                   ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
+                                              PMap[str, EinsumAxisDescriptor],
                                               PMap[str, ShapeComponent]]:
+    """
+    Normalizes the subscript for an input operand in an einsum. Returns
+    ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
+    where, *access_descrs* is a :class:`tuple` of
+    :class`EinsumAxisDescriptor` corresponding to *subscript*,
+    *updated_index_to_descr* is the updated version of *index_to_descr* while
+    inferring *subscript*. Similarly, *updated_index_to_axis_length* is the updated
+    version of *index_to_axis_length*.
+
+
+    :arg index_to_descr: A mapping from index names to instance of
+        :class:`EinsumAxisDescriptor`. These constraints would most likely
+        recorded during normalizing other parts of an einsum's subscripts.
+
+    :arg index_to_axis_length: A mapping from index names to instance of
+        :class:`ShapeComponent` denoting the iteration extent of the index.
+        These constraints would most likely recorded during normalizing other
+        parts of an einsum's subscripts.
+    """
     from pytato.utils import are_shape_components_equal
 
     normalized_indices: List[str] = []
@@ -974,17 +992,16 @@ def _normalize_einsum_in_subscript(subscript: str,
 
 
 def einsum(subscripts: str, *operands: Array) -> Einsum:
+    """
+    Einstein summation *subscripts* on *operands*.
+    """
     if len(operands) == 0:
         raise ValueError("must specify at least one operand")
 
     if "->" not in subscripts:
-        if len(operands) == 1:
-            return Einsum((tuple(ElementwiseAxis(i)
-                                 for i in range(operands[0].ndim)),),
-                          operands)
-        else:
-            # => eveything is reduced
-            subscripts = f"{subscripts} ->"
+        # implicit-mode: output spec matched by alphabetical ordering of
+        # indices (ewwwww)
+        raise NotImplementedError("implicit mode not supported.")
 
     in_spec, out_spec = subscripts.split("->")
 
@@ -998,7 +1015,7 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         )
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
-    index_to_axis_length = pmap()
+    index_to_axis_length: PMap[str, ShapeComponent] = pmap()
     access_descriptors = []
 
     for in_spec, in_operand in zip(in_specs, operands):
