@@ -797,6 +797,36 @@ def test_einsum(ctx_factory, spec, argshapes):
     np.testing.assert_allclose(np_out, pt_out)
 
 
+def test_einsum_with_parametrized_shapes(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    m = pt.make_size_param("m")
+    n = pt.make_size_param("n")
+
+    m_in = np.random.randint(2, 20)
+    n_in = np.random.randint(2, 20)
+
+    def _get_a_shape(_m, _n):
+        return (2*_m+1, 3*_n+7)
+
+    def _get_x_shape(_m, _n):
+        return (3*_n+7, )
+
+    A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
+    x_in = np.random.rand(*_get_x_shape(m_in, n_in))
+    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))  # noqa: N806
+    x = pt.make_data_wrapper(x_in, shape=_get_x_shape(m, n))
+
+    np_out = np.einsum("ij, j ->  i", A_in, x_in)
+    pt_expr = pt.einsum("ij, j ->  i", A, x)
+
+    _, (pt_out,) = pt.generate_loopy(pt_expr, cl_device=cq.device)(cq,
+                                                                   m=m_in, n=n_in)
+    assert np_out.shape == pt_out.shape
+    np.testing.assert_allclose(np_out, pt_out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
