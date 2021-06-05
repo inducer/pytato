@@ -1002,8 +1002,9 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
     if "->" not in subscripts:
         # implicit-mode: output spec matched by alphabetical ordering of
         # indices (ewwwww)
-        raise NotImplementedError("implicit mode not supported.")
-
+        raise NotImplementedError("Implicit mode not supported. 'subscripts'"
+                                  " must contains '->', followed by the output's"
+                                  " indices.")
     in_spec, out_spec = subscripts.split("->")
 
     in_specs = in_spec.split(",")
