@@ -1,6 +1,5 @@
 Python 3 POCL:
   script:
-  - sed -i "s/loopy.git/loopy.git@$LOOPY_BRANCH/g" requirements.txt
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
@@ -15,15 +14,8 @@ Python 3 POCL:
     reports:
       junit: test/pytest.xml
 
-  parallel:
-    matrix:
-      - LOOPY_BRANCH: main
-      - LOOPY_BRANCH: kernel_callables_v3-edit2
-
-
 Python 3 POCL Examples:
   script:
-  - sed -i "s/loopy.git/loopy.git@$LOOPY_BRANCH/g" requirements.txt
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
@@ -35,11 +27,6 @@ Python 3 POCL Examples:
   - large-node
   except:
   - tags
-  parallel:
-    matrix:
-      - LOOPY_BRANCH: main
-      - LOOPY_BRANCH: kernel_callables_v3-edit2
-
 
 Pylint:
   script:
