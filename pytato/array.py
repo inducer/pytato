@@ -1583,6 +1583,9 @@ def arccos(x: Array) -> ArrayOrScalar:
 def arctan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "atan")
 
+def conj(x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func(x, "conj")
+
 
 def sinh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sinh")
