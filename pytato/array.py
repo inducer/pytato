@@ -1589,9 +1589,9 @@ def conj(x: Array) -> ArrayOrScalar:
 
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
-    from math import pi
-    # From https://en.wikipedia.org/wiki/Atan2
-    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)), pi)
+    # Based on https://en.wikipedia.org/wiki/Atan2
+    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)),
+                                2*arctan((sqrt(x*x+y*y)-x)/y))
 
 
 def sinh(x: Array) -> ArrayOrScalar:
