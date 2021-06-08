@@ -1528,25 +1528,33 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
+def _apply_elem_wise_func(inputs: Union[ArrayOrScalar, Tuple[ArrayOrScalar]],
+                          func_name: str,
                           ret_dtype: Optional[_dtype_any] = None
                           ) -> ArrayOrScalar:
-    if isinstance(x, SCALAR_CLASSES):
+    if not isinstance(inputs, tuple):
+        inputs = tuple((inputs, ))
+
+    if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
-        return np_func(x)  # type: ignore
+        return np_func(inputs)  # type: ignore
 
-    assert isinstance(x, Array)
+    assert all(isinstance(x, Array) for x in inputs)
 
-    if x.dtype.kind != "f" and x.dtype.kind != "c":
-        raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
+    assert all(x.dtype.kind in ["f", "c"] for x in inputs)
+
+    shape = inputs[0].shape
+
     if ret_dtype is None:
-        ret_dtype = x.dtype
+        ret_dtype = inputs[0].dtype
 
     expr = prim.Call(
             var(f"pytato.c99.{func_name}"),
-            (prim.Subscript(var("in"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(expr, x.shape, ret_dtype, {"in": x})
+            ((prim.Subscript(var(f"in_{x}"),
+                tuple(var(f"_{i}") for i in range(len(x.shape)))),) for x in inputs))
+    bindings = {f"in_{x}": x for x in inputs}
+    print(bindings)
+    return IndexLambda(expr, shape, ret_dtype, bindings)
 
 
 def abs(x: Array) -> ArrayOrScalar:
