@@ -1588,6 +1588,12 @@ def conj(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "conj")
 
 
+def arctan2(y: Array, x: Array) -> ArrayOrScalar:
+    from math import pi
+    # From https://en.wikipedia.org/wiki/Atan2
+    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)), pi)
+
+
 def sinh(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func(x, "sinh")
 
