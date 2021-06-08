@@ -1591,9 +1591,13 @@ def conj(x: Array) -> ArrayOrScalar:
 
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
-    # Based on https://en.wikipedia.org/wiki/Atan2
-    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)),  # type:ignore
-                                2*arctan((sqrt(x*x+y*y)-x)/y))  # type:ignore
+    expr = prim.Call(
+            var("pytato.c99.atan2"),
+            (prim.Subscript(var("in_y"),
+                tuple(var(f"_{i}") for i in range(len(y.shape)))),
+             prim.Subscript(var("in_x"),
+                tuple(var(f"_{i}") for i in range(len(x.shape))))))
+    return IndexLambda(expr, x.shape, x.dtype, {"in_y": y, "in_x": x})
 
 
 def sinh(x: Array) -> ArrayOrScalar:
