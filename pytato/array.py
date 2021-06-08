@@ -1592,8 +1592,8 @@ def conj(x: Array) -> ArrayOrScalar:
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
     # Based on https://en.wikipedia.org/wiki/Atan2
-    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)),
-                                2*arctan((sqrt(x*x+y*y)-x)/y))
+    return where(greater(x, 0), 2*arctan(y/(sqrt(x*x+y*y)+x)),  # type:ignore
+                                2*arctan((sqrt(x*x+y*y)-x)/y))  # type:ignore
 
 
 def sinh(x: Array) -> ArrayOrScalar:
