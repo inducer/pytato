@@ -64,6 +64,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: arcsin
 .. autofunction:: arccos
 .. autofunction:: arctan
+.. autofunction:: conj
+.. autofunction:: arctan2
 .. autofunction:: sinh
 .. autofunction:: cosh
 .. autofunction:: tanh
