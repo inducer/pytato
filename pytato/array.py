@@ -1538,17 +1538,17 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
 
     assert all(isinstance(x, Array) for x in inputs)
 
-    assert all(x.dtype.kind in ["f", "c"] for x in inputs)
+    assert all(x.dtype.kind in ["f", "c"] for x in inputs)  # type: ignore
 
-    shape = inputs[0].shape
+    shape = inputs[0].shape  # type: ignore
 
     if ret_dtype is None:
-        ret_dtype = inputs[0].dtype
+        ret_dtype = inputs[0].dtype  # type: ignore
 
     bindings = {f"in_{index}": x for index, x in enumerate(inputs)}
 
     s = [(prim.Subscript(var(f"in_{index}"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))))
+                tuple(var(f"_{i}") for i in range(len(x.shape)))))  # type: ignore
                 for index, x in enumerate(inputs)]
 
     expr = prim.Call(
@@ -1556,7 +1556,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
                 tuple(s)
                 )
 
-    return IndexLambda(expr, shape, ret_dtype, bindings)
+    return IndexLambda(expr, shape, ret_dtype, bindings)  # type: ignore
 
 
 def abs(x: Array) -> ArrayOrScalar:
@@ -1565,71 +1565,71 @@ def abs(x: Array) -> ArrayOrScalar:
     else:
         result_dtype = x.dtype
 
-    return _apply_elem_wise_func(x, "abs", ret_dtype=result_dtype)
+    return _apply_elem_wise_func((x,), "abs", ret_dtype=result_dtype)
 
 
 def sqrt(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sqrt")
+    return _apply_elem_wise_func((x,), "sqrt")
 
 
 def sin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sin")
+    return _apply_elem_wise_func((x,), "sin")
 
 
 def cos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cos")
+    return _apply_elem_wise_func((x,), "cos")
 
 
 def tan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tan")
+    return _apply_elem_wise_func((x,), "tan")
 
 
 def arcsin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "asin")
+    return _apply_elem_wise_func((x,), "asin")
 
 
 def arccos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "acos")
+    return _apply_elem_wise_func((x,), "acos")
 
 
 def arctan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "atan")
+    return _apply_elem_wise_func((x,), "atan")
 
 
 def conj(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "conj")
+    return _apply_elem_wise_func((x,), "conj")
 
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func((y,x), "atan2")
+    return _apply_elem_wise_func((y, x), "atan2")  # type:ignore
 
 
 def sinh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sinh")
+    return _apply_elem_wise_func((x,), "sinh")
 
 
 def cosh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cosh")
+    return _apply_elem_wise_func((x,), "cosh")
 
 
 def tanh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tanh")
+    return _apply_elem_wise_func((x,), "tanh")
 
 
 def exp(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "exp")
+    return _apply_elem_wise_func((x,), "exp")
 
 
 def log(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log")
+    return _apply_elem_wise_func((x,), "log")
 
 
 def log10(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log10")
+    return _apply_elem_wise_func((x,), "log10")
 
 
 def isnan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
+    return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
 
 # }}}
 
