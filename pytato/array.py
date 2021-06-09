@@ -821,7 +821,8 @@ class Einsum(Array):
 
     .. note::
 
-        Use :func:`einsum` to create this type of expression node in user code.
+        Use :func:`pytato.einsum` to create this type of expression node in
+        user code.
 
     .. attribute:: access_descriptors
 
