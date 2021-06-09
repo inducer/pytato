@@ -1536,27 +1536,42 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
         np_func = getattr(np, func_name)
         return np_func(inputs)  # type: ignore
 
-    assert all(isinstance(x, Array) for x in inputs)
+    if not inputs:
+        raise ValueError("at least one argument must be present")
 
-    assert all(x.dtype.kind in ["f", "c"] for x in inputs)  # type: ignore
+    shape = None
 
-    shape = inputs[0].shape  # type: ignore
+    sym_args = []
+    bindings = {}
+    for index, inp in enumerate(inputs):
+        if isinstance(inp, Array):
+            if inp.dtype.kind not in ["f", "c"]:
+                raise ValueError("only floating-point or complex "
+                        "arguments supported")
 
-    if ret_dtype is None:
-        ret_dtype = inputs[0].dtype  # type: ignore
+            if shape is None:
+                shape = inp.shape
+            elif inp.shape != shape:
+                # FIXME: merge this logic with arithmetic, so that broadcasting
+                # is implemented properly
+                raise NotImplementedError("broadcasting in function application")
 
-    bindings = {f"in_{index}": x for index, x in enumerate(inputs)}
+            if ret_dtype is None:
+                ret_dtype = inp.dtype
 
-    s = [(prim.Subscript(var(f"in_{index}"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))))  # type: ignore
-                for index, x in enumerate(inputs)]
+            bindings[f"in_{index}"] = inp
+            sym_args.append(
+                    prim.Subscript(var(f"in_{index}"),
+                        tuple(var(f"_{i}") for i in range(len(shape)))))
+        else:
+            sym_args.append(inp)
 
-    expr = prim.Call(
-                var(f"pytato.c99.{func_name}"),
-                tuple(s)
-                )
+    assert shape is not None
+    assert ret_dtype is not None
 
-    return IndexLambda(expr, shape, ret_dtype, bindings)  # type: ignore
+    return IndexLambda(
+            prim.Call(var(f"pytato.c99.{func_name}"), tuple(sym_args)),
+            shape, ret_dtype, bindings)
 
 
 def abs(x: Array) -> ArrayOrScalar:
