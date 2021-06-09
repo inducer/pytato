@@ -495,13 +495,17 @@ def test_only_deps_as_knl_args():
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
-    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt"))
+    "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
+    "conj"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
     if np.dtype(dtype).kind == "c" and function_name in ["arcsin", "arccos",
                                                          "arctan", "log10"]:
+        pytest.skip("Unsupported by loopy.")
+
+    if np.dtype(dtype).kind == "f" and function_name in ["conj"]:
         pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng
@@ -518,6 +522,33 @@ def test_math_functions(ctx_factory, dtype, function_name):
     y_np = np_func(x_in)
     np.testing.assert_allclose(y, y_np, rtol=1e-6)
     assert y.dtype == y_np.dtype
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
+@pytest.mark.parametrize("function_name", ("arctan2",))
+def test_binary_math_functions(ctx_factory, dtype, function_name):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    if np.dtype(dtype).kind == "c" and function_name in ["arctan2"]:
+        pytest.skip("Unsupported by loopy.")
+
+    from numpy.random import default_rng
+    rng = default_rng()
+    x_in = rng.random(size=(10, 4)).astype(dtype)
+    y_in = rng.random(size=(10, 4)).astype(dtype)
+
+    x = pt.make_data_wrapper(x_in)
+    y = pt.make_data_wrapper(y_in)
+    pt_func = getattr(pt, function_name)
+    np_func = getattr(np, function_name)
+
+    _, (out,) = pt.generate_loopy(pt_func(x, y),
+            cl_device=queue.device)(queue)
+
+    out_np = np_func(x_in, y_in)
+    np.testing.assert_allclose(out, out_np, rtol=1e-6)
+    assert out.dtype == out_np.dtype
 
 
 @pytest.mark.parametrize("dtype", (np.int32, np.int64, np.float32, np.float64))
