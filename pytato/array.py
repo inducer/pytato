@@ -795,11 +795,21 @@ class EinsumAxisDescriptor:
 
 @dataclass(eq=True, frozen=True)
 class ElementwiseAxis(EinsumAxisDescriptor):
+    """
+    Describes an elementwise access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ElementwiseAxis(dim=1)`` would
+    correspond to indexing the array's axis as ``_1`` in the expression.
+    """
     dim: int
 
 
 @dataclass(eq=True, frozen=True)
 class ReductionAxis(EinsumAxisDescriptor):
+    """
+    Describes a reduction access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ReductionAxis(dim=0)`` would
+    correspond to indexing the array's axis as ``_r0`` in the expression.
+    """
     dim: int
 
 
@@ -808,7 +818,7 @@ class Einsum(Array):
     An array expression using the `Einstein summation convention
     <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
     :func:`numpy.einsum` for a similar construct.
-    
+
     .. note::
 
         Use :func:`einsum` to create this type of expression node in user code.
