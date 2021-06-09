@@ -1528,13 +1528,10 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(inputs: Union[ArrayOrScalar, Tuple[ArrayOrScalar]],
+def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
                           func_name: str,
                           ret_dtype: Optional[_dtype_any] = None
                           ) -> ArrayOrScalar:
-    if not isinstance(inputs, tuple):
-        inputs = tuple((inputs, ))
-
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
         return np_func(inputs)  # type: ignore
@@ -1548,12 +1545,17 @@ def _apply_elem_wise_func(inputs: Union[ArrayOrScalar, Tuple[ArrayOrScalar]],
     if ret_dtype is None:
         ret_dtype = inputs[0].dtype
 
+    bindings = {f"in_{index}": x for index, x in enumerate(inputs)}
+
+    s = [(prim.Subscript(var(f"in_{index}"),
+                tuple(var(f"_{i}") for i in range(len(x.shape)))))
+                for index, x in enumerate(inputs)]
+
     expr = prim.Call(
-            var(f"pytato.c99.{func_name}"),
-            ((prim.Subscript(var(f"in_{x}"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))),) for x in inputs))
-    bindings = {f"in_{x}": x for x in inputs}
-    print(bindings)
+                var(f"pytato.c99.{func_name}"),
+                tuple(s)
+                )
+
     return IndexLambda(expr, shape, ret_dtype, bindings)
 
 
@@ -1599,13 +1601,7 @@ def conj(x: Array) -> ArrayOrScalar:
 
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
-    expr = prim.Call(
-            var("pytato.c99.atan2"),
-            (prim.Subscript(var("in_y"),
-                tuple(var(f"_{i}") for i in range(len(y.shape)))),
-             prim.Subscript(var("in_x"),
-                tuple(var(f"_{i}") for i in range(len(x.shape))))))
-    return IndexLambda(expr, x.shape, x.dtype, {"in_y": y, "in_x": x})
+    return _apply_elem_wise_func((y,x), "atan2")
 
 
 def sinh(x: Array) -> ArrayOrScalar:
