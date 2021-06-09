@@ -805,7 +805,13 @@ class ReductionAxis(EinsumAxisDescriptor):
 
 class Einsum(Array):
     """
-    An Einsum expression.
+    An array expression using the `Einstein summation convention
+    <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
+    :func:`numpy.einsum` for a similar construct.
+    
+    .. note::
+
+        Use :func:`einsum` to create this type of expression node in user code.
 
     .. attribute:: access_descriptors
 
@@ -816,7 +822,7 @@ class Einsum(Array):
 
     .. attribute:: args
 
-       A :class:`tuple` of array over which the einstein summation is being
+       A :class:`tuple` of array over which the Einstein summation is being
        performed.
     """
     _fields = Array._fields + ("access_descriptors", "args")
