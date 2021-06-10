@@ -196,7 +196,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
     nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
-    for elem in outputs.values():
+    for elem in outputs._data.values():
         mapper(elem, nodes)
 
     input_arrays: List[Array] = []
@@ -234,7 +234,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
                 emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
 
         # Emit output/namespace name mappings.
-        _emit_name_cluster(emit, outputs, array_to_id, id_gen, label="Outputs")
+        _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
 
     return emit.get()
 
