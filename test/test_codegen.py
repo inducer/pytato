@@ -324,6 +324,30 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
+@pytest.mark.parametrize("which", ("__and__", "__or__", "__xor__"))
+def test_binary_logic(ctx_factory, which):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    pt_op = getattr(operator, which)
+    np_op = getattr(operator, which)
+
+    x_orig = np.array([1, 2, 3, 4, 5])
+    y_orig = np.array([5, 4, 3, 2, 1])
+
+    x = pt.make_data_wrapper(x_orig)
+    y = pt.make_data_wrapper(y_orig)
+
+    prog = pt.generate_loopy(pt_op(x, y), cl_device=queue.device)
+
+    _, out = prog(queue)
+
+    out_ref = np_op(x_orig, y_orig)
+
+    assert out[0].dtype == out_ref.dtype
+    assert np.array_equal(out[0], out_ref)
+
+
 @pytest.mark.parametrize("which", ("neg", "pos"))
 def test_unary_arith(ctx_factory, which):
     cl_ctx = ctx_factory()
@@ -496,7 +520,7 @@ def test_only_deps_as_knl_args():
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
-    "conj"))
+    "conj", "__abs__"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -513,8 +537,12 @@ def test_math_functions(ctx_factory, dtype, function_name):
     x_in = rng.random(size=(10, 4)).astype(dtype)
 
     x = pt.make_data_wrapper(x_in)
-    pt_func = getattr(pt, function_name)
-    np_func = getattr(np, function_name)
+    try:
+        pt_func = getattr(pt, function_name)
+        np_func = getattr(np, function_name)
+    except AttributeError:
+        pt_func = getattr(operator, function_name)
+        np_func = getattr(operator, function_name)
 
     _, (y,) = pt.generate_loopy(pt_func(x),
             cl_device=queue.device)(queue)
