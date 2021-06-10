@@ -551,8 +551,8 @@ class Array(Taggable):
     __xor__ = partialmethod(_binary_op, operator.xor)
     __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
 
-    def __abs__(self):
-        return abs(self)
+    def __abs__(self) -> Array:
+        return abs(self)  # type: ignore
 
     def __pos__(self) -> Array:
         return self
