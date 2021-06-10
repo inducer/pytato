@@ -30,12 +30,6 @@ Code Generation Targets
 
 .. autoclass:: Target
 .. autoclass:: BoundProgram
-
-
-Available targets
------------------
-
-.. automodule:: pytato.target.loopy
 """
 
 from dataclasses import dataclass

@@ -45,20 +45,6 @@ SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
 
 __doc__ = """
-References
-----------
-
-.. class:: DictOfNamedArrays
-
-    Should be referenced as :class:`pytato.DictOfNamedArrays`.
-
-.. class:: DataInterface
-
-    Should be referenced as :class:`pytato.array.DataInterface`.
-
-Code Generation Helpers
--------------------------
-
 .. currentmodule:: pytato.codegen
 
 .. autoclass:: CodeGenPreprocessor

@@ -54,10 +54,6 @@ if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
     import pyopencl
 
 __doc__ = """
-.. currentmodule:: pytato.target.loopy.codegen
-
-.. autofunction:: generate_loopy
-
 .. autoclass:: LoopyExpressionContext
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult

@@ -17,7 +17,10 @@ Here's an example usage:
     :maxdepth: 2
     :caption: Contents:
 
-    reference
+    array
+    dag
+    codegen
+    internal
     design
     misc
     🚀 Github <https://github.com/inducer/pytato>

@@ -44,12 +44,8 @@ import pytato.transform
 __doc__ = """
 .. currentmodule:: pytato
 
-Graph Visualization
--------------------
-
 .. autofunction:: get_dot_graph
 .. autofunction:: show_dot_graph
-
 """
 
 
@@ -193,7 +189,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     graph of the computation of *result*.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.target.loopy.codegen.generate_loopy`).
+        :func:`pytato.generate_loopy`).
     """
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
@@ -247,7 +243,7 @@ def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.target.loopy.codegen.generate_loopy`).
+        :func:`pytato.generate_loopy`).
     """
     dot_code: str
 
