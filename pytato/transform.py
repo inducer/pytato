@@ -40,9 +40,6 @@ R = FrozenSet[ArrayOrNames]
 __doc__ = """
 .. currentmodule:: pytato.transform
 
-Transforming Computations
--------------------------
-
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: WalkMapper

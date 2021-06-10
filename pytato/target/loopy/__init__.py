@@ -23,17 +23,15 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+.. currentmodule:: pytato
+
+.. autofunction:: generate_loopy
+
 .. currentmodule:: pytato.target.loopy
 
 .. autoclass:: LoopyTarget
 .. autoclass:: LoopyPyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
-
-
-Generating code
-^^^^^^^^^^^^^^^
-
-.. automodule:: pytato.target.loopy.codegen
 """
 
 import sys
