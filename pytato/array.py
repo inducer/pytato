@@ -861,6 +861,10 @@ class Einsum(Array):
                         assert arg.shape[axis_op.dim] == arg_axis_len
                     else:
                         iaxis_to_len[axis_op.dim] = arg_axis_len
+                elif isinstance(axis_op, ReductionAxis):
+                    pass
+                else:
+                    raise AssertionError
 
         assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
         return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
