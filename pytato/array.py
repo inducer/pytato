@@ -92,6 +92,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: amin
 .. autofunction:: amax
 .. autofunction:: prod
+.. autofunction:: einsum
 
 .. currentmodule:: pytato.array
 
@@ -152,6 +153,13 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
+Internal API
+------------
+
+.. autoclass:: EinsumAxisDescriptor
+.. autoclass:: ElementwiseAxis
+.. autoclass:: ReductionAxis
+
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -165,6 +173,7 @@ Internal stuff that is only here because the documentation tool wants it
 from abc import ABC, abstractmethod
 from functools import partialmethod
 import operator
+from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator)
@@ -178,7 +187,8 @@ from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
-
+import re
+from pyrsistent import pmap, PMap
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -194,6 +204,7 @@ else:
     EllipsisType = type(Ellipsis)
 
 # }}}
+
 
 if TYPE_CHECKING:
     _dtype_any = np.dtype[Any]
@@ -791,9 +802,261 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
 # {{{ einsum
 
+class EinsumAxisDescriptor:
+    """
+    Records the access pattern of iterating over an array's axis in a
+    :class:`Einsum`.
+    """
+    pass
+
+
+@dataclass(eq=True, frozen=True)
+class ElementwiseAxis(EinsumAxisDescriptor):
+    """
+    Describes an elementwise access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ElementwiseAxis(dim=1)`` would
+    correspond to indexing the array's axis as ``_1`` in the expression.
+    """
+    dim: int
+
+
+@dataclass(eq=True, frozen=True)
+class ReductionAxis(EinsumAxisDescriptor):
+    """
+    Describes a reduction access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ReductionAxis(dim=0)`` would
+    correspond to indexing the array's axis as ``_r0`` in the expression.
+    """
+    dim: int
+
+
 class Einsum(Array):
     """
+    An array expression using the `Einstein summation convention
+    <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
+    :func:`numpy.einsum` for a similar construct.
+
+    .. note::
+
+        Use :func:`pytato.einsum` to create this type of expression node in
+        user code.
+
+    .. attribute:: access_descriptors
+
+        A :class:`tuple` of *access_descriptor* for each *arg* in
+        :attr:`Einsum.args`. An *access_descriptor* is a tuple of
+        :class:`EinsumAxisDescriptor` denoting how each axis of the
+        argument will be operated in the einstein summation.
+
+    .. attribute:: args
+
+       A :class:`tuple` of array over which the Einstein summation is being
+       performed.
     """
+    _fields = Array._fields + ("access_descriptors", "args")
+    _mapper_method = "map_einsum"
+
+    def __init__(self,
+                 access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
+                 args: Tuple[Array, ...],
+                 tags: TagsType = frozenset()):
+        super().__init__(tags)
+        self.access_descriptors = access_descriptors
+        self.args = args
+
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
+    @memoize_method
+    def shape(self) -> ShapeType:
+        iaxis_to_len = {}
+
+        for access_descr, arg in zip(self.access_descriptors,
+                                     self.args):
+            assert arg.ndim == len(access_descr)
+            for arg_axis_len, axis_op in zip(arg.shape, access_descr):
+                if isinstance(axis_op, ElementwiseAxis):
+                    if axis_op.dim in iaxis_to_len:
+                        assert arg.shape[axis_op.dim] == arg_axis_len
+                    else:
+                        iaxis_to_len[axis_op.dim] = arg_axis_len
+                elif isinstance(axis_op, ReductionAxis):
+                    pass
+                else:
+                    raise AssertionError
+
+        assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
+        return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
+
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
+    @memoize_method
+    def dtype(self) -> np.dtype[Any]:
+        return np.find_common_type(array_types=[arg.dtype for arg in self.args],
+                                    scalar_types=[])
+
+
+EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
+
+
+def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
+                                                            EinsumAxisDescriptor]:
+    """
+    Normalizes the output subscript of an einsum (provided in the explicit
+    mode). Returns a mapping from index name to an instance of
+    :class:`ElementwiseAxis`.
+
+    .. testsetup::
+
+        >>> from pytato.array import _normalize_einsum_out_subscript
+
+    .. doctest::
+
+        >>> result = _normalize_einsum_out_subscript("kij")
+        >>> sorted(result.keys())
+        ['i', 'j', 'k']
+        >>> result["i"], result["j"], result["k"]
+        (ElementwiseAxis(dim=1), ElementwiseAxis(dim=2), ElementwiseAxis(dim=0))
+    """
+
+    normalized_indices: List[str] = []
+    acc = subscript.strip()
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict()["alpha"])
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(set(normalized_indices)) != len(normalized_indices):
+        raise ValueError("Used an input more than once to refer to the"
+                         f" output axis in '{subscript}")
+
+    return pmap({idx: ElementwiseAxis(i)
+                 for i, idx in enumerate(normalized_indices)})
+
+
+def _normalize_einsum_in_subscript(subscript: str,
+                                   in_operand: Array,
+                                   index_to_descr: PMap[str,
+                                                        EinsumAxisDescriptor],
+                                   index_to_axis_length: PMap[str,
+                                                               ShapeComponent],
+                                   ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
+                                              PMap[str, EinsumAxisDescriptor],
+                                              PMap[str, ShapeComponent]]:
+    """
+    Normalizes the subscript for an input operand in an einsum. Returns
+    ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
+    where, *access_descrs* is a :class:`tuple` of
+    :class`EinsumAxisDescriptor` corresponding to *subscript*,
+    *updated_index_to_descr* is the updated version of *index_to_descr* while
+    inferring *subscript*. Similarly, *updated_index_to_axis_length* is the updated
+    version of *index_to_axis_length*.
+
+
+    :arg index_to_descr: A mapping from index names to instance of
+        :class:`EinsumAxisDescriptor`. These constraints would most likely
+        recorded during normalizing other parts of an einsum's subscripts.
+
+    :arg index_to_axis_length: A mapping from index names to instance of
+        :class:`ShapeComponent` denoting the iteration extent of the index.
+        These constraints would most likely recorded during normalizing other
+        parts of an einsum's subscripts.
+    """
+    from pytato.utils import are_shape_components_equal
+
+    normalized_indices: List[str] = []
+    acc = subscript.strip()
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict()["alpha"])
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(normalized_indices) != in_operand.ndim:
+        raise ValueError(f"Subscript '{subscript}' doesn't match the dimensionality "
+                         f"of corresponding operand ({in_operand.ndim}).")
+
+    in_operand_axis_descrs = []
+
+    for iaxis, index_char in enumerate(normalized_indices):
+        in_axis_len = in_operand.shape[iaxis]
+        if index_char in index_to_descr:
+            if index_char in index_to_axis_length:
+                seen_axis_len = index_to_axis_length[index_char]
+                if not are_shape_components_equal(in_axis_len,
+                                                  seen_axis_len):
+                    raise ValueError(f"Got conflicting lengths for '{index_char}'"
+                                     f" -- {in_axis_len}, {seen_axis_len}.")
+            else:
+                index_to_axis_length = index_to_axis_length.set(index_char,
+                                                                in_axis_len)
+        else:
+            redn_sr_no = len([descr for descr in index_to_descr.values()
+                              if isinstance(descr, ReductionAxis)])
+            redn_axis_descr = ReductionAxis(redn_sr_no)
+            index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
+            index_to_axis_length = index_to_axis_length.set(index_char,
+                                                             in_axis_len)
+
+        in_operand_axis_descrs.append(index_to_descr[index_char])
+
+    return (tuple(in_operand_axis_descrs),
+            index_to_descr, index_to_axis_length)
+
+
+def einsum(subscripts: str, *operands: Array) -> Einsum:
+    """
+    Einstein summation *subscripts* on *operands*.
+    """
+    if len(operands) == 0:
+        raise ValueError("must specify at least one operand")
+
+    if "->" not in subscripts:
+        # implicit-mode: output spec matched by alphabetical ordering of
+        # indices (ewwwww)
+        raise NotImplementedError("Implicit mode not supported. 'subscripts'"
+                                  " must contain '->', followed by the output's"
+                                  " indices.")
+    in_spec, out_spec = subscripts.split("->")
+
+    in_specs = in_spec.split(",")
+
+    if len(operands) != len(in_specs):
+        raise ValueError(
+            f"Number of operands should match the number "
+            f"of arg specs: '{in_specs}'. Length of operands is {len(operands)}; "
+            f"expecting {len(in_specs)} operands."
+        )
+
+    index_to_descr = _normalize_einsum_out_subscript(out_spec)
+    index_to_axis_length: PMap[str, ShapeComponent] = pmap()
+    access_descriptors = []
+
+    for in_spec, in_operand in zip(in_specs, operands):
+        access_descriptor, index_to_descr, index_to_axis_length = (
+            _normalize_einsum_in_subscript(in_spec,
+                                           in_operand,
+                                           index_to_descr,
+                                           index_to_axis_length))
+        access_descriptors.append(access_descriptor)
+
+    return Einsum(tuple(access_descriptors), operands)
 
 # }}}
 
@@ -1318,6 +1581,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.stack(arrays, axis=0).shape
        (4, 3)
@@ -1347,6 +1611,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.concatenate(arrays, axis=0).shape
        (12,)

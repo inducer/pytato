@@ -30,6 +30,7 @@ from pytato.array import (
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
+        einsum,
 
         matmul, roll, transpose, stack, reshape, concatenate,
 
@@ -59,7 +60,7 @@ __all__ = (
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
-        "make_data_wrapper",
+        "make_data_wrapper", "einsum",
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
 

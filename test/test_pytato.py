@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-__copyright__ = "Copyright (C) 2020 Andreas Kloeckner"
+__copyright__ = """Copyright (C) 2020 Andreas Kloeckner
+Copyright (C) 2021 Kaushik Kulkarni
+Copyright (C) 2021 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -194,6 +197,16 @@ def test_same_placeholder_name_raises():
     x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
     with pytest.raises(NameClashError):
         pt.generate_loopy(2*x)
+
+
+def test_einsum_error_handling():
+    with pytest.raises(ValueError):
+        # operands not enough
+        pt.einsum("ij,j->j", pt.make_placeholder((2, 2), float))
+
+    with pytest.raises(ValueError):
+        # double index use in the out spec.
+        pt.einsum("ij,j->jj", ("a", "b"))
 
 
 def test_accessing_dict_of_named_arrays_validation():

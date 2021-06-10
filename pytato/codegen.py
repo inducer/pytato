@@ -33,7 +33,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, MatrixProduct)
+                          InputArgumentBase, MatrixProduct, Einsum)
 
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, WalkMapper
@@ -72,6 +72,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -301,6 +302,60 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings)
+
+    def map_einsum(self, expr: Einsum) -> Array:
+        import operator
+        from functools import reduce
+        from pytato.scalar_expr import Reduce
+        from pytato.utils import dim_to_index_lambda_components
+        from pytato.array import ElementwiseAxis, ReductionAxis
+
+        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+        args_as_pym_expr: List[prim.Subscript] = []
+        namegen = UniqueNameGenerator(set(bindings))
+
+        # {{{ add bindings coming from the shape expressions
+
+        for access_descr, (iarg, arg) in zip(expr.access_descriptors,
+                                            enumerate(expr.args)):
+            subscript_indices = []
+            for iaxis, axis in enumerate(access_descr):
+                if isinstance(axis, ElementwiseAxis):
+                    subscript_indices.append(prim.Variable(f"_{axis.dim}"))
+                else:
+                    assert isinstance(axis, ReductionAxis)
+                    redn_idx_name = f"_r{axis.dim}"
+                    if redn_idx_name not in redn_bounds:
+                        # convert the ShapeComponent to a ScalarExpression
+                        redn_bound, redn_bound_bindings = (
+                            dim_to_index_lambda_components(
+                                arg.shape[iaxis], namegen))
+                        redn_bounds[redn_idx_name] = (0, redn_bound)
+
+                        bindings.update({k: self.rec(v)
+                                         for k, v in redn_bound_bindings.items()})
+
+                    subscript_indices.append(prim.Variable(redn_idx_name))
+
+            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
+                                                   tuple(subscript_indices)))
+
+        # }}}
+
+        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
+                            args_as_pym_expr[0])
+
+        if redn_bounds:
+            inner_expr = Reduce(inner_expr,
+                                "sum",
+                                redn_bounds)
+
+        return IndexLambda(expr=inner_expr,
+                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                                       for s in expr.shape),
+                           dtype=expr.dtype,
+                           bindings=bindings)
 
     # {{{ index remapping (roll, axis permutation, slice)
 

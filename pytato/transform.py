@@ -30,7 +30,7 @@ from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays,
-        Reshape, Concatenate, NamedArray, IndexRemappingBase)
+        Reshape, Concatenate, NamedArray, IndexRemappingBase, Einsum)
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
@@ -155,6 +155,10 @@ class CopyMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         return SizeParam(name=expr.name, tags=expr.tags)
 
+    def map_einsum(self, expr: Einsum) -> Array:
+        return Einsum(expr.access_descriptors,
+                      tuple(self.rec(arg) for arg in expr.args))
+
     def map_named_array(self, expr: NamedArray) -> NamedArray:
         return type(expr)(self.rec(expr._container), expr.name)
 
@@ -225,6 +229,10 @@ class DependencyMapper(Mapper):
     def map_concatenate(self, expr: Concatenate) -> R:
         return self.combine(frozenset([expr]), *(self.rec(ary)
                                                  for ary in expr.arrays))
+
+    def map_einsum(self, expr: Einsum) -> R:
+        return self.combine(frozenset([expr]), *(self.rec(ary)
+                                                 for ary in expr.args))
 
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), self.rec(expr._container))
@@ -323,6 +331,17 @@ class WalkMapper(Mapper):
 
     map_concatenate = map_stack
 
+    def map_einsum(self, expr: Einsum) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.args:
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.rec(dim)
+
     def map_loopy_call(self, expr: LoopyCall) -> None:
         if not self.visit(expr):
             return
@@ -347,6 +366,7 @@ class WalkMapper(Mapper):
             return
 
         self.rec(expr._container)
+
         self.post_visit(expr)
 
 # }}}
