@@ -91,9 +91,6 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: amax
 .. autofunction:: prod
 
-Supporting Functionality
-------------------------
-
 .. currentmodule:: pytato.array
 
 Concrete Array Data
