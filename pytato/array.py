@@ -338,6 +338,13 @@ class Array(Taggable):
     .. method:: __rtruediv__
     .. method:: __neg__
     .. method:: __pos__
+    .. method:: __and__
+    .. method:: __rand__
+    .. method:: __or__
+    .. method:: __ror__
+    .. method:: __xor__
+    .. method:: __rxor__
+    .. method:: __abs__
 
     Derived attributes:
 
@@ -536,6 +543,17 @@ class Array(Taggable):
     __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True)
 
     __neg__ = partialmethod(_unary_op, operator.neg)
+
+    __and__ = partialmethod(_binary_op, operator.and_)
+    __rand__ = partialmethod(_binary_op, operator.and_, reverse=True)
+    __or__ = partialmethod(_binary_op, operator.or_)
+    __ror__ = partialmethod(_binary_op, operator.or_, reverse=True)
+    __xor__ = partialmethod(_binary_op, operator.xor)
+    __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
+
+    def __abs__(self) -> Array:
+        # /!\ This refers to the abs() defined in this file, not the built-in.
+        return cast(Array, abs(self))
 
     def __pos__(self) -> Array:
         return self
