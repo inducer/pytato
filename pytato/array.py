@@ -552,7 +552,8 @@ class Array(Taggable):
     __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
 
     def __abs__(self) -> Array:
-        return abs(self)  # type: ignore
+        # /!\ This refers to the abs() defined in this file, not the built-in.
+        return cast(Array, abs(self))
 
     def __pos__(self) -> Array:
         return self
