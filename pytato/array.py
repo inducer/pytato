@@ -64,6 +64,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: arcsin
 .. autofunction:: arccos
 .. autofunction:: arctan
+.. autofunction:: conj
+.. autofunction:: arctan2
 .. autofunction:: sinh
 .. autofunction:: cosh
 .. autofunction:: tanh
@@ -1523,25 +1525,50 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
+def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
+                          func_name: str,
                           ret_dtype: Optional[_dtype_any] = None
                           ) -> ArrayOrScalar:
-    if isinstance(x, SCALAR_CLASSES):
+    if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
-        return np_func(x)  # type: ignore
+        return np_func(inputs)  # type: ignore
 
-    assert isinstance(x, Array)
+    if not inputs:
+        raise ValueError("at least one argument must be present")
 
-    if x.dtype.kind != "f" and x.dtype.kind != "c":
-        raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
-    if ret_dtype is None:
-        ret_dtype = x.dtype
+    shape = None
 
-    expr = prim.Call(
-            var(f"pytato.c99.{func_name}"),
-            (prim.Subscript(var("in"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(expr, x.shape, ret_dtype, {"in": x})
+    sym_args = []
+    bindings = {}
+    for index, inp in enumerate(inputs):
+        if isinstance(inp, Array):
+            if inp.dtype.kind not in ["f", "c"]:
+                raise ValueError("only floating-point or complex "
+                        "arguments supported")
+
+            if shape is None:
+                shape = inp.shape
+            elif inp.shape != shape:
+                # FIXME: merge this logic with arithmetic, so that broadcasting
+                # is implemented properly
+                raise NotImplementedError("broadcasting in function application")
+
+            if ret_dtype is None:
+                ret_dtype = inp.dtype
+
+            bindings[f"in_{index}"] = inp
+            sym_args.append(
+                    prim.Subscript(var(f"in_{index}"),
+                        tuple(var(f"_{i}") for i in range(len(shape)))))
+        else:
+            sym_args.append(inp)
+
+    assert shape is not None
+    assert ret_dtype is not None
+
+    return IndexLambda(
+            prim.Call(var(f"pytato.c99.{func_name}"), tuple(sym_args)),
+            shape, ret_dtype, bindings)
 
 
 def abs(x: Array) -> ArrayOrScalar:
@@ -1550,63 +1577,71 @@ def abs(x: Array) -> ArrayOrScalar:
     else:
         result_dtype = x.dtype
 
-    return _apply_elem_wise_func(x, "abs", ret_dtype=result_dtype)
+    return _apply_elem_wise_func((x,), "abs", ret_dtype=result_dtype)
 
 
 def sqrt(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sqrt")
+    return _apply_elem_wise_func((x,), "sqrt")
 
 
 def sin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sin")
+    return _apply_elem_wise_func((x,), "sin")
 
 
 def cos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cos")
+    return _apply_elem_wise_func((x,), "cos")
 
 
 def tan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tan")
+    return _apply_elem_wise_func((x,), "tan")
 
 
 def arcsin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "asin")
+    return _apply_elem_wise_func((x,), "asin")
 
 
 def arccos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "acos")
+    return _apply_elem_wise_func((x,), "acos")
 
 
 def arctan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "atan")
+    return _apply_elem_wise_func((x,), "atan")
+
+
+def conj(x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func((x,), "conj")
+
+
+def arctan2(y: Array, x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func((y, x), "atan2")  # type:ignore
 
 
 def sinh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sinh")
+    return _apply_elem_wise_func((x,), "sinh")
 
 
 def cosh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cosh")
+    return _apply_elem_wise_func((x,), "cosh")
 
 
 def tanh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tanh")
+    return _apply_elem_wise_func((x,), "tanh")
 
 
 def exp(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "exp")
+    return _apply_elem_wise_func((x,), "exp")
 
 
 def log(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log")
+    return _apply_elem_wise_func((x,), "log")
 
 
 def log10(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log10")
+    return _apply_elem_wise_func((x,), "log10")
 
 
 def isnan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
+    return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
 
 # }}}
 
