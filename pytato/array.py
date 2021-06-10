@@ -869,18 +869,8 @@ class Einsum(Array):
     @property  # type: ignore
     @memoize_method
     def dtype(self) -> np.dtype[Any]:
-        from functools import reduce
-        import operator
-
-        def _scalar_placeholder_like(ary: Array) -> Placeholder:
-            return make_placeholder(shape=(),
-                                    dtype=ary.dtype)
-
-        # preferring this over invoking np.combine_types as pytato might
-        # choose to shift from numpy's binary ops' types
-        return reduce(operator.mul, (_scalar_placeholder_like(arg)
-                                     for arg in self.args[1:]),
-                      _scalar_placeholder_like(self.args[0])).dtype
+        return np.find_common_type(array_types=[arg.dtype for arg in self.args],
+                                    scalar_types=[])
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
