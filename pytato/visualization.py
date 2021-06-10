@@ -36,7 +36,7 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType)
+        Stack, ShapeType, Einsum)
 from pytato.codegen import normalize_outputs
 import pytato.transform
 
@@ -127,6 +127,19 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
         for i, array in enumerate(expr.arrays):
             self.rec(array, nodes)
             info.edges[str(i)] = array
+
+        nodes[expr] = info
+
+    def map_einsum(self, expr: Einsum,
+                   nodes: Dict[Array, DotNodeInfo]) -> None:
+        if expr in nodes:
+            return
+
+        info = self.get_common_dot_info(expr)
+
+        for access_descr, val in zip(expr.access_descriptors, expr.args):
+            self.rec(val, nodes)
+            info.edges[str(access_descr)] = val
 
         nodes[expr] = info
 
