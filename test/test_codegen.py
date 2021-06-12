@@ -524,7 +524,7 @@ def test_only_deps_as_knl_args():
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
-    "conj", "__abs__"))
+    "conj", "__abs__", "real", "imag"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -533,7 +533,7 @@ def test_math_functions(ctx_factory, dtype, function_name):
                                                          "arctan", "log10"]:
         pytest.skip("Unsupported by loopy.")
 
-    if np.dtype(dtype).kind == "f" and function_name in ["conj"]:
+    if np.dtype(dtype).kind == "f" and function_name in ["conj", "real", "imag"]:
         pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng

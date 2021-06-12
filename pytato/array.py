@@ -357,6 +357,9 @@ class Array(Taggable):
     .. method:: __rxor__
     .. method:: __abs__
 
+    .. autoattribute:: real
+    .. autoattribute:: imag
+
     Derived attributes:
 
     .. attribute:: ndim
@@ -568,6 +571,18 @@ class Array(Taggable):
 
     def __pos__(self) -> Array:
         return self
+
+    def real(self) -> Array:
+        import pytato as pt
+        return pt.real(self)
+
+    real = property(real)
+
+    def imag(self):
+        import pytato as pt
+        return pt.imag(self)
+
+    imag = property(imag)
 
 # }}}
 
@@ -1925,6 +1940,22 @@ def log10(x: Array) -> ArrayOrScalar:
 
 def isnan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
+
+
+def real(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        result_dtype = x.dtype
+    return _apply_elem_wise_func((x,), "real", ret_dtype=result_dtype)
+
+
+def imag(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        result_dtype = x.dtype
+    return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}
 
