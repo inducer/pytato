@@ -572,17 +572,15 @@ class Array(Taggable):
     def __pos__(self) -> Array:
         return self
 
-    def real(self) -> Array:
+    @property
+    def real(self) -> ArrayOrScalar:
         import pytato as pt
         return pt.real(self)
 
-    real = property(real)
-
-    def imag(self):
+    @property
+    def imag(self) -> ArrayOrScalar:
         import pytato as pt
         return pt.imag(self)
-
-    imag = property(imag)
 
 # }}}
 
