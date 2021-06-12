@@ -1946,7 +1946,7 @@ def real(x: Array) -> ArrayOrScalar:
     if x.dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x.dtype).real.dtype
     else:
-        result_dtype = x.dtype
+        return x
     return _apply_elem_wise_func((x,), "real", ret_dtype=result_dtype)
 
 
@@ -1954,7 +1954,7 @@ def imag(x: Array) -> ArrayOrScalar:
     if x.dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x.dtype).real.dtype
     else:
-        result_dtype = x.dtype
+        return zeros_like(x)
     return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}

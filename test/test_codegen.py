@@ -533,9 +533,6 @@ def test_math_functions(ctx_factory, dtype, function_name):
                                                          "arctan", "log10"]:
         pytest.skip("Unsupported by loopy.")
 
-    if np.dtype(dtype).kind == "f" and function_name in ["conj", "real", "imag"]:
-        pytest.skip("Unsupported by loopy.")
-
     from numpy.random import default_rng
     rng = default_rng()
     x_in = rng.random(size=(10, 4)).astype(dtype)
