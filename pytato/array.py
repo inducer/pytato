@@ -73,6 +73,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: log
 .. autofunction:: log10
 .. autofunction:: isnan
+.. autofunction:: real
+.. autofunction:: imag
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
