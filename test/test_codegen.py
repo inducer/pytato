@@ -524,16 +524,13 @@ def test_only_deps_as_knl_args():
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
-    "conj", "__abs__"))
+    "conj", "__abs__", "real", "imag"))
 def test_math_functions(ctx_factory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
     if np.dtype(dtype).kind == "c" and function_name in ["arcsin", "arccos",
                                                          "arctan", "log10"]:
-        pytest.skip("Unsupported by loopy.")
-
-    if np.dtype(dtype).kind == "f" and function_name in ["conj"]:
         pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng
@@ -552,6 +549,11 @@ def test_math_functions(ctx_factory, dtype, function_name):
             cl_device=queue.device)(queue)
 
     y_np = np_func(x_in)
+
+    # See https://github.com/inducer/loopy/issues/269 on why this is necessary.
+    if function_name == "imag" and np.dtype(dtype).kind == "f":
+        y = y.get()
+
     np.testing.assert_allclose(y, y_np, rtol=1e-6)
     assert y.dtype == y_np.dtype
 

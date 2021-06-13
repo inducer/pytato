@@ -73,6 +73,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: log
 .. autofunction:: log10
 .. autofunction:: isnan
+.. autofunction:: real
+.. autofunction:: imag
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
@@ -357,6 +359,9 @@ class Array(Taggable):
     .. method:: __rxor__
     .. method:: __abs__
 
+    .. autoattribute:: real
+    .. autoattribute:: imag
+
     Derived attributes:
 
     .. attribute:: ndim
@@ -568,6 +573,16 @@ class Array(Taggable):
 
     def __pos__(self) -> Array:
         return self
+
+    @property
+    def real(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.real(self)
+
+    @property
+    def imag(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.imag(self)
 
 # }}}
 
@@ -1892,6 +1907,8 @@ def arctan(x: Array) -> ArrayOrScalar:
 
 
 def conj(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind != "c":
+        return x
     return _apply_elem_wise_func((x,), "conj")
 
 
@@ -1925,6 +1942,22 @@ def log10(x: Array) -> ArrayOrScalar:
 
 def isnan(x: Array) -> ArrayOrScalar:
     return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
+
+
+def real(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        return x
+    return _apply_elem_wise_func((x,), "real", ret_dtype=result_dtype)
+
+
+def imag(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        return zeros(x.shape, dtype=x.dtype)
+    return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}
 

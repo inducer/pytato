@@ -46,6 +46,7 @@ from pytato.array import (
         logical_or, logical_and, logical_not,
 
         sum, amax, amin, prod,
+        real, imag,
 
         )
 
@@ -85,5 +86,6 @@ __all__ = (
         "sum",
 
         "sum", "amax", "amin", "prod",
+        "real", "imag",
 
 )
