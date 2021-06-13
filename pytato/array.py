@@ -1954,7 +1954,7 @@ def imag(x: Array) -> ArrayOrScalar:
     if x.dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x.dtype).real.dtype
     else:
-        return zeros_like(x)
+        return zeros(x.shape, x.dtype)
     return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}
