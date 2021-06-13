@@ -1907,6 +1907,8 @@ def arctan(x: Array) -> ArrayOrScalar:
 
 
 def conj(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind != "c":
+        return x
     return _apply_elem_wise_func((x,), "conj")
 
 
@@ -1954,7 +1956,7 @@ def imag(x: Array) -> ArrayOrScalar:
     if x.dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x.dtype).real.dtype
     else:
-        return zeros(x.shape, x.dtype)
+        return zeros(x.shape, dtype=x.dtype)
     return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}
