@@ -549,6 +549,11 @@ def test_math_functions(ctx_factory, dtype, function_name):
             cl_device=queue.device)(queue)
 
     y_np = np_func(x_in)
+
+    # See https://github.com/inducer/loopy/issues/269 on why this is necessary.
+    if function_name == "imag" and np.dtype(dtype).kind == "f":
+        y = y.get()
+
     np.testing.assert_allclose(y, y_np, rtol=1e-6)
     assert y.dtype == y_np.dtype
 
