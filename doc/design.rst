@@ -172,6 +172,14 @@ Guidelines for tag use:
   - **Good:** This array is the result of differentiation.
   - **Bad:** Unroll the loops in the code computing this result.
 
+Memory layout
+-------------
+
+:mod:`pytato` arrays do not have a defined memory layout. Any operation in :mod:`numpy`
+that relies on memory layout information to do its job is undefined in :mod:`pytato`.
+At the most basic level, the attribute :attr:`numpy.ndarray.strides` is not available
+on subclasses of :class:`pytato.Array`.
+
 Lessons learned
 ===============
 
