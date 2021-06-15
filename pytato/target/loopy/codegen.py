@@ -328,7 +328,9 @@ class CodeGenMapper(Mapper):
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
-                is_output_only=False)
+                is_input=True,
+                is_output=False,
+                )
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
         assert expr.name is not None
@@ -745,7 +747,9 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
-                is_output_only=True)
+                is_input=False,
+                is_output=True,
+                )
         kernel = kernel.copy(args=kernel.args + [arg],
                 domains=kernel.domains + [domain],
                 instructions=kernel.instructions + [insn])
