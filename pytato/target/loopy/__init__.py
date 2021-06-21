@@ -94,8 +94,8 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     .. automethod:: __call__
     """
-    def __call__(self, queue: "pyopencl.CommandQueue",
-            *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+                 *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
         if set(kwargs.keys()) & set(self.bound_arguments.keys()):

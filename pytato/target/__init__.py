@@ -80,4 +80,7 @@ class BoundProgram:
     bound_arguments: Mapping[str, Any]
     target: Target
 
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
 # vim: foldmethod=marker
