@@ -38,6 +38,7 @@ setup(
         "pytools>=2021.1",
         "pyrsistent"
         ],
+    package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
     url="https://github.com/inducer/pytato",
     author_email="inform@tiker.net",
