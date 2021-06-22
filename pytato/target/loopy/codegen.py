@@ -432,20 +432,19 @@ class CodeGenMapper(Mapper):
                     pt_arg = expr.bindings[arg.name]
                     assert isinstance(pt_arg, Array)
 
-                    if pt_arg in state.results and (
-                            isinstance(state.results[pt_arg], StoredResult)):
+                    pt_arg_rec = self.rec(pt_arg, state)
+
+                    if isinstance(pt_arg_rec, StoredResult):
                         # found a stored result corresponding to the argument, use it
-                        stored_result: StoredResult = state.results[  # type: ignore
-                                pt_arg]
-                        name = stored_result.name
+                        name = pt_arg_rec.name
                         params.append(_get_sub_array_ref(pt_arg, name))
-                        depends_on.update(stored_result.depends_on)
+                        depends_on.update(pt_arg_rec.depends_on)
                     else:
                         # did not find a stored result for the sub-expression, store
                         # it and then pass it to the call
                         name = state.var_name_gen("_pt_temp")
                         store_insn_id = add_store(name, pt_arg,
-                                self.rec(pt_arg, state),
+                                pt_arg_rec,
                                 state, output_to_temporary=True,
                                 cgen_mapper=self)
                         depends_on.add(store_insn_id)
