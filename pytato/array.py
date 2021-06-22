@@ -593,6 +593,10 @@ class Array(Taggable):
         import pytato as pt
         return pt.imag(self)
 
+    def reshape(self, shape: Sequence[int], order: str = "C") -> Array:
+        import pytato as pt
+        return pt.reshape(self, shape, order=order)
+
 # }}}
 
 
