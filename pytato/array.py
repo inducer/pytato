@@ -277,13 +277,23 @@ DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
 
+# https://github.com/numpy/numpy/issues/19302
+def _np_result_type(
+        # actual dtype:
+        #*arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
+        # our dtype:
+        *arrays_and_dtypes: DtypeOrScalar,
+        ) -> np.dtype[Any]:
+    return np.result_type(*arrays_and_dtypes)  # type: ignore
+
+
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
-    dtype = np.result_type(arg1, arg2)
+    dtype = _np_result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     if dtype.kind in "iu":
         return np.dtype(np.float64)
     else:
-        return cast(_dtype_any, dtype)
+        return dtype
 
 
 class Array(Taggable):
@@ -508,7 +518,7 @@ class Array(Taggable):
     def _binary_op(self,
             op: Any,
             other: ArrayOrScalar,
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
 
         # {{{ sanity checks
@@ -1120,7 +1130,7 @@ class MatrixProduct(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any, np.result_type(self.x1.dtype, self.x2.dtype))
+        return _np_result_type(self.x1.dtype, self.x2.dtype)
 
 # }}}
 
@@ -1153,8 +1163,7 @@ class Stack(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1193,8 +1202,7 @@ class Concatenate(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -2082,7 +2090,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
-                       dtype=np.bool8,
+                       dtype=np.dtype(np.bool8),
                        bindings={"_in0": x})
 
 # }}}
