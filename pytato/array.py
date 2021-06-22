@@ -184,8 +184,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
-    TagsType, tag_dataclass)
+from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
@@ -1395,13 +1394,6 @@ class InputArgumentBase(Array):
             tags: TagsType = frozenset()):
         super().__init__(tags=tags)
         self.name = name
-
-    def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
-
-    def without_tags(self, tags: TagOrIterableType,
-                        verify_existence: bool = True) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
 
     def __hash__(self) -> int:
         return id(self)
