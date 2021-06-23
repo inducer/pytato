@@ -593,9 +593,15 @@ class Array(Taggable):
         import pytato as pt
         return pt.imag(self)
 
-    def reshape(self, shape: Sequence[int], order: str = "C") -> Array:
+    def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
         import pytato as pt
-        return pt.reshape(self, shape, order=order)
+        if len(shape) == 1:
+            # handle shape as single argument tuple
+            return pt.reshape(self, shape[0], order=order)
+
+        # type-ignore reason: passed: "Tuple[Union[int, Sequence[int]], ...]";
+        # expected "Union[int, Sequence[int]]"
+        return pt.reshape(self, shape, order=order)  # type: ignore
 
 # }}}
 
@@ -1703,7 +1709,8 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
     return Slice(array, tuple(starts), tuple(stops))
 
 
-def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
+def reshape(array: Array, newshape: Union[int, Sequence[int]],
+            order: str = "C") -> Array:
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
@@ -1715,6 +1722,9 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
         reshapes of arrays with symbolic shapes not yet implemented.
     """
     from pytools import product
+
+    if isinstance(newshape, int):
+        newshape = newshape,
 
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
