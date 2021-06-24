@@ -43,6 +43,7 @@ __doc__ = """
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: WalkMapper
+.. autoclass:: CachedWalkMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 
