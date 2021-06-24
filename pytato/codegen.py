@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 import dataclasses
 from functools import partialmethod
-from typing import Union, Dict, Tuple, Callable, List, Any
+from typing import Union, Dict, Tuple, Callable, List, Any, FrozenSet
 
 import pymbolic.primitives as prim
 from pymbolic import var
@@ -36,7 +36,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           InputArgumentBase, MatrixProduct, Einsum)
 
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
-from pytato.transform import CopyMapper, CachedWalkMapper
+from pytato.transform import CopyMapper, CachedWalkMapper, DependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
@@ -482,9 +482,29 @@ class PreprocessResult:
     bound_arguments: Dict[str, DataInterface]
 
 
+# {{{ SubsetDependencyMapper
+
+class SubsetDependencyMapper(DependencyMapper):
+    """
+    Mapper to combine the dependencies of an expression that are a subset of
+    *universe*.
+    """
+    def __init__(self, universe: FrozenSet[Array]):
+        self.universe = universe
+        super().__init__()
+
+    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+        from functools import reduce
+        return reduce(lambda acc, arg: acc | (arg & self.universe),
+                      args,
+                      frozenset())
+
+# }}}
+
+
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
-    from pytato.transform import copy_dict_of_named_arrays, get_dependencies
+    from pytato.transform import copy_dict_of_named_arrays
 
     check_validity_of_outputs(outputs)
 
@@ -495,11 +515,12 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     from pytools.graph import compute_topological_order
 
-    deps = get_dependencies(outputs)
+    get_deps = SubsetDependencyMapper(frozenset(out.expr
+                                                for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: (val & frozenset(out.expr for out in outputs.values()))
-            for name, val in deps.items()}
+    deps = {name: get_deps(output.expr)
+            for name, output in outputs.items()}
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}
