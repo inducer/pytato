@@ -381,6 +381,8 @@ class Array(Taggable):
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
+    __array_priority__ = 1  # disallow numpy arithmetic to take preference
+
     @property
     def shape(self) -> ShapeType:
         raise NotImplementedError
