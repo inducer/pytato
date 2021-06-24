@@ -36,7 +36,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           InputArgumentBase, MatrixProduct, Einsum)
 
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
-from pytato.transform import CopyMapper, WalkMapper
+from pytato.transform import CopyMapper, CachedWalkMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
@@ -444,7 +444,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 
 # {{{ input naming check
 
-class NamesValidityChecker(WalkMapper):
+class NamesValidityChecker(CachedWalkMapper):
     def __init__(self) -> None:
         self.name_to_input: Dict[str, InputArgumentBase] = {}
         super().__init__()
