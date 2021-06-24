@@ -394,6 +394,12 @@ class Array(Taggable):
     def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
 
+    def __len__(self) -> ShapeComponent:
+        if self.ndim == 0:
+            raise TypeError("len() of unsized object")
+
+        return self.shape[0]
+
     def __getitem__(self,
             slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
         if not isinstance(slice_spec, tuple):
