@@ -910,7 +910,8 @@ class Einsum(Array):
     @property  # type: ignore
     @memoize_method
     def shape(self) -> ShapeType:
-        iaxis_to_len = {}
+        from pytato.utils import are_shape_components_equal
+        iaxis_to_len: Dict[int, ShapeComponent] = {}
 
         for access_descr, arg in zip(self.access_descriptors,
                                      self.args):
@@ -918,7 +919,10 @@ class Einsum(Array):
             for arg_axis_len, axis_op in zip(arg.shape, access_descr):
                 if isinstance(axis_op, ElementwiseAxis):
                     if axis_op.dim in iaxis_to_len:
-                        assert arg.shape[axis_op.dim] == arg_axis_len
+                        # check that the accumulated shape-dim matches with the
+                        # current arg's axis len
+                        assert are_shape_components_equal(iaxis_to_len[axis_op.dim],
+                                                          arg_axis_len)
                     else:
                         iaxis_to_len[axis_op.dim] = arg_axis_len
                 elif isinstance(axis_op, ReductionAxis):
