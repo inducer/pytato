@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar
+from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -43,6 +43,7 @@ __doc__ = """
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: WalkMapper
+.. autoclass:: CachedWalkMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 
@@ -259,6 +260,7 @@ class WalkMapper(Mapper):
     .. automethod:: visit
     .. automethod:: post_visit
     """
+
     def visit(self, expr: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
@@ -368,6 +370,28 @@ class WalkMapper(Mapper):
         self.rec(expr._container)
 
         self.post_visit(expr)
+
+
+class CachedWalkMapper(WalkMapper):
+    """
+    WalkMapper that visits each node in the DAG exactly once. This loses some
+    information compared to :class:`WalkMapper` as a node is visited only from
+    one of its predecessors.
+    """
+
+    def __init__(self) -> None:
+        self._visited_nodes: Set[ArrayOrNames] = set()
+
+    # type-ignore reason: CachedWalkMapper.rec's type does not match
+    # WalkMapper.rec's type
+    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
+        if expr in self._visited_nodes:
+            return
+
+        # type-ignore reason: super().rec expects either 'Array' or
+        # 'AbstractResultWithNamedArrays', passed 'ArrayOrNames'
+        super().rec(expr)  # type: ignore
+        self._visited_nodes.add(expr)
 
 # }}}
 
