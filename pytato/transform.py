@@ -29,8 +29,8 @@ from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
-        AbstractResultWithNamedArrays,
-        Reshape, Concatenate, NamedArray, IndexRemappingBase, Einsum)
+        AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
+        IndexRemappingBase, Einsum, InputArgumentBase)
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
@@ -291,6 +291,26 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
+
+
+class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
+    """
+    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
+    an array expression depends on.
+    """
+    def combine(self, *args: FrozenSet[InputArgumentBase]
+                ) -> FrozenSet[InputArgumentBase]:
+        from functools import reduce
+        return reduce(lambda a, b: a | b, args, frozenset())
+
+    def map_placeholder(self, expr: Placeholder) -> FrozenSet[InputArgumentBase]:
+        return self.combine(frozenset([expr]), super().map_placeholder(expr))
+
+    def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[InputArgumentBase]:
+        return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
+
+    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
+        return frozenset([expr])
 
 # }}}
 
