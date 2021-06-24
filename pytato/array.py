@@ -381,6 +381,8 @@ class Array(Taggable):
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
+    __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
     @property
     def shape(self) -> ShapeType:
         raise NotImplementedError
@@ -393,6 +395,12 @@ class Array(Taggable):
     @property
     def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
+
+    def __len__(self) -> ShapeComponent:
+        if self.ndim == 0:
+            raise TypeError("len() of unsized object")
+
+        return self.shape[0]
 
     def __getitem__(self,
             slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:

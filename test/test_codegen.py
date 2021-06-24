@@ -242,10 +242,11 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     x_orig = 7
     y_orig = np.array([1, 2, 3, 4, 5])
 
-    for first_dtype in (int, float, complex):
+    for first_dtype in (int, float, complex, np.int32, np.float64,
+                        np.complex128):
         x_in = first_dtype(x_orig)
 
-        if first_dtype == complex and not_valid_in_complex:
+        if first_dtype in [complex, np.complex128] and not_valid_in_complex:
             continue
 
         exprs = {}
