@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set
+from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -34,8 +34,9 @@ from pytato.array import (
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
+CombineT = TypeVar("CombineT")  # used in CombineMapper
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-R = FrozenSet[ArrayOrNames]
+R = FrozenSet[Array]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -169,83 +170,127 @@ class CopyMapper(Mapper):
                                   for key, val in expr.items()})
 
 
-class DependencyMapper(Mapper):
+class CombineMapper(Mapper, Generic[CombineT]):
+    def __init__(self) -> None:
+        self.cache: Dict[ArrayOrNames, CombineT] = {}
+
+    def rec(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+        # type-ignore reason: type not compatible with super.rec() type
+        result: CombineT = super().rec(expr)  # type: ignore
+        self.cache[expr] = result
+        return result
+
+    # type-ignore reason: incompatible ret. type with super class
+    def __call__(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
+        return self.rec(expr)
+
+    def combine(self, *args: CombineT) -> CombineT:
+        raise NotImplementedError
+
+    def map_index_lambda(self, expr: IndexLambda) -> CombineT:
+        return self.combine(*(self.rec(bnd)
+                              for bnd in expr.bindings.values()),
+                            *(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
+
+    def map_placeholder(self, expr: Placeholder) -> CombineT:
+        return self.combine(*(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
+
+    def map_data_wrapper(self, expr: DataWrapper) -> CombineT:
+        return self.combine(*(self.rec(s)
+                              for s in expr.shape if isinstance(s, Array)))
+
+    def map_matrix_product(self, expr: MatrixProduct) -> CombineT:
+        return self.combine(self.rec(expr.x1), self.rec(expr.x2))
+
+    def map_stack(self, expr: Stack) -> CombineT:
+        return self.combine(*(self.rec(ary)
+                              for ary in expr.arrays))
+
+    def map_roll(self, expr: Roll) -> CombineT:
+        return self.combine(self.rec(expr.array))
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> CombineT:
+        return self.combine(self.rec(expr.array))
+
+    def map_slice(self, expr: Slice) -> CombineT:
+        return self.combine(self.rec(expr.array))
+
+    def map_reshape(self, expr: Reshape) -> CombineT:
+        return self.combine(self.rec(expr.array))
+
+    def map_concatenate(self, expr: Concatenate) -> CombineT:
+        return self.combine(*(self.rec(ary)
+                              for ary in expr.arrays))
+
+    def map_einsum(self, expr: Einsum) -> CombineT:
+        return self.combine(*(self.rec(ary)
+                              for ary in expr.args))
+
+    def map_named_array(self, expr: NamedArray) -> CombineT:
+        return self.combine(self.rec(expr._container))
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> CombineT:
+        return self.combine(*(self.rec(ary.expr)
+                              for ary in expr.values()))
+
+    def map_loopy_call(self, expr: LoopyCall) -> CombineT:
+        return self.combine(*(self.rec(ary)
+                              for ary in expr.bindings.values()
+                              if isinstance(ary, Array)))
+
+
+class DependencyMapper(CombineMapper[R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
     """
-
-    def __init__(self) -> None:
-        self.cache: Dict[ArrayOrNames, R] = {}
-
-    def rec(self, expr: ArrayOrNames) -> R:  # type: ignore
-        if expr in self.cache:
-            return self.cache[expr]
-        result: R = super().rec(expr)  # type:ignore
-        self.cache[expr] = result
-        return result
 
     def combine(self, *args: R) -> R:
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
     def map_index_lambda(self, expr: IndexLambda) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(bnd)
-                                                 for bnd in expr.bindings.values()),
-                            *(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+        return self.combine(frozenset([expr]), super().map_index_lambda(expr))
 
     def map_placeholder(self, expr: Placeholder) -> R:
-        return self.combine(frozenset([expr]),
-                            *(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+        return self.combine(frozenset([expr]), super().map_placeholder(expr))
 
     def map_data_wrapper(self, expr: DataWrapper) -> R:
-        return self.combine(frozenset([expr]),
-                            *(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+        return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
 
     def map_size_param(self, expr: SizeParam) -> R:
         return frozenset([expr])
 
     def map_matrix_product(self, expr: MatrixProduct) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.x1), self.rec(expr.x2))
+        return self.combine(frozenset([expr]), super().map_matrix_product(expr))
 
     def map_stack(self, expr: Stack) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.arrays))
+        return self.combine(frozenset([expr]), super().map_stack(expr))
 
     def map_roll(self, expr: Roll) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), super().map_roll(expr))
 
     def map_axis_permutation(self, expr: AxisPermutation) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), super().map_axis_permutation(expr))
 
     def map_slice(self, expr: Slice) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), super().map_slice(expr))
 
     def map_reshape(self, expr: Reshape) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), super().map_reshape(expr))
 
     def map_concatenate(self, expr: Concatenate) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.arrays))
+        return self.combine(frozenset([expr]), super().map_concatenate(expr))
 
     def map_einsum(self, expr: Einsum) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.args))
+        return self.combine(frozenset([expr]), super().map_einsum(expr))
 
     def map_named_array(self, expr: NamedArray) -> R:
-        return self.combine(frozenset([expr]), self.rec(expr._container))
-
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary.expr)
-                                                 for ary in expr.values()))
-
-    def map_loopy_call(self, expr: LoopyCall) -> R:
-        return self.combine(frozenset([expr]), *(self.rec(ary)
-                                                 for ary in expr.bindings.values()
-                                                 if isinstance(ary, Array)))
+        return self.combine(frozenset([expr]), super().map_named_array(expr))
 
 # }}}
 
