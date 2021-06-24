@@ -447,6 +447,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 class NamesValidityChecker(WalkMapper):
     def __init__(self) -> None:
         self.name_to_input: Dict[str, InputArgumentBase] = {}
+        super().__init__()
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, InputArgumentBase):

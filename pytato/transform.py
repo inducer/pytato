@@ -259,6 +259,20 @@ class WalkMapper(Mapper):
     .. automethod:: visit
     .. automethod:: post_visit
     """
+    def __init__(self) -> None:
+        self._cache: Dict[ArrayOrNames, Any] = {}
+
+    # type-ignore reason: WalkMapper.rec's type does not match Mapper.rec's type
+    def rec(self, expr: ArrayOrNames) -> Any:  # type: ignore
+        if expr in self._cache:
+            return self._cache[expr]
+
+        # type-ignore reason: super().rec expects either 'Array' or
+        # "AbstractResultWithNamedArrays", passed ArrayOrNames
+        result = super().rec(expr)  # type: ignore
+        self._cache[expr] = result
+        return result
+
     def visit(self, expr: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
