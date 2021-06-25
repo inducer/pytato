@@ -26,7 +26,7 @@ import numpy as np
 import pymbolic.primitives as prim
 
 from numbers import Number
-from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
+from typing import Tuple, List, Union, Callable, Any, Sequence, Dict, Optional
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
                           DtypeOrScalar, ArrayOrScalar)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
@@ -193,7 +193,7 @@ class ShapeExpressionMapper(Mapper):
 
 
 def dim_to_index_lambda_components(expr: ShapeComponent,
-                                   vng: UniqueNameGenerator,
+                                   vng: Optional[UniqueNameGenerator] = None,
                                    ) -> Tuple[ScalarExpression,
                                               Dict[str, SizeParam]]:
     """
@@ -218,6 +218,10 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     if isinstance(expr, int):
         return expr, {}
 
+    if vng is None:
+        vng = UniqueNameGenerator()
+
+    assert isinstance(vng, UniqueNameGenerator)
     assert isinstance(expr, Array)
     mapper = ShapeExpressionMapper(vng)
     result = mapper(expr)

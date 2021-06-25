@@ -898,6 +898,71 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
     np.testing.assert_allclose(out.get(), 0)
 
 
+def test_call_loopy_shape_inference1(ctx_factory):
+    from pytato.loopy import call_loopy
+    import loopy as lp
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    A_in = rng.random((20, 37))  # noqa
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    y_pt = call_loopy(knl, {"A": A})["out"]
+
+    _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in)
+
+    np.testing.assert_allclose(out,
+                               A_in.sum() * (np.arange(4).reshape(4, 1)
+                                             + np.arange(3)))
+
+
+def test_call_loopy_shape_inference2(ctx_factory):
+    from pytato.loopy import call_loopy
+    import loopy as lp
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    A_in = rng.random((38, 71))  # noqa
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    n1 = pt.make_size_param("n1")
+    n2 = pt.make_size_param("n2")
+    A = pt.make_placeholder(name="x",  # noqa: N806
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
+                            dtype=np.float64)
+
+    y_pt = call_loopy(knl, {"A": A})["out"]
+
+    _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in, n1=3, n2=4)
+
+    np.testing.assert_allclose(out,
+                               A_in.sum() * (np.arange(8).reshape(8, 1)
+                                             + np.arange(6)))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

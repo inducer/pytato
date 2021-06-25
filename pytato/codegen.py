@@ -150,8 +150,8 @@ class CodeGenPreprocessor(CopyMapper):
                     for name, subexpr in expr.bindings.items()}
 
         return LoopyCall(translation_unit=translation_unit,
-                             bindings=bindings,  # type: ignore
-                             entrypoint=entrypoint)
+                         bindings=bindings,
+                         entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name

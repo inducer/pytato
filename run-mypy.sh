@@ -1,3 +1,3 @@
 #! /bin/bash
 
-mypy --strict pytato
+mypy --show-error-codes --strict pytato
