@@ -218,6 +218,41 @@ def test_accessing_dict_of_named_arrays_validation():
     assert y1y2["y1"].dtype == (2*x).dtype
 
 
+def test_call_loopy_shape_inference():
+    from pytato.loopy import call_loopy
+    from pytato.utils import are_shapes_equal
+    import loopy as lp
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    # {{{ variant 1
+
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    y = call_loopy(knl, {"A": A})["out"]
+    assert are_shapes_equal(y.shape, (4, 3))
+
+    # }}}
+
+    # {{{ variant 2
+
+    n1 = pt.make_size_param("n1")
+    n2 = pt.make_size_param("n2")
+    A = pt.make_placeholder(name="x",  # noqa: N806
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
+                            dtype=np.float64)
+
+    y = call_loopy(knl, {"A": A})["out"]
+    assert are_shapes_equal(y.shape, (2*n2, 2*n1))
+
+    # }}}
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
