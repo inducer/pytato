@@ -28,12 +28,16 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import pymbolic.primitives as prim
-from typing import Dict, Optional, Any, Union, Iterator
+from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
+                    Tuple, Iterable, Mapping)
 from numbers import Number
-from pytato.array import AbstractResultWithNamedArrays, Array, ShapeType, NamedArray
-from pytato.scalar_expr import SubstitutionMapper, ScalarExpression
+from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
+                          NamedArray, ArrayOrScalar, SizeParam)
+from pytato.scalar_expr import SubstitutionMapper, ScalarExpression, EvaluationMapper
 from pytools import memoize_method
 from pytools.tag import TagsType
+from pyrsistent import PMap, pmap
+import islpy as isl
 
 __doc__ = """
 .. currentmodule:: pytato.loopy
@@ -55,7 +59,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __init__(self,
             translation_unit: "lp.TranslationUnit",
-            bindings: Dict[str, Union[Array, Number]],
+            bindings: Dict[str, ArrayOrScalar],
             entrypoint: str):
         entry_kernel = translation_unit[entrypoint]
         super().__init__()
@@ -139,7 +143,7 @@ class LoopyCallResult(NamedArray):
 
 
 def call_loopy(translation_unit: "lp.TranslationUnit",
-               bindings: Dict[str, Union[Array, Number]],
+               bindings: Dict[str, ArrayOrScalar],
                entrypoint: Optional[str] = None) -> LoopyCall:
     """
     Invokes an entry point of a :class:`loopy.TranslationUnit` on the array inputs as
@@ -184,23 +188,33 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
             raise ValueError(f"Kernel '{entrypoint}' got an output arg '{name}' "
                     f"as input.")
 
+    # {{{ perform shape inference here
+
+    bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
+                                                    pmap(bindings))
+
+    # }}}
+
     for arg in translation_unit[entrypoint].args:
         if arg.is_input:
             if arg.name not in bindings:
                 raise ValueError(f"Kernel '{entrypoint}' expects an input"
                         f" '{arg.name}'")
+
+            arg_binding = bindings[arg.name]
+
             if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
-                if not isinstance(bindings[arg.name], Array):
+                if not isinstance(arg_binding, Array):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
-                            f"pytato.Array, got {type(bindings[arg.name])}.")
+                            f"pytato.Array, got {type(arg_binding)}.")
             else:
                 assert isinstance(arg, lp.ValueArg)
-                if not (isinstance(bindings[arg.name], Number)
-                        or (isinstance(bindings[arg.name], Array)
-                            and bindings[arg.name].shape == ())):  # type: ignore
+                if not (isinstance(arg_binding, Number)
+                        or (isinstance(arg_binding, Array)
+                            and arg_binding.shape == ())):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             " number or a scalar expression, got "
-                            f"{type(bindings[arg.name])}.")
+                            f"{type(arg_binding)}.")
 
     # }}}
 
@@ -228,6 +242,255 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     translation_unit = translation_unit.with_entrypoints(frozenset())
 
     return LoopyCall(translation_unit, bindings, entrypoint)
+
+
+# {{{ shape inference
+
+class ShapeInferenceFailure(RuntimeError):
+    pass
+
+
+def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
+    """
+    Gets the value of *bset*'s *idim*-th set-dim in terms of it's param-dims.
+
+    .. note::
+
+        Assumes all constraints in *bset* are equality constraints.
+    """
+    from loopy.symbolic import aff_to_expr
+
+    max_val = bset.dim_max(idim)
+
+    assert max_val.is_equal(bset.dim_min(idim))
+
+    if max_val.n_piece() != 1:
+        raise NotImplementedError("Shape inference resulted in a piecewise"
+                                    " result.")
+
+    (_, aff), = max_val.get_pieces()
+
+    return aff_to_expr(aff)
+
+
+def solve_constraints(variables: Iterable[str],
+                      parameters: Iterable[str],
+                      constraints: Sequence[Tuple[ScalarExpression,
+                                                  ScalarExpression]],
+
+                      ) -> Mapping[str, ScalarExpression]:
+    """
+    :arg variables: Names of the variables to solve for
+    :arg parameters: Names of the parameters that to express that are allowed
+        to be a part of the solution expressions.
+    :arg constraints: A :class:`list` of constraints. Each constraint is
+        represented as a tuple ``(lhs, rhs)``, that corresponds to the
+        constraint ``lhs = rhs``. ``lhs`` and ``rhs`` are quasi-affine
+        expressions in *variables* and *constraints*.
+    :returns: A mapping from variable name in *variables* to
+        :class:`ScalarExpression` obtained after solving for them.
+    """
+    from loopy.symbolic import aff_from_expr
+
+    space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
+                                        set=variables,
+                                        params=parameters)
+
+    shape_inference_bset = isl.BasicSet.universe(space)
+
+    for lhs, rhs in constraints:
+        # type-ignored reason: no "(-)" support for Number
+        aff = aff_from_expr(space, lhs-rhs)  # type: ignore
+
+        shape_inference_bset = (shape_inference_bset
+                                .add_constraint(isl.Constraint
+                                                .equality_from_aff(aff)))
+
+    if shape_inference_bset.is_empty():
+        raise ShapeInferenceFailure
+
+    solution = {}
+
+    # {{{ get the value of each unknown variable
+
+    for idim in range(shape_inference_bset.dim(isl.dim_type.set)):
+        arg_name = shape_inference_bset.get_dim_name(isl.dim_type.set, idim)
+        solved_val = _get_val_in_bset(shape_inference_bset, idim)
+        solution[arg_name] = solved_val
+
+    # }}}
+
+    return solution
+
+
+# {{{ shape inference helpers
+
+def _lp_var_to_global_namespace(name: str) -> str:
+    return f"_lp_{name}"
+
+
+def _lp_var_from_global_namespace(name: str) -> str:
+    assert name[:4] == "_lp_"
+    return name[4:]
+
+
+def _pt_var_to_global_namespace(name: Optional[str]) -> str:
+    assert name is not None  # size params are always named
+    return f"_pt_{name}"
+
+
+def _get_pt_dim_expr(dim: Union[int, Array]) -> ScalarExpression:
+    from pytato.utils import dim_to_index_lambda_components
+    from pymbolic.mapper.substitutor import substitute
+    dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
+    assert all(isinstance(dim_bnd, SizeParam)
+                for dim_bnd in dim_bnds.values())
+
+    return substitute(dim_expr,
+                        {k: prim.Variable(v.name)
+                        for k, v in dim_bnds.items()})
+
+# }}}
+
+
+# {{{ SizeParamGatherer
+
+from pytato.transform import CombineMapper
+
+
+class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
+    """
+    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
+    an array expression depends on.
+    """
+    def combine(self, *args: FrozenSet[SizeParam]
+                ) -> FrozenSet[SizeParam]:
+        from functools import reduce
+        return reduce(lambda a, b: a | b, args, frozenset())
+
+    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
+        return frozenset([expr])
+
+# }}}
+
+
+def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
+                                         bindings: PMap[str, ArrayOrScalar]
+                                         ) -> Dict[str, ArrayOrScalar]:
+    from functools import reduce
+    from loopy.symbolic import get_dependencies as lpy_get_deps
+    from loopy.kernel.array import ArrayBase
+    from pymbolic.mapper.substitutor import make_subst_func
+    get_size_param_deps = SizeParamGatherer()
+
+    lp_size_params: FrozenSet[str] = reduce(frozenset.union,
+                                            (lpy_get_deps(arg.shape)
+                                             for arg in knl.args
+                                             if isinstance(arg, ArrayBase)),
+                                            frozenset())
+
+    pt_size_params: FrozenSet[SizeParam] = reduce(frozenset.union,
+                                                  (get_size_param_deps(bnd)
+                                                   for bnd in bindings.values()
+                                                   if isinstance(bnd, Array)),
+                                                  frozenset())
+
+    # {{{ mappers to map expressions to a global namespace
+
+    pt_subst_map = SubstitutionMapper(
+                        make_subst_func({
+                            arg.name: prim.Variable(_pt_var_to_global_namespace(arg
+                                                                                .name
+                                                                                ))
+                            for arg in pt_size_params}))
+
+    lp_subst_map = SubstitutionMapper(
+                        make_subst_func({
+                            arg: prim.Variable(_lp_var_to_global_namespace(arg))
+                            for arg in lp_size_params}))
+
+    # }}}
+
+    constraints = []
+
+    # {{{ collect constraints from passed arguments
+
+    for lp_arg_name, lp_arg in knl.arg_dict.items():
+        if lp_arg_name not in bindings:
+            # value not passed => don't add any constraints
+            continue
+
+        pt_arg = bindings[lp_arg_name]
+
+        if isinstance(lp_arg, ArrayBase):
+
+            # {{{ sanity checks
+
+            if lp_arg.shape is None:
+                # no constraints to add here
+                continue
+
+            if lp_arg.shape is lp.auto:
+                # TODO: Can lp.auto as shape really appear here?
+                raise NotImplementedError("'loopy.auto' as shape dim.")
+
+            assert isinstance(lp_arg.shape, tuple)
+
+            if not isinstance(pt_arg, Array):
+                raise ValueError(f"'{knl.name}' got scalar value for '{lp_arg_name}'"
+                                 ", expected an array.")
+
+            if len(lp_arg.shape) != len(pt_arg.shape):
+                raise ValueError(f"ndim mismatch for argument '{lp_arg_name}'"
+                                 f"of '{knl.name}'")
+
+            # }}}
+
+            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape):
+                pt_dim_expr = pt_subst_map(_get_pt_dim_expr(pt_dim))
+                lp_dim_expr = lp_subst_map(lp_dim)
+                constraints.append((pt_dim_expr, lp_dim_expr))
+
+        else:
+            if lp_arg_name not in lp_size_params:
+                continue
+
+            assert isinstance(lp_arg, lp.ValueArg)
+            assert isinstance(pt_arg, (int, Array))
+            pt_arg_expr = pt_subst_map(_get_pt_dim_expr(pt_arg))
+            lp_arg_expr = lp_subst_map(prim.Variable(lp_arg.name))
+            constraints.append((pt_arg_expr, lp_arg_expr))
+
+    # }}}
+
+    solutions = solve_constraints(variables={_lp_var_to_global_namespace(var)
+                                             for var in lp_size_params},
+                                  parameters={_pt_var_to_global_namespace(var.name)
+                                              for var in pt_size_params},
+                                  constraints=constraints)
+
+    as_pt_size_param = EvaluationMapper({_pt_var_to_global_namespace(arg.name): arg
+                                         for arg in pt_size_params})
+
+    for var, val in solutions.items():
+        # map the pymbolic expression back into an expression in terms of
+        # pt.SizeParams
+        var = _lp_var_from_global_namespace(var)
+        val = as_pt_size_param(val)
+
+        # {{{ respect callee's scalar dtype preference if there exists one
+
+        if (isinstance(val, Number)
+                and knl.arg_dict[var].dtype not in [lp.auto, None]):
+            val = knl.arg_dict[var].dtype.numpy_dtype.type(val)
+
+        # }}}
+
+        bindings = bindings.set(var, val)
+
+    return dict(bindings)
+
+# }}}
 
 
 # vim: fdm=marker
