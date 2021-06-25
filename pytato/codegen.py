@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 import dataclasses
 from functools import partialmethod
-from typing import Union, Dict, Tuple, Callable, List, Any, FrozenSet
+from typing import Union, Dict, Tuple, Callable, List, Any
 
 import pymbolic.primitives as prim
 from pymbolic import var
@@ -36,7 +36,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           InputArgumentBase, MatrixProduct, Einsum)
 
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
-from pytato.transform import CopyMapper, CachedWalkMapper, DependencyMapper
+from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
@@ -480,26 +480,6 @@ class PreprocessResult:
     outputs: DictOfNamedArrays
     compute_order: Tuple[str, ...]
     bound_arguments: Dict[str, DataInterface]
-
-
-# {{{ SubsetDependencyMapper
-
-class SubsetDependencyMapper(DependencyMapper):
-    """
-    Mapper to combine the dependencies of an expression that are a subset of
-    *universe*.
-    """
-    def __init__(self, universe: FrozenSet[Array]):
-        self.universe = universe
-        super().__init__()
-
-    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
-        from functools import reduce
-        return reduce(lambda acc, arg: acc | (arg & self.universe),
-                      args,
-                      frozenset())
-
-# }}}
 
 
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
