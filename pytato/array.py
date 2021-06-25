@@ -238,13 +238,12 @@ def normalize_shape(
     def normalize_shape_component(
             s: ShapeComponent) -> ShapeComponent:
         if isinstance(s, Array):
-            from pytato.transform import DependencyMapper
+            from pytato.transform import InputGatherer
 
             if s.shape != ():
                 raise ValueError("array valued shapes must be scalars")
 
-            for d in (k for k in DependencyMapper()(s)
-                      if isinstance(k, InputArgumentBase)):
+            for d in InputGatherer()(s):
                 if not isinstance(d, SizeParam):
                     raise NotImplementedError("shape expressions can (for now) only "
                                               "be in terms of SizeParams. Depends on"
