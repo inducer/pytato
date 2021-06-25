@@ -899,6 +899,21 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
     np.testing.assert_allclose(np_out, pt_out)
 
 
+def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
+    from numpy.random import default_rng
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    ctx = cl.create_some_context()
+    x_in = rng.random((3, 3))
+    x = pt.make_data_wrapper(x_in)
+    _, (out,) = pt.generate_loopy(0 * x)(cq)
+
+    assert out.shape == (3, 3)
+    np.testing.assert_allclose(out.get(), 0)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
