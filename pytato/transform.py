@@ -318,7 +318,7 @@ class SubsetDependencyMapper(DependencyMapper):
 
 class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
     """
-    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
+    Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
     """
     def combine(self, *args: FrozenSet[InputArgumentBase]
@@ -338,7 +338,7 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
 
 class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
     """
-    Mapper to combine all instances of :class:`pytato.SizeParam` that
+    Mapper to combine all instances of :class:`pytato.array.SizeParam` that
     an array expression depends on.
     """
     def combine(self, *args: FrozenSet[SizeParam]
@@ -354,7 +354,7 @@ class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
 
 class WalkMapper(Mapper):
     """
-    A mapper that walks over all the arrays in a :class:`pytato.array.Array`.
+    A mapper that walks over all the arrays in a :class:`pytato.Array`.
 
     Users may override the specific mapper methods in a derived class or
     override :meth:`WalkMapper.visit` and :meth:`WalkMapper.post_visit`.
