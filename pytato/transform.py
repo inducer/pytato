@@ -43,6 +43,7 @@ __doc__ = """
 
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
+.. autoclass:: SubsetDependencyMapper
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autofunction:: copy_dict_of_named_arrays
@@ -248,9 +249,9 @@ class DependencyMapper(CombineMapper[R]):
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
     .. warning::
-    
-        This returns every node in the graph! Consider a custom :class:`CombineMapper`
-        or a :class:`SubsetDependencyMapper` instead.
+
+        This returns every node in the graph! Consider a custom
+        :class:`CombineMapper` or a :class:`SubsetDependencyMapper` instead.
     """
 
     def combine(self, *args: R) -> R:
@@ -295,6 +296,22 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
+
+
+class SubsetDependencyMapper(DependencyMapper):
+    """
+    Mapper to combine the dependencies of an expression that are a subset of
+    *universe*.
+    """
+    def __init__(self, universe: FrozenSet[Array]):
+        self.universe = universe
+        super().__init__()
+
+    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+        from functools import reduce
+        return reduce(lambda acc, arg: acc | (arg & self.universe),
+                      args,
+                      frozenset())
 
 
 class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
