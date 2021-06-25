@@ -107,6 +107,13 @@ class BoundPyOpenCLProgram(BoundProgram):
         if not isinstance(self. program, loopy.LoopKernel):
             updated_kwargs.setdefault("entrypoint", "_pt_kernel")
 
+        # final DAG might be independent of certain placeholders, for ex.
+        # '0 * x' results in a final loopy t-unit that is independent of the
+        # array 'x', do not pass such inputs
+        updated_kwargs = {kw: arg
+                          for kw, arg in updated_kwargs.items()
+                          if kw in self.program.default_entrypoint.arg_dict}
+
         return self.program(queue, *args, **updated_kwargs)
 
     @property
