@@ -43,6 +43,8 @@ __doc__ = """
 
 .. autoclass:: CopyMapper
 .. autoclass:: DependencyMapper
+.. autoclass:: InputGatherer
+.. autoclass:: SizeParamGatherer
 .. autoclass:: SubsetDependencyMapper
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
@@ -336,7 +338,7 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
 
 class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
     """
-    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
+    Mapper to combine all instances of :class:`pytato.SizeParam` that
     an array expression depends on.
     """
     def combine(self, *args: FrozenSet[SizeParam]
