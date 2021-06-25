@@ -333,6 +333,20 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
     def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
         return frozenset([expr])
 
+
+class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
+    """
+    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
+    an array expression depends on.
+    """
+    def combine(self, *args: FrozenSet[SizeParam]
+                ) -> FrozenSet[SizeParam]:
+        from functools import reduce
+        return reduce(lambda a, b: a | b, args, frozenset())
+
+    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
+        return frozenset([expr])
+
 # }}}
 
 

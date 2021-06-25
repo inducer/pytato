@@ -353,27 +353,6 @@ def _get_pt_dim_expr(dim: Union[int, Array]) -> ScalarExpression:
 # }}}
 
 
-# {{{ SizeParamGatherer
-
-from pytato.transform import CombineMapper
-
-
-class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
-    """
-    Mapper to combine all instances of :class:`pytato.InputArgumentBase` that
-    an array expression depends on.
-    """
-    def combine(self, *args: FrozenSet[SizeParam]
-                ) -> FrozenSet[SizeParam]:
-        from functools import reduce
-        return reduce(lambda a, b: a | b, args, frozenset())
-
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
-        return frozenset([expr])
-
-# }}}
-
-
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                                          bindings: PMap[str, ArrayOrScalar]
                                          ) -> Dict[str, ArrayOrScalar]:
@@ -381,6 +360,8 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     from loopy.symbolic import get_dependencies as lpy_get_deps
     from loopy.kernel.array import ArrayBase
     from pymbolic.mapper.substitutor import make_subst_func
+    from pytato.transform import SizeParamGatherer
+
     get_size_param_deps = SizeParamGatherer()
 
     lp_size_params: FrozenSet[str] = reduce(frozenset.union,
