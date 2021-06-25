@@ -221,10 +221,12 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     # {{{ infer types of the translation_unit
 
     for name, ary in bindings.items():
+        if translation_unit[entrypoint].arg_dict[name].dtype not in [lp.auto,
+                                                                     None]:
+            continue
+
         if isinstance(ary, Array):
             translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})
-        elif isinstance(ary, prim.Expression):
-            translation_unit = lp.add_dtypes(translation_unit, {name: np.intp})
         else:
             assert isinstance(ary, Number)
             translation_unit = lp.add_dtypes(translation_unit, {name: type(ary)})
@@ -461,6 +463,8 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         # {{{ respect callee's scalar dtype preference if there exists one
 
+        # TODO: remove this once
+        # https://github.com/inducer/loopy/issues/442 is resolved.
         if (isinstance(val, Number)
                 and knl.arg_dict[var].dtype not in [lp.auto, None]):
             val = knl.arg_dict[var].dtype.numpy_dtype.type(val)
