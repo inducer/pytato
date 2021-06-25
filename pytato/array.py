@@ -1857,7 +1857,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
-        return np_func(inputs)  # type: ignore
+        return np_func(*inputs)  # type: ignore
 
     if not inputs:
         raise ValueError("at least one argument must be present")
