@@ -247,6 +247,10 @@ class DependencyMapper(CombineMapper[R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
+    .. warning::
+    
+        This returns every node in the graph! Consider a custom :class:`CombineMapper`
+        or a :class:`SubsetDependencyMapper` instead.
     """
 
     def combine(self, *args: R) -> R:
