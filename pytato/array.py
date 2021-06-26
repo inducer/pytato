@@ -590,6 +590,9 @@ class Array(Taggable):
     def __pos__(self) -> Array:
         return self
 
+    def __bool__(self) -> None:
+        raise ValueError("The truth value of an array expression is undefined.")
+
     @property
     def real(self) -> ArrayOrScalar:
         import pytato as pt
