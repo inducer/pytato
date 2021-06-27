@@ -78,6 +78,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: eye
 .. autofunction:: equal
 .. autofunction:: not_equal
 .. autofunction:: less
@@ -2023,6 +2024,29 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
     return full(shape, 1, dtype)  # type: ignore
 
 # }}}
+
+
+def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
+        dtype: Any = np.float64) -> Array:
+    """
+    Retuns a 2D-array with ones on the *k*-th diagonal
+
+    :arg N: Number of rows in the output matrix
+    :arg M: Number of columns in the output matrix. Equal to *N* if *None*.
+    """
+    from pymbolic import parse
+
+    if M is None:
+        M = N  # noqa: N806
+
+    if M < 0 or N < 0:
+        raise ValueError("Negative dimension lengths not allowed.")
+
+    if not isinstance(k, int):
+        raise ValueError(f"k must be int, got {type(k)}.")
+
+    return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
+                       shape=(N, M), dtype=dtype, bindings={})
 
 
 # {{{ comparison operator
