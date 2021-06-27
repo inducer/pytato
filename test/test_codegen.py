@@ -963,6 +963,22 @@ def test_call_loopy_shape_inference2(ctx_factory):
                                              + np.arange(6)))
 
 
+@pytest.mark.parametrize("n", [4, 3, 5])
+@pytest.mark.parametrize("m", [2, 7, None])
+@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+def test_eye(ctx_factory, n, m, k):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    np_eye = np.eye(n, m, k)
+    pt_eye = pt.eye(n, m, k)
+
+    _, (out,) = pt.generate_loopy(pt_eye)(cq)
+
+    assert np_eye.shape == out.shape
+    np.testing.assert_allclose(out.get(), np_eye)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

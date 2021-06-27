@@ -41,6 +41,8 @@ from pytato.array import (
 
         full, zeros, ones,
 
+        eye,
+
         equal, not_equal, less, less_equal, greater, greater_equal,
 
         logical_or, logical_and, logical_not,
@@ -77,7 +79,7 @@ __all__ = (
 
         "maximum", "minimum", "where",
 
-        "full", "zeros", "ones",
+        "full", "zeros", "ones", "eye",
 
         "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
 
