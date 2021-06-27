@@ -2029,7 +2029,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
         dtype: Any = np.float64) -> Array:
     """
-    Retuns a 2D-array with ones on the *k*-th diagonal
+    Returns a 2D-array with ones on the *k*-th diagonal
 
     :arg N: Number of rows in the output matrix
     :arg M: Number of columns in the output matrix. Equal to *N* if *None*.
