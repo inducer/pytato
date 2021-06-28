@@ -47,14 +47,6 @@ from testlib import assert_allclose_to_numpy
 import pymbolic.primitives as p
 
 
-def does_lpy_support_knl_callables():
-    try:
-        from loopy import TranslationUnit  # noqa: F401
-        return True
-    except ImportError:
-        return False
-
-
 def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -242,10 +234,11 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
     x_orig = 7
     y_orig = np.array([1, 2, 3, 4, 5])
 
-    for first_dtype in (int, float, complex):
+    for first_dtype in (int, float, complex, np.int32, np.float64,
+                        np.complex128):
         x_in = first_dtype(x_orig)
 
-        if first_dtype == complex and not_valid_in_complex:
+        if first_dtype in [complex, np.complex128] and not_valid_in_complex:
             continue
 
         exprs = {}
@@ -466,7 +459,8 @@ def test_concatenate(ctx_factory):
                                       (-1, 6),
                                       (4, 9),
                                       (9, -1),
-                                      (36, -1)])
+                                      (36, -1),
+                                      36])
 def test_reshape(ctx_factory, oldshape, newshape):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -478,6 +472,9 @@ def test_reshape(ctx_factory, oldshape, newshape):
     x = pt.make_data_wrapper(x_in)
 
     assert_allclose_to_numpy(pt.reshape(x, newshape=newshape), queue)
+    assert_allclose_to_numpy(x.reshape(newshape), queue)
+    if isinstance(newshape, tuple):
+        assert_allclose_to_numpy(x.reshape(*newshape), queue)
 
 
 def test_dict_of_named_array_codegen_avoids_recomputation():
@@ -676,8 +673,6 @@ def test_maximum_minimum(ctx_factory, which):
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
-@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
-        " support calling kernels")
 def test_call_loopy(ctx_factory):
     from pytato.loopy import call_loopy
     cl_ctx = ctx_factory()
@@ -700,8 +695,6 @@ def test_call_loopy(ctx_factory):
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
 
-@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
-        " support calling kernels")
 def test_call_loopy_with_same_callee_names(ctx_factory):
     from pytato.loopy import call_loopy
 
@@ -743,8 +736,6 @@ def test_exprs_with_named_arrays(ctx_factory):
     np.testing.assert_allclose(out, 42*x_in)
 
 
-@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
-        " support calling kernels")
 def test_call_loopy_with_parametric_sizes(ctx_factory):
 
     x_in = np.random.rand(10, 4)
@@ -771,8 +762,6 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
-@pytest.mark.skipif(not does_lpy_support_knl_callables(), reason="loopy does not"
-        " support calling kernels")
 def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     import loopy as lp
     from numpy.random import default_rng
@@ -845,6 +834,9 @@ def test_reductions(ctx_factory, axis, redn, shape):
 
                                              (" ij ->  ",  # np.sum
                                               [(10, 4)]),
+                                             ("dij,ej,ej,dej->ei",
+                                              [(2, 10, 10), (100, 10),
+                                               (100, 10), (2, 100, 10)]),
                                              ]))
 def test_einsum(ctx_factory, spec, argshapes):
     ctx = ctx_factory()
@@ -889,6 +881,102 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
                                                                    m=m_in, n=n_in)
     assert np_out.shape == pt_out.shape
     np.testing.assert_allclose(np_out, pt_out)
+
+
+def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
+    from numpy.random import default_rng
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    ctx = cl.create_some_context()
+    x_in = rng.random((3, 3))
+    x = pt.make_data_wrapper(x_in)
+    _, (out,) = pt.generate_loopy(0 * x)(cq)
+
+    assert out.shape == (3, 3)
+    np.testing.assert_allclose(out.get(), 0)
+
+
+def test_call_loopy_shape_inference1(ctx_factory):
+    from pytato.loopy import call_loopy
+    import loopy as lp
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    A_in = rng.random((20, 37))  # noqa
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    y_pt = call_loopy(knl, {"A": A})["out"]
+
+    _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in)
+
+    np.testing.assert_allclose(out,
+                               A_in.sum() * (np.arange(4).reshape(4, 1)
+                                             + np.arange(3)))
+
+
+def test_call_loopy_shape_inference2(ctx_factory):
+    from pytato.loopy import call_loopy
+    import loopy as lp
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    A_in = rng.random((38, 71))  # noqa
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    n1 = pt.make_size_param("n1")
+    n2 = pt.make_size_param("n2")
+    A = pt.make_placeholder(name="x",  # noqa: N806
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
+                            dtype=np.float64)
+
+    y_pt = call_loopy(knl, {"A": A})["out"]
+
+    _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in, n1=3, n2=4)
+
+    np.testing.assert_allclose(out,
+                               A_in.sum() * (np.arange(8).reshape(8, 1)
+                                             + np.arange(6)))
+
+
+@pytest.mark.parametrize("n", [4, 3, 5])
+@pytest.mark.parametrize("m", [2, 7, None])
+@pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
+def test_eye(ctx_factory, n, m, k):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    np_eye = np.eye(n, m, k)
+    pt_eye = pt.eye(n, m, k)
+
+    _, (out,) = pt.generate_loopy(pt_eye)(cq)
+
+    assert np_eye.shape == out.shape
+    np.testing.assert_allclose(out.get(), np_eye)
 
 
 if __name__ == "__main__":

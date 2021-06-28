@@ -94,8 +94,8 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     .. automethod:: __call__
     """
-    def __call__(self, queue: "pyopencl.CommandQueue",
-            *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+                 *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
         if set(kwargs.keys()) & set(self.bound_arguments.keys()):
@@ -106,6 +106,13 @@ class BoundPyOpenCLProgram(BoundProgram):
         updated_kwargs.update(kwargs)
         if not isinstance(self. program, loopy.LoopKernel):
             updated_kwargs.setdefault("entrypoint", "_pt_kernel")
+
+        # final DAG might be independent of certain placeholders, for ex.
+        # '0 * x' results in a final loopy t-unit that is independent of the
+        # array 'x', do not pass such inputs
+        updated_kwargs = {kw: arg
+                          for kw, arg in updated_kwargs.items()
+                          if kw in self.program.default_entrypoint.arg_dict}
 
         return self.program(queue, *args, **updated_kwargs)
 

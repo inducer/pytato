@@ -78,6 +78,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: eye
 .. autofunction:: equal
 .. autofunction:: not_equal
 .. autofunction:: less
@@ -184,8 +185,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
-    TagsType, tag_dataclass)
+from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
@@ -239,13 +239,12 @@ def normalize_shape(
     def normalize_shape_component(
             s: ShapeComponent) -> ShapeComponent:
         if isinstance(s, Array):
-            from pytato.transform import DependencyMapper
+            from pytato.transform import InputGatherer
 
             if s.shape != ():
                 raise ValueError("array valued shapes must be scalars")
 
-            for d in (k for k in DependencyMapper()(s)
-                      if isinstance(k, InputArgumentBase)):
+            for d in InputGatherer()(s):
                 if not isinstance(d, SizeParam):
                     raise NotImplementedError("shape expressions can (for now) only "
                                               "be in terms of SizeParams. Depends on"
@@ -278,13 +277,23 @@ DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
 
+# https://github.com/numpy/numpy/issues/19302
+def _np_result_type(
+        # actual dtype:
+        #*arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
+        # our dtype:
+        *arrays_and_dtypes: DtypeOrScalar,
+        ) -> np.dtype[Any]:
+    return np.result_type(*arrays_and_dtypes)  # type: ignore
+
+
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
-    dtype = np.result_type(arg1, arg2)
+    dtype = _np_result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     if dtype.kind in "iu":
         return np.dtype(np.float64)
     else:
-        return cast(_dtype_any, dtype)
+        return dtype
 
 
 class Array(Taggable):
@@ -372,6 +381,8 @@ class Array(Taggable):
     # hashable. Dicts of hashable keys and values are also permitted.
     _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
 
+    __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
     @property
     def shape(self) -> ShapeType:
         raise NotImplementedError
@@ -384,6 +395,12 @@ class Array(Taggable):
     @property
     def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
+
+    def __len__(self) -> ShapeComponent:
+        if self.ndim == 0:
+            raise TypeError("len() of unsized object")
+
+        return self.shape[0]
 
     def __getitem__(self,
             slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
@@ -509,7 +526,7 @@ class Array(Taggable):
     def _binary_op(self,
             op: Any,
             other: ArrayOrScalar,
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
 
         # {{{ sanity checks
@@ -574,6 +591,9 @@ class Array(Taggable):
     def __pos__(self) -> Array:
         return self
 
+    def __bool__(self) -> None:
+        raise ValueError("The truth value of an array expression is undefined.")
+
     @property
     def real(self) -> ArrayOrScalar:
         import pytato as pt
@@ -583,6 +603,16 @@ class Array(Taggable):
     def imag(self) -> ArrayOrScalar:
         import pytato as pt
         return pt.imag(self)
+
+    def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
+        import pytato as pt
+        if len(shape) == 1:
+            # handle shape as single argument tuple
+            return pt.reshape(self, shape[0], order=order)
+
+        # type-ignore reason: passed: "Tuple[Union[int, Sequence[int]], ...]";
+        # expected "Union[int, Sequence[int]]"
+        return pt.reshape(self, shape, order=order)  # type: ignore
 
 # }}}
 
@@ -883,7 +913,8 @@ class Einsum(Array):
     @property  # type: ignore
     @memoize_method
     def shape(self) -> ShapeType:
-        iaxis_to_len = {}
+        from pytato.utils import are_shape_components_equal
+        iaxis_to_len: Dict[int, ShapeComponent] = {}
 
         for access_descr, arg in zip(self.access_descriptors,
                                      self.args):
@@ -891,7 +922,10 @@ class Einsum(Array):
             for arg_axis_len, axis_op in zip(arg.shape, access_descr):
                 if isinstance(axis_op, ElementwiseAxis):
                     if axis_op.dim in iaxis_to_len:
-                        assert arg.shape[axis_op.dim] == arg_axis_len
+                        # check that the accumulated shape-dim matches with the
+                        # current arg's axis len
+                        assert are_shape_components_equal(iaxis_to_len[axis_op.dim],
+                                                          arg_axis_len)
                     else:
                         iaxis_to_len[axis_op.dim] = arg_axis_len
                 elif isinstance(axis_op, ReductionAxis):
@@ -1121,7 +1155,7 @@ class MatrixProduct(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any, np.result_type(self.x1.dtype, self.x2.dtype))
+        return _np_result_type(self.x1.dtype, self.x2.dtype)
 
 # }}}
 
@@ -1154,8 +1188,7 @@ class Stack(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1194,8 +1227,7 @@ class Concatenate(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1395,13 +1427,6 @@ class InputArgumentBase(Array):
             tags: TagsType = frozenset()):
         super().__init__(tags=tags)
         self.name = name
-
-    def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
-
-    def without_tags(self, tags: TagOrIterableType,
-                        verify_existence: bool = True) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
 
     def __hash__(self) -> int:
         return id(self)
@@ -1699,7 +1724,8 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
     return Slice(array, tuple(starts), tuple(stops))
 
 
-def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
+def reshape(array: Array, newshape: Union[int, Sequence[int]],
+            order: str = "C") -> Array:
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
@@ -1711,6 +1737,9 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
         reshapes of arrays with symbolic shapes not yet implemented.
     """
     from pytools import product
+
+    if isinstance(newshape, int):
+        newshape = newshape,
 
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
@@ -1829,7 +1858,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
-        return np_func(inputs)  # type: ignore
+        return np_func(*inputs)  # type: ignore
 
     if not inputs:
         raise ValueError("at least one argument must be present")
@@ -1997,6 +2026,29 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 # }}}
 
 
+def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
+        dtype: Any = np.float64) -> Array:
+    """
+    Returns a 2D-array with ones on the *k*-th diagonal
+
+    :arg N: Number of rows in the output matrix
+    :arg M: Number of columns in the output matrix. Equal to *N* if *None*.
+    """
+    from pymbolic import parse
+
+    if M is None:
+        M = N  # noqa: N806
+
+    if M < 0 or N < 0:
+        raise ValueError("Negative dimension lengths not allowed.")
+
+    if not isinstance(k, int):
+        raise ValueError(f"k must be int, got {type(k)}.")
+
+    return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
+                       shape=(N, M), dtype=dtype, bindings={})
+
+
 # {{{ comparison operator
 
 def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
@@ -2090,7 +2142,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
-                       dtype=np.bool8,
+                       dtype=np.dtype(np.bool8),
                        bindings={"_in0": x})
 
 # }}}
