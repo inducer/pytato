@@ -584,6 +584,10 @@ class Array(Taggable):
     __xor__ = partialmethod(_binary_op, operator.xor)
     __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
 
+    def conj(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.conj(self)
+
     def __abs__(self) -> Array:
         # /!\ This refers to the abs() defined in this file, not the built-in.
         return cast(Array, abs(self))
