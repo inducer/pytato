@@ -367,6 +367,7 @@ class Array(Taggable):
     .. method:: __xor__
     .. method:: __rxor__
     .. method:: __abs__
+    .. method:: conj
 
     .. autoattribute:: real
     .. autoattribute:: imag
