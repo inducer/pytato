@@ -81,10 +81,10 @@ def test_slice_input_validation():
     a[0, 0]
     a[0, 0, 0]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndexError):
         a[0, 0, 0, 0]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndexError):
         a[10]
 
 
