@@ -37,7 +37,7 @@ __doc__ = """
 import sys
 from dataclasses import dataclass
 
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Mapping, Optional, Union, Callable
 
 from pytato.target import Target, BoundProgram
 
@@ -93,7 +93,36 @@ class BoundPyOpenCLProgram(BoundProgram):
     """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
 
     .. automethod:: __call__
+    .. automethod:: copy
+    .. automethod:: with_transformed_program
     """
+
+    def copy(self, *,
+             program: Optional[loopy.TranslationUnit] = None,
+             bound_arguments: Optional[Mapping[str, Any]] = None,
+             target: Optional[Target] = None
+             ) -> BoundPyOpenCLProgram:
+        if program is None:
+            program = self.program
+
+        if bound_arguments is None:
+            bound_arguments = self.bound_arguments
+
+        if target is None:
+            target = self.target
+
+        return BoundPyOpenCLProgram(program=program,
+                                    bound_arguments=bound_arguments,
+                                    target=target)
+
+    def with_transformed_program(self, f: Callable[[loopy.TranslationUnit],
+                                                   loopy.TranslationUnit]
+                                 ) -> BoundPyOpenCLProgram:
+        """
+        Returns a copy of *self* with an *f*-transformed loopy translation unit.
+        """
+        return self.copy(program=f(self.program))
+
     def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
                  *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
