@@ -99,7 +99,7 @@ jobs:
     downstream_tests:
         strategy:
             matrix:
-                downstream_project: [meshmode, mirgecom]
+                downstream_project: [meshmode, mirgecom, arraycontext]
         name: Tests for downstream project ${{ matrix.downstream_project }}
         runs-on: ubuntu-latest
         steps:
