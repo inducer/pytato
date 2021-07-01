@@ -136,6 +136,6 @@ jobs:
                 test_py_project
                 
                 if [[ "$DOWNSTREAM_PROJECT" = "meshmode" ]]; then
-                    python examples/simple-dg.py --lazy
+                    python ../examples/simple-dg.py --lazy
                 fi
 
