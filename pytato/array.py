@@ -439,7 +439,7 @@ class Array(Taggable):
                 [slice(None, None, None)] * (self.ndim - len(slice_spec)))
 
         if len(slice_spec_expanded) > self.ndim:
-            raise ValueError("too many dimensions in index")
+            raise IndexError("too many dimensions in index")
 
         for i, elem in enumerate(slice_spec_expanded):
             if isinstance(elem, slice):
@@ -1720,7 +1720,7 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
 
         ubound: int = cast(int, array.shape[i])
         if not (0 <= start < ubound):
-            raise ValueError("index '%d' of 'begin' out of bounds" % i)
+            raise IndexError("index '%d' of 'begin' out of bounds" % i)
 
         if not (start <= stop <= ubound):
             raise ValueError("index '%d' of 'size' out of bounds" % i)
