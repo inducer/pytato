@@ -1425,7 +1425,7 @@ class InputArgumentBase(Array):
 
     # The name uniquely identifies this object in the namespace. Therefore,
     # subclasses don't have to update *_fields*.
-    _fields = ("name",)
+    _fields = Array._fields + ("name",)
 
     def __init__(self,
             name: Optional[str],
