@@ -412,7 +412,7 @@ class CodeGenPreprocessor(CopyMapper):
     map_axis_permutation = (
             partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
     map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
-    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) # noqa
+    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) #type: ignore # noqa
 
     # }}}
 
