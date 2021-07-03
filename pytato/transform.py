@@ -133,6 +133,10 @@ class CopyMapper(Mapper):
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, tags=expr.tags)
 
+    def map_concatenate(self, expr: Concatenate) -> Array:
+        arrays = tuple(self.rec(arr) for arr in expr.arrays)
+        return Concatenate(arrays=arrays, axis=expr.axis, tags=expr.tags)
+
     def map_roll(self, expr: Roll) -> Array:
         return Roll(array=self.rec(expr.array),
                 shift=expr.shift,
@@ -171,6 +175,26 @@ class CopyMapper(Mapper):
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
         return DictOfNamedArrays({key: self.rec(val.expr)
                                   for key, val in expr.items()})
+
+    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
+        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+                           else subexpr)
+                    for name, subexpr in expr.bindings.items()}
+
+        return LoopyCall(translation_unit=expr.translation_unit,
+                         bindings=bindings,
+                         entrypoint=expr.entrypoint)
+
+    def map_reshape(self, expr: Reshape) -> Reshape:
+        return Reshape(self.rec(expr.array),
+                       # type-ignore reason: mypy can't tell 'rec' is being fed
+                       # only arrays
+                       newshape=tuple(self.rec(s)  # type: ignore
+                                      if isinstance(s, Array)
+                                      else s
+                                      for s in expr.newshape),
+                       order=expr.order,
+                       tags=expr.tags)
 
 
 class CombineMapper(Mapper, Generic[CombineT]):
