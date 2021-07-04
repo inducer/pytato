@@ -42,7 +42,7 @@ from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
-from pytato.transform import Mapper, WalkMapper
+from pytato.transform import Mapper, CachedWalkMapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
@@ -804,18 +804,15 @@ def get_initial_codegen_state(target: LoopyTarget,
             results=dict())
 
 
-class InputNameRecorder(WalkMapper):
+class InputNameRecorder(CachedWalkMapper):
     def __init__(self, state: CodeGenState) -> None:
         super().__init__()
         self.state = state
-        self.already_visited: Set[InputArgumentBase] = set()
 
     def post_visit(self, expr: Any) -> None:
-        if (isinstance(expr, InputArgumentBase)
-                and expr not in self.already_visited):
+        if isinstance(expr, InputArgumentBase):
             assert expr.name is not None
             self.state.var_name_gen.add_names([expr.name])
-            self.already_visited.add(expr)
 
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
