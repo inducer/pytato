@@ -54,11 +54,11 @@ __doc__ = """
 """
 
 
-# {{{ mapper classes
-
 class UnsupportedArrayError(ValueError):
     pass
 
+
+# {{{ mapper base class
 
 class Mapper:
     def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
@@ -89,6 +89,10 @@ class Mapper:
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args, **kwargs)
 
+# }}}
+
+
+# {{{ CopyMapper
 
 class CopyMapper(Mapper):
     """Performs a deep copy of a :class:`pytato.array.Array`.
@@ -196,6 +200,10 @@ class CopyMapper(Mapper):
                        order=expr.order,
                        tags=expr.tags)
 
+# }}}
+
+
+# {{{ CombineMapper
 
 class CombineMapper(Mapper, Generic[CombineT]):
     def __init__(self) -> None:
@@ -269,6 +277,10 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for ary in expr.bindings.values()
                               if isinstance(ary, Array)))
 
+# }}}
+
+
+# {{{ DependencyMapper
 
 class DependencyMapper(CombineMapper[R]):
     """
@@ -323,6 +335,10 @@ class DependencyMapper(CombineMapper[R]):
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
+# }}}
+
+
+# {{{ SubsetDependencyMapper
 
 class SubsetDependencyMapper(DependencyMapper):
     """
@@ -339,6 +355,10 @@ class SubsetDependencyMapper(DependencyMapper):
                       args,
                       frozenset())
 
+# }}}
+
+
+# {{{ InputGatherer
 
 class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
     """
@@ -359,6 +379,10 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
     def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
         return frozenset([expr])
 
+# }}}
+
+
+# {{{ SizeParamGatherer
 
 class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
     """
@@ -375,6 +399,8 @@ class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
 
 # }}}
 
+
+# {{{ WalkMapper
 
 class WalkMapper(Mapper):
     """
@@ -497,6 +523,10 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
+# }}}
+
+
+# {{{ CachedWalkMapper
 
 class CachedWalkMapper(WalkMapper):
     """

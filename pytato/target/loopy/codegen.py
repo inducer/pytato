@@ -78,12 +78,12 @@ def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) ->
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
-# {{{ generated array expressions
-
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
 # type level.
 ReductionBounds = Dict[str, Tuple[ScalarExpression, ScalarExpression]]
 
+
+# {{{ LoopyExpressionContext
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class LoopyExpressionContext(object):
@@ -140,6 +140,10 @@ class LoopyExpressionContext(object):
     def update_depends_on(self, other: FrozenSet[str]) -> None:
         self._depends_on = self._depends_on | other
 
+# }}}
+
+
+# {{{ ImplementedResult
 
 class ImplementedResult(object):
     """Generated code for a node in the computation graph (i.e., an array
@@ -166,6 +170,10 @@ class ImplementedResult(object):
         """
         raise NotImplementedError
 
+# }}}
+
+
+# {{{ StoredResult
 
 class StoredResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` array.
@@ -186,6 +194,10 @@ class StoredResult(ImplementedResult):
         else:
             return prim.Variable(self.name)[indices]
 
+# }}}
+
+
+# {{{ InlinedResult
 
 class InlinedResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` expression containing inlined
@@ -228,6 +240,10 @@ class InlinedResult(ImplementedResult):
         expr_context.update_depends_on(self.depends_on)
         return loopy_substitute(self.expr, substitutions)
 
+# }}}
+
+
+# {{{ SubstitutionRuleResult
 
 class SubstitutionRuleResult(ImplementedResult):
     # TODO: implement
@@ -236,7 +252,7 @@ class SubstitutionRuleResult(ImplementedResult):
 # }}}
 
 
-# {{{ codegen
+# {{{ codegen state
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class CodeGenState:
@@ -295,6 +311,10 @@ class CodeGenState:
     def update_program(self, program: lp.Program) -> None:
         self._program = program
 
+# }}}
+
+
+# {{{ codegen mapper
 
 class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
@@ -466,8 +486,6 @@ class CodeGenMapper(Mapper):
                                                (), loopy_expr_context))
                 else:
                     params.append(self.exprgen_mapper(pt_arg, loopy_expr_context))
-
-        # }}}
 
         new_insn = make_assignment(
                 tuple(assignees),
@@ -814,6 +832,7 @@ class InputNameRecorder(CachedWalkMapper):
             assert expr.name is not None
             self.state.var_name_gen.add_names([expr.name])
 
+# {{{ generate_loopy
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         target: Optional[LoopyTarget] = None,
