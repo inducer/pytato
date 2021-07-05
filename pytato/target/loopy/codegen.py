@@ -39,11 +39,11 @@ from typing import (
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, InputArgumentBase, Placeholder, NamedArray)
+        SizeParam, Placeholder, NamedArray)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
-from pytato.transform import Mapper, CachedWalkMapper
+from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
@@ -824,16 +824,6 @@ def get_initial_codegen_state(target: LoopyTarget,
             results=dict())
 
 
-class InputNameRecorder(CachedWalkMapper):
-    def __init__(self, state: CodeGenState) -> None:
-        super().__init__()
-        self.state = state
-
-    def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, InputArgumentBase):
-            assert expr.name is not None
-            self.state.var_name_gen.add_names([expr.name])
-
 # {{{ generate_loopy
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
@@ -872,12 +862,14 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         options = lp.Options(return_dict=True)
 
     state = get_initial_codegen_state(target, options)
-    input_name_recorder = InputNameRecorder(state)
 
-    for name in compute_order:
-        expr = outputs[name].expr
-        # Reserve names of input and output arguments.
-        input_name_recorder(expr)
+    from pytato.transform import InputGatherer
+    ing = InputGatherer()
+
+    state.var_name_gen.add_names({input_expr.name
+            for name in compute_order
+            for input_expr in ing(outputs[name].expr)
+            if input_expr.name is not None})
 
     state.var_name_gen.add_names(outputs)
 
