@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABC, abstractmethod
 import sys
 import dataclasses
 import islpy as isl
@@ -58,7 +59,8 @@ __doc__ = """
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult
 .. autoclass:: InlinedResult
-.. autoclass:: SubstitutionRuleResult
+..
+    .. autoclass:: SubstitutionRuleResult
 .. autoclass:: CodeGenState
 .. autoclass:: CodeGenMapper
 .. autoclass:: InlinedExpressionGenMapper
@@ -145,13 +147,14 @@ class LoopyExpressionContext(object):
 
 # {{{ ImplementedResult
 
-class ImplementedResult(object):
+class ImplementedResult(ABC):
     """Generated code for a node in the computation graph (i.e., an array
     expression).
 
     .. automethod:: to_loopy_expression
     """
 
+    @abstractmethod
     def to_loopy_expression(self, indices: SymbolicIndex,
             expr_context: LoopyExpressionContext) -> ScalarExpression:
         """Return a :mod:`loopy` expression for this result.
@@ -168,7 +171,6 @@ class ImplementedResult(object):
               *reduction_bounds* is nonempty, then the returned inames are
               ensured to be disjoint from those present.
         """
-        raise NotImplementedError
 
 # }}}
 
@@ -245,9 +247,9 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-class SubstitutionRuleResult(ImplementedResult):
-    # TODO: implement
-    pass
+# class SubstitutionRuleResult(ImplementedResult):
+#     # TODO: implement
+#     pass
 
 # }}}
 
