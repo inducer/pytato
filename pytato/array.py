@@ -223,12 +223,16 @@ ConvertibleToShape = Union[
     Sequence[ShapeComponent]]
 
 
-def _check_identifier(s: Optional[str]) -> bool:
+def _check_identifier(s: Optional[str], optional: bool) -> bool:
+    err = ValueError(f"'{s}' is not a valid identifier")
     if s is None:
-        return True
+        if optional:
+            return True
+        else:
+            raise err
 
     if not s.isidentifier():
-        raise ValueError(f"'{s}' is not a valid identifier")
+        raise err
 
     return True
 
@@ -1433,12 +1437,6 @@ class InputArgumentBase(Array):
         super().__init__(tags=tags)
         self.name = name
 
-    def __hash__(self) -> int:
-        return id(self)
-
-    def __eq__(self, other: Any) -> bool:
-        return self is other
-
 # }}}
 
 
@@ -1489,6 +1487,12 @@ class DataWrapper(InputArgumentBase):
         self.data = data
         self._shape = shape
 
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __eq__(self, other: Any) -> bool:
+        return self is other
+
     @property
     def shape(self) -> ShapeType:
         return self._shape
@@ -1513,7 +1517,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     _mapper_method = "map_placeholder"
 
     def __init__(self,
-            name: Optional[str],
+            name: str,
             shape: ShapeType,
             dtype: np.dtype[Any],
             tags: TagsType = frozenset()):
@@ -1536,6 +1540,11 @@ class SizeParam(InputArgumentBase):
     """
 
     _mapper_method = "map_size_param"
+
+    def __init__(self,
+                 name: str,
+                 tags: TagsType = frozenset()):
+        super().__init__(name=name, tags=tags)
 
     @property
     def shape(self) -> ShapeType:
@@ -1799,10 +1808,10 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 # }}}
 
 
-def make_placeholder(shape: ConvertibleToShape,
-        dtype: Any,
-        name: Optional[str] = None,
-        tags: TagsType = frozenset()) -> Placeholder:
+def make_placeholder(name: str,
+                     shape: ConvertibleToShape,
+                     dtype: Any,
+                     tags: TagsType = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param name:       name of the placeholder array, generated automatically
@@ -1812,7 +1821,7 @@ def make_placeholder(shape: ConvertibleToShape,
                        (must be convertible to :class:`numpy.dtype`)
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=False)
     shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
 
@@ -1820,7 +1829,7 @@ def make_placeholder(shape: ConvertibleToShape,
 
 
 def make_size_param(name: str,
-        tags: TagsType = frozenset()) -> SizeParam:
+                    tags: TagsType = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1829,7 +1838,7 @@ def make_size_param(name: str,
     :param name:       name
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=False)
     return SizeParam(name, tags=tags)
 
 
@@ -1844,7 +1853,7 @@ def make_data_wrapper(data: DataInterface,
     :param shape:      optional shape of the array, inferred from *data* if not given
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=True)
     if shape is None:
         shape = data.shape
 
