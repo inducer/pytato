@@ -253,6 +253,19 @@ def test_call_loopy_shape_inference():
     # }}}
 
 
+def test_tagging_array():
+    from pytools.tag import Tag
+
+    class BestArrayTag(Tag):
+        """
+        Best array known to humankind.
+        """
+
+    x = pt.make_placeholder(shape=(42, 1729), dtype=float, name="x")
+    y = x.tagged(BestArrayTag())
+    assert any(isinstance(tag, BestArrayTag) for tag in y.tags)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
