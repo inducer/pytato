@@ -52,9 +52,10 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
+.. autoclass:: CachedMapAndCopyMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
-
+.. autofunction:: map_and_copy
 """
 
 
@@ -90,7 +91,7 @@ class Mapper:
 
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args, **kwargs)
 
 # }}}
@@ -542,7 +543,14 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    map_concatenate = map_stack
+    def map_concatenate(self, expr: Concatenate) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.arrays:
+            self.rec(child)
+
+        self.post_visit(expr)
 
     def map_einsum(self, expr: Einsum) -> None:
         if not self.visit(expr):
@@ -633,6 +641,34 @@ class TopoSortMapper(CachedWalkMapper):
 # }}}
 
 
+# {{{ MapAndCopyMapper
+
+class CachedMapAndCopyMapper(CopyMapper):
+    """
+    Mapper that applies *map_fn* to each node and copies it. Results of
+    traversals are memoized i.e. each node is mapped via *map_fn* exactly once.
+    """
+
+    def __init__(self, map_fn: Callable[[ArrayOrNames], ArrayOrNames]) -> None:
+        super().__init__()
+        self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
+
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+
+        # type-ignore reason: ArrayOrNames not compatible with 'T'
+        result = super().rec(self.map_fn(expr))  # type: ignore[type-var]
+        self.cache[expr] = result
+        return result
+
+    # type-ignore-reason: Mapper.__call__ returns Any
+    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+        return self.rec(expr)
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -658,6 +694,21 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     dep_mapper = DependencyMapper()
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
+
+
+def map_and_copy(expr: T,
+                 map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+                 ) -> ArrayOrNames:
+    """
+    Returns a copy of *expr* with every array expression reachable from *expr*
+    mapped via *map_fn*.
+
+    .. note::
+
+        Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
+        caching nature each node is mapped exactly once.
+    """
+    return CachedMapAndCopyMapper(map_fn)(expr)
 
 # }}}
 
