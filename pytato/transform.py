@@ -543,6 +543,10 @@ class CachedWalkMapper(WalkMapper):
     # type-ignore reason: CachedWalkMapper.rec's type does not match
     # WalkMapper.rec's type
     def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
+        # Why choose id(x) as the cache key?
+        # - Some downstream users (NamesValidityChecker) of this mapper rely on
+        #   object-identity while implementing their logic during the walk.
+
         if id(expr) in self._visited_ids:
             return
 
