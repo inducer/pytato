@@ -179,7 +179,7 @@ import operator
 from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator)
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -212,6 +212,8 @@ if TYPE_CHECKING:
     _dtype_any = np.dtype[Any]
 else:
     _dtype_any = np.dtype
+
+ArrayT = TypeVar("ArrayT", bound="Array")
 
 
 # {{{ shape
@@ -380,9 +382,15 @@ class Array(Taggable):
     _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
-    _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
+    _fields: ClassVar[Tuple[str, ...]] = ("tags",)
 
     __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
+    def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
+        for field in self._fields:
+            if field not in kwargs:
+                kwargs[field] = getattr(self, field)
+        return type(self)(**kwargs)
 
     @property
     def shape(self) -> ShapeType:
@@ -829,7 +837,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
     """
 
-    _fields = Array._fields + ("expr", "bindings")
+    _fields = Array._fields + ("expr", "shape", "dtype", "bindings")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -1356,7 +1364,7 @@ class Reshape(IndexRemappingBase):
         Output layout order, either ``C`` or ``F``.
     """
 
-    _fields = Array._fields + ("array", "newshape", "order")
+    _fields = IndexRemappingBase._fields + ("newshape", "order")
     _mapper_method = "map_reshape"
 
     def __init__(self,
@@ -1477,6 +1485,7 @@ class DataWrapper(InputArgumentBase):
         this array may not be updated in-place.
     """
 
+    _fields = InputArgumentBase._fields + ("data", "shape")
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
@@ -1510,6 +1519,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     .. automethod:: __init__
     """
 
+    _fields = InputArgumentBase._fields + ("shape", "dtype")
     _mapper_method = "map_placeholder"
 
     def __init__(self,
