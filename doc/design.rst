@@ -100,7 +100,7 @@ Naming
     case to describe the shape of the index array used to realize
     the access ``A[A>0]``. These will be drawn from the reserved namespace
     ``_pt_shp``. Users may control the naming of these counts
-    by assigning the tag :attr:`pytato.array.CountNamed`, like so::
+    by assigning the tag :attr:`pytato.tags.CountNamed`, like so::
 
         A[(A > 0).tagged(CountNamed("mycount"))]
 
