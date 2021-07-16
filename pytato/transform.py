@@ -545,7 +545,8 @@ class CachedWalkMapper(WalkMapper):
     def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
         # Why choose id(x) as the cache key?
         # - Some downstream users (NamesValidityChecker) of this mapper rely on
-        #   object-identity while implementing their logic during the walk.
+        #   structurally equal objects being walked separately (e.g. to detect separate
+        #   instances of Placeholder with the same name).
 
         if id(expr) in self._visited_ids:
             return
