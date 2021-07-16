@@ -723,6 +723,18 @@ class NamedArray(Array):
         self._container = container
         self.name = name
 
+    # type-ignore reason: `copy` signature incompatible with super-class
+    def copy(self, *,  # type: ignore[override]
+             container: Optional[AbstractResultWithNamedArrays] = None,
+             name: Optional[str] = None,
+             tags: Optional[TagsType] = None) -> NamedArray:
+        container = self._container if container is None else container
+        name = self.name if name is None else name
+        tags = self.tags if tags is None else tags
+        return type(self)(container=container,
+                          name=name,
+                          tags=tags)
+
     @property
     def expr(self) -> Array:
         if isinstance(self._container, DictOfNamedArrays):
