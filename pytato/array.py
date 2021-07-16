@@ -224,15 +224,14 @@ ConvertibleToShape = Union[
 
 
 def _check_identifier(s: Optional[str], optional: bool) -> bool:
-    err = ValueError(f"'{s}' is not a valid identifier")
     if s is None:
         if optional:
             return True
         else:
-            raise err
+            raise ValueError(f"'{s}' is not a valid identifier")
 
     if not s.isidentifier():
-        raise err
+        raise ValueError(f"'{s}' is not a valid identifier")
 
     return True
 
