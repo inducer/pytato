@@ -1472,6 +1472,11 @@ class DataWrapper(InputArgumentBase):
 
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
+
+    .. note::
+
+        Since we cannot compare instances of :class:`DataInterface` being
+        wrapped, a :class:`DataWrapper` can only be equal to itself.
     """
 
     _mapper_method = "map_data_wrapper"
