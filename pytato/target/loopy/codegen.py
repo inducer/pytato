@@ -204,7 +204,7 @@ class ImplementedResult(ABC):
 class StoredResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` array.
 
-    See also: :class:`pytato.array.ImplStored`.
+    See also: :class:`pytato.tags.ImplStored`.
     """
     def __init__(self, name: str, num_indices: int, depends_on: FrozenSet[str]):
         self.name = name
@@ -229,7 +229,7 @@ class InlinedResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` expression containing inlined
     sub-expressions.
 
-    See also: :class:`pytato.array.ImplInlined`.
+    See also: :class:`pytato.tags.ImplInlined`.
     """
     def __init__(self, expr: ScalarExpression,
             num_indices: int,

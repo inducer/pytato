@@ -10,6 +10,12 @@ Calling :mod:`loopy` kernels in an array expression
 
 .. automodule:: pytato.loopy
 
+
+Attaching metadata to arrays
+============================
+
+.. automodule:: pytato.tags
+
 Scalar Expressions
 ==================
 
