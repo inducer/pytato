@@ -3,6 +3,11 @@ Transforming Array Expression Graphs
 
 .. automodule:: pytato.transform
 
+Analyzing Array Expression Graphs
+====================================
+
+.. automodule:: pytato.analysis
+
 Visualizing Array Expression Graphs
 ===================================
 
