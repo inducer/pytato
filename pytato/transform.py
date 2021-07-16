@@ -122,6 +122,7 @@ class CopyMapper(Mapper):
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
+        assert expr.name is not None
         return Placeholder(name=expr.name,
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
@@ -166,6 +167,7 @@ class CopyMapper(Mapper):
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
+        assert expr.name is not None
         return SizeParam(name=expr.name, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
@@ -536,18 +538,23 @@ class CachedWalkMapper(WalkMapper):
     """
 
     def __init__(self) -> None:
-        self._visited_nodes: Set[ArrayOrNames] = set()
+        self._visited_ids: Set[int] = set()
 
     # type-ignore reason: CachedWalkMapper.rec's type does not match
     # WalkMapper.rec's type
     def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
-        if expr in self._visited_nodes:
+        # Why choose id(x) as the cache key?
+        # - Some downstream users (NamesValidityChecker) of this mapper rely on
+        #   structurally equal objects being walked separately (e.g. to detect
+        #   separate instances of Placeholder with the same name).
+
+        if id(expr) in self._visited_ids:
             return
 
         # type-ignore reason: super().rec expects either 'Array' or
         # 'AbstractResultWithNamedArrays', passed 'ArrayOrNames'
         super().rec(expr)  # type: ignore
-        self._visited_nodes.add(expr)
+        self._visited_ids.add(id(expr))
 
 # }}}
 

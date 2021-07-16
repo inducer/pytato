@@ -109,7 +109,7 @@ def test_stack_input_validation():
 
 @pytest.mark.xfail  # Unnamed placeholders should be used via pt.bind
 def test_make_placeholder_noname():
-    x = pt.make_placeholder(shape=(10, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(10, 4), dtype=float)
     y = 2*x
 
     knl = pt.generate_loopy(y).kernel
@@ -119,7 +119,7 @@ def test_make_placeholder_noname():
 
 
 def test_zero_length_arrays():
-    x = pt.make_placeholder(shape=(0, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(0, 4), dtype=float)
     y = 2*x
 
     assert y.shape == (0, 4)
@@ -149,7 +149,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    x = pt.make_placeholder(shape=(3, 3, 4), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(3, 3, 4), dtype=np.float64)
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
@@ -202,7 +202,7 @@ def test_same_placeholder_name_raises():
 def test_einsum_error_handling():
     with pytest.raises(ValueError):
         # operands not enough
-        pt.einsum("ij,j->j", pt.make_placeholder((2, 2), float))
+        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2), float))
 
     with pytest.raises(ValueError):
         # double index use in the out spec.
