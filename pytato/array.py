@@ -1496,7 +1496,8 @@ class DataWrapper(InputArgumentBase):
     .. note::
 
         Since we cannot compare instances of :class:`DataInterface` being
-        wrapped, a :class:`DataWrapper` can only be equal to itself.
+        wrapped, a :class:`DataWrapper` instances compare equal to themselves
+        (i.e. the very same instance).
     """
 
     _fields = InputArgumentBase._fields + ("data", "shape")
