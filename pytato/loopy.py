@@ -124,6 +124,19 @@ class LoopyCallResult(NamedArray):
             tags: TagsType = frozenset()) -> None:
         super().__init__(loopy_call, name, tags=tags)
 
+    # type-ignore reason: `copy` signature incompatible with super-class
+    def copy(self, *,  # type: ignore[override]
+             loopy_call: Optional[AbstractResultWithNamedArrays] = None,
+             name: Optional[str] = None,
+             tags: Optional[TagsType] = None) -> LoopyCallResult:
+        loopy_call = self._container if loopy_call is None else loopy_call
+        name = self.name if name is None else name
+        tags = self.tags if tags is None else tags
+        assert isinstance(loopy_call, LoopyCall)
+        return LoopyCallResult(loopy_call=loopy_call,
+                               name=name,
+                               tags=tags)
+
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
