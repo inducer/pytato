@@ -188,10 +188,11 @@ class CopyMapper(Mapper):
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec(arg) for arg in expr.args))
+                      tuple(self.rec(arg) for arg in expr.args),
+                      tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
-        return type(expr)(self.rec(expr._container), expr.name)
+        return type(expr)(self.rec(expr._container), expr.name, tags=expr.tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
