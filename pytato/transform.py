@@ -113,7 +113,7 @@ class CopyMapper(Mapper):
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings: Dict[str, Array] = {
                 name: self.rec(subexpr)
-                for name, subexpr in expr.bindings.items()}
+                for name, subexpr in sorted(expr.bindings.items())}
         return IndexLambda(expr=expr.expr,
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
@@ -185,7 +185,7 @@ class CopyMapper(Mapper):
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in expr.bindings.items()}
+                    for name, subexpr in sorted(expr.bindings.items())}
 
         return LoopyCall(translation_unit=expr.translation_unit,
                          bindings=bindings,
@@ -228,7 +228,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
 
     def map_index_lambda(self, expr: IndexLambda) -> CombineT:
         return self.combine(*(self.rec(bnd)
-                              for bnd in expr.bindings.values()),
+                              for _, bnd in sorted(expr.bindings.items())),
                             *(self.rec(s)
                               for s in expr.shape if isinstance(s, Array)))
 
@@ -276,7 +276,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
 
     def map_loopy_call(self, expr: LoopyCall) -> CombineT:
         return self.combine(*(self.rec(ary)
-                              for ary in expr.bindings.values()
+                              for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
 # }}}
@@ -433,7 +433,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        for child in expr.bindings.values():
+        for _, child in sorted(expr.bindings.items()):
             self.rec(child)
 
         for dim in expr.shape:
@@ -502,7 +502,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        for child in expr.bindings.values():
+        for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
                 self.rec(child)
 
