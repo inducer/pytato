@@ -147,7 +147,7 @@ class CodeGenPreprocessor(CopyMapper):
 
         bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in expr.bindings.items()}
+                    for name, subexpr in sorted(expr.bindings.items())}
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
