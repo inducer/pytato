@@ -273,4 +273,4 @@ if __name__ == "__main__":
         from pytest import main
         main([__file__])
 
-# vim: filetype=pyopencl:fdm=marker
+# vim: fdm=marker
