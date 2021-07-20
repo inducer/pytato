@@ -979,6 +979,20 @@ def test_eye(ctx_factory, n, m, k):
     np.testing.assert_allclose(out.get(), np_eye)
 
 
+@pytest.mark.parametrize("which,num_args", ([("maximum", 2),
+                                             ("minimum", 2),
+                                             ]))
+def test_pt_ops_on_scalar_args_computed_eagerly(ctx_factory, which, num_args):
+    from numpy.random import default_rng
+    rng = default_rng()
+    args = [rng.random() for _ in range(num_args)]
+
+    pt_func = getattr(pt, which)
+    np_func = getattr(np, which)
+
+    np.testing.assert_allclose(pt_func(*args), np_func(*args))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
@@ -986,4 +1000,4 @@ if __name__ == "__main__":
         from pytest import main
         main([__file__])
 
-# vim: filetype=pyopencl:fdm=marker
+# vim: fdm=marker
