@@ -50,6 +50,8 @@ from pytato.array import (
         sum, amax, amin, prod,
         real, imag,
 
+        dot, vdot,
+
         )
 
 from pytato.loopy import LoopyCall
@@ -89,5 +91,7 @@ __all__ = (
 
         "sum", "amax", "amin", "prod",
         "real", "imag",
+
+        "dot", "vdot",
 
 )
