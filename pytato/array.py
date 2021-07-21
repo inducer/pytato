@@ -96,6 +96,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: amax
 .. autofunction:: prod
 .. autofunction:: einsum
+.. autofunction:: dot
+.. autofunction:: vdot
 
 .. currentmodule:: pytato.array
 
@@ -2444,5 +2446,55 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     return _make_reduction_lambda("product", a, axis)
 
 # }}}
+
+
+def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
+    """
+    For 1-dimensional arrays *a* and *b* computes their inner product.  See
+    :func:`numpy.dot` for behavior in the case when *a* and *b* aren't
+    single-dimensional arrays.
+    """
+    import pytato as pt
+
+    if isinstance(a, SCALAR_CLASSES) or isinstance(b, SCALAR_CLASSES):
+        # type-ignored because Number * bool is undefined
+        return a * b  # type: ignore
+
+    assert isinstance(a, Array)
+    assert isinstance(b, Array)
+
+    if a.ndim == b.ndim == 1:
+        return pt.sum(a*b)
+    elif a.ndim == b.ndim == 2:
+        return a @ b
+    elif a.ndim == 0 or b.ndim == 0:
+        return a * b
+    elif b.ndim == 1:
+        return pt.sum(a * b, axis=(a.ndim - 1))
+    else:
+        idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
+        idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+        a_indices = "".join(idx_gen() for _ in range(a.ndim))
+        b_indices = "".join(idx_gen() for _ in range(b.ndim))
+        # reduce over second-to-last axis of *b* and last axis of *a*
+        b_indices = b_indices[:-2] + a_indices[-1] + b_indices[-1]
+        result_indices = a_indices[:-1] + b_indices[:-2] + b_indices[-1]
+        return pt.einsum(f"{a_indices}, {b_indices} -> {result_indices}", a, b)
+
+
+def vdot(a: Array, b: Array) -> ArrayOrScalar:
+    """
+    Returns the dot-product of conjugate of *a* with *b*. If the input
+    arguments are multi-dimensional arrays, they are ravel-ed first and then
+    their *vdot* is computed.
+    """
+    import pytato as pt
+
+    if isinstance(a, Array) and a.ndim > 1:
+        a = a.reshape(-1)
+    if isinstance(b, Array) and b.ndim > 1:
+        b = b.reshape(-1)
+
+    return pt.dot(pt.conj(a), b)
 
 # vim: foldmethod=marker
