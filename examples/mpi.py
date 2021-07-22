@@ -79,16 +79,19 @@ def main():
 
     pf = PartitionFinder(pfunc)
     new = pf(y)
-    # partition_id_to_output_names = {}
-    # partition_id_to_input_names = {}
-    # partitions = set()
-    # for (pid_producer, pid_consumer), var_names in \
-    #         pf.partition_pair_to_edges.items():
-    #     partitions.add(pid_producer)
-    #     partitions.add(pid_consumer)
-    #     for var_name in var_names:
-    #         partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
-    #         partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+    print(pf.partition_pair_to_edges)
+    partition_id_to_output_names = {}
+    partition_id_to_input_names = {}
+    partitions = set()
+    for (pid_producer, pid_consumer), var_names in \
+            pf.partition_pair_to_edges.items():
+        partitions.add(pid_producer)
+        partitions.add(pid_consumer)
+        print(pid_consumer)
+        for var_name in var_names:
+            partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
+            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+            print(var_name)
 
     # pytools.graph
     # topsorted_partitions = topsort(partitions)
@@ -111,7 +114,7 @@ def main():
 
     print(new)
 
-    show_graph(y)
+    # show_graph(y)
 
     print("========")
     print(pf.cross_partition_name_to_value)

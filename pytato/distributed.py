@@ -160,6 +160,8 @@ class PartitionFinder(CopyMapper):
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
+        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
+
         self.var_name_to_result: Dict[str, Array] = {}
 
     def does_edge_cross_partition_boundary(self, node1, node2) -> bool:
@@ -171,14 +173,14 @@ class PartitionFinder(CopyMapper):
 
         return res
 
-    def register_partition_id(self, expr: Array) -> None:
-        return
-        pid = self.get_partition_id(expr)
+    def register_partition_id(self, expr: Array, pid=None) -> None:
+        if not pid:
+            pid = self.get_partition_id(expr)
         self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
 
-    def register_placeholder(self, expr, placeholder) -> None:
-        return
-        pid = self.get_partition_id(expr)
+    def register_placeholder(self, expr, placeholder, pid=None) -> None:
+        if not pid:
+            pid = self.get_partition_id(expr)
         self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
 
     def make_new_name(self):
@@ -196,7 +198,7 @@ class PartitionFinder(CopyMapper):
             self.register_placeholder(expr, new_binding)
         else:
             new_binding = self.rec(expr.data)
-            self.register_partition_id(new_binding)
+            self.register_partition_id(new_binding, self.get_partition_id(expr.data))
 
         self.register_partition_id(expr)
         return DistributedSend(new_binding)
@@ -224,7 +226,7 @@ class PartitionFinder(CopyMapper):
             self.register_placeholder(expr, new_binding)
         else:
             new_binding = self.rec(expr.array)
-            self.register_partition_id(expr.array)
+            self.register_partition_id(new_binding, self.get_partition_id(expr.array))
 
         self.register_partition_id(expr)
 
