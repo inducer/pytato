@@ -34,6 +34,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                sed -i "s/loopy.git/loopy.git@kernel_callables_v3-edit2/g" requirements.txt
                 curl -L -O -k https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
@@ -59,28 +60,20 @@ jobs:
     pytest:
         name: Conda Pytest
         runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                loopy-branch: [main, kernel_callables_v3-edit2]
         steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
-                sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
 
     examples:
         name: Conda Examples
         runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                loopy-branch: [main, kernel_callables_v3-edit2]
         steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
-                sed -i "s/loopy.git/loopy.git@${{ matrix.loopy-branch }}/g" requirements.txt
                 curl -L -O -k https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
@@ -101,7 +94,48 @@ jobs:
                 curl -L -O -k https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
-                # Circular references in type hints. Sphinx currently doesn't deal well with those.
-                # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
-                build_docs --no-check
+                build_docs
+
+    downstream_tests:
+        strategy:
+            matrix:
+                downstream_project: [meshmode, mirgecom, arraycontext]
+        name: Tests for downstream project ${{ matrix.downstream_project }}
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v2
+        -   name: "Main Script"
+            env:
+                DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}
+            run: |
+                if test "$DOWNSTREAM_PROJECT" = "mirgecom"; then
+                    git clone "https://github.com/illinois-ceesd/$DOWNSTREAM_PROJECT.git"
+                else
+                    git clone "https://github.com/inducer/$DOWNSTREAM_PROJECT.git"
+                fi
+
+                cd "$DOWNSTREAM_PROJECT"
+                echo "*** $DOWNSTREAM_PROJECT version: $(git rev-parse --short HEAD)"
+
+                # Avoid slow or complicated tests in downstream projects
+                export PYTEST_ADDOPTS="-k 'not (slowtest or octave or mpi)'"
+
+                if test "$DOWNSTREAM_PROJECT" = "mirgecom"; then
+                    # can't turn off MPI in mirgecom
+                    sudo apt-get update
+                    sudo apt-get install openmpi-bin libopenmpi-dev
+                    export CONDA_ENVIRONMENT=conda-env.yml
+                    export CISUPPORT_PARALLEL_PYTEST=no
+                else
+                    sed -i "/mpi4py/ d" requirements.txt
+                fi
+
+                curl -L -O https://tiker.net/ci-support-v0
+                . ./ci-support-v0
+                build_py_project_in_conda_env
+                test_py_project
+                
+                if [[ "$DOWNSTREAM_PROJECT" = "meshmode" ]]; then
+                    python ../examples/simple-dg.py --lazy
+                fi
 

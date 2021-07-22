@@ -25,8 +25,7 @@ THE SOFTWARE.
 import numpy as np
 import pymbolic.primitives as prim
 
-from numbers import Number
-from typing import Tuple, List, Union, Callable, Any, Sequence, Dict
+from typing import Tuple, List, Union, Callable, Any, Sequence, Dict, Optional
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
                           DtypeOrScalar, ArrayOrScalar)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
@@ -142,7 +141,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         ) -> ArrayOrScalar:
-    if isinstance(a1, Number) and isinstance(a2, Number):
+    if np.isscalar(a1) and np.isscalar(a2):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
 
@@ -193,7 +192,7 @@ class ShapeExpressionMapper(Mapper):
 
 
 def dim_to_index_lambda_components(expr: ShapeComponent,
-                                   vng: UniqueNameGenerator,
+                                   vng: Optional[UniqueNameGenerator] = None,
                                    ) -> Tuple[ScalarExpression,
                                               Dict[str, SizeParam]]:
     """
@@ -218,6 +217,10 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     if isinstance(expr, int):
         return expr, {}
 
+    if vng is None:
+        vng = UniqueNameGenerator()
+
+    assert isinstance(vng, UniqueNameGenerator)
     assert isinstance(expr, Array)
     mapper = ShapeExpressionMapper(vng)
     result = mapper(expr)

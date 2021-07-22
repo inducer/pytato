@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-__copyright__ = "Copyright (C) 2020 Andreas Kloeckner"
+__copyright__ = """Copyright (C) 2020 Andreas Kloeckner
+Copyright (C) 2021 Kaushik Kulkarni
+Copyright (C) 2021 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -78,10 +81,10 @@ def test_slice_input_validation():
     a[0, 0]
     a[0, 0, 0]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndexError):
         a[0, 0, 0, 0]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndexError):
         a[10]
 
 
@@ -106,7 +109,7 @@ def test_stack_input_validation():
 
 @pytest.mark.xfail  # Unnamed placeholders should be used via pt.bind
 def test_make_placeholder_noname():
-    x = pt.make_placeholder(shape=(10, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(10, 4), dtype=float)
     y = 2*x
 
     knl = pt.generate_loopy(y).kernel
@@ -116,7 +119,7 @@ def test_make_placeholder_noname():
 
 
 def test_zero_length_arrays():
-    x = pt.make_placeholder(shape=(0, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(0, 4), dtype=float)
     y = 2*x
 
     assert y.shape == (0, 4)
@@ -146,7 +149,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    x = pt.make_placeholder(shape=(3, 3, 4), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(3, 3, 4), dtype=np.float64)
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
@@ -196,6 +199,73 @@ def test_same_placeholder_name_raises():
         pt.generate_loopy(2*x)
 
 
+def test_einsum_error_handling():
+    with pytest.raises(ValueError):
+        # operands not enough
+        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2), float))
+
+    with pytest.raises(ValueError):
+        # double index use in the out spec.
+        pt.einsum("ij,j->jj", ("a", "b"))
+
+
+def test_accessing_dict_of_named_arrays_validation():
+    x = pt.make_placeholder(name="x", shape=10, dtype=float)
+    y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
+
+    assert isinstance(y1y2["y1"], pt.array.NamedArray)
+    assert y1y2["y1"].shape == (2*x).shape
+    assert y1y2["y1"].dtype == (2*x).dtype
+
+
+def test_call_loopy_shape_inference():
+    from pytato.loopy import call_loopy
+    from pytato.utils import are_shapes_equal
+    import loopy as lp
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    # {{{ variant 1
+
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    y = call_loopy(knl, {"A": A})["out"]
+    assert are_shapes_equal(y.shape, (4, 3))
+
+    # }}}
+
+    # {{{ variant 2
+
+    n1 = pt.make_size_param("n1")
+    n2 = pt.make_size_param("n2")
+    A = pt.make_placeholder(name="x",  # noqa: N806
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
+                            dtype=np.float64)
+
+    y = call_loopy(knl, {"A": A})["out"]
+    assert are_shapes_equal(y.shape, (2*n2, 2*n1))
+
+    # }}}
+
+
+def test_tagging_array():
+    from pytools.tag import Tag
+
+    class BestArrayTag(Tag):
+        """
+        Best array known to humankind.
+        """
+
+    x = pt.make_placeholder(shape=(42, 1729), dtype=float, name="x")
+    y = x.tagged(BestArrayTag())
+    assert any(isinstance(tag, BestArrayTag) for tag in y.tags)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
@@ -203,4 +273,4 @@ if __name__ == "__main__":
         from pytest import main
         main([__file__])
 
-# vim: filetype=pyopencl:fdm=marker
+# vim: fdm=marker

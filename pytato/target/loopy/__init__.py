@@ -23,32 +23,31 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+.. currentmodule:: pytato
+
+.. autofunction:: generate_loopy
+
 .. currentmodule:: pytato.target.loopy
 
 .. autoclass:: LoopyTarget
 .. autoclass:: LoopyPyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
-
-
-Generating code
-^^^^^^^^^^^^^^^
-
-.. automodule:: pytato.target.loopy.codegen
 """
 
+import sys
 from dataclasses import dataclass
 
-import typing
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Mapping, Optional, Union, Callable
 
 from pytato.target import Target, BoundProgram
 
 import loopy
 
 
-if typing.TYPE_CHECKING:
-    # Imports skipped for efficiency.  FIXME: Neither of these work as type
-    # stubs are not present. Types are here only as documentation.
+# set in doc/conf.py
+if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
+    # Avoid import unless building docs to avoid creating a hard
+    # dependency on pyopencl, when Loopy can run fine without.
     import pyopencl
 
 
@@ -94,9 +93,38 @@ class BoundPyOpenCLProgram(BoundProgram):
     """A wrapper around a :mod:`loopy` kernel for execution with :mod:`pyopencl`.
 
     .. automethod:: __call__
+    .. automethod:: copy
+    .. automethod:: with_transformed_program
     """
-    def __call__(self, queue: "pyopencl.CommandQueue",
-            *args: Any, **kwargs: Any) -> Any:
+
+    def copy(self, *,
+             program: Optional[loopy.TranslationUnit] = None,
+             bound_arguments: Optional[Mapping[str, Any]] = None,
+             target: Optional[Target] = None
+             ) -> BoundPyOpenCLProgram:
+        if program is None:
+            program = self.program
+
+        if bound_arguments is None:
+            bound_arguments = self.bound_arguments
+
+        if target is None:
+            target = self.target
+
+        return BoundPyOpenCLProgram(program=program,
+                                    bound_arguments=bound_arguments,
+                                    target=target)
+
+    def with_transformed_program(self, f: Callable[[loopy.TranslationUnit],
+                                                   loopy.TranslationUnit]
+                                 ) -> BoundPyOpenCLProgram:
+        """
+        Returns a copy of *self* with an *f*-transformed loopy translation unit.
+        """
+        return self.copy(program=f(self.program))
+
+    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+                 *args: Any, **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
         if set(kwargs.keys()) & set(self.bound_arguments.keys()):
@@ -107,6 +135,13 @@ class BoundPyOpenCLProgram(BoundProgram):
         updated_kwargs.update(kwargs)
         if not isinstance(self. program, loopy.LoopKernel):
             updated_kwargs.setdefault("entrypoint", "_pt_kernel")
+
+        # final DAG might be independent of certain placeholders, for ex.
+        # '0 * x' results in a final loopy t-unit that is independent of the
+        # array 'x', do not pass such inputs
+        updated_kwargs = {kw: arg
+                          for kw, arg in updated_kwargs.items()
+                          if kw in self.program.default_entrypoint.arg_dict}
 
         return self.program(queue, *args, **updated_kwargs)
 

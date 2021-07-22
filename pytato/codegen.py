@@ -33,28 +33,18 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation, Slice,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, MatrixProduct)
+                          InputArgumentBase, MatrixProduct, Einsum)
+
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
-from pytato.transform import CopyMapper, WalkMapper
+from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
+from pytato.target import Target
+from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
+import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
 
 __doc__ = """
-References
-----------
-
-.. class:: DictOfNamedArrays
-
-    Should be referenced as :class:`pytato.DictOfNamedArrays`.
-
-.. class:: DataInterface
-
-    Should be referenced as :class:`pytato.array.DataInterface`.
-
-Code Generation Helpers
--------------------------
-
 .. currentmodule:: pytato.codegen
 
 .. autoclass:: CodeGenPreprocessor
@@ -82,6 +72,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
@@ -89,10 +80,12 @@ class CodeGenPreprocessor(CopyMapper):
     # Stack -> IndexLambda
     # MatrixProduct -> Einsum
 
-    def __init__(self) -> None:
+    def __init__(self, target: Target) -> None:
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
+        self.target = target
+        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -108,6 +101,57 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
+
+    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
+        from pytato.target.loopy import LoopyTarget
+        if not isinstance(self.target, LoopyTarget):
+            raise ValueError("Got a LoopyCall for a non-loopy target.")
+        translation_unit = expr.translation_unit.copy(
+                                        target=self.target.get_loopy_target())
+        namegen = UniqueNameGenerator(set(self.kernels_seen))
+        entrypoint = expr.entrypoint
+
+        # {{{ eliminate callable name collision
+
+        for name, clbl in translation_unit.callables_table.items():
+            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+                if name in self.kernels_seen and (
+                        translation_unit[name] != self.kernels_seen[name]):
+                    # callee name collision => must rename
+
+                    # {{{ see if it's one of the other kernels
+
+                    for other_knl in self.kernels_seen.values():
+                        if other_knl.copy(name=name) == translation_unit[name]:
+                            new_name = other_knl.name
+                            break
+                    else:
+                        # didn't find any other equivalent kernel, rename to
+                        # something unique
+                        new_name = namegen(name)
+
+                    # }}}
+
+                    if name == entrypoint:
+                        # if the colliding name is the entrypoint, then rename the
+                        # entrypoint as well.
+                        entrypoint = new_name
+
+                    translation_unit = lp.rename_callable(
+                                            translation_unit, name, new_name)
+                    name = new_name
+
+                self.kernels_seen[name] = translation_unit[name]
+
+        # }}}
+
+        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+                           else subexpr)
+                    for name, subexpr in sorted(expr.bindings.items())}
+
+        return LoopyCall(translation_unit=translation_unit,
+                         bindings=bindings,
+                         entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name
@@ -259,6 +303,60 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings=bindings)
 
+    def map_einsum(self, expr: Einsum) -> Array:
+        import operator
+        from functools import reduce
+        from pytato.scalar_expr import Reduce
+        from pytato.utils import dim_to_index_lambda_components
+        from pytato.array import ElementwiseAxis, ReductionAxis
+
+        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+        args_as_pym_expr: List[prim.Subscript] = []
+        namegen = UniqueNameGenerator(set(bindings))
+
+        # {{{ add bindings coming from the shape expressions
+
+        for access_descr, (iarg, arg) in zip(expr.access_descriptors,
+                                            enumerate(expr.args)):
+            subscript_indices = []
+            for iaxis, axis in enumerate(access_descr):
+                if isinstance(axis, ElementwiseAxis):
+                    subscript_indices.append(prim.Variable(f"_{axis.dim}"))
+                else:
+                    assert isinstance(axis, ReductionAxis)
+                    redn_idx_name = f"_r{axis.dim}"
+                    if redn_idx_name not in redn_bounds:
+                        # convert the ShapeComponent to a ScalarExpression
+                        redn_bound, redn_bound_bindings = (
+                            dim_to_index_lambda_components(
+                                arg.shape[iaxis], namegen))
+                        redn_bounds[redn_idx_name] = (0, redn_bound)
+
+                        bindings.update({k: self.rec(v)
+                                         for k, v in redn_bound_bindings.items()})
+
+                    subscript_indices.append(prim.Variable(redn_idx_name))
+
+            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
+                                                   tuple(subscript_indices)))
+
+        # }}}
+
+        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
+                            args_as_pym_expr[0])
+
+        if redn_bounds:
+            inner_expr = Reduce(inner_expr,
+                                "sum",
+                                redn_bounds)
+
+        return IndexLambda(expr=inner_expr,
+                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
+                                       for s in expr.shape),
+                           dtype=expr.dtype,
+                           bindings=bindings)
+
     # {{{ index remapping (roll, axis permutation, slice)
 
     def handle_index_remapping(self,
@@ -314,7 +412,7 @@ class CodeGenPreprocessor(CopyMapper):
     map_axis_permutation = (
             partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
     map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
-    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) # noqa
+    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) #type: ignore # noqa
 
     # }}}
 
@@ -346,9 +444,10 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 
 # {{{ input naming check
 
-class NamesValidityChecker(WalkMapper):
+class NamesValidityChecker(CachedWalkMapper):
     def __init__(self) -> None:
         self.name_to_input: Dict[str, InputArgumentBase] = {}
+        super().__init__()
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, InputArgumentBase):
@@ -383,9 +482,9 @@ class PreprocessResult:
     bound_arguments: Dict[str, DataInterface]
 
 
-def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
+def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
-    from pytato.transform import copy_dict_of_named_arrays, get_dependencies
+    from pytato.transform import copy_dict_of_named_arrays
 
     check_validity_of_outputs(outputs)
 
@@ -396,15 +495,16 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
 
     from pytools.graph import compute_topological_order
 
-    deps = get_dependencies(outputs)
+    get_deps = SubsetDependencyMapper(frozenset(out.expr
+                                                for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: (val & frozenset(outputs.values()))
-            for name, val in deps.items()}
+    deps = {name: get_deps(output.expr)
+            for name, output in outputs.items()}
 
     # represent deps in terms of output names
-    output_to_name = {output: name for name, output in outputs.items()}
-    dag = {name: (frozenset([output_to_name[output] for output in val])
+    output_expr_to_name = {output.expr: name for name, output in outputs.items()}
+    dag = {name: (frozenset([output_expr_to_name[output] for output in val])
                   - frozenset([name]))
            for name, val in deps.items()}
 
@@ -412,7 +512,7 @@ def preprocess(outputs: DictOfNamedArrays) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor()
+    mapper = CodeGenPreprocessor(target)
 
     new_outputs = copy_dict_of_named_arrays(outputs, mapper)
 

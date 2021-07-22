@@ -25,43 +25,51 @@ THE SOFTWARE.
 """
 
 from pytato.array import (
-        Array, DictOfNamedArrays, Placeholder, IndexLambda,
+        Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
+        IndexLambda, NamedArray,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
         AdditionalOutput,
+        einsum,
 
         matmul, roll, transpose, stack, reshape, concatenate,
 
         abs, sin, cos, tan, arcsin, arccos, arctan, sinh, cosh, tanh, exp, log,
-        log10, isnan, sqrt,
+        log10, isnan, sqrt, conj, arctan2,
 
         maximum, minimum, where,
 
         full, zeros, ones,
+
+        eye,
 
         equal, not_equal, less, less_equal, greater, greater_equal,
 
         logical_or, logical_and, logical_not,
 
         sum, amax, amin, prod,
+        real, imag,
+
+        dot, vdot,
 
         )
 
 from pytato.distributed import make_distributed_send, make_distributed_recv
 
+from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.visualization import get_dot_graph, show_dot_graph
 
 __all__ = (
-        "Array", "DictOfNamedArrays",
-        "Placeholder", "IndexLambda",
+        "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
+        "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper", "make_distributed_recv", "make_distributed_send",
-        "AdditionalOutput",
+        "AdditionalOutput", "einsum",
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
 
@@ -73,11 +81,11 @@ __all__ = (
 
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
-        "tanh", "exp", "log", "log10", "isnan", "sqrt",
+        "tanh", "exp", "log", "log10", "isnan", "sqrt", "conj", "arctan2",
 
         "maximum", "minimum", "where",
 
-        "full", "zeros", "ones",
+        "full", "zeros", "ones", "eye",
 
         "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
 
@@ -86,5 +94,8 @@ __all__ = (
         "sum",
 
         "sum", "amax", "amin", "prod",
+        "real", "imag",
+
+        "dot", "vdot",
 
 )

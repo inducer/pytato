@@ -30,12 +30,6 @@ Code Generation Targets
 
 .. autoclass:: Target
 .. autoclass:: BoundProgram
-
-
-Available targets
------------------
-
-.. automodule:: pytato.target.loopy
 """
 
 from dataclasses import dataclass
@@ -85,5 +79,8 @@ class BoundProgram:
     program: Any
     bound_arguments: Mapping[str, Any]
     target: Target
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
 
 # vim: foldmethod=marker

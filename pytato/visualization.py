@@ -36,7 +36,7 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType)
+        Stack, ShapeType, Einsum)
 from pytato.codegen import normalize_outputs
 import pytato.transform
 
@@ -44,12 +44,8 @@ import pytato.transform
 __doc__ = """
 .. currentmodule:: pytato
 
-Graph Visualization
--------------------
-
 .. autofunction:: get_dot_graph
 .. autofunction:: show_dot_graph
-
 """
 
 
@@ -134,6 +130,19 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
 
         nodes[expr] = info
 
+    def map_einsum(self, expr: Einsum,
+                   nodes: Dict[Array, DotNodeInfo]) -> None:
+        if expr in nodes:
+            return
+
+        info = self.get_common_dot_info(expr)
+
+        for access_descr, val in zip(expr.access_descriptors, expr.args):
+            self.rec(val, nodes)
+            info.edges[str(access_descr)] = val
+
+        nodes[expr] = info
+
 
 def dot_escape(s: str) -> str:
     # "\" and HTML are significant in graphviz.
@@ -193,14 +202,14 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     graph of the computation of *result*.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.target.loopy.codegen.generate_loopy`).
+        :func:`pytato.generate_loopy`).
     """
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
     nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
-    for elem in outputs.values():
+    for elem in outputs._data.values():
         mapper(elem, nodes)
 
     input_arrays: List[Array] = []
@@ -238,7 +247,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
                 emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
 
         # Emit output/namespace name mappings.
-        _emit_name_cluster(emit, outputs, array_to_id, id_gen, label="Outputs")
+        _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
 
     return emit.get()
 
@@ -247,7 +256,7 @@ def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.target.loopy.codegen.generate_loopy`).
+        :func:`pytato.generate_loopy`).
     """
     dot_code: str
 

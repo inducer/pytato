@@ -1,6 +1,5 @@
 Python 3 POCL:
   script:
-  - sed -i "s/loopy.git/loopy.git@$LOOPY_BRANCH/g" requirements.txt
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
@@ -15,15 +14,8 @@ Python 3 POCL:
     reports:
       junit: test/pytest.xml
 
-  parallel:
-    matrix:
-      - LOOPY_BRANCH: main
-      - LOOPY_BRANCH: kernel_callables_v3-edit2
-
-
 Python 3 POCL Examples:
   script:
-  - sed -i "s/loopy.git/loopy.git@$LOOPY_BRANCH/g" requirements.txt
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
@@ -35,11 +27,6 @@ Python 3 POCL Examples:
   - large-node
   except:
   - tags
-  parallel:
-    matrix:
-      - LOOPY_BRANCH: main
-      - LOOPY_BRANCH: kernel_callables_v3-edit2
-
 
 Pylint:
   script:
@@ -83,9 +70,7 @@ Documentation:
     curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
     . ./ci-support.sh
     build_py_project_in_venv
-    # Circular references in type hints. Sphinx currently doesn't deal well with those.
-    # e.g. https://gitlab.tiker.net/inducer/pytato/-/jobs/202899
-    build_docs --no-check
+    build_docs
     maybe_upload_docs
   tags:
   - python3

@@ -41,7 +41,9 @@ Array Interface
 ---------------
 
 .. autoclass:: Array
+.. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
+.. autoclass:: AbstractResultWithNamedArrays
 
 NumPy-Like Interface
 --------------------
@@ -62,6 +64,8 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: arcsin
 .. autofunction:: arccos
 .. autofunction:: arctan
+.. autofunction:: conj
+.. autofunction:: arctan2
 .. autofunction:: sinh
 .. autofunction:: cosh
 .. autofunction:: tanh
@@ -69,9 +73,12 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: log
 .. autofunction:: log10
 .. autofunction:: isnan
+.. autofunction:: real
+.. autofunction:: imag
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: eye
 .. autofunction:: equal
 .. autofunction:: not_equal
 .. autofunction:: less
@@ -88,9 +95,9 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: amin
 .. autofunction:: amax
 .. autofunction:: prod
-
-Supporting Functionality
-------------------------
+.. autofunction:: einsum
+.. autofunction:: dot
+.. autofunction:: vdot
 
 .. currentmodule:: pytato.array
 
@@ -116,10 +123,8 @@ Built-in Expression Nodes
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
 .. autoclass:: MatrixProduct
-.. autoclass:: LoopyFunction
 .. autoclass:: Stack
 .. autoclass:: Concatenate
-.. autoclass:: AttributeLookup
 
 Index Remapping
 ^^^^^^^^^^^^^^^
@@ -154,40 +159,41 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
-Aliases
--------
+Internal API
+------------
 
-(This section exists because Sphinx, our documentation tool, can't (yet)
-canonicalize type references. Once Sphinx 4.0 is released, we should use the
-``:canonical:`` option here.)
+.. autoclass:: EinsumAxisDescriptor
+.. autoclass:: ElementwiseAxis
+.. autoclass:: ReductionAxis
 
-.. class:: Array
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    Should be referenced as :class:`pytato.Array`.
+.. class:: T_co
 
-.. class:: DictOfNamedArrays
-
-    Should be referenced as :class:`pytato.DictOfNamedArrays`.
+    A covariant type variable used in, e.g. :meth:`pytools.tag.Taggable.copy`.
 """
 
 # }}}
 
+from abc import ABC, abstractmethod
 from functools import partialmethod
 import operator
+from dataclasses import dataclass
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Iterator, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List)
+        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar)
 
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import (Tag, Taggable, UniqueTag, TagOrIterableType,
-    TagsType, tag_dataclass)
+from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, Reduce)
-
+import re
+from pyrsistent import pmap, PMap
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -204,10 +210,13 @@ else:
 
 # }}}
 
+
 if TYPE_CHECKING:
     _dtype_any = np.dtype[Any]
 else:
     _dtype_any = np.dtype
+
+ArrayT = TypeVar("ArrayT", bound="Array")
 
 
 # {{{ shape
@@ -219,9 +228,12 @@ ConvertibleToShape = Union[
     Sequence[ShapeComponent]]
 
 
-def _check_identifier(s: Optional[str]) -> bool:
+def _check_identifier(s: Optional[str], optional: bool) -> bool:
     if s is None:
-        return True
+        if optional:
+            return True
+        else:
+            raise ValueError(f"'{s}' is not a valid identifier")
 
     if not s.isidentifier():
         raise ValueError(f"'{s}' is not a valid identifier")
@@ -235,13 +247,12 @@ def normalize_shape(
     def normalize_shape_component(
             s: ShapeComponent) -> ShapeComponent:
         if isinstance(s, Array):
-            from pytato.transform import DependencyMapper
+            from pytato.transform import InputGatherer
 
             if s.shape != ():
                 raise ValueError("array valued shapes must be scalars")
 
-            for d in (k for k in DependencyMapper()(s)
-                      if isinstance(k, InputArgumentBase)):
+            for d in InputGatherer()(s):
                 if not isinstance(d, SizeParam):
                     raise NotImplementedError("shape expressions can (for now) only "
                                               "be in terms of SizeParams. Depends on"
@@ -274,17 +285,27 @@ DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
 
+# https://github.com/numpy/numpy/issues/19302
+def _np_result_type(
+        # actual dtype:
+        #*arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
+        # our dtype:
+        *arrays_and_dtypes: DtypeOrScalar,
+        ) -> np.dtype[Any]:
+    return np.result_type(*arrays_and_dtypes)  # type: ignore
+
+
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
-    dtype = np.result_type(arg1, arg2)
+    dtype = _np_result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     if dtype.kind in "iu":
         return np.dtype(np.float64)
     else:
-        return cast(_dtype_any, dtype)
+        return dtype
 
 
 class Array(Taggable):
-    """
+    r"""
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
     compatibility, though not at all costs.
@@ -301,9 +322,9 @@ class Array(Taggable):
 
     .. attribute:: shape
 
-        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`s.
+        A tuple of integers or scalar-shaped :class:`~pytato.array.Array`\ s.
         Array-valued shape components may be (at most affinely) symbolic in terms of
-        :class:`~pytato.array.SizeParam`s.
+        :class:`~pytato.array.SizeParam`\ s.
 
         .. note::
 
@@ -327,10 +348,10 @@ class Array(Taggable):
         triples (subject: implicitly the array being tagged,
         predicate: the tag, object: the arg).
 
-        Inherits from :class:`pytools.Taggable`.
+        Inherits from :class:`pytools.tag.Taggable`.
 
     .. automethod:: tagged
-    .. automethod:: without_tag
+    .. automethod:: without_tags
 
     Array interface:
 
@@ -347,6 +368,17 @@ class Array(Taggable):
     .. method:: __rtruediv__
     .. method:: __neg__
     .. method:: __pos__
+    .. method:: __and__
+    .. method:: __rand__
+    .. method:: __or__
+    .. method:: __ror__
+    .. method:: __xor__
+    .. method:: __rxor__
+    .. method:: __abs__
+    .. method:: conj
+
+    .. autoattribute:: real
+    .. autoattribute:: imag
 
     Derived attributes:
 
@@ -356,7 +388,15 @@ class Array(Taggable):
     _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
-    _fields: ClassVar[Tuple[str, ...]] = ("shape", "dtype", "tags")
+    _fields: ClassVar[Tuple[str, ...]] = ("tags",)
+
+    __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
+    def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
+        for field in self._fields:
+            if field not in kwargs:
+                kwargs[field] = getattr(self, field)
+        return type(self)(**kwargs)
 
     @property
     def shape(self) -> ShapeType:
@@ -370,6 +410,12 @@ class Array(Taggable):
     @property
     def dtype(self) -> np.dtype[Any]:
         raise NotImplementedError
+
+    def __len__(self) -> ShapeComponent:
+        if self.ndim == 0:
+            raise TypeError("len() of unsized object")
+
+        return self.shape[0]
 
     def __getitem__(self,
             slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
@@ -407,7 +453,7 @@ class Array(Taggable):
                 [slice(None, None, None)] * (self.ndim - len(slice_spec)))
 
         if len(slice_spec_expanded) > self.ndim:
-            raise ValueError("too many dimensions in index")
+            raise IndexError("too many dimensions in index")
 
         for i, elem in enumerate(slice_spec_expanded):
             if isinstance(elem, slice):
@@ -495,7 +541,7 @@ class Array(Taggable):
     def _binary_op(self,
             op: Any,
             other: ArrayOrScalar,
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = np.result_type,  # noqa
+            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
 
         # {{{ sanity checks
@@ -546,8 +592,46 @@ class Array(Taggable):
 
     __neg__ = partialmethod(_unary_op, operator.neg)
 
+    __and__ = partialmethod(_binary_op, operator.and_)
+    __rand__ = partialmethod(_binary_op, operator.and_, reverse=True)
+    __or__ = partialmethod(_binary_op, operator.or_)
+    __ror__ = partialmethod(_binary_op, operator.or_, reverse=True)
+    __xor__ = partialmethod(_binary_op, operator.xor)
+    __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
+
+    def conj(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.conj(self)
+
+    def __abs__(self) -> Array:
+        # /!\ This refers to the abs() defined in this file, not the built-in.
+        return cast(Array, abs(self))
+
     def __pos__(self) -> Array:
         return self
+
+    def __bool__(self) -> None:
+        raise ValueError("The truth value of an array expression is undefined.")
+
+    @property
+    def real(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.real(self)
+
+    @property
+    def imag(self) -> ArrayOrScalar:
+        import pytato as pt
+        return pt.imag(self)
+
+    def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
+        import pytato as pt
+        if len(shape) == 1:
+            # handle shape as single argument tuple
+            return pt.reshape(self, shape[0], order=order)
+
+        # type-ignore reason: passed: "Tuple[Union[int, Sequence[int]], ...]";
+        # expected "Union[int, Sequence[int]]"
+        return pt.reshape(self, shape, order=order)  # type: ignore
 
 # }}}
 
@@ -638,37 +722,115 @@ class AdditionalOutput(UniqueTag):
 
 # {{{ dict of named arrays
 
-class DictOfNamedArrays(Mapping[str, Array]):
-    """A container that maps valid Python identifiers
-    to instances of :class:`Array`. May occur as a result
-    type of array computations.
+class NamedArray(Array):
+    """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
+    back to thecontaining instance as well as the name by which *self* is
+    known there.
+
+    .. automethod:: __init__
+    """
+    _fields = Array._fields + ("_container", "name")
+    _mapper_method = "map_named_array"
+
+    def __init__(self,
+            container: AbstractResultWithNamedArrays,
+            name: str,
+            tags: TagsType = frozenset()) -> None:
+        super().__init__(tags=tags)
+        self._container = container
+        self.name = name
+
+    # type-ignore reason: `copy` signature incompatible with super-class
+    def copy(self, *,  # type: ignore[override]
+             container: Optional[AbstractResultWithNamedArrays] = None,
+             name: Optional[str] = None,
+             tags: Optional[TagsType] = None) -> NamedArray:
+        container = self._container if container is None else container
+        name = self.name if name is None else name
+        tags = self.tags if tags is None else tags
+        return type(self)(container=container,
+                          name=name,
+                          tags=tags)
+
+    @property
+    def expr(self) -> Array:
+        if isinstance(self._container, DictOfNamedArrays):
+            return self._container._data[self.name]
+        else:
+            raise TypeError("only permitted when container is a DictOfNamedArrays")
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.expr.shape
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return self.expr.dtype
+
+
+class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
+    r"""An abstract array computation that results in multiple :class:`Array`\ s,
+    each named. The way in which the values of these arrays are computed
+    is determined by concrete subclasses of this class, e.g.
+    :class:`pytato.loopy.LoopyCall` or :class:`DictOfNamedArrays`.
 
     .. automethod:: __init__
     .. automethod:: __contains__
     .. automethod:: __getitem__
-    .. automethod:: __iter__
     .. automethod:: __len__
 
     .. note::
 
-        This container deliberately does not implement
-        arithmetic.
+        This container deliberately does not implement arithmetic.
     """
 
-    def __init__(self, data: Dict[str, Array]):
+    _mapper_method: ClassVar[str]
+
+    @abstractmethod
+    def __contains__(self, name: object) -> bool:
+        pass
+
+    @abstractmethod
+    def __getitem__(self, name: str) -> NamedArray:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+class DictOfNamedArrays(AbstractResultWithNamedArrays):
+    """A container of named results, each of which can be computed as an
+    array expression provided to the constructor.
+
+    Implements :class:`AbstractResultWithNamedArrays`.
+
+    .. automethod:: __init__
+    """
+
+    _mapper_method = "map_dict_of_named_arrays"
+
+    def __init__(self, data: Mapping[str, Array]):
+        super().__init__()
         self._data = data
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self._data.items()))
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
-    def __getitem__(self, name: str) -> Array:
-        return self._data[name]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
+    @memoize_method
+    def __getitem__(self, name: str) -> NamedArray:
+        if name not in self._data:
+            raise KeyError(name)
+        return NamedArray(self, name)
 
     def __len__(self) -> int:
         return len(self._data)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
 # }}}
 
@@ -704,7 +866,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
     """
 
-    _fields = Array._fields + ("expr", "bindings")
+    _fields = Array._fields + ("expr", "shape", "dtype", "bindings")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -727,9 +889,265 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
 
 # {{{ einsum
 
+class EinsumAxisDescriptor:
+    """
+    Records the access pattern of iterating over an array's axis in a
+    :class:`Einsum`.
+    """
+    pass
+
+
+@dataclass(eq=True, frozen=True)
+class ElementwiseAxis(EinsumAxisDescriptor):
+    """
+    Describes an elementwise access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ElementwiseAxis(dim=1)`` would
+    correspond to indexing the array's axis as ``_1`` in the expression.
+    """
+    dim: int
+
+
+@dataclass(eq=True, frozen=True)
+class ReductionAxis(EinsumAxisDescriptor):
+    """
+    Describes a reduction access pattern of an array's axis.  In terms of the
+    nomenclature used by :class:`IndexLambda`, ``ReductionAxis(dim=0)`` would
+    correspond to indexing the array's axis as ``_r0`` in the expression.
+    """
+    dim: int
+
+
 class Einsum(Array):
     """
+    An array expression using the `Einstein summation convention
+    <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
+    :func:`numpy.einsum` for a similar construct.
+
+    .. note::
+
+        Use :func:`pytato.einsum` to create this type of expression node in
+        user code.
+
+    .. attribute:: access_descriptors
+
+        A :class:`tuple` of *access_descriptor* for each *arg* in
+        :attr:`Einsum.args`. An *access_descriptor* is a tuple of
+        :class:`EinsumAxisDescriptor` denoting how each axis of the
+        argument will be operated in the einstein summation.
+
+    .. attribute:: args
+
+       A :class:`tuple` of array over which the Einstein summation is being
+       performed.
     """
+    _fields = Array._fields + ("access_descriptors", "args")
+    _mapper_method = "map_einsum"
+
+    def __init__(self,
+                 access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
+                 args: Tuple[Array, ...],
+                 tags: TagsType = frozenset()):
+        super().__init__(tags)
+        self.access_descriptors = access_descriptors
+        self.args = args
+
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
+    @memoize_method
+    def shape(self) -> ShapeType:
+        from pytato.utils import are_shape_components_equal
+        iaxis_to_len: Dict[int, ShapeComponent] = {}
+
+        for access_descr, arg in zip(self.access_descriptors,
+                                     self.args):
+            assert arg.ndim == len(access_descr)
+            for arg_axis_len, axis_op in zip(arg.shape, access_descr):
+                if isinstance(axis_op, ElementwiseAxis):
+                    if axis_op.dim in iaxis_to_len:
+                        # check that the accumulated shape-dim matches with the
+                        # current arg's axis len
+                        assert are_shape_components_equal(iaxis_to_len[axis_op.dim],
+                                                          arg_axis_len)
+                    else:
+                        iaxis_to_len[axis_op.dim] = arg_axis_len
+                elif isinstance(axis_op, ReductionAxis):
+                    pass
+                else:
+                    raise AssertionError
+
+        assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
+        return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
+
+    # type-ignore reason: github.com/python/mypy/issues/1362
+    @property  # type: ignore
+    @memoize_method
+    def dtype(self) -> np.dtype[Any]:
+        return np.find_common_type(array_types=[arg.dtype for arg in self.args],
+                                    scalar_types=[])
+
+
+EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
+
+
+def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
+                                                            EinsumAxisDescriptor]:
+    """
+    Normalizes the output subscript of an einsum (provided in the explicit
+    mode). Returns a mapping from index name to an instance of
+    :class:`ElementwiseAxis`.
+
+    .. testsetup::
+
+        >>> from pytato.array import _normalize_einsum_out_subscript
+
+    .. doctest::
+
+        >>> result = _normalize_einsum_out_subscript("kij")
+        >>> sorted(result.keys())
+        ['i', 'j', 'k']
+        >>> result["i"], result["j"], result["k"]
+        (ElementwiseAxis(dim=1), ElementwiseAxis(dim=2), ElementwiseAxis(dim=0))
+    """
+
+    normalized_indices: List[str] = []
+    acc = subscript.strip()
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict()["alpha"])
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(set(normalized_indices)) != len(normalized_indices):
+        raise ValueError("Used an input more than once to refer to the"
+                         f" output axis in '{subscript}")
+
+    return pmap({idx: ElementwiseAxis(i)
+                 for i, idx in enumerate(normalized_indices)})
+
+
+def _normalize_einsum_in_subscript(subscript: str,
+                                   in_operand: Array,
+                                   index_to_descr: PMap[str,
+                                                        EinsumAxisDescriptor],
+                                   index_to_axis_length: PMap[str,
+                                                               ShapeComponent],
+                                   ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
+                                              PMap[str, EinsumAxisDescriptor],
+                                              PMap[str, ShapeComponent]]:
+    """
+    Normalizes the subscript for an input operand in an einsum. Returns
+    ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
+    where, *access_descrs* is a :class:`tuple` of
+    :class`EinsumAxisDescriptor` corresponding to *subscript*,
+    *updated_index_to_descr* is the updated version of *index_to_descr* while
+    inferring *subscript*. Similarly, *updated_index_to_axis_length* is the updated
+    version of *index_to_axis_length*.
+
+
+    :arg index_to_descr: A mapping from index names to instance of
+        :class:`EinsumAxisDescriptor`. These constraints would most likely
+        recorded during normalizing other parts of an einsum's subscripts.
+
+    :arg index_to_axis_length: A mapping from index names to instance of
+        :class:`ShapeComponent` denoting the iteration extent of the index.
+        These constraints would most likely recorded during normalizing other
+        parts of an einsum's subscripts.
+    """
+    from pytato.utils import are_shape_components_equal
+
+    normalized_indices: List[str] = []
+    acc = subscript.strip()
+    while acc:
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict()["alpha"])
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Broadcasting in einsums not supported")
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+    if len(normalized_indices) != in_operand.ndim:
+        raise ValueError(f"Subscript '{subscript}' doesn't match the dimensionality "
+                         f"of corresponding operand ({in_operand.ndim}).")
+
+    in_operand_axis_descrs = []
+
+    for iaxis, index_char in enumerate(normalized_indices):
+        in_axis_len = in_operand.shape[iaxis]
+        if index_char in index_to_descr:
+            if index_char in index_to_axis_length:
+                seen_axis_len = index_to_axis_length[index_char]
+                if not are_shape_components_equal(in_axis_len,
+                                                  seen_axis_len):
+                    raise ValueError(f"Got conflicting lengths for '{index_char}'"
+                                     f" -- {in_axis_len}, {seen_axis_len}.")
+            else:
+                index_to_axis_length = index_to_axis_length.set(index_char,
+                                                                in_axis_len)
+        else:
+            redn_sr_no = len([descr for descr in index_to_descr.values()
+                              if isinstance(descr, ReductionAxis)])
+            redn_axis_descr = ReductionAxis(redn_sr_no)
+            index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
+            index_to_axis_length = index_to_axis_length.set(index_char,
+                                                             in_axis_len)
+
+        in_operand_axis_descrs.append(index_to_descr[index_char])
+
+    return (tuple(in_operand_axis_descrs),
+            index_to_descr, index_to_axis_length)
+
+
+def einsum(subscripts: str, *operands: Array) -> Einsum:
+    """
+    Einstein summation *subscripts* on *operands*.
+    """
+    if len(operands) == 0:
+        raise ValueError("must specify at least one operand")
+
+    if "->" not in subscripts:
+        # implicit-mode: output spec matched by alphabetical ordering of
+        # indices (ewwwww)
+        raise NotImplementedError("Implicit mode not supported. 'subscripts'"
+                                  " must contain '->', followed by the output's"
+                                  " indices.")
+    in_spec, out_spec = subscripts.split("->")
+
+    in_specs = in_spec.split(",")
+
+    if len(operands) != len(in_specs):
+        raise ValueError(
+            f"Number of operands should match the number "
+            f"of arg specs: '{in_specs}'. Length of operands is {len(operands)}; "
+            f"expecting {len(in_specs)} operands."
+        )
+
+    index_to_descr = _normalize_einsum_out_subscript(out_spec)
+    index_to_axis_length: PMap[str, ShapeComponent] = pmap()
+    access_descriptors = []
+
+    for in_spec, in_operand in zip(in_specs, operands):
+        access_descriptor, index_to_descr, index_to_axis_length = (
+            _normalize_einsum_in_subscript(in_spec,
+                                           in_operand,
+                                           index_to_descr,
+                                           index_to_axis_length))
+        access_descriptors.append(access_descriptor)
+
+    return Einsum(tuple(access_descriptors), operands)
 
 # }}}
 
@@ -779,7 +1197,7 @@ class MatrixProduct(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any, np.result_type(self.x1.dtype, self.x2.dtype))
+        return _np_result_type(self.x1.dtype, self.x2.dtype)
 
 # }}}
 
@@ -812,8 +1230,7 @@ class Stack(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -852,8 +1269,7 @@ class Concatenate(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return cast(_dtype_any,
-                np.result_type(*(arr.dtype for arr in self.arrays)))
+        return _np_result_type(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -863,20 +1279,6 @@ class Concatenate(Array):
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
                 + self.arrays[0].shape[self.axis+1:])
-
-# }}}
-
-
-# {{{ attribute lookup
-
-class AttributeLookup(Array):
-    """An expression node to extract an array from a :class:`DictOfNamedArrays`.
-
-    .. warning::
-
-        Not yet implemented.
-    """
-    pass
 
 # }}}
 
@@ -991,7 +1393,7 @@ class Reshape(IndexRemappingBase):
         Output layout order, either ``C`` or ``F``.
     """
 
-    _fields = Array._fields + ("array", "newshape", "order")
+    _fields = IndexRemappingBase._fields + ("newshape", "order")
     _mapper_method = "map_reshape"
 
     def __init__(self,
@@ -1060,26 +1462,13 @@ class InputArgumentBase(Array):
 
     # The name uniquely identifies this object in the namespace. Therefore,
     # subclasses don't have to update *_fields*.
-    _fields = ("name",)
+    _fields = Array._fields + ("name",)
 
     def __init__(self,
             name: Optional[str],
             tags: TagsType = frozenset()):
         super().__init__(tags=tags)
         self.name = name
-
-    def tagged(self, tags: TagOrIterableType) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
-
-    def without_tags(self, tags: TagOrIterableType,
-                        verify_existence: bool = True) -> InputArgumentBase:
-        raise ValueError("Cannot modify tags")
-
-    def __hash__(self) -> int:
-        return id(self)
-
-    def __eq__(self, other: Any) -> bool:
-        return self is other
 
 # }}}
 
@@ -1117,8 +1506,15 @@ class DataWrapper(InputArgumentBase):
 
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
+
+    .. note::
+
+        Since we cannot compare instances of :class:`DataInterface` being
+        wrapped, a :class:`DataWrapper` instances compare equal to themselves
+        (i.e. the very same instance).
     """
 
+    _fields = InputArgumentBase._fields + ("data", "shape")
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
@@ -1130,6 +1526,12 @@ class DataWrapper(InputArgumentBase):
 
         self.data = data
         self._shape = shape
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __eq__(self, other: Any) -> bool:
+        return self is other
 
     @property
     def shape(self) -> ShapeType:
@@ -1152,10 +1554,11 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     .. automethod:: __init__
     """
 
+    _fields = InputArgumentBase._fields + ("shape", "dtype")
     _mapper_method = "map_placeholder"
 
     def __init__(self,
-            name: Optional[str],
+            name: str,
             shape: ShapeType,
             dtype: np.dtype[Any],
             tags: TagsType = frozenset()):
@@ -1179,6 +1582,11 @@ class SizeParam(InputArgumentBase):
 
     _mapper_method = "map_size_param"
 
+    def __init__(self,
+                 name: str,
+                 tags: TagsType = frozenset()):
+        super().__init__(name=name, tags=tags)
+
     @property
     def shape(self) -> ShapeType:
         return ()
@@ -1186,20 +1594,6 @@ class SizeParam(InputArgumentBase):
     @property
     def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
-
-# }}}
-
-
-# {{{ loopy function
-
-class LoopyFunction(DictOfNamedArrays):
-    """
-    .. note::
-
-        This should allow both a locally stored kernel
-        and one that's obtained by importing a dotted
-        name.
-    """
 
 # }}}
 
@@ -1282,6 +1676,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.stack(arrays, axis=0).shape
        (4, 3)
@@ -1311,6 +1706,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     Example::
 
+       >>> import pytato as pt
        >>> arrays = [pt.zeros(3)] * 4
        >>> pt.concatenate(arrays, axis=0).shape
        (12,)
@@ -1374,7 +1770,7 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
 
         ubound: int = cast(int, array.shape[i])
         if not (0 <= start < ubound):
-            raise ValueError("index '%d' of 'begin' out of bounds" % i)
+            raise IndexError("index '%d' of 'begin' out of bounds" % i)
 
         if not (start <= stop <= ubound):
             raise ValueError("index '%d' of 'size' out of bounds" % i)
@@ -1383,7 +1779,8 @@ def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Ar
     return Slice(array, tuple(starts), tuple(stops))
 
 
-def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
+def reshape(array: Array, newshape: Union[int, Sequence[int]],
+            order: str = "C") -> Array:
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
@@ -1395,6 +1792,9 @@ def reshape(array: Array, newshape: Sequence[int], order: str = "C") -> Array:
         reshapes of arrays with symbolic shapes not yet implemented.
     """
     from pytools import product
+
+    if isinstance(newshape, int):
+        newshape = newshape,
 
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
@@ -1449,10 +1849,10 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 # }}}
 
 
-def make_placeholder(shape: ConvertibleToShape,
-        dtype: Any,
-        name: Optional[str] = None,
-        tags: TagsType = frozenset()) -> Placeholder:
+def make_placeholder(name: str,
+                     shape: ConvertibleToShape,
+                     dtype: Any,
+                     tags: TagsType = frozenset()) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param name:       name of the placeholder array, generated automatically
@@ -1462,7 +1862,7 @@ def make_placeholder(shape: ConvertibleToShape,
                        (must be convertible to :class:`numpy.dtype`)
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=False)
     shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
 
@@ -1470,7 +1870,7 @@ def make_placeholder(shape: ConvertibleToShape,
 
 
 def make_size_param(name: str,
-        tags: TagsType = frozenset()) -> SizeParam:
+                    tags: TagsType = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1479,7 +1879,7 @@ def make_size_param(name: str,
     :param name:       name
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=False)
     return SizeParam(name, tags=tags)
 
 
@@ -1494,7 +1894,7 @@ def make_data_wrapper(data: DataInterface,
     :param shape:      optional shape of the array, inferred from *data* if not given
     :param tags:       implementation tags
     """
-    _check_identifier(name)
+    _check_identifier(name, optional=True)
     if shape is None:
         shape = data.shape
 
@@ -1507,85 +1907,141 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ math functions
 
-def _apply_elem_wise_func(x: ArrayOrScalar, func_name: str,
+def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
+                          func_name: str,
                           ret_dtype: Optional[_dtype_any] = None
                           ) -> ArrayOrScalar:
-    if isinstance(x, SCALAR_CLASSES):
+    if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         np_func = getattr(np, func_name)
-        return np_func(x)  # type: ignore
+        return np_func(*inputs)  # type: ignore
 
-    assert isinstance(x, Array)
+    if not inputs:
+        raise ValueError("at least one argument must be present")
 
-    if x.dtype.kind != "f":
-        raise ValueError(f"'{func_name}' does not support '{x.dtype}' arrays.")
-    if ret_dtype is None:
-        ret_dtype = x.dtype
+    shape = None
 
-    expr = prim.Call(
-            var(f"pytato.c99.{func_name}"),
-            (prim.Subscript(var("in"),
-                tuple(var(f"_{i}") for i in range(len(x.shape)))),))
-    return IndexLambda(expr, x.shape, ret_dtype, {"in": x})
+    sym_args = []
+    bindings = {}
+    for index, inp in enumerate(inputs):
+        if isinstance(inp, Array):
+            if inp.dtype.kind not in ["f", "c"]:
+                raise ValueError("only floating-point or complex "
+                        "arguments supported")
+
+            if shape is None:
+                shape = inp.shape
+            elif inp.shape != shape:
+                # FIXME: merge this logic with arithmetic, so that broadcasting
+                # is implemented properly
+                raise NotImplementedError("broadcasting in function application")
+
+            if ret_dtype is None:
+                ret_dtype = inp.dtype
+
+            bindings[f"in_{index}"] = inp
+            sym_args.append(
+                    prim.Subscript(var(f"in_{index}"),
+                        tuple(var(f"_{i}") for i in range(len(shape)))))
+        else:
+            sym_args.append(inp)
+
+    assert shape is not None
+    assert ret_dtype is not None
+
+    return IndexLambda(
+            prim.Call(var(f"pytato.c99.{func_name}"), tuple(sym_args)),
+            shape, ret_dtype, bindings)
 
 
 def abs(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "abs")
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        result_dtype = x.dtype
+
+    return _apply_elem_wise_func((x,), "abs", ret_dtype=result_dtype)
 
 
 def sqrt(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sqrt")
+    return _apply_elem_wise_func((x,), "sqrt")
 
 
 def sin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sin")
+    return _apply_elem_wise_func((x,), "sin")
 
 
 def cos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cos")
+    return _apply_elem_wise_func((x,), "cos")
 
 
 def tan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tan")
+    return _apply_elem_wise_func((x,), "tan")
 
 
 def arcsin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "asin")
+    return _apply_elem_wise_func((x,), "asin")
 
 
 def arccos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "acos")
+    return _apply_elem_wise_func((x,), "acos")
 
 
 def arctan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "atan")
+    return _apply_elem_wise_func((x,), "atan")
+
+
+def conj(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind != "c":
+        return x
+    return _apply_elem_wise_func((x,), "conj")
+
+
+def arctan2(y: Array, x: Array) -> ArrayOrScalar:
+    return _apply_elem_wise_func((y, x), "atan2")  # type:ignore
 
 
 def sinh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "sinh")
+    return _apply_elem_wise_func((x,), "sinh")
 
 
 def cosh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "cosh")
+    return _apply_elem_wise_func((x,), "cosh")
 
 
 def tanh(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "tanh")
+    return _apply_elem_wise_func((x,), "tanh")
 
 
 def exp(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "exp")
+    return _apply_elem_wise_func((x,), "exp")
 
 
 def log(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log")
+    return _apply_elem_wise_func((x,), "log")
 
 
 def log10(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "log10")
+    return _apply_elem_wise_func((x,), "log10")
 
 
 def isnan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func(x, "isnan", np.dtype(np.int32))
+    return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
+
+
+def real(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        return x
+    return _apply_elem_wise_func((x,), "real", ret_dtype=result_dtype)
+
+
+def imag(x: Array) -> ArrayOrScalar:
+    if x.dtype.kind == "c":
+        result_dtype = np.empty(0, dtype=x.dtype).real.dtype
+    else:
+        return zeros(x.shape, dtype=x.dtype)
+    return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # }}}
 
@@ -1623,6 +2079,29 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
     return full(shape, 1, dtype)  # type: ignore
 
 # }}}
+
+
+def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
+        dtype: Any = np.float64) -> Array:
+    """
+    Returns a 2D-array with ones on the *k*-th diagonal
+
+    :arg N: Number of rows in the output matrix
+    :arg M: Number of columns in the output matrix. Equal to *N* if *None*.
+    """
+    from pymbolic import parse
+
+    if M is None:
+        M = N  # noqa: N806
+
+    if M < 0 or N < 0:
+        raise ValueError("Negative dimension lengths not allowed.")
+
+    if not isinstance(k, int):
+        raise ValueError(f"k must be int, got {type(k)}.")
+
+    return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
+                       shape=(N, M), dtype=dtype, bindings={})
 
 
 # {{{ comparison operator
@@ -1718,7 +2197,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
-                       dtype=np.bool8,
+                       dtype=np.dtype(np.bool8),
                        bindings={"_in0": x})
 
 # }}}
@@ -1979,5 +2458,55 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
     return _make_reduction_lambda("product", a, axis)
 
 # }}}
+
+
+def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
+    """
+    For 1-dimensional arrays *a* and *b* computes their inner product.  See
+    :func:`numpy.dot` for behavior in the case when *a* and *b* aren't
+    single-dimensional arrays.
+    """
+    import pytato as pt
+
+    if isinstance(a, SCALAR_CLASSES) or isinstance(b, SCALAR_CLASSES):
+        # type-ignored because Number * bool is undefined
+        return a * b  # type: ignore
+
+    assert isinstance(a, Array)
+    assert isinstance(b, Array)
+
+    if a.ndim == b.ndim == 1:
+        return pt.sum(a*b)
+    elif a.ndim == b.ndim == 2:
+        return a @ b
+    elif a.ndim == 0 or b.ndim == 0:
+        return a * b
+    elif b.ndim == 1:
+        return pt.sum(a * b, axis=(a.ndim - 1))
+    else:
+        idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
+        idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+        a_indices = "".join(idx_gen() for _ in range(a.ndim))
+        b_indices = "".join(idx_gen() for _ in range(b.ndim))
+        # reduce over second-to-last axis of *b* and last axis of *a*
+        b_indices = b_indices[:-2] + a_indices[-1] + b_indices[-1]
+        result_indices = a_indices[:-1] + b_indices[:-2] + b_indices[-1]
+        return pt.einsum(f"{a_indices}, {b_indices} -> {result_indices}", a, b)
+
+
+def vdot(a: Array, b: Array) -> ArrayOrScalar:
+    """
+    Returns the dot-product of conjugate of *a* with *b*. If the input
+    arguments are multi-dimensional arrays, they are ravel-ed first and then
+    their *vdot* is computed.
+    """
+    import pytato as pt
+
+    if isinstance(a, Array) and a.ndim > 1:
+        a = a.reshape(-1)
+    if isinstance(b, Array) and b.ndim > 1:
+        b = b.reshape(-1)
+
+    return pt.dot(pt.conj(a), b)
 
 # vim: foldmethod=marker

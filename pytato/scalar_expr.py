@@ -47,9 +47,6 @@ import re
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
 
-Scalar Expressions
-------------------
-
 .. data:: ScalarExpression
 
     A :class:`type` for scalar-valued symbolic expressions. Expressions are
