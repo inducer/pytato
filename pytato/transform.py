@@ -32,6 +32,7 @@ from pytato.array import (
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase)
 from pytato.loopy import LoopyCall
+# from pytato.distributed import DistributedSend, DistributedRecv
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -515,6 +516,7 @@ class WalkMapper(Mapper):
         self.rec(expr.data, *args)
 
         self.post_visit(expr, *args)
+
     def map_einsum(self, expr: Einsum) -> None:
         if not self.visit(expr):
             return

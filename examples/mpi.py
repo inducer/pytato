@@ -9,7 +9,7 @@ from pytato.visualization import show_graph
 # from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
 #                           make_placeholder, Placeholder, Slice)
 
-from typing import Callable, Any, Dict, List, Tuple
+# from typing import Callable, Any, Dict, List, Tuple
 
 from pytato.distributed import DistributedRecv, DistributedSend
 
@@ -20,6 +20,7 @@ def advect(*args):
 
 
 from dataclasses import dataclass
+
 
 @dataclass(frozen=True, eq=True)
 class PartitionId:
@@ -36,7 +37,7 @@ def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
 def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
-    x = pt.make_placeholder(shape=(10,), dtype=float)
+    x = pt.make_placeholder(name="myph", shape=(10,), dtype=float)
     bnd = pt.make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
 
     halo = pt.make_distributed_recv(x[9], src_rank=(rank+1) % size, comm_tag="halo",
@@ -107,8 +108,6 @@ def main():
     #     # find names that are needed
     #     inputs = {...}
     #     context.update(prg_per_partition[f](**inputs))
-
-
 
     print(new)
 

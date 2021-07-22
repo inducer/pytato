@@ -1,7 +1,8 @@
-from pytato.array import Array, ShapeType, _SuppliedShapeAndDtypeMixin, IndexLambda, Placeholder, Slice
+from pytato.array import (Array, ShapeType, _SuppliedShapeAndDtypeMixin,
+                          IndexLambda, Placeholder, Slice)
 import numpy as np
 
-from typing import Any, Tuple, Callable
+from typing import Any, Tuple, Callable, Dict, List
 from pytato.transform import Mapper, CopyMapper
 
 
@@ -13,7 +14,8 @@ class DistributedSend(Array):
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data",)
 
-    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: object = None) -> None:
+    def __init__(self, data: Array, dest_rank: int = 0,
+                 comm_tag: object = None) -> None:
         super().__init__()
         self.data = data
 
@@ -188,8 +190,8 @@ class PartitionFinder(CopyMapper):
     def map_distributed_send(self, expr, *args):
         if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
-            new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
-                                                  name, tags=expr.data.tags)
+            new_binding = make_placeholder(name, expr.data.shape, expr.data.
+                                           dtype, tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
             self.register_placeholder(expr, new_binding)
         else:
@@ -202,8 +204,8 @@ class PartitionFinder(CopyMapper):
     def map_distributed_recv(self, expr, *args):
         if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
-            new_binding = make_placeholder(expr.data.shape, expr.data.dtype,
-                                                  name, tags=expr.data.tags)
+            new_binding = make_placeholder(name, expr.data.shape, expr.data.dtype,
+                                                  tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
             self.register_placeholder(expr, new_binding)
         else:
@@ -216,8 +218,8 @@ class PartitionFinder(CopyMapper):
     def map_slice(self, expr, *args):
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
-            new_binding = make_placeholder(expr.array.shape, expr.array.dtype,
-                                                  name, tags=expr.array.tags)
+            new_binding = make_placeholder(name, expr.array.shape, expr.array.dtype,
+                                                tags=expr.array.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
             self.register_placeholder(expr, new_binding)
         else:
@@ -237,7 +239,7 @@ class PartitionFinder(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    new_bindings[name] = make_placeholder(dim.shape, dim.dtype, name,
+                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
                 else:
@@ -257,7 +259,7 @@ class PartitionFinder(CopyMapper):
             name = self.make_new_name()
             if self.does_edge_cross_partition_boundary(expr, child):
 
-                new_bindings[name] = make_placeholder(child.shape, child.dtype, name,
+                new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
                                                       tags=child.tags)
                 self.cross_partition_name_to_value[name] = self.rec(child)
             else:
@@ -268,7 +270,7 @@ class PartitionFinder(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    new_shapes[name] = make_placeholder(dim.shape, dim.dtype, name,
+                    new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
                 else:
