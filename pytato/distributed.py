@@ -165,13 +165,18 @@ class PartitionFinder(CopyMapper):
         self.var_name_to_result: Dict[str, Array] = {}
 
     def does_edge_cross_partition_boundary(self, node1, node2) -> bool:
-        res = self.get_partition_id(node1) != self.get_partition_id(node2)
-        if res:
+        p1 = self.get_partition_id(node1)
+        p2 = self.get_partition_id(node2)
+        crosses = p1 != p2
+
+        print("XXXX", str(node1))
+        if crosses:
+            self.partition_pair_to_edges.setdefault((p1,p2), list()).append((node1,node2))
             print("PART", node1, node2)
         else:
             print("NOPART", node1, node2)
 
-        return res
+        return crosses
 
     def register_partition_id(self, expr: Array, pid=None) -> None:
         if not pid:

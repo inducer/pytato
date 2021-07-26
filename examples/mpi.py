@@ -79,7 +79,7 @@ def main():
 
     pf = PartitionFinder(pfunc)
     new = pf(y)
-    print(pf.partition_pair_to_edges)
+    # print(pf.partition_pair_to_edges)
     partition_id_to_output_names = {}
     partition_id_to_input_names = {}
     partitions = set()
@@ -87,23 +87,24 @@ def main():
             pf.partition_pair_to_edges.items():
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
-        print(pid_consumer)
         for var_name in var_names:
             partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
             partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
             print(var_name)
 
-    # pytools.graph
-    # topsorted_partitions = topsort(partitions)
+    print(partition_id_to_output_names)
+
+    from pytools.graph import compute_topological_order
+    topsorted_partitions = compute_topological_order(partitions)
 
     # # codegen
-    # prg_per_partition = {pid:
-    #         pt.generate_loopy(
-    #             pt.DictOfNamedArrays(
-    #                 {var_name: pf.var_name_to_result[var_name]
-    #                     for var_name in partition_id_to_output_names[pid]
-    #                     }))
-    #         for pid in partitions}
+    prg_per_partition = {pid:
+            pt.generate_loopy(
+                pt.DictOfNamedArrays(
+                    {var_name: pf.var_name_to_result[var_name]
+                        for var_name in partition_id_to_output_names[pid]
+                        }))
+            for pid in partitions}
 
     # # execution
     # context = {}
