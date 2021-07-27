@@ -32,7 +32,7 @@ from pytato.array import (
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase)
 from pytato.loopy import LoopyCall
-# from pytato.distributed import DistributedSend, DistributedRecv
+from pytato.distributed import *
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -345,10 +345,10 @@ class DependencyMapper(CombineMapper[R]):
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
     def map_distributed_send(self, expr: DistributedSend) -> FrozenSet[Array]:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), self.rec(expr.data))
 
     def map_distributed_recv(self, expr: DistributedRecv) -> FrozenSet[Array]:
-        return self.combine(frozenset([expr]), self.rec(expr.array))
+        return self.combine(frozenset([expr]), self.rec(expr.data))
 
 # }}}
 
