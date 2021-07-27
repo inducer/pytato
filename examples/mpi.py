@@ -9,7 +9,7 @@ from pytato.visualization import show_graph
 # from pytato.array import (Array, IndexLambda, DistributedRecv, DistributedSend,
 #                           make_placeholder, Placeholder, Slice)
 
-# from typing import Callable, Any, Dict, List, Tuple
+from typing import Callable, Any, Dict, List, Tuple
 
 from pytato.distributed import DistributedRecv, DistributedSend
 
@@ -83,19 +83,22 @@ def main():
     partition_id_to_output_names = {}
     partition_id_to_input_names = {}
     partitions = set()
+    partitions_dict = {}
     for (pid_producer, pid_consumer), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
+        partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
         for var_name in var_names:
             partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
             partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
             print(var_name)
 
-    print(partition_id_to_output_names)
-
     from pytools.graph import compute_topological_order
-    topsorted_partitions = compute_topological_order(partitions)
+    toposorted_partitions = compute_topological_order(partitions_dict)
+
+    print("========")
+    print(toposorted_partitions)
 
     # # codegen
     prg_per_partition = {pid:
@@ -113,12 +116,12 @@ def main():
     #     inputs = {...}
     #     context.update(prg_per_partition[f](**inputs))
 
-    print(new)
+    # print(new)
 
     # show_graph(y)
 
-    print("========")
-    print(pf.cross_partition_name_to_value)
+    # print("========")
+    # print(pf.cross_partition_name_to_value)
 
 
 if __name__ == "__main__":
