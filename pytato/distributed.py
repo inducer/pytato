@@ -90,7 +90,7 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.array)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
-        children = set()
+        children: Set[Array] = set()
 
         for child in expr.bindings.values():
             children = children | {child}
@@ -274,6 +274,8 @@ class PartitionFinder(CopyMapper):
                 self.register_partition_id(new_bindings[name])
 
         self.register_partition_id(expr)
+
+        assert expr.name
 
         return Placeholder(name=expr.name,
                 shape=new_bindings,
