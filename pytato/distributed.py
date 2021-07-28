@@ -189,11 +189,12 @@ class PartitionFinder(CopyMapper):
         assert pid
         self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
 
-    def register_placeholder(self, expr: Array, placeholder: Array, pid: Optional[PartitionId] = None) -> None:
+    def register_placeholder(self, name: str, expr: Array, placeholder: Array, pid: Optional[PartitionId] = None) -> None:
         if not pid:
             pid = self.get_partition_id(expr)
         assert pid
         self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
+        self.var_name_to_result[name] = expr
 
     def make_new_name(self) -> str:
         self.name_index += 1
@@ -217,7 +218,7 @@ class PartitionFinder(CopyMapper):
             new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.
                                            dtype, tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
-            self.register_placeholder(expr, new_binding)
+            self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.data)
             self.register_partition_id(new_binding, self.get_partition_id(expr.data))
@@ -232,7 +233,7 @@ class PartitionFinder(CopyMapper):
             new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.dtype,
                                                   tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
-            self.register_placeholder(expr, new_binding)
+            self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.data)
             self.register_partition_id(new_binding)
@@ -247,7 +248,7 @@ class PartitionFinder(CopyMapper):
             new_binding: Array = make_placeholder(name, expr.array.shape, expr.array.dtype,
                                                 tags=expr.array.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(expr, new_binding)
+            self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.array)
             self.register_partition_id(new_binding, self.get_partition_id(expr.array))
@@ -269,6 +270,7 @@ class PartitionFinder(CopyMapper):
                     new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
+                    self.register_placeholder(name, expr, new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
                 self.register_partition_id(new_bindings[name])
@@ -292,6 +294,7 @@ class PartitionFinder(CopyMapper):
                 new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
                                                       tags=child.tags)
                 self.cross_partition_name_to_value[name] = self.rec(child)
+                self.register_placeholder(name, expr, new_bindings[name])
             else:
                 new_bindings[name] = self.rec(child)
 
@@ -304,6 +307,7 @@ class PartitionFinder(CopyMapper):
                     new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
+                    self.register_placeholder(name, expr, new_bindings[name])
                 else:
                     new_shapes[name] = self.rec(dim)
 
