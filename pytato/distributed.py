@@ -180,10 +180,6 @@ class PartitionFinder(CopyMapper):
         p2 = self.get_partition_id(node2)
         crosses: bool = p1 != p2
 
-        if crosses:
-            # FIXME: need the var name here
-            self.partition_pair_to_edges.setdefault((p1,p2), list()).append((node1,node2))
-
         return crosses
 
     def register_partition_id(self, expr: Array, pid: Optional[PartitionId] = None) -> None:
@@ -205,9 +201,19 @@ class PartitionFinder(CopyMapper):
         assert res not in self.cross_partition_name_to_value
         return res
 
+    def set_partition_pair_to_edges(self, expr1: Array, expr2: Array, name: str) -> None:
+        p1 = self.get_partition_id(expr1)
+        p2 = self.get_partition_id(expr2)
+
+        self.partition_pair_to_edges.setdefault(
+                (p1, p2), list()).append(name)
+
+
+
     def map_distributed_send(self, expr: DistributedSend, *args: Any) -> DistributedSend:
         if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.data, name)
             new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.
                                            dtype, tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
@@ -222,6 +228,7 @@ class PartitionFinder(CopyMapper):
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> DistributedRecv:
         if self.does_edge_cross_partition_boundary(expr, expr.data):
             name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.data, name)
             new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.dtype,
                                                   tags=expr.data.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.data)
@@ -236,6 +243,7 @@ class PartitionFinder(CopyMapper):
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.array, name)
             new_binding: Array = make_placeholder(name, expr.array.shape, expr.array.dtype,
                                                 tags=expr.array.tags)
             self.cross_partition_name_to_value[name] = self.rec(expr.array)
@@ -257,6 +265,7 @@ class PartitionFinder(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
+                    self.set_partition_pair_to_edges(expr, dim, name)
                     new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
@@ -276,6 +285,7 @@ class PartitionFinder(CopyMapper):
         for child in expr.bindings.values():
             name = self.make_new_name()
             if self.does_edge_cross_partition_boundary(expr, child):
+                self.set_partition_pair_to_edges(expr, child, name)
 
                 new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
                                                       tags=child.tags)
@@ -283,11 +293,12 @@ class PartitionFinder(CopyMapper):
             else:
                 new_bindings[name] = self.rec(child)
 
-        new_shapes = {}
+        new_shapes: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
+                    self.set_partition_pair_to_edges(expr, dim, name)
                     new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
@@ -300,7 +311,7 @@ class PartitionFinder(CopyMapper):
                 bindings=new_bindings,
                 tags=expr.tags)
 
-    def __call__(self, expr: Array) -> Array:
+    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
         return self.rec(expr)
 
 # }}}
