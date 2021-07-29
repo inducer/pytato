@@ -172,9 +172,11 @@ class CopyMapper(Mapper):
         return SizeParam(name=expr.name, tags=expr.tags)
 
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        from pytato.distributed import DistributedSend
         return DistributedSend(expr.data)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+        from pytato.distributed import DistributedRecv
         return DistributedRecv(expr.data)
 
     def map_einsum(self, expr: Einsum) -> Array:
@@ -285,6 +287,12 @@ class CombineMapper(Mapper, Generic[CombineT]):
         return self.combine(*(self.rec(ary)
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
+        return self.combine(self.rec(expr.data))
+
+    def map_distributed_send(self, expr: DistributedSend) -> CombineT:
+        return self.combine(self.rec(expr.data))
 
 # }}}
 

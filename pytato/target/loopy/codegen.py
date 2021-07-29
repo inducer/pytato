@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pytato.distributed import DistributedSend
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -505,6 +507,15 @@ class CodeGenMapper(Mapper):
                              domains=kernel.domains+domains)
 
         state.update_kernel(kernel)
+
+    def map_distributed_send(self, expr: DistributedSend, state: CodeGenState) -> None:
+        # FIXME: implement this
+        pass
+
+    def map_distributed_recv(self, expr: DistributedRecv, state: CodeGenState) -> None:
+        # FIXME: implement this
+        pass
+
 
 # }}}
 
