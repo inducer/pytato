@@ -88,6 +88,7 @@ def main():
             pf.partition_pair_to_edges.items():
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
+        # FIXME?: Does this need to store *all* connected nodes? 
         partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
         for var_name in var_names:
             partition_id_to_output_names.setdefault(pid_producer, []).append(var_name)
