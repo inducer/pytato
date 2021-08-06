@@ -24,7 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
+from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
+                    Optional, List, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -584,6 +585,234 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     dep_mapper = DependencyMapper()
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
+
+# }}}
+
+
+# {{{ Graph partitioning
+
+
+class GraphToDictMapper(Mapper):
+    """
+    Maps a graph to a dictionary representation.
+    .. attribute:: graph_dict
+        :class:`dict`, maps each node in the graph to the set of directly connected
+        nodes, obeying the direction of each edge.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the GraphToDictMapper."""
+        self.graph_dict: Dict[Array, Set[Array]] = {}
+
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+        children: Set[Array] = set()
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim, *args)
+
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+
+    def map_slice(self, expr: Slice, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+        children: Set[Array] = set()
+
+        for child in expr.bindings.values():
+            children = children | {child}
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim)
+
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+
+    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+        return self.rec(expr, *args)
+
+
+def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
+    """Reverses a graph."""
+    result: Dict[Array, Set[Array]] = {}
+
+    for node_key, edges in graph.items():
+        for other_node_key in edges:
+            result.setdefault(other_node_key, set()).add(node_key)
+
+    return result
+
+
+def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
+        starting_point: Optional[Array] = None,
+        result: Optional[Dict[Array, Set[Array]]] = None) -> None:
+    """Tags nodes with their starting point."""
+    if result is None:
+        result = {}
+    if starting_point is None:
+        starting_point = node
+
+    result.setdefault(node, set()).add(starting_point)
+    if node in graph:
+        for other_node_key in graph[node]:
+            tag_nodes_with_starting_point(graph, other_node_key, starting_point,
+                                          result)
+
+
+from pytato.array import make_placeholder
+from abc import ABC
+
+
+class PartitionId(ABC):
+    """A class that represents a partition ID."""
+    pass
+
+
+class PartitionFinder(CopyMapper):
+    """Find partitions."""
+
+    def __init__(self, get_partition_id:
+                                   Callable[[Any], Any]) -> None:
+        super().__init__()
+        self.get_partition_id = get_partition_id
+        self.cross_partition_name_to_value: Dict[str, Array] = {}
+
+        self.name_index = 0
+
+        # "nodes" of the coarsened graph
+        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
+
+        # "edges" of the coarsened graph
+        self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
+                List[str]] = {}
+
+        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
+
+        self.var_name_to_result: Dict[str, Array] = {}
+
+    def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
+        p1 = self.get_partition_id(node1)
+        p2 = self.get_partition_id(node2)
+        crosses: bool = p1 != p2
+
+        return crosses
+
+    def register_partition_id(self, expr: Array,
+                              pid: Optional[PartitionId] = None) -> None:
+        if not pid:
+            pid = self.get_partition_id(expr)
+
+        assert pid
+        self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
+
+    def register_placeholder(self, name: str, expr: Array, placeholder: Array,
+                             pid: Optional[PartitionId] = None) -> None:
+        if not pid:
+            pid = self.get_partition_id(expr)
+        assert pid
+        self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
+        self.var_name_to_result[name] = expr
+
+    def make_new_name(self) -> str:
+        self.name_index += 1
+        res = "placeholder_" + str(self.name_index)
+        assert res not in self.cross_partition_name_to_value
+        return res
+
+    def set_partition_pair_to_edges(self, expr1: Array, expr2: Array,
+                                    name: str) -> None:
+        p1 = self.get_partition_id(expr1)
+        p2 = self.get_partition_id(expr2)
+
+        self.partition_pair_to_edges.setdefault(
+                (p1, p2), list()).append(name)
+
+    def map_slice(self, expr: Slice, *args: Any) -> Slice:
+        if self.does_edge_cross_partition_boundary(expr, expr.array):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.array, name)
+            new_binding: Array = make_placeholder(name, expr.array.shape,
+                                                  expr.array.dtype,
+                                                  tags=expr.array.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.array)
+            self.register_placeholder(name, expr, new_binding)
+        else:
+            new_binding = self.rec(expr.array)
+            self.register_partition_id(
+                new_binding, self.get_partition_id(expr.array))
+
+        self.register_partition_id(expr)
+
+        return Slice(array=new_binding,
+                starts=expr.starts,
+                stops=expr.stops,
+                tags=expr.tags)
+
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
+        new_bindings: Dict[str, Array] = {}
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                name = self.make_new_name()
+                if self.does_edge_cross_partition_boundary(expr, dim):
+                    self.set_partition_pair_to_edges(expr, dim, name)
+                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
+                                                          tags=dim.tags)
+                    self.cross_partition_name_to_value[name] = self.rec(dim)
+                    self.register_placeholder(name, expr, new_bindings[name])
+                else:
+                    new_bindings[name] = self.rec(dim)
+                self.register_partition_id(new_bindings[name])
+
+        self.register_partition_id(expr)
+
+        assert expr.name
+
+        return Placeholder(name=expr.name,
+                shape=new_bindings,  # FIXME: this is likely incorrect
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
+        new_bindings: Dict[str, Array] = {}
+        for child in expr.bindings.values():
+            name = self.make_new_name()
+            if self.does_edge_cross_partition_boundary(expr, child):
+                self.set_partition_pair_to_edges(expr, child, name)
+
+                new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
+                                                      tags=child.tags)
+                self.cross_partition_name_to_value[name] = self.rec(child)
+                self.register_placeholder(name, expr, new_bindings[name])
+            else:
+                new_bindings[name] = self.rec(child)
+
+        new_shapes: Dict[str, Array] = {}
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                name = self.make_new_name()
+                if self.does_edge_cross_partition_boundary(expr, dim):
+                    self.set_partition_pair_to_edges(expr, dim, name)
+                    new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
+                                                          tags=dim.tags)
+                    self.cross_partition_name_to_value[name] = self.rec(dim)
+                    self.register_placeholder(name, expr, new_bindings[name])
+                else:
+                    new_shapes[name] = self.rec(dim)
+
+        return IndexLambda(expr=expr.expr,
+                shape=new_shapes,  # FIXME: this is likely incorrect
+                dtype=expr.dtype,
+                bindings=new_bindings,
+                tags=expr.tags)
+
+    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
+        return self.rec(expr)
 
 # }}}
 
