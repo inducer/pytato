@@ -47,7 +47,7 @@ from pytato.array import (
         dot, vdot,
 
         )
-from pytato.reductions import sum, amax, amin, prod
+from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
                           cosh, tanh, exp, log, log10, isnan, sqrt, conj,
                           arctan2, real, imag)
@@ -86,7 +86,8 @@ __all__ = (
 
         "logical_or", "logical_and", "logical_not",
 
-        "sum", "amax", "amin", "prod",
+        "sum", "amax", "amin", "prod", "all", "any",
+
         "real", "imag",
 
         "dot", "vdot",

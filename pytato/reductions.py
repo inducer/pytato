@@ -41,6 +41,8 @@ __doc__ = """
 .. autofunction:: amin
 .. autofunction:: amax
 .. autofunction:: prod
+.. autofunction:: all
+.. autofunction:: any
 """
 
 # }}}
@@ -195,6 +197,30 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
         Defaults to all axes of the input array.
     """
     return _make_reduction_lambda("product", a, axis)
+
+
+def all(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Returns the logical-and array *a*'s elements along the *axis* axes.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes along which the elements are to be product-reduced.
+        Defaults to all axes of the input array.
+    """
+    return _make_reduction_lambda("all", a, axis)
+
+
+def any(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+    """
+    Returns the logical-or of array *a*'s elements along the *axis* axes.
+
+    :arg a: The :class:`pytato.Array` on which to perform the reduction.
+
+    :arg axis: The axes along which the elements are to be product-reduced.
+        Defaults to all axes of the input array.
+    """
+    return _make_reduction_lambda("any", a, axis)
 
 # }}}
 
