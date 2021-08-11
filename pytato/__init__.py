@@ -47,12 +47,12 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
-        sum, amax, amin, prod,
         real, imag,
 
         dot, vdot,
 
         )
+from pytato.reductions import sum, amax, amin, prod
 
 from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
@@ -86,8 +86,6 @@ __all__ = (
         "equal", "not_equal", "less", "less_equal", "greater", "greater_equal",
 
         "logical_or", "logical_and", "logical_not",
-
-        "sum",
 
         "sum", "amax", "amin", "prod",
         "real", "imag",
