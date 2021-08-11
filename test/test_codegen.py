@@ -779,7 +779,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
 
 
 @pytest.mark.parametrize("axis", (None, 1, 0))
-@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod", "all", "any"))
 @pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
 def test_reductions(ctx_factory, axis, redn, shape):
     queue = cl.CommandQueue(ctx_factory())

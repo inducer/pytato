@@ -520,6 +520,8 @@ PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
     "product": "product",
     "max": "max",
     "min": "min",
+    "all": "all",
+    "any": "any",
 }
 
 

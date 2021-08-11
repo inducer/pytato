@@ -227,7 +227,7 @@ class Reduce(ExpressionBase):
 
     .. attribute:: op
 
-        One of ``"sum"``, ``"product"``, ``"max"``, ``"min"``.
+        One of ``"sum"``, ``"product"``, ``"max"``, ``"min"``,``"all"``, ``"any"``.
 
     .. attribute:: bounds
 
@@ -240,7 +240,7 @@ class Reduce(ExpressionBase):
 
     def __init__(self, inner_expr: ScalarExpression, op: str, bounds: Any) -> None:
         self.inner_expr = inner_expr
-        if op not in ["sum", "product", "max", "min"]:
+        if op not in {"sum", "product", "max", "min", "all", "any"}:
             raise ValueError(f"unsupported op: {op}")
         self.op = op
         self.bounds = bounds
