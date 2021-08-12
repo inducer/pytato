@@ -354,6 +354,8 @@ class Array(Taggable):
     .. method:: __rxor__
     .. method:: __abs__
     .. method:: conj
+    .. automethod:: all
+    .. automethod:: any
 
     .. autoattribute:: real
     .. autoattribute:: imag
@@ -610,6 +612,20 @@ class Array(Taggable):
         # type-ignore reason: passed: "Tuple[Union[int, Sequence[int]], ...]";
         # expected "Union[int, Sequence[int]]"
         return pt.reshape(self, shape, order=order)  # type: ignore
+
+    def all(self, axis: int = 0) -> ArrayOrScalar:
+        """
+        Equivalent to :func:`pytato.all`.
+        """
+        import pytato as pt
+        return pt.all(self, axis)
+
+    def any(self, axis: int = 0) -> ArrayOrScalar:
+        """
+        Equivalent to :func:`pytato.any`.
+        """
+        import pytato as pt
+        return pt.any(self, axis)
 
 # }}}
 
