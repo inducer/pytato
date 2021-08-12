@@ -841,7 +841,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     If *result* is a :class:`dict` or a :class:`pytato.DictOfNamedArrays` and
     *options* is not supplied, then the Loopy option
-    :attr:`~loopy.Options.return_dict` will be set to *True*.
+    :attr:`~loopy.Options.return_dict` will be set to *True*. If it is supplied,
+    :attr:`~loopy.Options.return_dict` must already be set to *True*.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
@@ -858,8 +859,18 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order
 
-    if options is None and result_is_dict:
-        options = lp.Options(return_dict=True)
+    if options is None:
+        options = lp.Options(return_dict=result_is_dict)
+    elif isinstance(options, dict):
+        from warnings import warn
+        warn("Passing a dict for options is deprecated and will stop working in "
+                "2022. Pass an actual loopy.Options object instead.",
+                DeprecationWarning, stacklevel=2)
+        options = lp.Options(**options)
+
+    if options.return_dict != result_is_dict:
+        raise ValueError("options.result_is_dict is expected to match "
+                "whether the returned value is a dictionary")
 
     state = get_initial_codegen_state(target, options)
 

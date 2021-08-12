@@ -135,13 +135,6 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
 
     result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
 
-    # Without return_dict.
-    prog = pt.generate_loopy(result, cl_device=queue.device,
-            options=lp.Options(return_dict=False))
-    _, (x_out, y_out) = prog(queue, x=x_in, y=y_in)
-    assert (x_out == x_in).all()
-    assert (y_out == y_in).all()
-
     # With return_dict.
     prog = pt.generate_loopy(result, cl_device=queue.device)
 
