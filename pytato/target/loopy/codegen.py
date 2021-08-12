@@ -859,7 +859,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     compute_order = preproc_result.compute_order
 
     if options is None and result_is_dict:
-        options = lp.Options(return_dict=True)
+        options = lp.Options(return_dict=True, no_numpy=True)
 
     state = get_initial_codegen_state(target, options)
 
