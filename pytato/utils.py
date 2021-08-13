@@ -46,13 +46,14 @@ Helper routines
 
 
 def get_shape_after_broadcasting(
-        exprs: List[Union[Array, ScalarExpression]]) -> ShapeType:
+        exprs: Sequence[Union[Array, ScalarExpression]]) -> ShapeType:
     """
     Returns the shape after broadcasting *exprs* in an operation.
     """
+    from pytato.diagnostic import CannotBroadcastError
     shapes = [expr.shape if isinstance(expr, Array) else () for expr in exprs]
 
-    result_dim = max(len(s) for s in shapes)
+    result_dim = max((len(s) for s in shapes), default=0)
 
     # append leading dimensions of all the shapes with 1's to match result_dim.
     augmented_shapes = [((1,)*(result_dim-len(s)) + s) for s in shapes]
@@ -68,8 +69,9 @@ def get_shape_after_broadcasting(
             elif are_shape_components_equal(result_axis_len, 1):
                 result_axis_len = axis_len
             else:
-                raise ValueError("operands could not be broadcasted together with "
-                                 f"shapes {' '.join(str(s) for s in shapes)}.")
+                raise CannotBroadcastError("operands could not be broadcasted "
+                                           "together with shapes "
+                                           f"{' '.join(str(s) for s in shapes)}.")
         return result_axis_len
 
     return tuple(_get_result_axis_length([s[i] for s in augmented_shapes])
