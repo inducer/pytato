@@ -643,6 +643,8 @@ def shape_to_scalar_expression(shape: ShapeType,
             result.append(
                 cgen_mapper(component, state).to_loopy_expression((), shape_context))
 
+    assert not shape_context.depends_on
+
     return tuple(result)
 
 
