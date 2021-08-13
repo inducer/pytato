@@ -113,10 +113,6 @@ class SharedLoopyExpressionContext(object):
         The set of statement IDs that need to be included in
         :attr:`loopy.InstructionBase.depends_on`.
 
-    .. attribute:: reduction_bounds
-
-        A mapping from inames to reduction bounds in the expression.
-
     .. automethod:: update_depends_on
     .. automethod:: lookup
 
