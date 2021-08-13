@@ -29,6 +29,7 @@ Pytato-specific exceptions
 --------------------------
 
 .. autoclass:: NameClashError
+.. autoclass:: CannotBroadcastError
 """
 
 
@@ -38,3 +39,7 @@ class NameClashError(RuntimeError):
     reachable in an :class:`~pytato.array.Array`'s DAG and share the same name. Here,
     we refer to 2 objects ``a`` and ``b`` as being identical iff ``a is b``.
     """
+
+
+class CannotBroadcastError(ValueError):
+    pass
