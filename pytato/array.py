@@ -563,6 +563,9 @@ class Array(Taggable):
     __sub__ = partialmethod(_binary_op, operator.sub)
     __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
 
+    __floordiv__ = partialmethod(_binary_op, operator.floordiv)
+    __rfloordiv__ = partialmethod(_binary_op, operator.floordiv, reverse=True)
+
     __truediv__ = partialmethod(_binary_op, operator.truediv,
             get_result_type=_truediv_result_type)
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
