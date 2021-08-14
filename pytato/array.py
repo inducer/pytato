@@ -815,6 +815,13 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
+    def __eq__(self, other: Any) -> bool:
+        if self is other:
+            return True
+
+        return (isinstance(other, DictOfNamedArrays)
+                and self._data == other._data)
+
 # }}}
 
 
