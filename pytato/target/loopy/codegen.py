@@ -54,7 +54,8 @@ if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
     import pyopencl
 
 __doc__ = """
-.. autoclass:: SharedLoopyExpressionContext
+.. autoclass:: PersistentExpressionContext
+.. autoclass:: LocalExpressionContext
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult
 .. autoclass:: InlinedResult
@@ -86,9 +87,11 @@ ReductionBounds = Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 # {{{ LoopyExpressionContexts
 
 @dataclasses.dataclass(init=True, repr=False, eq=False)
-class SharedLoopyExpressionContext(object):
-    """Mutable state used while generating :mod:`loopy` expressions.
-    Wraps :class:`CodeGenState` with more expression-specific information.
+class PersistentExpressionContext(object):
+    """
+    Mutable state used while generating :mod:`loopy` expressions for a
+    :class:`ImplementedResult`. Wraps :class:`CodeGenState` with more
+    expression-specific information.
 
     This data is passed through :class:`InlinedExpressionGenMapper` via arguments,
     and is also used by :meth:`ImplementedResult.to_loopy_expression` to
@@ -97,6 +100,32 @@ class SharedLoopyExpressionContext(object):
     .. attribute:: state
 
         The :class:`CodeGenState`.
+
+    .. attribute:: depends_on
+
+        The set of statement IDs that need to be included in
+        :attr:`loopy.InstructionBase.depends_on`.
+
+    .. automethod:: update_depends_on
+
+    """
+    state: CodeGenState
+    _depends_on: FrozenSet[str] = \
+            dataclasses.field(default_factory=frozenset)
+
+    @property
+    def depends_on(self) -> FrozenSet[str]:
+        return self._depends_on
+
+    def update_depends_on(self, other: FrozenSet[str]) -> None:
+        self._depends_on = self._depends_on | other
+
+
+@dataclasses.dataclass(frozen=True)
+class LocalExpressionContext:
+    """
+    Records context being to be conveyed from a parent expression to its
+    sub-expressions.
 
     .. attribute:: local_namespace
 
@@ -108,47 +137,29 @@ class SharedLoopyExpressionContext(object):
         The number of indices of the form ``_0``, ``_1``, allowed in the
         expression.
 
-    .. attribute:: depends_on
-
-        The set of statement IDs that need to be included in
-        :attr:`loopy.InstructionBase.depends_on`.
-
-    .. automethod:: update_depends_on
     .. automethod:: lookup
-
     """
-    state: CodeGenState
     num_indices: int
-    _depends_on: FrozenSet[str] = \
-            dataclasses.field(default_factory=frozenset)
-    local_namespace: Mapping[str, Array] = \
-            dataclasses.field(default_factory=dict)
+    local_namespace: Mapping[str, Array]
+    reduction_bounds: ReductionBounds
 
     def lookup(self, name: str) -> Array:
         return self.local_namespace[name]
 
-    @property
-    def depends_on(self) -> FrozenSet[str]:
-        return self._depends_on
-
-    def update_depends_on(self, other: FrozenSet[str]) -> None:
-        self._depends_on = self._depends_on | other
-
-
-@dataclasses.dataclass(frozen=True)
-class UpstreamLoopyExpressionContext:
-    """
-    Records context being to be conveyed from a parent expression to its
-    sub-expressions.
-    """
-    reduction_bounds: ReductionBounds = \
-            dataclasses.field(default_factory=dict)
-
     def copy(self, *,
-             reduction_bounds: Optional[ReductionBounds] = None
-             ) -> UpstreamLoopyExpressionContext:
-        reduction_bounds = reduction_bounds or self.reduction_bounds
-        return UpstreamLoopyExpressionContext(reduction_bounds)
+             reduction_bounds: Optional[ReductionBounds] = None,
+             num_indices: Optional[int] = None,
+             local_namespace: Optional[Mapping[str, Array]] = None,
+             ) -> LocalExpressionContext:
+        if reduction_bounds is None:
+            reduction_bounds = self.reduction_bounds
+        if num_indices is None:
+            num_indices = self.num_indices
+        if local_namespace is None:
+            local_namespace = self.local_namespace
+        return LocalExpressionContext(reduction_bounds=reduction_bounds,
+                                      num_indices=num_indices,
+                                      local_namespace=local_namespace)
 
 # }}}
 
@@ -164,7 +175,7 @@ class ImplementedResult(ABC):
 
     @abstractmethod
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: SharedLoopyExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ScalarExpression:
         """Return a :mod:`loopy` expression for this result.
 
         :param indices: symbolic expressions for the indices of the array
@@ -191,7 +202,7 @@ class StoredResult(ImplementedResult):
         self.depends_on = depends_on
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: SharedLoopyExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ScalarExpression:
         assert len(indices) == self.num_indices
         expr_context.update_depends_on(self.depends_on)
         if indices == ():
@@ -217,16 +228,8 @@ class InlinedResult(ImplementedResult):
         self.num_indices = num_indices
         self.depends_on = depends_on
 
-    @staticmethod
-    def from_loopy_expression(
-            loopy_expr: ScalarExpression,
-            loopy_expr_context: SharedLoopyExpressionContext) -> InlinedResult:
-        return InlinedResult(loopy_expr,
-                loopy_expr_context.num_indices,
-                loopy_expr_context.depends_on)
-
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: SharedLoopyExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ScalarExpression:
         assert len(indices) == self.num_indices
         substitutions = {f"_{d}": i for d, i in enumerate(indices)}
         expr_context.update_depends_on(self.depends_on)
@@ -356,13 +359,13 @@ class CodeGenMapper(Mapper):
 
         # TODO: Respect tags.
 
-        loopy_expr_context = SharedLoopyExpressionContext(state,
-                local_namespace=expr.bindings,
-                num_indices=expr.ndim)
-        loopy_expr = self.exprgen_mapper(expr.expr, loopy_expr_context)
+        shared_ctx = PersistentExpressionContext(state)
+        upstream_ctx = LocalExpressionContext(local_namespace=expr.bindings,
+                                              num_indices=expr.ndim,
+                                              reduction_bounds={})
+        loopy_expr = self.exprgen_mapper(expr.expr, shared_ctx, upstream_ctx)
 
-        result = InlinedResult.from_loopy_expression(loopy_expr,
-                loopy_expr_context)
+        result = InlinedResult(loopy_expr, expr.ndim, shared_ctx.depends_on)
         state.results[expr] = result
 
         shape_to_scalar_expression(expr.shape, self, state)  # walk over size params
@@ -469,15 +472,20 @@ class CodeGenMapper(Mapper):
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
                 pt_arg = expr.bindings[arg.name]
-                loopy_expr_context = SharedLoopyExpressionContext(state,
-                        local_namespace={}, num_indices=0)
+                shared_ctx = PersistentExpressionContext(state)
+
                 if isinstance(pt_arg, Array):
                     assert pt_arg.ndim == 0
-                    params.append(self.rec(pt_arg,
-                                           state).to_loopy_expression(
-                                               (), loopy_expr_context))
+                    pt_arg_rec = self.rec(pt_arg, state)
+                    params.append(pt_arg_rec.to_loopy_expression((), shared_ctx))
+                    depends_on.update(pt_arg_rec.depends_on)
                 else:
-                    params.append(self.exprgen_mapper(pt_arg, loopy_expr_context))
+                    upstream_ctx = LocalExpressionContext(reduction_bounds={},
+                                                          num_indices=0,
+                                                          local_namespace={})
+                    params.append(self.exprgen_mapper(pt_arg,
+                                                      shared_ctx,
+                                                      upstream_ctx))
 
         new_insn = make_assignment(
                 tuple(assignees),
@@ -532,47 +540,45 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         self.codegen_mapper = codegen_mapper
 
     def __call__(self, expr: ScalarExpression,
-                 shared_ctx: SharedLoopyExpressionContext,
-                 upstream_ctx: Optional[UpstreamLoopyExpressionContext] = None,
+                 shared_ctx: PersistentExpressionContext,
+                 upstream_ctx: Optional[LocalExpressionContext],
                  ) -> ScalarExpression:
-        if upstream_ctx is None:
-            upstream_ctx = UpstreamLoopyExpressionContext()
         return self.rec(expr, shared_ctx, upstream_ctx)
 
     def map_subscript(self, expr: prim.Subscript,
-                      shared_ctx: SharedLoopyExpressionContext,
-                      upstream_ctx: UpstreamLoopyExpressionContext,
+                      shared_ctx: PersistentExpressionContext,
+                      upstream_ctx: LocalExpressionContext,
                       ) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
         result: ImplementedResult = self.codegen_mapper(
-                shared_ctx.lookup(expr.aggregate.name), shared_ctx.state)
+                upstream_ctx.lookup(expr.aggregate.name), shared_ctx.state)
         return result.to_loopy_expression(self.rec(expr.index, shared_ctx,
                                                    upstream_ctx),
                                           shared_ctx)
 
     def map_variable(self, expr: prim.Variable,
-                     shared_ctx: SharedLoopyExpressionContext,
-                     upstream_ctx: UpstreamLoopyExpressionContext,
+                     shared_ctx: PersistentExpressionContext,
+                     upstream_ctx: LocalExpressionContext,
                      ) -> ScalarExpression:
 
         elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
         if elw_match:
             # Found an index of the form _0, _1, ...
             index = int(elw_match.group(1))
-            if not (0 <= index < shared_ctx.num_indices):
+            if not (0 <= index < upstream_ctx.num_indices):
                 raise ValueError(f"invalid index encountered: _{index}")
             return expr
         elif expr.name in upstream_ctx.reduction_bounds:
             return expr
         else:
-            array = shared_ctx.lookup(expr.name)
+            array = upstream_ctx.lookup(expr.name)
             impl_result: ImplementedResult = self.codegen_mapper(array,
                     shared_ctx.state)
             return impl_result.to_loopy_expression((), shared_ctx)
 
     def map_call(self, expr: prim.Call,
-                 shared_ctx: SharedLoopyExpressionContext,
-                 upstream_ctx: UpstreamLoopyExpressionContext
+                 shared_ctx: PersistentExpressionContext,
+                 upstream_ctx: LocalExpressionContext
                  ) -> ScalarExpression:
         if isinstance(expr.function, prim.Variable) and (
                 expr.function.name.startswith("pytato.c99.")):
@@ -584,8 +590,8 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         return super().map_call(expr, shared_ctx, upstream_ctx)
 
     def map_reduce(self, expr: scalar_expr.Reduce,
-                   shared_ctx: SharedLoopyExpressionContext,
-                   upstream_ctx: UpstreamLoopyExpressionContext
+                   shared_ctx: PersistentExpressionContext,
+                   upstream_ctx: LocalExpressionContext
                    ) -> ScalarExpression:
         from loopy.symbolic import Reduction as LoopyReduction
         state = shared_ctx.state
@@ -629,7 +635,7 @@ def shape_to_scalar_expression(shape: ShapeType,
                                cgen_mapper: CodeGenMapper,
                                state: CodeGenState
                                ) -> Tuple[ScalarExpression, ...]:
-    shape_context = SharedLoopyExpressionContext(state, num_indices=0)
+    shape_context = PersistentExpressionContext(state)
     result: List[ScalarExpression] = []
     for component in shape:
         if isinstance(component, int):
@@ -727,7 +733,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
             state.var_name_gen(f"{name}_dim{d}")
             for d in range(expr.ndim))
     indices = tuple(prim.Variable(iname) for iname in inames)
-    loopy_expr_context = SharedLoopyExpressionContext(state, num_indices=0)
+    loopy_expr_context = PersistentExpressionContext(state)
     loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
 
     # Make the instruction
