@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
-        IndexLambda, NamedArray,
+        IndexLambda, NamedArray, DataWrapper, InputArgumentBase,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -62,6 +62,7 @@ from pytato.visualization import get_dot_graph, show_dot_graph
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
+        "DataWrapper", "InputArgumentBase",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper", "einsum",
