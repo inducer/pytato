@@ -615,6 +615,24 @@ class GraphToDictMapper(Mapper):
         for c in children:
             self.graph_dict.setdefault(c, set()).add(expr)
 
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
+        children = (expr.x1, expr.x2)
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+            self.rec(c)
+
+    def map_stack(self, expr: Stack, *args: Any) -> None:
+        for c in expr.arrays:
+            self.graph_dict.setdefault(c, set()).add(expr)
+            self.rec(c)
+
+    def map_size_param(self, expr: SizeParam) -> None:
+        pass
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
     def map_slice(self, expr: Slice, *args: Any) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
@@ -701,6 +719,8 @@ class PartitionFinder(CopyMapper):
         p2 = self.get_partition_id(node2)
         crosses: bool = p1 != p2
 
+        print(crosses)
+
         return crosses
 
     def register_partition_id(self, expr: Array,
@@ -755,6 +775,30 @@ class PartitionFinder(CopyMapper):
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
+        new_bindings: Dict[str, Array] = {}
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                name = self.make_new_name()
+                if self.does_edge_cross_partition_boundary(expr, dim):
+                    self.set_partition_pair_to_edges(expr, dim, name)
+                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
+                                                          tags=dim.tags)
+                    self.cross_partition_name_to_value[name] = self.rec(dim)
+                    self.register_placeholder(name, expr, new_bindings[name])
+                else:
+                    new_bindings[name] = self.rec(dim)
+                self.register_partition_id(new_bindings[name])
+
+        self.register_partition_id(expr)
+
+        assert expr.name
+
+        return Placeholder(name=expr.name,
+                shape=new_bindings,  # FIXME: this is likely incorrect
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_matrix_product(self, expr: Placeholder, *args: Any) -> Placeholder:
         new_bindings: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
