@@ -57,6 +57,10 @@ def main():
     pfunc = partial(get_partition_id, node_to_fed_sends,
                     node_to_feeding_recvs)
 
+    print(f"{graph=}")
+    print(f"{node_to_feeding_recvs=}")
+    print(f"{node_to_fed_sends=}")
+
     pf = PartitionFinder(pfunc)
     new = pf(y)
     print(pf.partition_pair_to_edges)
@@ -82,7 +86,7 @@ def main():
     print("========")
     print(toposorted_partitions)
 
-    # # codegen
+    # codegen
     prg_per_partition = {pid:
             pt.generate_loopy(
                 pt.DictOfNamedArrays(
@@ -90,9 +94,6 @@ def main():
                         for var_name in partition_id_to_output_names[pid]
                      }))
             for pid in partitions}
-    print(f"{graph=}")
-    print(f"{node_to_feeding_recvs=}")
-    print(f"{node_to_fed_sends=}")
 
     # # execution
     # context = {}
