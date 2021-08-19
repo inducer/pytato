@@ -847,7 +847,7 @@ class PartitionFinder(CopyMapper):
                     new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_bindings[name])
+                    self.register_placeholder(name, expr, new_shapes[name])
                 else:
                     new_shapes[name] = self.rec(dim)
 
