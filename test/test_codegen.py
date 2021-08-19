@@ -135,13 +135,6 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
 
     result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
 
-    # Without return_dict.
-    prog = pt.generate_loopy(result, cl_device=queue.device,
-            options=lp.Options(return_dict=False))
-    _, (x_out, y_out) = prog(queue, x=x_in, y=y_in)
-    assert (x_out == x_in).all()
-    assert (y_out == y_in).all()
-
     # With return_dict.
     prog = pt.generate_loopy(result, cl_device=queue.device)
 
@@ -786,7 +779,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
 
 
 @pytest.mark.parametrize("axis", (None, 1, 0))
-@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod"))
+@pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod", "all", "any"))
 @pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
 def test_reductions(ctx_factory, axis, redn, shape):
     queue = cl.CommandQueue(ctx_factory())
@@ -1039,6 +1032,27 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
     np.testing.assert_allclose(np_result, pt_result, rtol=1e-6)
+
+
+def test_reduction_adds_deps(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    x_in = rng.random(10)
+    x = pt.make_data_wrapper(x_in)
+    y = 2*x
+    z = pt.sum(y)
+    pt_prg = pt.generate_loopy({"y": y, "z": z})
+
+    assert ("y_store"
+            in pt_prg.program.default_entrypoint.id_to_insn["z_store"].depends_on)
+
+    _, out_dict = pt_prg(queue)
+    np.testing.assert_allclose(np.sum(2*x_in),
+                               out_dict["z"])
 
 
 if __name__ == "__main__":
