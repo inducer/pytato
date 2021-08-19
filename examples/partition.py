@@ -30,7 +30,7 @@ def main():
 
     stack = pt.stack([array, 2*array, array + 6])
 
-    y = stack @ stack.T
+    y = 2*array
 
     gdm = GraphToDictMapper()
     gdm(y)
@@ -42,13 +42,15 @@ def main():
     node_to_feeding_recvs = {}
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
+        # FIXME: IndexLambda is just a place where the graph should be split:
         if isinstance(node, IndexLambda):
             tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
 
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
-        if isinstance(node, AxisPermutation):
+        # FIXME: IndexLambda is just a place where the graph should be split:
+        if isinstance(node, IndexLambda):
             tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
 
     from functools import partial
@@ -88,6 +90,9 @@ def main():
                         for var_name in partition_id_to_output_names[pid]
                      }))
             for pid in partitions}
+    print(f"{graph=}")
+    print(f"{node_to_feeding_recvs=}")
+    print(f"{node_to_fed_sends=}")
 
     # # execution
     # context = {}

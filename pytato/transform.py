@@ -627,6 +627,7 @@ class GraphToDictMapper(Mapper):
             self.rec(c)
 
     def map_size_param(self, expr: SizeParam) -> None:
+        # FIXME: Anything we need to do here?
         pass
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
@@ -653,6 +654,7 @@ class GraphToDictMapper(Mapper):
             self.graph_dict.setdefault(c, set()).add(expr)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+        self.graph_dict[expr] = set()  # FIXME: Is this necessary?
         return self.rec(expr, *args)
 
 
