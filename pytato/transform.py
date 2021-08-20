@@ -24,7 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
+from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
+                    List)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -566,12 +567,13 @@ class TopoSortMapper(CachedWalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self.topological_order = []
+        self.topological_order: List[Array] = []
 
-    def post_visit(self, expr: Any) -> bool:
+    def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
 # }}}
+
 
 # {{{ mapper frontends
 
