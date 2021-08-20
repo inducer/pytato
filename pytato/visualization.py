@@ -168,7 +168,8 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
     rows = ['<tr><td colspan="2" %s>%s</td></tr>'
             % (td_attrib, dot_escape(info.title))]
 
-    rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>" % (td_attrib,  "addr", td_attrib, info.addr))
+    rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>"
+                % (td_attrib,  "addr", td_attrib, info.addr))
 
     for name, field in info.fields.items():
         rows.append(
