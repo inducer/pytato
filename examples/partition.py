@@ -5,7 +5,7 @@ import numpy as np
 from pytato.transform import (GraphToDictMapper, reverse_graph, PartitionId,
                               tag_nodes_with_starting_point, PartitionFinder)
 
-from pytato.visualization import show_graph
+from pytato.visualization import show_dot_graph
 from pytato.array import Stack, AxisPermutation, IndexLambda
 
 from dataclasses import dataclass
@@ -112,6 +112,8 @@ def main():
     # print(new)
 
     show_graph(y)
+
+    show_dot_graph(y)
 
     # print("========")
     # print(pf.cross_partition_name_to_value)
