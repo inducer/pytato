@@ -560,6 +560,21 @@ class CachedWalkMapper(WalkMapper):
 # }}}
 
 
+# {{{ TopoSortMapper
+
+class TopoSortMapper(CachedWalkMapper):
+    """A mapper that creates a list of nodes in topological order."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.topological_order: List[Array] = []
+
+    def post_visit(self, expr: Any) -> None:
+        self.topological_order.append(expr)
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
