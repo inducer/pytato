@@ -278,6 +278,27 @@ def test_dict_of_named_arrays_comparison():
     assert dict1 != dict4
 
 
+def test_toposortmapper():
+    n = pt.make_size_param("n")
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    stack = pt.stack([array, 2*array, array + 6])
+    y = stack @ stack.T
+
+    tm = pt.transform.TopoSortMapper()
+    tm(y)
+
+    from pytato.array import (AxisPermutation, IndexLambda, MatrixProduct,
+                              Placeholder, SizeParam, Stack)
+
+    assert isinstance(tm.topological_order[0], SizeParam)
+    assert isinstance(tm.topological_order[1], Placeholder)
+    assert isinstance(tm.topological_order[2], IndexLambda)
+    assert isinstance(tm.topological_order[3], IndexLambda)
+    assert isinstance(tm.topological_order[4], Stack)
+    assert isinstance(tm.topological_order[5], AxisPermutation)
+    assert isinstance(tm.topological_order[6], MatrixProduct)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
