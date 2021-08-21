@@ -531,7 +531,6 @@ class WalkMapper(Mapper):
 
 
 # {{{ CachedWalkMapper
-# {{{ CachedWalkMapper
 
 class CachedWalkMapper(WalkMapper):
     """
