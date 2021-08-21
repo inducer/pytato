@@ -24,7 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
+from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
+                    List)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -48,6 +49,7 @@ __doc__ = """
 .. autoclass:: SubsetDependencyMapper
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
+.. autoclass:: TopoSortMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 
@@ -555,6 +557,21 @@ class CachedWalkMapper(WalkMapper):
         # 'AbstractResultWithNamedArrays', passed 'ArrayOrNames'
         super().rec(expr)  # type: ignore
         self._visited_ids.add(id(expr))
+
+# }}}
+
+
+# {{{ TopoSortMapper
+
+class TopoSortMapper(CachedWalkMapper):
+    """A mapper that creates a list of nodes in topological order."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.topological_order: List[Array] = []
+
+    def post_visit(self, expr: Any) -> None:
+        self.topological_order.append(expr)
 
 # }}}
 
