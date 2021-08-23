@@ -23,12 +23,16 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import islpy as isl
 import pymbolic.primitives as prim
 
 from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
                     Optional, Iterable, TypeVar)
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
-                          DtypeOrScalar, ArrayOrScalar)
+                          DtypeOrScalar, ArrayOrScalar, BasicIndex,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes,
+                          ConvertibleToIndexExpr, IndexExpr, NormalizedSlice)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES)
 from pytools import UniqueNameGenerator
@@ -282,3 +286,253 @@ def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
     return ((len(shape1) == len(shape2))
             and all(are_shape_components_equal(dim1, dim2)
                     for dim1, dim2 in zip(shape1, shape2)))
+
+
+# {{{ ShapeToISLExpressionMapper
+
+class ShapeToISLExpressionMapper(Mapper):
+    """
+    Mapper that takes a shape component and returns it as :class:`isl.Aff`.
+    """
+    def __init__(self, space: isl.Space):
+        self.cache: Dict[Array, isl.Aff] = {}
+        self.space = space
+
+    # type-ignore reason: incompatible return type with super class
+    def rec(self, expr: Array) -> isl.Aff:  # type: ignore[override]
+        if expr in self.cache:
+            return self.cache[expr]
+        result: Array = super().rec(expr)
+        self.cache[expr] = result
+        return result
+
+    def map_index_lambda(self, expr: IndexLambda) -> isl.Aff:
+        from pytato.scalar_expr import evaluate
+        return evaluate(expr.expr, {name: self.rec(val)
+                                    for name, val in expr.bindings.items()})
+
+    def map_size_param(self, expr: SizeParam) -> isl.Aff:
+        dt, pos = self.space.get_var_dict()[expr.name]
+        return isl.Aff.var_on_domain(self.space, dt, pos)
+
+
+# }}}
+
+
+def _create_size_param_space(names: Iterable[str]) -> isl.Space:
+    return isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
+                                       set=[],
+                                       params=sorted(names)).params()
+
+
+def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:
+    bset = isl.BasicSet.universe(space)
+    for name in bset.get_var_dict():
+        bset = bset.add_constraint(isl.Constraint.ineq_from_names(space, {name: 1}))
+
+    return bset
+
+
+def _is_non_negative(expr: ShapeComponent) -> bool:
+    """
+    Returns *True* iff it can be proven that ``expr >= 0``.
+    """
+    if isinstance(expr, int):
+        return expr >= 0
+
+    assert isinstance(expr, Array) and expr.shape == ()
+    from pytato.transform import InputGatherer
+    # type-ignore reason: passed Set[Optional[str]]; function expects Set[str]
+    space = _create_size_param_space({expr.name  # type: ignore
+                                      for expr in InputGatherer()(expr)})
+    aff = ShapeToISLExpressionMapper(space)(expr)
+    # type-ignore reason: mypy doesn't know comparing isl.Sets returns bool
+    return (aff.ge_set(aff * 0)  # type: ignore[no-any-return]
+            <= _get_size_params_assumptions_bset(space))
+
+
+def _is_non_positive(expr: ShapeComponent) -> bool:
+    """
+    Returns *True* iff it can be proven that ``expr <= 0``.
+    """
+    return _is_non_negative(-expr)
+
+
+# {{{ _index_into
+
+# {{{ normalized slice
+
+def _normalize_slice(slice_: slice,
+                     axis_len: ShapeComponent) -> NormalizedSlice:
+    start, stop, step = slice_.start, slice_.stop, slice_.step
+    if step is None:
+        step = 1
+    if not isinstance(step, int):
+        raise ValueError(f"slice step must be an int or 'None' (got a {type(step)})")
+    if step == 0:
+        raise ValueError("slice step cannot be zero")
+
+    if step > 0:
+        default_start: ShapeComponent = 0
+        default_stop: ShapeComponent = axis_len
+    else:
+        default_start = axis_len - 1
+        default_stop = -1
+
+    if start is None:
+        start = default_start
+    else:
+        if isinstance(axis_len, int):
+            if -axis_len <= start < axis_len:
+                start = start % axis_len
+            elif start >= axis_len:
+                if step > 0:
+                    start = axis_len
+                else:
+                    start = axis_len - 1
+            else:
+                if step > 0:
+                    start = 0
+                else:
+                    start = -1
+        else:
+            raise NotImplementedError
+
+    if stop is None:
+        stop = default_stop
+    else:
+        if isinstance(axis_len, int):
+            if -axis_len <= stop < axis_len:
+                stop = stop % axis_len
+            elif stop >= axis_len:
+                if step > 0:
+                    stop = axis_len
+                else:
+                    stop = axis_len - 1
+            else:
+                if step > 0:
+                    stop = 0
+                else:
+                    stop = -1
+        else:
+            raise NotImplementedError
+
+    return NormalizedSlice(start, stop, step)
+
+
+def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
+    start, stop, step = slice_.start, slice_.stop, slice_.step
+
+    if step > 0:
+        if _is_non_negative(stop - start):
+            return (stop - start + step - 1) // step
+        elif _is_non_positive(stop - start):
+            return 0
+        else:
+            # ISL could not ascertain the expression's sign
+            raise NotImplementedError("could not ascertain the sign of "
+                                      f"{stop-start} while computing the axis"
+                                      " length.")
+    else:
+        if _is_non_negative(start - stop):
+            return (start - stop - step - 1) // (-step)
+        elif _is_non_positive(start - stop):
+            return 0
+        else:
+            # ISL could not ascertain the expression's sign
+            raise NotImplementedError("could not ascertain the sign of "
+                                      f"{start-stop} while computing the axis"
+                                      " length.")
+
+# }}}
+
+
+def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
+    from pytato.diagnostic import CannotBroadcastError
+
+    # {{{ handle ellipsis
+
+    if indices.count(...) > 1:
+        raise IndexError("an index can only have a single ellipsis ('...')")
+
+    if indices.count(...):
+        ellipsis_pos = indices.index(...)
+        indices = (indices[:ellipsis_pos]
+                   + (slice(None, None, None),) * (ary.ndim - len(indices) + 1)
+                   + indices[ellipsis_pos+1:])
+
+    # }}}
+
+    # {{{ "pad" index with complete slices to match ary's ndim
+
+    if len(indices) < ary.ndim:
+        indices = indices + (slice(None, None, None),) * (ary.ndim - len(indices))
+
+    # }}}
+
+    if len(indices) != ary.ndim:
+        raise IndexError(f"Too many indices (expected {ary.ndim}"
+                         f", got {len(indices)})")
+
+    if any(idx is None for idx in indices):
+        raise NotImplementedError("newaxis is not supported")
+
+    # {{{ validate broadcastability of the array indices
+
+    try:
+        get_shape_after_broadcasting([idx
+                                      for idx in indices
+                                      if isinstance(idx, Array)])
+    except CannotBroadcastError as e:
+        raise IndexError(str(e))
+
+    # }}}
+
+    # {{{ validate index
+
+    for i, idx in enumerate(indices):
+        if isinstance(idx, slice):
+            pass
+        elif isinstance(idx, int):
+            if not (_is_non_negative(idx + ary.shape[i])
+                    and _is_non_negative(ary.shape[i] - 1 - idx)):
+                raise IndexError(f"{idx} is out of bounds for axis {i}")
+        elif isinstance(idx, Array):
+            if idx.dtype.kind != "i":
+                raise IndexError("only integer arrays are valid array indices")
+        else:
+            raise IndexError("only integers, slices, ellipsis and integer arrays"
+                             " are valid indices")
+
+    # }}}
+
+    # {{{ normalize slices
+
+    normalized_indices: List[IndexExpr] = [_normalize_slice(idx, axis_len)
+                                           if isinstance(idx, slice)
+                                           else idx
+                                           for idx, axis_len in zip(indices,
+                                                                    ary.shape)]
+
+    del indices
+
+    # }}}
+
+    if any(isinstance(idx, Array) for idx in normalized_indices):
+        # advanced indexing expression
+        i_adv_indices, i_basic_indices = partition(
+                                            lambda idx: isinstance(
+                                                            normalized_indices[idx],
+                                                            NormalizedSlice),
+                                            range(len(normalized_indices)))
+        if any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
+               for i_basic_idx in i_basic_indices):
+            # non contiguous advanced indices
+            return AdvancedIndexInNoncontiguousAxes(ary, tuple(normalized_indices))
+        else:
+            return AdvancedIndexInContiguousAxes(ary, tuple(normalized_indices))
+    else:
+        # basic indexing expression
+        return BasicIndex(ary, tuple(normalized_indices))
+
+# }}}

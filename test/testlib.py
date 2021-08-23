@@ -4,7 +4,7 @@ import numpy
 import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
-                          AxisPermutation, Slice, DataWrapper, Reshape,
+                          AxisPermutation, DataWrapper, Reshape,
                           Concatenate)
 
 
@@ -36,11 +36,6 @@ class NumpyBasedEvaluator(Mapper):
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Any:
         return self.np.transpose(self.rec(expr.array), expr.axes)
-
-    def map_slice(self, expr: Slice) -> Any:
-        array = self.rec(expr.array)
-        return array[tuple(slice(start, stop)
-                           for start, stop in zip(expr.starts, expr.stops))]
 
     def map_reshape(self, expr: Reshape) -> Any:
         return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)
