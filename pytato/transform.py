@@ -49,6 +49,7 @@ __doc__ = """
 .. autoclass:: SubsetDependencyMapper
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
+.. autoclass:: TopoSortMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 
