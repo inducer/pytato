@@ -1126,6 +1126,65 @@ def test_advanced_indexing_with_broadcasting(ctx_factory):
     np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
 
 
+def test_advanced_indexing_fuzz(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+    rng = default_rng(seed=0)
+
+    NSAMPLES = 50  # noqa: N806
+
+    for i in range(NSAMPLES):
+        input_ndim = rng.integers(1, 8)
+
+        # choosing shape so that the max input size is approx 20MB
+        input_shape = [rng.integers(low=1, high=10)
+                       for i in range(input_ndim)]
+
+        indirection_shape = [rng.integers(low=1, high=5)
+                             for i in range(rng.integers(1, 4))]
+
+        x_in = rng.random(input_shape, dtype=np.float32)
+        x = pt.make_data_wrapper(x_in)
+
+        n_indices = rng.integers(low=1, high=input_ndim+1)
+        np_indices = []
+
+        for i in range(n_indices):
+            axis_len = input_shape[i]
+            idx_type = rng.choice(["INT", "SLICE", "ARRAY"])
+            if idx_type == "INT":
+                if axis_len == 0:
+                    # rng.integers does not like low == high
+                    np_indices.append(0)
+                else:
+                    np_indices.append(int(rng.integers(low=-axis_len,
+                                                       high=axis_len)))
+            elif idx_type == "SLICE":
+                start, stop, step = rng.integers(low=-2*axis_len, high=2*axis_len,
+                                                 size=3)
+                step = 1 if step == 0 else step
+
+                np_indices.append(slice(int(start), int(stop), int(step)))
+            elif idx_type == "ARRAY":
+                np_indices.append(rng.integers(low=-axis_len, high=axis_len,
+                                               size=indirection_shape))
+            else:
+                raise NotImplementedError
+
+        pt_indices = [idx if isinstance(idx, (int, slice))
+                      else pt.make_data_wrapper(idx)
+                      for idx in np_indices]
+
+        evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
+
+        np.testing.assert_allclose(pt_out, x_in[tuple(np_indices)],
+                                   err_msg=(f"input_shape={input_shape}, "
+                                            f"indirection_shape={indirection_shape},"
+                                            f" indices={pt_indices}"))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
