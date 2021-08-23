@@ -1090,6 +1090,42 @@ def test_broadcast_to(ctx_factory):
                                    x_brdcst)
 
 
+def test_advanced_indexing_with_broadcasting(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    x_in = rng.random((3, 3, 3, 3))
+    idx1_in = np.array([[-1], [1]])
+    idx2_in = np.array([0, 2])
+
+    x = pt.make_data_wrapper(x_in)
+    idx1 = pt.make_data_wrapper(idx1_in)
+    idx2 = pt.make_data_wrapper(idx2_in)
+
+    # Case 1
+    evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[:, ::-1, idx1_in, idx2_in])
+
+    # Case 2
+    evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
+    np.testing.assert_allclose(pt_out, x_in[-4:4:-1, idx1_in, idx2_in, :])
+
+    # Case 3
+    evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
+    np.testing.assert_allclose(pt_out, x_in[idx1_in, idx2_in, -2::-1, :])
+
+    # Case 4 (non-contiguous advanced indices)
+    evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[:, idx1_in, -2::-1, idx2_in])
+
+    # Case 5 (non-contiguous advanced indices with ellipsis)
+    evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
