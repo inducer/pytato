@@ -563,7 +563,11 @@ class CachedWalkMapper(WalkMapper):
 # {{{ TopoSortMapper
 
 class TopoSortMapper(CachedWalkMapper):
-    """A mapper that creates a list of nodes in topological order."""
+    """A mapper that creates a list of nodes in topological order.
+
+    .. attribute:: topological_order
+        A list of all nodes in the graph in topological order.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -715,7 +719,7 @@ class PartitionFinder(CopyMapper):
     def __init__(self, get_partition_id:
                                    Callable[[Any], Any]) -> None:
         super().__init__()
-        self.get_partition_id = get_partition_id
+        self.get_partition_id_init = get_partition_id
         self.cross_partition_name_to_value: Dict[str, Array] = {}
 
         self.name_index = 0
@@ -730,6 +734,16 @@ class PartitionFinder(CopyMapper):
         self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
 
         self.var_name_to_result: Dict[str, Array] = {}
+
+
+        self.expr_to_partition_id = {}
+
+    def get_partition_id(self, expr):
+        try:
+            return self.get_partition_id_init(expr)
+        except ValueError:
+            return self.expr_to_partition_id[expr]
+
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         p1 = self.get_partition_id(node1)
@@ -755,6 +769,8 @@ class PartitionFinder(CopyMapper):
         assert pid
         self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
         self.var_name_to_result[name] = expr
+        self.expr_to_partition_id[expr] = pid
+        print("REG PH", expr, pid)
 
     def make_new_name(self) -> str:
         self.name_index += 1
@@ -804,7 +820,8 @@ class PartitionFinder(CopyMapper):
                     self.register_placeholder(name, expr, new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
-                self.register_partition_id(new_bindings[name])
+                self.register_partition_id(
+                    new_bindings[name], self.get_partition_id(dim))
 
         self.register_partition_id(expr)
 
@@ -815,7 +832,7 @@ class PartitionFinder(CopyMapper):
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_matrix_product(self, expr: Placeholder, *args: Any) -> Placeholder:
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
         new_bindings: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
@@ -830,11 +847,35 @@ class PartitionFinder(CopyMapper):
                     new_bindings[name] = self.rec(dim)
                 self.register_partition_id(new_bindings[name])
 
+        if self.does_edge_cross_partition_boundary(expr, expr.x1):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.x1, name)
+            new_x1: Array = make_placeholder(name, expr.x1.shape,
+                                                  expr.x1.dtype,
+                                                  tags=expr.x1.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.x1)
+            self.register_placeholder(name, expr, new_x1)
+        else:
+            new_x1 = self.rec(expr.x1)
+        self.register_partition_id(
+                new_x1, self.get_partition_id(expr.x1))
+
+        if self.does_edge_cross_partition_boundary(expr, expr.x2):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.x2, name)
+            new_x2: Array = make_placeholder(name, expr.x2.shape,
+                                                  expr.x2.dtype,
+                                                  tags=expr.x2.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.x2)
+            self.register_placeholder(name, expr, new_x2)
+        else:
+            new_x2 = self.rec(expr.x2)
+        self.register_partition_id(
+                new_x2, self.get_partition_id(expr.x2))
+
         self.register_partition_id(expr)
 
-        assert expr.name
-
-        return Placeholder(name=expr.name,
+        return MatrixProduct(x1=new_x1, x2=new_x2,
                 shape=new_bindings,  # FIXME: this is likely incorrect
                 dtype=expr.dtype,
                 tags=expr.tags)
@@ -853,6 +894,9 @@ class PartitionFinder(CopyMapper):
             else:
                 new_bindings[name] = self.rec(child)
 
+            self.register_partition_id(
+                new_bindings[name], self.get_partition_id(child))
+
         new_shapes: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
@@ -865,6 +909,9 @@ class PartitionFinder(CopyMapper):
                     self.register_placeholder(name, expr, new_shapes[name])
                 else:
                     new_shapes[name] = self.rec(dim)
+
+            self.register_partition_id(
+                new_shapes[name], self.get_partition_id(dim))
 
         return IndexLambda(expr=expr.expr,
                 shape=new_shapes,  # FIXME: this is likely incorrect
