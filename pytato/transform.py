@@ -736,9 +736,9 @@ class PartitionFinder(CopyMapper):
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self.expr_to_partition_id = {}  # FIXME: unused?
+        self.expr_to_partition_id: Dict[Array, PartitionId] = {}  # FIXME: unused?
 
-    def get_partition_id(self, expr):
+    def get_partition_id(self, expr: Array):
         try:
             return self.get_partition_id_init(expr)
         except ValueError:
