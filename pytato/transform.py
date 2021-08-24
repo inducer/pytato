@@ -728,7 +728,7 @@ class PartitionFinder(CopyMapper):
     """Find partitions."""
 
     def __init__(self, get_partition_id:
-                                   Callable[[Any], Any]) -> None:
+                                   Callable[[Array], PartitionId]) -> None:
         super().__init__()
         self.get_partition_id_init = get_partition_id
         self.cross_partition_name_to_value: Dict[str, Array] = {}
