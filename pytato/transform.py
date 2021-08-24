@@ -736,15 +736,13 @@ class PartitionFinder(CopyMapper):
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-
-        self.expr_to_partition_id = {}
+        self.expr_to_partition_id = {}  # FIXME: unused?
 
     def get_partition_id(self, expr):
         try:
             return self.get_partition_id_init(expr)
         except ValueError:
             return self.expr_to_partition_id[expr]
-
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         p1 = self.get_partition_id(node1)

@@ -2,11 +2,10 @@
 
 import pytato as pt
 import numpy as np
-from pytato.transform import (GraphToDictMapper, WalkMapper, TopoSortMapper,reverse_graph, PartitionId,
-                              tag_nodes_with_starting_point, PartitionFinder)
+from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
+                              PartitionFinder)
 
 from pytato.visualization import show_dot_graph
-from pytato.array import Stack, AxisPermutation, IndexLambda
 
 from dataclasses import dataclass
 
@@ -20,11 +19,10 @@ def get_partition_id(topo_list, expr) -> MyPartitionId:
     return MyPartitionId(topo_list.index(expr))
 
 
-
 def main():
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
-    stack = pt.stack([array, 2*array, array + 6])
+    # stack = pt.stack([array, 2*array, array + 6])
     # y = stack @ stack.T
     y = 2*array
 
@@ -48,14 +46,14 @@ def main():
     #     node_to_feeding_recvs.setdefault(node, set())
     #     # FIXME: IndexLambda is just a place where the graph should be split:
     #     if isinstance(node, IndexLambda):
-    #         tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
+    #        tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
 
     # node_to_fed_sends = {}
     # for node in rev_graph:
     #     node_to_fed_sends.setdefault(node, set())
     #     # FIXME: IndexLambda is just a place where the graph should be split:
     #     if isinstance(node, IndexLambda):
-    #         tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
+    #        tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
 
     # from functools import partial
     # pfunc = partial(get_partition_id, node_to_fed_sends,
@@ -66,7 +64,7 @@ def main():
     # print(f"{node_to_fed_sends=}")
 
     pf = PartitionFinder(pfunc)
-    new = pf(y)
+    pf(y)
     print(f"{pf.partition_pair_to_edges=}")
     partition_id_to_output_names = {}
     partition_id_to_input_names = {}
@@ -99,7 +97,6 @@ def main():
     print("========")
     print(f"{toposorted_partitions=}")
 
-
     for pid in partitions:
         print(pid)
 
@@ -117,7 +114,7 @@ def main():
                      }))
             for pid in partitions}
 
-    for k,p in prg_per_partition.items():
+    for k, p in prg_per_partition.items():
         print(k, p.kernel)
 
     # execution
