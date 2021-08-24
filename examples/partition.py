@@ -74,15 +74,24 @@ def main():
     partitions_dict = {}
     for (pid_producer, pid_consumer), var_names in \
             pf.partition_pair_to_edges.items():
+        print((pid_producer, pid_consumer), var_names)
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
+        if pid_producer not in partition_id_to_input_names:
+            partition_id_to_input_names[pid_producer] = []
+        if pid_producer not in partition_id_to_output_names:
+            partition_id_to_output_names[pid_producer] = []
+        if pid_consumer not in partition_id_to_input_names:
+            partition_id_to_input_names[pid_consumer] = []
+        if pid_consumer not in partition_id_to_output_names:
+            partition_id_to_output_names[pid_consumer] = []
         # FIXME?: Does this need to store *all* connected nodes?:
         partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
                 pid_producer, []).append(var_name)
             partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
-            print(var_name)
+            # print(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partitions_dict)
@@ -108,12 +117,15 @@ def main():
                      }))
             for pid in partitions}
 
-    # # # execution
-    # # context = {}
-    # # for pid in topsorted_partitions:
-    # #     # find names that are needed
-    # #     inputs = {...}
-    # #     context.update(prg_per_partition[f](**inputs))
+    for k,p in prg_per_partition.items():
+        print(k, p.kernel)
+
+    # execution
+    context = {}
+    for pid in toposorted_partitions:
+        # find names that are needed
+        inputs = {...}
+        context.update(prg_per_partition[f](**inputs))
 
     # # print(new)
 
