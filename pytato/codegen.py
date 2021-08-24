@@ -429,7 +429,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
     """
     if not isinstance(result, (Array, DictOfNamedArrays, dict)):
         raise TypeError("outputs of the computation should be "
-                "either an Array or a DictOfNamedArrays")
+               f"either an Array or a DictOfNamedArrays, not {type(result)}.")
 
     if isinstance(result, Array):
         outputs = DictOfNamedArrays({"_pt_out": result})

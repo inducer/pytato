@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import pytato as pt
+import pyopencl as cl
 import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
                               PartitionFinder)
@@ -20,11 +21,14 @@ def get_partition_id(topo_list, expr) -> MyPartitionId:
 
 
 def main():
-    n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    x_in = np.random.randn(20, 10)
+
+    x = pt.make_data_wrapper(x_in)
+    # n = pt.make_size_param("n")
+    # array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     # stack = pt.stack([array, 2*array, array + 6])
     # y = stack @ stack.T
-    y = 2*array
+    y = 2*x
 
     gdm = GraphToDictMapper()
     gdm(y)
@@ -33,6 +37,9 @@ def main():
     tm(y)
 
     print(tm.topological_order)
+    # show_dot_graph(y)
+
+    # 1/0
 
     from functools import partial
     pfunc = partial(get_partition_id, tm.topological_order)
@@ -114,19 +121,31 @@ def main():
                      }))
             for pid in partitions}
 
-    for k, p in prg_per_partition.items():
-        print(k, p.kernel)
+    # for k, p in prg_per_partition.items():
+    #     print(k, p.kernel)
 
     # execution
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+
     context = {}
     for pid in toposorted_partitions:
         # find names that are needed
-        inputs = {...}
-        context.update(prg_per_partition[f](**inputs))
+        # inputs = {...}
+        print(prg_per_partition[pid])
+        pt.generate_loopy(prg_per_partition[pid], cl_device=queue.device)
+
+
+    prg = pt.generate_loopy(y, cl_device=queue.device)
+
+    evt, (out,) = prg(queue)
+    evt.wait()
+
+    print(out)
 
     # # print(new)
 
-    show_dot_graph(y)
+    # show_dot_graph(y)
 
     # print("========")
     # print(pf.cross_partition_name_to_value)

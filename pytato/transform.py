@@ -748,20 +748,14 @@ class PartitionFinder(CopyMapper):
 
         self.expr_to_partition_id: Dict[Array, PartitionId] = {}  # FIXME: unused?
 
-    def get_partition_id(self, expr: Array):
+    def get_partition_id(self, expr: Array) -> PartitionId:
         try:
             return self.get_partition_id_init(expr)
         except ValueError:
             return self.expr_to_partition_id[expr]
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
-        p1 = self.get_partition_id(node1)
-        p2 = self.get_partition_id(node2)
-        crosses: bool = p1 != p2
-
-        print(crosses)
-
-        return crosses
+        return self.get_partition_id(node1) != self.get_partition_id(node2)
 
     def register_partition_id(self, expr: Array,
                               pid: Optional[PartitionId] = None) -> None:
@@ -919,8 +913,8 @@ class PartitionFinder(CopyMapper):
                 else:
                     new_shapes[name] = self.rec(dim)
 
-            self.register_partition_id(
-                new_shapes[name], self.get_partition_id(dim))
+                self.register_partition_id(
+                    new_shapes[name], self.get_partition_id(dim))
 
         return IndexLambda(expr=expr.expr,
                 shape=new_shapes,  # FIXME: this is likely incorrect
