@@ -658,6 +658,16 @@ class GraphToDictMapper(Mapper):
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
+    def map_data_wrapper(self, expr: DataWrapper) -> None:
+        if isinstance(expr.data, Array):
+            self.graph_dict.setdefault(expr.data, set()).add(expr)
+            self.rec(expr.data)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.graph_dict.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
         children: Set[Array] = set()
 
