@@ -121,8 +121,6 @@ def main():
                      }))
             for pid in partitions}
 
-    # for k, p in prg_per_partition.items():
-    #     print(k, p.kernel)
 
     # execution
     ctx = cl.create_some_context()
@@ -132,23 +130,12 @@ def main():
     for pid in toposorted_partitions:
         # find names that are needed
         # inputs = {...}
-        print(prg_per_partition[pid])
-        pt.generate_loopy(prg_per_partition[pid], cl_device=queue.device)
+        # prg_per_partition[f](**inputs)
+        res = prg_per_partition[pid](queue)
 
+        context.update(res[1])
 
-    prg = pt.generate_loopy(y, cl_device=queue.device)
-
-    evt, (out,) = prg(queue)
-    evt.wait()
-
-    print(out)
-
-    # # print(new)
-
-    # show_dot_graph(y)
-
-    # print("========")
-    # print(pf.cross_partition_name_to_value)
+    print(context)
 
 
 if __name__ == "__main__":
