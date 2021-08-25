@@ -6,7 +6,7 @@ import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
                               PartitionFinder)
 
-from pytato.visualization import show_dot_graph
+# from pytato.visualization import show_dot_graph
 
 from dataclasses import dataclass
 
@@ -120,7 +120,6 @@ def main():
                         for var_name in partition_id_to_output_names[pid]
                      }))
             for pid in partitions}
-
 
     # execution
     ctx = cl.create_some_context()

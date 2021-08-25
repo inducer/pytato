@@ -831,12 +831,12 @@ class PartitionFinder(CopyMapper):
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=new_bindings,  # FIXME: this is likely incorrect
+                shape=new_bindings,  # type: ignore # FIXME: this is likely incorrect
                 dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: Dict[str, Array] = {}  # FIXME: unused
         for dim in expr.shape:
             if isinstance(dim, Array):
                 name = self.make_new_name()
@@ -879,8 +879,6 @@ class PartitionFinder(CopyMapper):
         self.register_partition_id(expr)
 
         return MatrixProduct(x1=new_x1, x2=new_x2,
-                shape=new_bindings,  # FIXME: this is likely incorrect
-                dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
@@ -917,7 +915,7 @@ class PartitionFinder(CopyMapper):
                     new_shapes[name], self.get_partition_id(dim))
 
         return IndexLambda(expr=expr.expr,
-                shape=new_shapes,  # FIXME: this is likely incorrect
+                shape=new_shapes,  # type: ignore # FIXME: this is likely incorrect
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
