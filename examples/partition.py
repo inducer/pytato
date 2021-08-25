@@ -4,7 +4,7 @@ import pytato as pt
 import pyopencl as cl
 import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
-                              PartitionFinder, find_partitions)
+                              find_partitions)
 
 # from pytato.visualization import show_dot_graph
 

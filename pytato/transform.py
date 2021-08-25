@@ -924,16 +924,16 @@ class PartitionFinder(CopyMapper):
         return self.rec(expr)
 
 
-def find_partitions(expr, part_func) -> Any:
+def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> Any:
     """Find partitions."""
 
     pf = PartitionFinder(part_func)
     pf(expr)
     # print(f"{pf.partition_pair_to_edges=}")
-    partition_id_to_output_names = {}
-    partition_id_to_input_names = {}
+    partition_id_to_output_names: Dict[PartitionId, List[str]] = {}
+    partition_id_to_input_names: Dict[PartitionId, List[str]] = {}
     partitions = set()
-    partitions_dict = {}
+    partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
     for (pid_producer, pid_consumer), var_names in \
             pf.partition_pair_to_edges.items():
         # print((pid_producer, pid_consumer), var_names)

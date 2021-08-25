@@ -1060,7 +1060,6 @@ def test_partitionfinder(ctx_factory):
     x = pt.make_data_wrapper(x_in)
     y = 2*x
 
-
     from dataclasses import dataclass
     from pytato.transform import (TopoSortMapper, PartitionId,
                                   find_partitions)
@@ -1098,6 +1097,7 @@ def test_partitionfinder(ctx_factory):
     evt, (out,) = prg(queue)
 
     np.testing.assert_allclose(out, context["placeholder_1"])
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
