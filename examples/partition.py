@@ -70,18 +70,19 @@ def main():
     # print(f"{node_to_feeding_recvs=}")
     # print(f"{node_to_fed_sends=}")
 
-    toposorted_partitions, prg_per_partition = find_partitions(y, pfunc)
+    toposorted_partitions, prg_per_partition, _, _ = find_partitions(
+        y, pfunc)
 
     # execution
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = {}
+    context = {"queue": queue}
     for pid in toposorted_partitions:
         # find names that are needed
         # inputs = {...}
         # prg_per_partition[f](**inputs)
-        res = prg_per_partition[pid](queue)
+        res = prg_per_partition[pid](**context)
 
         context.update(res[1])
 

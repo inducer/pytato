@@ -615,6 +615,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 class GraphToDictMapper(Mapper):
     """
     Maps a graph to a dictionary representation.
+
     .. attribute:: graph_dict
         :class:`dict`, maps each node in the graph to the set of directly connected
         nodes, obeying the direction of each edge.
@@ -967,7 +968,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
     # for i in partition_id_to_output_names:
     #     print(i)
 
-    # print(partition_id_to_output_names)
+    print(partition_id_to_input_names)
+    print(partition_id_to_output_names)
 
     # codegen
     from pytato import generate_loopy
@@ -979,7 +981,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
                      }))
             for pid in partitions}
 
-    return toposorted_partitions, prg_per_partition
+    return (toposorted_partitions, prg_per_partition,
+            partition_id_to_input_names, partition_id_to_output_names)
 
 # }}}
 

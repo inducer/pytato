@@ -1077,26 +1077,29 @@ def test_partitionfinder(ctx_factory):
     from functools import partial
     part_func = partial(get_partition_id, tm.topological_order)
 
-    toposorted_partitions, prg_per_partition = find_partitions(y, part_func)
+    toposorted_partitions, prg_per_partition, _, partition_id_to_output_names \
+        = find_partitions(y, part_func)
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     # Execute the partitioned code
-    context = {}
+    context = {"queue": queue}
     for pid in toposorted_partitions:
         # find names that are needed
         # inputs = {...}
         # prg_per_partition[f](**inputs)
-        res = prg_per_partition[pid](queue)
+        res = prg_per_partition[pid](**context)
 
         context.update(res[1])
+
+    final_res = context[partition_id_to_output_names[toposorted_partitions[-1]][0]]
 
     # Execute the non-partitioned code for comparison
     prg = pt.generate_loopy(y)
     evt, (out,) = prg(queue)
 
-    np.testing.assert_allclose(out, context["placeholder_1"])
+    np.testing.assert_allclose(out, final_res)
 
 
 if __name__ == "__main__":
