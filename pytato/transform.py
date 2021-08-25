@@ -923,6 +923,64 @@ class PartitionFinder(CopyMapper):
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
         return self.rec(expr)
 
+
+def find_partitions(expr, part_func) -> Any:
+    """Find partitions."""
+
+    pf = PartitionFinder(part_func)
+    pf(expr)
+    # print(f"{pf.partition_pair_to_edges=}")
+    partition_id_to_output_names = {}
+    partition_id_to_input_names = {}
+    partitions = set()
+    partitions_dict = {}
+    for (pid_producer, pid_consumer), var_names in \
+            pf.partition_pair_to_edges.items():
+        # print((pid_producer, pid_consumer), var_names)
+        partitions.add(pid_producer)
+        partitions.add(pid_consumer)
+        if pid_producer not in partition_id_to_input_names:
+            partition_id_to_input_names[pid_producer] = []
+        if pid_producer not in partition_id_to_output_names:
+            partition_id_to_output_names[pid_producer] = []
+        if pid_consumer not in partition_id_to_input_names:
+            partition_id_to_input_names[pid_consumer] = []
+        if pid_consumer not in partition_id_to_output_names:
+            partition_id_to_output_names[pid_consumer] = []
+        # FIXME?: Does this need to store *all* connected nodes?:
+        partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
+        for var_name in var_names:
+            partition_id_to_output_names.setdefault(
+                pid_producer, []).append(var_name)
+            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+            # print(var_name)
+
+    from pytools.graph import compute_topological_order
+    toposorted_partitions = compute_topological_order(partitions_dict)
+
+    # print("========")
+    # print(f"{toposorted_partitions=}")
+
+    # for pid in partitions:
+    #     print(pid)
+
+    # for i in partition_id_to_output_names:
+    #     print(i)
+
+    # print(partition_id_to_output_names)
+
+    # codegen
+    from pytato import generate_loopy
+    prg_per_partition = {pid:
+            generate_loopy(
+                DictOfNamedArrays(
+                    {var_name: pf.var_name_to_result[var_name]
+                        for var_name in partition_id_to_output_names[pid]
+                     }))
+            for pid in partitions}
+
+    return toposorted_partitions, prg_per_partition
+
 # }}}
 
 # vim: foldmethod=marker

@@ -284,7 +284,9 @@ def test_toposortmapper():
     stack = pt.stack([array, 2*array, array + 6])
     y = stack @ stack.T
 
-    tm = pt.transform.TopoSortMapper()
+    from pytato.transform import TopoSortMapper
+
+    tm = TopoSortMapper()
     tm(y)
 
     from pytato.array import (AxisPermutation, IndexLambda, MatrixProduct,

@@ -1055,6 +1055,50 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
+def test_partitionfinder(ctx_factory):
+    x_in = np.random.randn(20, 10)
+    x = pt.make_data_wrapper(x_in)
+    y = 2*x
+
+
+    from dataclasses import dataclass
+    from pytato.transform import (TopoSortMapper, PartitionId,
+                                  find_partitions)
+
+    @dataclass(frozen=True, eq=True)
+    class MyPartitionId(PartitionId):
+        num: int
+
+    def get_partition_id(topo_list, expr) -> MyPartitionId:
+        return MyPartitionId(topo_list.index(expr))
+
+    tm = TopoSortMapper()
+    tm(y)
+
+    from functools import partial
+    part_func = partial(get_partition_id, tm.topological_order)
+
+    toposorted_partitions, prg_per_partition = find_partitions(y, part_func)
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # Execute the partitioned code
+    context = {}
+    for pid in toposorted_partitions:
+        # find names that are needed
+        # inputs = {...}
+        # prg_per_partition[f](**inputs)
+        res = prg_per_partition[pid](queue)
+
+        context.update(res[1])
+
+    # Execute the non-partitioned code for comparison
+    prg = pt.generate_loopy(y)
+    evt, (out,) = prg(queue)
+
+    np.testing.assert_allclose(out, context["placeholder_1"])
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
