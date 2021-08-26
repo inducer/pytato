@@ -1102,6 +1102,17 @@ def test_partitionfinder(ctx_factory):
     np.testing.assert_allclose(out, final_res)
 
 
+def test_loopy_target_doesnot_take_arbit_args(ctx_factory):
+    # see https://github.com/inducer/pytato/issues/142
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    pt_prg = pt.generate_loopy(pt.zeros(10))
+
+    with pytest.raises(ValueError):
+        evt, (out, ) = pt_prg(cq, d="pytato_is_buggy")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
