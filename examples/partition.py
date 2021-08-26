@@ -21,14 +21,9 @@ def get_partition_id(topo_list, expr) -> MyPartitionId:
 
 
 def main():
-    x_in = np.random.randn(20, 10)
-
+    x_in = np.random.randn(20, 20)
     x = pt.make_data_wrapper(x_in)
-    # n = pt.make_size_param("n")
-    # array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
-    # stack = pt.stack([array, 2*array, array + 6])
-    # y = stack @ stack.T
-    y = 2*x
+    y = pt.stack([x@x.T, 2*x, x + 6])
 
     gdm = GraphToDictMapper()
     gdm(y)
@@ -70,8 +65,8 @@ def main():
     # print(f"{node_to_feeding_recvs=}")
     # print(f"{node_to_fed_sends=}")
 
-    toposorted_partitions, prg_per_partition, _, _ = find_partitions(
-        y, pfunc)
+    (toposorted_partitions, prg_per_partition, _, partition_id_to_output_names) = \
+        find_partitions(y, pfunc)
 
     # execution
     ctx = cl.create_some_context()
@@ -86,7 +81,15 @@ def main():
 
         context.update(res[1])
 
-    print(context)
+    prg = pt.generate_loopy(y)
+    evt, (out, ) = prg(queue)
+
+    # print(out)
+
+    final_res = context[partition_id_to_output_names[toposorted_partitions[-1]][0]]
+    # print(final_res)
+
+    assert np.allclose(out, final_res)
 
 
 if __name__ == "__main__":

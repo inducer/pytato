@@ -790,6 +790,30 @@ class PartitionFinder(CopyMapper):
         self.partition_pair_to_edges.setdefault(
                 (p1, p2), list()).append(name)
 
+    def map_stack(self, expr: Stack, *args: Any) -> Stack:
+        new_bindings: Dict[str, Array] = {}
+        for c in expr.arrays:
+            if self.does_edge_cross_partition_boundary(expr, c):
+                name = self.make_new_name()
+                self.set_partition_pair_to_edges(expr, c, name)
+                new_bindings[name] = make_placeholder(name, c.shape,
+                                                    c.dtype,
+                                                    tags=c.tags)
+                self.cross_partition_name_to_value[name] = self.rec(c)
+                self.register_placeholder(name, expr, new_bindings[name])
+            else:
+                new_bindings[name] = self.rec(c)
+            self.register_partition_id(
+                    new_bindings[name], self.get_partition_id(c))
+
+        self.register_partition_id(expr)
+
+        return Stack(
+                     # FIXME: this is likely incorrect due to wrong type:
+                     arrays=new_bindings,  # type: ignore
+                     axis=expr.axis,
+                     tags=expr.tags)
+
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
@@ -832,7 +856,8 @@ class PartitionFinder(CopyMapper):
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=new_bindings,  # type: ignore # FIXME: this is likely incorrect
+                # FIXME: this is likely incorrect due to wrong type:
+                shape=new_bindings,  # type: ignore
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -916,7 +941,8 @@ class PartitionFinder(CopyMapper):
                     new_shapes[name], self.get_partition_id(dim))
 
         return IndexLambda(expr=expr.expr,
-                shape=new_shapes,  # type: ignore # FIXME: this is likely incorrect
+                # FIXME: this is likely incorrect due to wrong type:
+                shape=new_shapes,  # type: ignore
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
@@ -968,8 +994,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
     # for i in partition_id_to_output_names:
     #     print(i)
 
-    print(partition_id_to_input_names)
-    print(partition_id_to_output_names)
+    print(f"{partition_id_to_input_names=}")
+    print(f"{partition_id_to_output_names=}")
 
     # codegen
     from pytato import generate_loopy
