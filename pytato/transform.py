@@ -652,6 +652,10 @@ class GraphToDictMapper(Mapper):
             self.graph_dict.setdefault(c, set()).add(expr)
             self.rec(c)
 
+    def map_roll(self, expr: Roll, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
     def map_size_param(self, expr: SizeParam) -> None:
         # FIXME: Anything we need to do here?
         pass
@@ -842,6 +846,27 @@ class PartitionFinder(CopyMapper):
                      arrays=new_bindings,  # type: ignore
                      axis=expr.axis,
                      tags=expr.tags)
+
+    def map_roll(self, expr: Roll, *args: Any) -> Roll:
+        if self.does_edge_cross_partition_boundary(expr, expr.array):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.array, name)
+            new_binding: Array = make_placeholder(name, expr.array.shape,
+                                                  expr.array.dtype,
+                                                  tags=expr.array.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.array)
+            self.register_placeholder(name, expr, new_binding)
+        else:
+            new_binding = self.rec(expr.array)
+            self.register_partition_id(
+                new_binding, self.get_partition_id(expr.array))
+
+        self.register_partition_id(expr)
+
+        return Roll(array=new_binding,
+                shift=expr.shift,
+                axis=expr.axis,
+                tags=expr.tags)
 
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         if self.does_edge_cross_partition_boundary(expr, expr.array):

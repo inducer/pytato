@@ -24,6 +24,7 @@ def main():
     x_in = np.random.randn(20, 20)
     x = pt.make_data_wrapper(x_in)
     y = pt.stack([x@x.T, 2*x, x + 6])
+    y = pt.roll(y, shift=1, axis=1)
 
     gdm = GraphToDictMapper()
     gdm(y)
