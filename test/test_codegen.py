@@ -1084,12 +1084,12 @@ def test_partitionfinder(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     # Execute the partitioned code
-    context = {"queue": queue}
+    context = {}
     for pid in toposorted_partitions:
         # find names that are needed
-        # inputs = {...}
+        inputs = {"queue": queue}
         # prg_per_partition[f](**inputs)
-        res = prg_per_partition[pid](**context)
+        res = prg_per_partition[pid](**inputs)
 
         context.update(res[1])
 

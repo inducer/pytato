@@ -72,9 +72,9 @@ def main():
     context = {"queue": queue}
     for pid in toposorted_partitions:
         # find names that are needed
-        # inputs = {...}
+        inputs = {"queue": queue}
         # prg_per_partition[f](**inputs)
-        res = prg_per_partition[pid](**context)
+        res = prg_per_partition[pid](**inputs)
 
         context.update(res[1])
 
