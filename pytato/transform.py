@@ -642,6 +642,11 @@ class GraphToDictMapper(Mapper):
             self.graph_dict.setdefault(c, set()).add(expr)
             self.rec(c)
 
+    def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
+        for c in expr.arrays:
+            self.graph_dict.setdefault(c, set()).add(expr)
+            self.rec(c)
+
     def map_stack(self, expr: Stack, *args: Any) -> None:
         for c in expr.arrays:
             self.graph_dict.setdefault(c, set()).add(expr)
@@ -789,6 +794,30 @@ class PartitionFinder(CopyMapper):
 
         self.partition_pair_to_edges.setdefault(
                 (p1, p2), list()).append(name)
+
+    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
+        new_bindings: Dict[str, Array] = {}
+        for c in expr.arrays:
+            if self.does_edge_cross_partition_boundary(expr, c):
+                name = self.make_new_name()
+                self.set_partition_pair_to_edges(expr, c, name)
+                new_bindings[name] = make_placeholder(name, c.shape,
+                                                    c.dtype,
+                                                    tags=c.tags)
+                self.cross_partition_name_to_value[name] = self.rec(c)
+                self.register_placeholder(name, expr, new_bindings[name])
+            else:
+                new_bindings[name] = self.rec(c)
+            self.register_partition_id(
+                    new_bindings[name], self.get_partition_id(c))
+
+        self.register_partition_id(expr)
+
+        return Concatenate(
+                     # FIXME: this is likely incorrect due to wrong type:
+                     arrays=new_bindings,  # type: ignore
+                     axis=expr.axis,
+                     tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         new_bindings: Dict[str, Array] = {}

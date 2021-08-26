@@ -32,9 +32,6 @@ def main():
     tm(y)
 
     print(tm.topological_order)
-    # show_dot_graph(y)
-
-    # 1/0
 
     from functools import partial
     pfunc = partial(get_partition_id, tm.topological_order)
