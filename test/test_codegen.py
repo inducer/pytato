@@ -1077,7 +1077,8 @@ def test_partitionfinder(ctx_factory):
     from functools import partial
     part_func = partial(get_partition_id, tm.topological_order)
 
-    toposorted_partitions, prg_per_partition, _, partition_id_to_output_names \
+    (toposorted_partitions, prg_per_partition,
+    partition_id_to_input_names, partition_id_to_output_names) \
         = find_partitions(y, part_func)
 
     ctx = ctx_factory()
@@ -1088,6 +1089,9 @@ def test_partitionfinder(ctx_factory):
     for pid in toposorted_partitions:
         # find names that are needed
         inputs = {"queue": queue}
+        for k in partition_id_to_input_names[pid]:
+            if k in context:
+                inputs[k] = context[k]
         # prg_per_partition[f](**inputs)
         res = prg_per_partition[pid](**inputs)
 
