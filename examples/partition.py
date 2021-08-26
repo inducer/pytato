@@ -25,6 +25,7 @@ def main():
     x = pt.make_data_wrapper(x_in)
     y = pt.stack([x@x.T, 2*x, x + 6])
     y = pt.roll(y, shift=1, axis=1)
+    y = pt.reshape(y, newshape=(-1,))
 
     gdm = GraphToDictMapper()
     gdm(y)

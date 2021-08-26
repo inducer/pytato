@@ -625,6 +625,10 @@ class GraphToDictMapper(Mapper):
         """Initialize the GraphToDictMapper."""
         self.graph_dict: Dict[Array, Set[Array]] = {}
 
+    def map_reshape(self, expr: Reshape, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
     def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
         children: Set[Array] = set()
 
@@ -798,6 +802,27 @@ class PartitionFinder(CopyMapper):
 
         self.partition_pair_to_edges.setdefault(
                 (p1, p2), list()).append(name)
+
+    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
+        if self.does_edge_cross_partition_boundary(expr, expr.array):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.array, name)
+            new_binding: Array = make_placeholder(name, expr.array.shape,
+                                                  expr.array.dtype,
+                                                  tags=expr.array.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.array)
+            self.register_placeholder(name, expr, new_binding)
+        else:
+            new_binding = self.rec(expr.array)
+            self.register_partition_id(
+                new_binding, self.get_partition_id(expr.array))
+
+        self.register_partition_id(expr)
+
+        return Reshape(array=new_binding,
+                newshape=expr.newshape,
+                order=expr.order,
+                tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         new_bindings: Dict[str, Array] = {}
