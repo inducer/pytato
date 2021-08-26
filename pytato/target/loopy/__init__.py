@@ -37,10 +37,9 @@ __doc__ = """
 import sys
 from dataclasses import dataclass
 
-from typing import Any, Mapping, Optional, Union, Callable, FrozenSet
+from typing import Any, Mapping, Optional, Union, Callable
 
 from pytato.target import Target, BoundProgram
-from pytools import memoize_method
 
 import loopy
 
@@ -83,12 +82,9 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         return lp.PyOpenCLTarget(self.device)
 
     def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
-                     bound_arguments: Mapping[str, Any],
-                     valid_arguments: FrozenSet[str]
-                     ) -> BoundProgram:
+            bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
                 bound_arguments=bound_arguments,
-                valid_arguments=valid_arguments,
                 target=self)
 
 
@@ -104,7 +100,6 @@ class BoundPyOpenCLProgram(BoundProgram):
     def copy(self, *,
              program: Optional[loopy.TranslationUnit] = None,
              bound_arguments: Optional[Mapping[str, Any]] = None,
-             valid_arguments: Optional[FrozenSet[str]] = None,
              target: Optional[Target] = None
              ) -> BoundPyOpenCLProgram:
         if program is None:
@@ -113,15 +108,11 @@ class BoundPyOpenCLProgram(BoundProgram):
         if bound_arguments is None:
             bound_arguments = self.bound_arguments
 
-        if valid_arguments is None:
-            valid_arguments = self.valid_arguments
-
         if target is None:
             target = self.target
 
         return BoundPyOpenCLProgram(program=program,
                                     bound_arguments=bound_arguments,
-                                    valid_arguments=valid_arguments,
                                     target=target)
 
     def with_transformed_program(self, f: Callable[[loopy.TranslationUnit],
@@ -132,12 +123,6 @@ class BoundPyOpenCLProgram(BoundProgram):
         """
         return self.copy(program=f(self.program))
 
-    @memoize_method
-    def _validate_args(self, passed_arg_names: FrozenSet[str]) -> None:
-        if not (passed_arg_names <= self.valid_arguments):
-            raise ValueError("Unexpected arguments passed:"
-                             f" '{passed_arg_names - self.valid_arguments}'")
-
     def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
                  allocator=None, wait_for=None, out_host=None,
                  entrypoint="_pt_kernel",
@@ -147,8 +132,6 @@ class BoundPyOpenCLProgram(BoundProgram):
         if set(kwargs.keys()) & set(self.bound_arguments.keys()):
             raise ValueError("Got arguments that were previously bound: "
                     f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
-
-        self._validate_args(frozenset(kwargs.keys()))
 
         updated_kwargs = dict(self.bound_arguments)
         updated_kwargs.update(kwargs)
