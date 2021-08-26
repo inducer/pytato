@@ -32,7 +32,7 @@ import re
 import pytato.scalar_expr as scalar_expr
 import pymbolic.primitives as prim
 from pymbolic import var
-
+import typing
 from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
                     Any, List)
 
@@ -881,7 +881,10 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     return target.bind_program(
             program=program,
-            bound_arguments=preproc_result.bound_arguments)
+            bound_arguments=preproc_result.bound_arguments,
+            valid_arguments=typing.cast(FrozenSet[str],
+                                        frozenset({inp.name
+                                                   for inp in ing(outputs)})))
 
 # }}}
 
