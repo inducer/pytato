@@ -33,7 +33,7 @@ Code Generation Targets
 """
 
 from dataclasses import dataclass
-from typing import Any, Mapping, FrozenSet
+from typing import Any, Mapping
 
 
 class Target:
@@ -43,9 +43,7 @@ class Target:
     """
 
     def bind_program(self, program: Any,
-                     bound_arguments: Mapping[str, Any],
-                     valid_arguments: FrozenSet[str]
-                     ) -> BoundProgram:
+            bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """Create a :class:`BoundProgram` for this code generation target.
 
         :param program: the :mod:`loopy` program
@@ -71,10 +69,6 @@ class BoundProgram:
 
         A map from names to pre-bound kernel arguments.
 
-    .. attribute:: valid_arguments
-
-        A :class:`frozenset` of argument names that could be passed in.
-
     .. method:: __call__
 
         It is expected that every concrete subclass of this class
@@ -85,7 +79,6 @@ class BoundProgram:
     program: Any
     bound_arguments: Mapping[str, Any]
     target: Target
-    valid_arguments: FrozenSet[str]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
