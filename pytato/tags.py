@@ -94,3 +94,16 @@ class PrefixNamed(_BaseNameTag):
     prefix: str
 
 # }}}
+
+
+# {{{ User operation name
+
+class UserOpInfo(UniqueTag):
+    pass
+
+
+@tag_dataclass
+class EinsumInfo(UserOpInfo):
+    spec: str
+
+# }}}

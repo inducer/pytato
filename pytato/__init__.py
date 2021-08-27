@@ -27,6 +27,7 @@ THE SOFTWARE.
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
         IndexLambda, NamedArray, DataWrapper, InputArgumentBase, Reshape,
+        Einsum,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -68,7 +69,7 @@ import pytato.transform as transform
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
-        "DataWrapper", "InputArgumentBase", "Reshape",
+        "DataWrapper", "InputArgumentBase", "Reshape", "Einsum",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper", "einsum",
