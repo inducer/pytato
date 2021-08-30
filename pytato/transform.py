@@ -625,7 +625,22 @@ class GraphToDictMapper(Mapper):
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
-        self.graph_dict: Dict[Array, Set[Array]] = {}
+        self.graph_dict: Dict[Any, Set[Any]] = {}
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
+        for child in expr._data.values():
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+    def map_named_array(self, expr: NamedArray, *args: Any) -> None:
+        self.graph_dict.setdefault(expr._container, set()).add(expr)
+        self.rec(expr._container)
+
+    def map_loopy_call(self, expr: LoopyCall, *args: Any) -> None:
+        for _, child in sorted(expr.bindings.items()):
+            if isinstance(child, Array):
+                self.graph_dict.setdefault(child, set()).add(expr)
+                self.rec(child)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> None:
         for arg in expr.args:
