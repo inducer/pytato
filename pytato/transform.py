@@ -500,6 +500,8 @@ class WalkMapper(Mapper):
             if isinstance(dim, Array):
                 self.rec(dim)
 
+        self.post_visit(expr)
+
     def map_loopy_call(self, expr: LoopyCall) -> None:
         if not self.visit(expr):
             return
