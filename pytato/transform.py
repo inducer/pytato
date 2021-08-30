@@ -529,6 +529,22 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.data)
+
+        self.post_visit(expr)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.data)
+
+        self.post_visit(expr)
+
 # }}}
 
 
@@ -718,6 +734,14 @@ class GraphToDictMapper(Mapper):
 
         for c in children:
             self.graph_dict.setdefault(c, set()).add(expr)
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.data, set()).add(expr)
+        self.rec(expr.data)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.data, set()).add(expr)
+        self.rec(expr.data)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         self.graph_dict[expr] = set()  # FIXME: Is this necessary?
@@ -1071,6 +1095,40 @@ class PartitionFinder(CopyMapper):
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> DistributedSend:
+        from pytato import DistributedSend
+        if self.does_edge_cross_partition_boundary(expr, expr.data):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.data, name)
+            new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.
+                                           dtype, tags=expr.data.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.data)
+            self.register_placeholder(name, expr, new_binding)
+        else:
+            new_binding = self.rec(expr.data)
+            self.register_partition_id(new_binding, self.get_partition_id(expr.data))
+
+        self.register_partition_id(expr)
+
+        return DistributedSend(new_binding)  # FIXME: Return Placeholder instead?
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> DistributedRecv:
+        from pytato import DistributedRecv
+        if self.does_edge_cross_partition_boundary(expr, expr.data):
+            name = self.make_new_name()
+            self.set_partition_pair_to_edges(expr, expr.data, name)
+            new_binding: Array = make_placeholder(name, expr.data.shape, expr.data.dtype,
+                                                  tags=expr.data.tags)
+            self.cross_partition_name_to_value[name] = self.rec(expr.data)
+            self.register_placeholder(name, expr, new_binding)
+        else:
+            new_binding = self.rec(expr.data)
+            self.register_partition_id(new_binding)
+
+        self.register_partition_id(expr)
+
+        return DistributedRecv(new_binding)  # FIXME: Return Placeholder instead?
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
         return self.rec(expr)

@@ -46,6 +46,8 @@ from pytato.array import (
 
         dot, vdot,
 
+        make_distributed_send, make_distributed_recv, DistributedRecv,
+        DistributedSend
         )
 from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
@@ -93,4 +95,6 @@ __all__ = (
 
         "dot", "vdot",
 
+        "make_distributed_recv", "make_distributed_send", "DistributedRecv",
+        "DistributedSend"
 )

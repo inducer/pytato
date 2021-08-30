@@ -2206,4 +2206,65 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
     return pt.dot(pt.conj(a), b)
 
+
+# {{{ Distributed execution
+
+from pytato.array import (Array, ShapeType, _SuppliedShapeAndDtypeMixin,
+                          IndexLambda, Placeholder, Slice)
+import numpy as np
+
+from typing import Any, Tuple, Callable, Dict, List, Set, Optional
+from pytato.transform import Mapper, CopyMapper
+
+
+# {{{ Communication nodes
+
+
+class DistributedSend(Array):
+
+    _mapper_method = "map_distributed_send"
+    _fields = Array._fields + ("data",)
+
+    def __init__(self, data: Array, dest_rank: int = 0,
+                 comm_tag: object = None) -> None:
+        super().__init__()
+        self.data = data
+
+    @property
+    def shape(self) -> ShapeType:
+        return self.data.shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.data.dtype
+
+
+class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
+
+    _fields = Array._fields + ("src_rank", "comm_tag", "data")
+    _mapper_method = "map_distributed_recv"
+
+    def __init__(self, data: Array, src_rank: int = 0, comm_tag: object = None,
+                 shape: Tuple[int, ...] = (), dtype=float,
+                 tags=frozenset()) -> None:
+        super().__init__(shape=shape, dtype=dtype, tags=tags)
+        self.src_rank = src_rank
+        self.comm_tag = comm_tag
+        self.data = data
+
+
+def make_distributed_send(data: Array, dest_rank: int, comm_tag: object) -> \
+         DistributedSend:
+    return DistributedSend(data, dest_rank, comm_tag)
+
+
+def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
+                          shape: Tuple[int, ...] = (), dtype=float,
+                          tags=frozenset()) \
+                          -> DistributedRecv:
+    return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
+
+
+# }}}
+
 # vim: foldmethod=marker
