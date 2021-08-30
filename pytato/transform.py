@@ -500,6 +500,8 @@ class WalkMapper(Mapper):
             if isinstance(dim, Array):
                 self.rec(dim)
 
+        self.post_visit(expr)
+
     def map_loopy_call(self, expr: LoopyCall) -> None:
         if not self.visit(expr):
             return
@@ -624,6 +626,11 @@ class GraphToDictMapper(Mapper):
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
         self.graph_dict: Dict[Array, Set[Array]] = {}
+
+    def map_einsum(self, expr: Einsum, *args: Any) -> None:
+        for arg in expr.args:
+            self.graph_dict.setdefault(arg, set()).add(expr)
+            self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
@@ -823,6 +830,30 @@ class PartitionFinder(CopyMapper):
                 newshape=expr.newshape,
                 order=expr.order,
                 tags=expr.tags)
+
+    def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
+        new_bindings: Dict[str, Array] = {}
+        for c in expr.args:
+            if self.does_edge_cross_partition_boundary(expr, c):
+                name = self.make_new_name()
+                self.set_partition_pair_to_edges(expr, c, name)
+                new_bindings[name] = make_placeholder(name, c.shape,
+                                                    c.dtype,
+                                                    tags=c.tags)
+                self.cross_partition_name_to_value[name] = self.rec(c)
+                self.register_placeholder(name, expr, new_bindings[name])
+            else:
+                new_bindings[name] = self.rec(c)
+            self.register_partition_id(
+                    new_bindings[name], self.get_partition_id(c))
+
+        self.register_partition_id(expr)
+
+        return Einsum(
+                     access_descriptors=expr.access_descriptors,
+                     # FIXME: this is likely incorrect due to wrong type:
+                     args=new_bindings,  # type: ignore
+                     tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         new_bindings: Dict[str, Array] = {}
