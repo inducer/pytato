@@ -1081,14 +1081,13 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
 
     pf = PartitionFinder(part_func)
     pf(expr)
-    # print(f"{pf.partition_pair_to_edges=}")
+
     partition_id_to_output_names: Dict[PartitionId, List[str]] = {}
     partition_id_to_input_names: Dict[PartitionId, List[str]] = {}
     partitions = set()
     partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
     for (pid_producer, pid_consumer), var_names in \
             pf.partition_pair_to_edges.items():
-        # print((pid_producer, pid_consumer), var_names)
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
         if pid_producer not in partition_id_to_input_names:
@@ -1105,22 +1104,9 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
             partition_id_to_output_names.setdefault(
                 pid_producer, []).append(var_name)
             partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
-            # print(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partitions_dict)
-
-    # print("========")
-    # print(f"{toposorted_partitions=}")
-
-    # for pid in partitions:
-    #     print(pid)
-
-    # for i in partition_id_to_output_names:
-    #     print(i)
-
-    print(f"{partition_id_to_input_names=}")
-    print(f"{partition_id_to_output_names=}")
 
     # codegen
     from pytato import generate_loopy

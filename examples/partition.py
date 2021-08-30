@@ -58,7 +58,6 @@ def main():
     prg = pt.generate_loopy(y)
     evt, (out, ) = prg(queue)
 
-
     final_res = context[partition_id_to_output_names[toposorted_partitions[-1]][0]]
 
     assert np.allclose(out, final_res)
