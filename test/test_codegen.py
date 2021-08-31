@@ -1087,10 +1087,10 @@ def test_partitionfinder(ctx_factory):
     for pid in parts.toposorted_partitions:
         # find names that are needed
         inputs = {"queue": queue}
-        for k in parts.partition_id_to_input_names[pid]:
-            if k in context:
-                inputs[k] = context[k]
-        # prg_per_partition[f](**inputs)
+        inputs.update({
+            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            if k in context})
+
         res = parts.prg_per_partition[pid](**inputs)
 
         context.update(res[1])
