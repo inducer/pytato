@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
@@ -809,7 +810,6 @@ class GraphPartitioner(CopyMapper):
         self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
         self.var_name_to_result[name] = expr
         self.expr_to_partition_id[expr] = pid
-        print("REG PH", expr, pid)
 
     def make_new_name(self) -> str:
         self.name_index += 1
@@ -1076,7 +1076,20 @@ class GraphPartitioner(CopyMapper):
         return self.rec(expr)
 
 
-def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> Any:
+from pytato.target import BoundProgram
+
+
+@dataclass
+class CodePartitions:
+    """Store partitions and their code."""
+    toposorted_partitions: List[PartitionId]
+    prg_per_partition: Dict[PartitionId, BoundProgram]
+    partition_id_to_input_names: Dict[PartitionId, List[str]]
+    partition_id_to_output_names: Dict[PartitionId, List[str]]
+
+
+def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
+        CodePartitions:
     """Find partitions."""
 
     pf = GraphPartitioner(part_func)
@@ -1118,8 +1131,10 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
                      }))
             for pid in partitions}
 
-    return (toposorted_partitions, prg_per_partition,
+    res = CodePartitions(toposorted_partitions, prg_per_partition,
             partition_id_to_input_names, partition_id_to_output_names)
+
+    return res
 
 # }}}
 
