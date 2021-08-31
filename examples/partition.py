@@ -25,9 +25,6 @@ def main():
     y = pt.roll(y, shift=1, axis=1)
     y = pt.reshape(y, newshape=(-1,))
 
-    gdm = GraphToDictMapper()
-    gdm(y)
-
     tm = TopoSortMapper()
     tm(y)
 

@@ -760,7 +760,7 @@ class PartitionId(ABC):
     pass
 
 
-class PartitionFinder(CopyMapper):
+class GraphPartitioner(CopyMapper):
     """Find partitions."""
 
     def __init__(self, get_partition_id:
@@ -1079,7 +1079,7 @@ class PartitionFinder(CopyMapper):
 def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> Any:
     """Find partitions."""
 
-    pf = PartitionFinder(part_func)
+    pf = GraphPartitioner(part_func)
     pf(expr)
 
     partition_id_to_output_names: Dict[PartitionId, List[str]] = {}
