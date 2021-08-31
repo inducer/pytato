@@ -790,7 +790,6 @@ class GraphPartitioner(CopyMapper):
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-        # FIXME: unused?:
         self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
 
     def get_partition_id(self, expr: Array) -> PartitionId:
@@ -823,10 +822,10 @@ class GraphPartitioner(CopyMapper):
         assert res not in self.cross_partition_name_to_value
         return res
 
-    def set_partition_pair_to_edges(self, expr1: Array, expr2: Array,
+    def add_interpartition_edge(self, target: Array, dependency: Array,
                                     name: str) -> None:
-        p1 = self.get_partition_id(expr1)
-        p2 = self.get_partition_id(expr2)
+        p1 = self.get_partition_id(target)
+        p2 = self.get_partition_id(dependency)
 
         self.partition_pair_to_edges.setdefault(
                 (p1, p2), []).append(name)
@@ -834,7 +833,7 @@ class GraphPartitioner(CopyMapper):
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
+            self.add_interpartition_edge(expr, expr.array, name)
             new_binding: Array = make_placeholder(name, expr.array.shape,
                                                   expr.array.dtype,
                                                   tags=expr.array.tags)
@@ -857,7 +856,7 @@ class GraphPartitioner(CopyMapper):
         for c in expr.args:
             if self.does_edge_cross_partition_boundary(expr, c):
                 name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
+                self.add_interpartition_edge(expr, c, name)
                 new_bindings[name] = make_placeholder(name, c.shape,
                                                     c.dtype,
                                                     tags=c.tags)
@@ -881,7 +880,7 @@ class GraphPartitioner(CopyMapper):
         for c in expr.arrays:
             if self.does_edge_cross_partition_boundary(expr, c):
                 name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
+                self.add_interpartition_edge(expr, c, name)
                 new_bindings[name] = make_placeholder(name, c.shape,
                                                     c.dtype,
                                                     tags=c.tags)
@@ -905,7 +904,7 @@ class GraphPartitioner(CopyMapper):
         for c in expr.arrays:
             if self.does_edge_cross_partition_boundary(expr, c):
                 name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
+                self.add_interpartition_edge(expr, c, name)
                 new_bindings[name] = make_placeholder(name, c.shape,
                                                     c.dtype,
                                                     tags=c.tags)
@@ -927,7 +926,7 @@ class GraphPartitioner(CopyMapper):
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
+            self.add_interpartition_edge(expr, expr.array, name)
             new_binding: Array = make_placeholder(name, expr.array.shape,
                                                   expr.array.dtype,
                                                   tags=expr.array.tags)
@@ -948,7 +947,7 @@ class GraphPartitioner(CopyMapper):
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
             name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
+            self.add_interpartition_edge(expr, expr.array, name)
             new_binding: Array = make_placeholder(name, expr.array.shape,
                                                   expr.array.dtype,
                                                   tags=expr.array.tags)
@@ -972,7 +971,7 @@ class GraphPartitioner(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
+                    self.add_interpartition_edge(expr, dim, name)
                     new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
@@ -998,7 +997,7 @@ class GraphPartitioner(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
+                    self.add_interpartition_edge(expr, dim, name)
                     new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
@@ -1009,7 +1008,7 @@ class GraphPartitioner(CopyMapper):
 
         if self.does_edge_cross_partition_boundary(expr, expr.x1):
             name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.x1, name)
+            self.add_interpartition_edge(expr, expr.x1, name)
             new_x1: Array = make_placeholder(name, expr.x1.shape,
                                                   expr.x1.dtype,
                                                   tags=expr.x1.tags)
@@ -1022,7 +1021,7 @@ class GraphPartitioner(CopyMapper):
 
         if self.does_edge_cross_partition_boundary(expr, expr.x2):
             name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.x2, name)
+            self.add_interpartition_edge(expr, expr.x2, name)
             new_x2: Array = make_placeholder(name, expr.x2.shape,
                                                   expr.x2.dtype,
                                                   tags=expr.x2.tags)
@@ -1043,7 +1042,7 @@ class GraphPartitioner(CopyMapper):
         for child in expr.bindings.values():
             name = self.make_new_name()
             if self.does_edge_cross_partition_boundary(expr, child):
-                self.set_partition_pair_to_edges(expr, child, name)
+                self.add_interpartition_edge(expr, child, name)
 
                 new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
                                                       tags=child.tags)
@@ -1060,7 +1059,7 @@ class GraphPartitioner(CopyMapper):
             if isinstance(dim, Array):
                 name = self.make_new_name()
                 if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
+                    self.add_interpartition_edge(expr, dim, name)
                     new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
                                                           tags=dim.tags)
                     self.cross_partition_name_to_value[name] = self.rec(dim)
