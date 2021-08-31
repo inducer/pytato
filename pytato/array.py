@@ -289,6 +289,24 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[A
 
 @dataclass(frozen=True, eq=True)
 class NormalizedSlice:
+    """
+    A normalized version of :class:`slice`. "Normalized" is explained in
+    :attr:`start` and :attr:`stop`.
+
+    .. attribute:: start
+
+        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        relation ``-1 <= start <= axis_len``, where ``axis_len`` is the length of the
+        axis being sliced.
+
+    .. attribute:: stop
+
+        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        relation ``-1 <= stop <= axis_len``, where ``axis_len`` is the length of
+        the axis being sliced.
+
+    .. attribute:: step
+    """
     start: ShapeComponent
     stop: ShapeComponent
     step: int
