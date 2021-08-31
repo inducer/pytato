@@ -830,19 +830,24 @@ class GraphPartitioner(CopyMapper):
         self.partition_pair_to_edges.setdefault(
                 (p1, p2), []).append(name)
 
-    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.add_interpartition_edge(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
+    def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
+        new_name = self.make_new_name()
+        if self.does_edge_cross_partition_boundary(expr, child):
+            self.add_interpartition_edge(expr, child, new_name)
+            new_binding: Array = make_placeholder(new_name, child.shape,
+                                                  child.dtype,
+                                                  tags=child.tags)
+            self.cross_partition_name_to_value[new_name] = self.rec(child)
+            self.register_placeholder(new_name, expr, new_binding)
         else:
-            new_binding = self.rec(expr.array)
+            new_binding = self.rec(child)
             self.add_node_to_partition(
-                new_binding, self.get_partition_id(expr.array))
+                new_binding, self.get_partition_id(child))
+
+        return (new_name, new_binding)
+
+    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
+        (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
         self.add_node_to_partition(expr)
 
@@ -854,88 +859,44 @@ class GraphPartitioner(CopyMapper):
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         new_bindings: Dict[str, Array] = {}
         for c in expr.args:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.add_interpartition_edge(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.add_node_to_partition(
-                    new_bindings[name], self.get_partition_id(c))
+            (new_name, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings[new_name] = new_binding
 
         self.add_node_to_partition(expr)
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     # FIXME: this is likely incorrect due to wrong type:
-                     args=new_bindings,  # type: ignore
+                     args=tuple(new_bindings.values()),
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         new_bindings: Dict[str, Array] = {}
         for c in expr.arrays:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.add_interpartition_edge(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.add_node_to_partition(
-                    new_bindings[name], self.get_partition_id(c))
+            (new_name, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings[new_name] = new_binding
 
         self.add_node_to_partition(expr)
 
         return Concatenate(
-                     # FIXME: this is likely incorrect due to wrong type:
-                     arrays=new_bindings,  # type: ignore
+                     arrays=tuple(new_bindings.values()),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         new_bindings: Dict[str, Array] = {}
         for c in expr.arrays:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.add_interpartition_edge(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.add_node_to_partition(
-                    new_bindings[name], self.get_partition_id(c))
+            (new_name, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings[new_name] = new_binding
 
         self.add_node_to_partition(expr)
 
         return Stack(
-                     # FIXME: this is likely incorrect due to wrong type:
-                     arrays=new_bindings,  # type: ignore
+                     arrays=tuple(new_bindings.values()),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.add_interpartition_edge(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
-        else:
-            new_binding = self.rec(expr.array)
-            self.add_node_to_partition(
-                new_binding, self.get_partition_id(expr.array))
+        (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
         self.add_node_to_partition(expr)
 
@@ -945,18 +906,7 @@ class GraphPartitioner(CopyMapper):
                 tags=expr.tags)
 
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.add_interpartition_edge(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
-        else:
-            new_binding = self.rec(expr.array)
-            self.add_node_to_partition(
-                new_binding, self.get_partition_id(expr.array))
+        (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
         self.add_node_to_partition(expr)
 
@@ -969,68 +919,22 @@ class GraphPartitioner(CopyMapper):
         new_bindings: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.add_interpartition_edge(expr, dim, name)
-                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_bindings[name])
-                else:
-                    new_bindings[name] = self.rec(dim)
-                self.add_node_to_partition(
-                    new_bindings[name], self.get_partition_id(dim))
+                (new_name, new_binding) = self._handle_new_binding(expr, dim)
+                new_bindings[new_name] = new_binding
 
         self.add_node_to_partition(expr)
 
         assert expr.name
 
         return Placeholder(name=expr.name,
-                # FIXME: this is likely incorrect due to wrong type:
-                shape=new_bindings,  # type: ignore
+                shape=tuple(new_bindings.values()),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        new_bindings: Dict[str, Array] = {}  # FIXME: unused
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.add_interpartition_edge(expr, dim, name)
-                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_bindings[name])
-                else:
-                    new_bindings[name] = self.rec(dim)
-                self.add_node_to_partition(new_bindings[name])
 
-        if self.does_edge_cross_partition_boundary(expr, expr.x1):
-            name = self.make_new_name()
-            self.add_interpartition_edge(expr, expr.x1, name)
-            new_x1: Array = make_placeholder(name, expr.x1.shape,
-                                                  expr.x1.dtype,
-                                                  tags=expr.x1.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.x1)
-            self.register_placeholder(name, expr, new_x1)
-        else:
-            new_x1 = self.rec(expr.x1)
-        self.add_node_to_partition(
-                new_x1, self.get_partition_id(expr.x1))
-
-        if self.does_edge_cross_partition_boundary(expr, expr.x2):
-            name = self.make_new_name()
-            self.add_interpartition_edge(expr, expr.x2, name)
-            new_x2: Array = make_placeholder(name, expr.x2.shape,
-                                                  expr.x2.dtype,
-                                                  tags=expr.x2.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.x2)
-            self.register_placeholder(name, expr, new_x2)
-        else:
-            new_x2 = self.rec(expr.x2)
-        self.add_node_to_partition(
-                new_x2, self.get_partition_id(expr.x2))
+        (_, new_x1) = self._handle_new_binding(expr, expr.x1)
+        (_, new_x2) = self._handle_new_binding(expr, expr.x2)
 
         self.add_node_to_partition(expr)
 
@@ -1040,39 +944,17 @@ class GraphPartitioner(CopyMapper):
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         new_bindings: Dict[str, Array] = {}
         for child in expr.bindings.values():
-            name = self.make_new_name()
-            if self.does_edge_cross_partition_boundary(expr, child):
-                self.add_interpartition_edge(expr, child, name)
-
-                new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
-                                                      tags=child.tags)
-                self.cross_partition_name_to_value[name] = self.rec(child)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(child)
-
-            self.add_node_to_partition(
-                new_bindings[name], self.get_partition_id(child))
+            (new_name, new_binding) = self._handle_new_binding(expr, child)
+            new_bindings[new_name] = new_binding
 
         new_shapes: Dict[str, Array] = {}
         for dim in expr.shape:
             if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.add_interpartition_edge(expr, dim, name)
-                    new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_shapes[name])
-                else:
-                    new_shapes[name] = self.rec(dim)
-
-                self.add_node_to_partition(
-                    new_shapes[name], self.get_partition_id(dim))
+                (new_name, new_binding) = self._handle_new_binding(expr, dim)
+                new_shapes[new_name] = new_binding
 
         return IndexLambda(expr=expr.expr,
-                # FIXME: this is likely incorrect due to wrong type:
-                shape=new_shapes,  # type: ignore
+                shape=tuple(new_shapes.values()),
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
