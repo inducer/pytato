@@ -51,8 +51,14 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
+.. autoclass:: GraphToDictMapper
+.. autoclass:: GraphPartitioner
+.. autoclass:: CodePartitions
+.. autoclass:: PartitionId
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
+.. autofunction:: find_partitions
+.. autofunction:: execute_partitions
 
 """
 
@@ -291,6 +297,7 @@ class DependencyMapper(CombineMapper[R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
+
     .. warning::
 
         This returns every node in the graph! Consider a custom
@@ -569,8 +576,7 @@ class CachedWalkMapper(WalkMapper):
 class TopoSortMapper(CachedWalkMapper):
     """A mapper that creates a list of nodes in topological order.
 
-    .. attribute:: topological_order
-        A list of all nodes in the graph in topological order.
+    :members: topological_order
     """
 
     def __init__(self) -> None:
@@ -619,9 +625,7 @@ class GraphToDictMapper(Mapper):
     """
     Maps a graph to a dictionary representation.
 
-    .. attribute:: graph_dict
-        :class:`dict`, maps each node in the graph to the set of directly connected
-        nodes, obeying the direction of each edge.
+    :members: graph_dict
     """
 
     def __init__(self) -> None:
@@ -762,7 +766,10 @@ class PartitionId(ABC):
 
 
 class GraphPartitioner(CopyMapper):
-    """Find partitions."""
+    """Given a function *get_partition_id*, produces subgraphs representing
+    the computation. Users should not use this class directly, but use
+    :meth:`find_partitions` instead.
+    """
 
     def __init__(self, get_partition_id:
                                    Callable[[Array], PartitionId]) -> None:
@@ -1089,7 +1096,14 @@ class CodePartitions:
 
 def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
         CodePartitions:
-    """Find partitions."""
+    """Partitions the `expr` according to `part_func` and generates code for
+    each partition.
+
+    :param expr: The expression to partition.
+    :param part_func: A callable that returns an instance of
+        :class:`PartitionId` for a node.
+    :returns: An instance of :class:`CodePartitions` that contains the partitions.
+    """
 
     pf = GraphPartitioner(part_func)
     pf(expr)
@@ -1137,7 +1151,14 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
 
 
 def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
-    """Executes a set of partitions on a :class:`pyopencl.CommandQueue`."""
+    """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
+
+    :param parts: An instance of :class:`CodePartitions` representing the
+        partitioned code.
+    :param queue: An instance of :class:`pyopencl.CommandQueue` to execute the
+        code on.
+    :returns: A dictionary of variable names mapped to their values.
+    """
     context: Dict[str, Any] = {}
     for pid in parts.toposorted_partitions:
         # find names that are needed
