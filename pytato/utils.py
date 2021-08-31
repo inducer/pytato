@@ -25,7 +25,8 @@ THE SOFTWARE.
 import numpy as np
 import pymbolic.primitives as prim
 
-from typing import Tuple, List, Union, Callable, Any, Sequence, Dict, Optional
+from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
+                    Optional, Iterable, TypeVar)
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
                           DtypeOrScalar, ArrayOrScalar)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
@@ -43,6 +44,27 @@ Helper routines
 .. autofunction:: get_shape_after_broadcasting
 .. autofunction:: dim_to_index_lambda_components
 """
+
+
+# {{{ partition
+
+Tpart = TypeVar("Tpart")
+
+
+def partition(pred: Callable[[Tpart], bool],
+              iterable: Iterable[Tpart]) -> Tuple[List[Tpart],
+                                                  List[Tpart]]:
+    """
+    Use a predicate to partition entries into false entries and true
+    entries
+    """
+    # Inspired from https://docs.python.org/3/library/itertools.html
+    # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
+    from itertools import tee, filterfalse
+    t1, t2 = tee(iterable)
+    return list(filterfalse(pred, t1)), list(filter(pred, t2))
+
+# }}}
 
 
 def get_shape_after_broadcasting(
