@@ -786,10 +786,7 @@ class GraphPartitioner(CopyMapper):
         self.expr_to_partition_id: Dict[Array, PartitionId] = {}  # FIXME: unused?
 
     def get_partition_id(self, expr: Array) -> PartitionId:
-        try:
-            return self.get_partition_id_init(expr)
-        except ValueError:
-            return self.expr_to_partition_id[expr]
+        return self.expr_to_partition_id.get(expr, self.get_partition_id_init(expr))
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
