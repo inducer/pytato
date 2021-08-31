@@ -44,6 +44,7 @@ __doc__ = """
 .. currentmodule:: pytato.transform
 
 .. autoclass:: CopyMapper
+.. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
 .. autoclass:: SizeParamGatherer
