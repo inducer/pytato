@@ -783,30 +783,32 @@ class GraphPartitioner(CopyMapper):
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self.expr_to_partition_id: Dict[Array, PartitionId] = {}  # FIXME: unused?
+        # FIXME: unused?:
+        self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
 
     def get_partition_id(self, expr: Array) -> PartitionId:
-        return self.expr_to_partition_id.get(expr, self.get_partition_id_init(expr))
+        return self.newly_created_expr_to_partition_id.get(expr,
+                    self.get_partition_id_init(expr))
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
-    def register_partition_id(self, expr: Array,
+    def add_node_to_partition(self, expr: Array,
                               pid: Optional[PartitionId] = None) -> None:
         if not pid:
             pid = self.get_partition_id(expr)
 
         assert pid
-        self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
+        self.partition_id_to_nodes.setdefault(pid, []).append(expr)
 
     def register_placeholder(self, name: str, expr: Array, placeholder: Array,
                              pid: Optional[PartitionId] = None) -> None:
         if not pid:
             pid = self.get_partition_id(expr)
         assert pid
-        self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
+        self.partion_id_to_placeholders.setdefault(pid, []).append(placeholder)
         self.var_name_to_result[name] = expr
-        self.expr_to_partition_id[expr] = pid
+        self.newly_created_expr_to_partition_id[expr] = pid
 
     def make_new_name(self) -> str:
         self.name_index += 1
@@ -820,7 +822,7 @@ class GraphPartitioner(CopyMapper):
         p2 = self.get_partition_id(expr2)
 
         self.partition_pair_to_edges.setdefault(
-                (p1, p2), list()).append(name)
+                (p1, p2), []).append(name)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         if self.does_edge_cross_partition_boundary(expr, expr.array):
@@ -833,10 +835,10 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.array)
-            self.register_partition_id(
+            self.add_node_to_partition(
                 new_binding, self.get_partition_id(expr.array))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Reshape(array=new_binding,
                 newshape=expr.newshape,
@@ -856,10 +858,10 @@ class GraphPartitioner(CopyMapper):
                 self.register_placeholder(name, expr, new_bindings[name])
             else:
                 new_bindings[name] = self.rec(c)
-            self.register_partition_id(
+            self.add_node_to_partition(
                     new_bindings[name], self.get_partition_id(c))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
@@ -880,10 +882,10 @@ class GraphPartitioner(CopyMapper):
                 self.register_placeholder(name, expr, new_bindings[name])
             else:
                 new_bindings[name] = self.rec(c)
-            self.register_partition_id(
+            self.add_node_to_partition(
                     new_bindings[name], self.get_partition_id(c))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Concatenate(
                      # FIXME: this is likely incorrect due to wrong type:
@@ -904,10 +906,10 @@ class GraphPartitioner(CopyMapper):
                 self.register_placeholder(name, expr, new_bindings[name])
             else:
                 new_bindings[name] = self.rec(c)
-            self.register_partition_id(
+            self.add_node_to_partition(
                     new_bindings[name], self.get_partition_id(c))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Stack(
                      # FIXME: this is likely incorrect due to wrong type:
@@ -926,10 +928,10 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.array)
-            self.register_partition_id(
+            self.add_node_to_partition(
                 new_binding, self.get_partition_id(expr.array))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Roll(array=new_binding,
                 shift=expr.shift,
@@ -947,10 +949,10 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(name, expr, new_binding)
         else:
             new_binding = self.rec(expr.array)
-            self.register_partition_id(
+            self.add_node_to_partition(
                 new_binding, self.get_partition_id(expr.array))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -970,10 +972,10 @@ class GraphPartitioner(CopyMapper):
                     self.register_placeholder(name, expr, new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
-                self.register_partition_id(
+                self.add_node_to_partition(
                     new_bindings[name], self.get_partition_id(dim))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         assert expr.name
 
@@ -996,7 +998,7 @@ class GraphPartitioner(CopyMapper):
                     self.register_placeholder(name, expr, new_bindings[name])
                 else:
                     new_bindings[name] = self.rec(dim)
-                self.register_partition_id(new_bindings[name])
+                self.add_node_to_partition(new_bindings[name])
 
         if self.does_edge_cross_partition_boundary(expr, expr.x1):
             name = self.make_new_name()
@@ -1008,7 +1010,7 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(name, expr, new_x1)
         else:
             new_x1 = self.rec(expr.x1)
-        self.register_partition_id(
+        self.add_node_to_partition(
                 new_x1, self.get_partition_id(expr.x1))
 
         if self.does_edge_cross_partition_boundary(expr, expr.x2):
@@ -1021,10 +1023,10 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(name, expr, new_x2)
         else:
             new_x2 = self.rec(expr.x2)
-        self.register_partition_id(
+        self.add_node_to_partition(
                 new_x2, self.get_partition_id(expr.x2))
 
-        self.register_partition_id(expr)
+        self.add_node_to_partition(expr)
 
         return MatrixProduct(x1=new_x1, x2=new_x2,
                 tags=expr.tags)
@@ -1043,7 +1045,7 @@ class GraphPartitioner(CopyMapper):
             else:
                 new_bindings[name] = self.rec(child)
 
-            self.register_partition_id(
+            self.add_node_to_partition(
                 new_bindings[name], self.get_partition_id(child))
 
         new_shapes: Dict[str, Array] = {}
@@ -1059,7 +1061,7 @@ class GraphPartitioner(CopyMapper):
                 else:
                     new_shapes[name] = self.rec(dim)
 
-                self.register_partition_id(
+                self.add_node_to_partition(
                     new_shapes[name], self.get_partition_id(dim))
 
         return IndexLambda(expr=expr.expr,
