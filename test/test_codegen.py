@@ -38,6 +38,7 @@ import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from pytato.transform import execute_partitions
 import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
@@ -1079,21 +1080,11 @@ def test_partitionfinder(ctx_factory):
 
     parts = find_partitions(y, part_func)
 
+    # Execute the partitioned code
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    # Execute the partitioned code
-    context = {}
-    for pid in parts.toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
-        inputs.update({
-            k: context[k] for k in parts.partition_id_to_input_names[pid]
-            if k in context})
-
-        res = parts.prg_per_partition[pid](**inputs)
-
-        context.update(res[1])
+    context = execute_partitions(parts, queue)
 
     final_res = context[parts.partition_id_to_output_names[
                             parts.toposorted_partitions[-1]][0]]

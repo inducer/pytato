@@ -1135,6 +1135,24 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
 
     return res
 
+
+def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
+    """Executes a set of partitions on a :class:`pyopencl.CommandQueue`."""
+    context: Dict[str, Any] = {}
+    for pid in parts.toposorted_partitions:
+        # find names that are needed
+        inputs = {"queue": queue}
+
+        inputs.update({
+            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            if k in context})
+
+        res = parts.prg_per_partition[pid](**inputs)
+
+        context.update(res[1])
+
+    return context
+
 # }}}
 
 # vim: foldmethod=marker

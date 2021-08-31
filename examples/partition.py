@@ -3,7 +3,7 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (TopoSortMapper, PartitionId,
+from pytato.transform import (TopoSortMapper, PartitionId, execute_partitions,
                               find_partitions)
 
 from dataclasses import dataclass
@@ -38,20 +38,9 @@ def main():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = {}
-    for pid in parts.toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
+    context = execute_partitions(parts, queue)
 
-        inputs.update({
-            k: context[k] for k in parts.partition_id_to_input_names[pid]
-            if k in context})
-
-        res = parts.prg_per_partition[pid](**inputs)
-
-        context.update(res[1])
-
-    # Execute unpartitioned code for comparison
+    # Execute the unpartitioned code for comparison
     prg = pt.generate_loopy(y)
     evt, (out, ) = prg(queue)
 
