@@ -818,7 +818,7 @@ class GraphPartitioner(CopyMapper):
 
     def make_new_name(self) -> str:
         self.name_index += 1
-        res = "placeholder_" + str(self.name_index)
+        res = "_dist_ph_" + str(self.name_index)
         assert res not in self.cross_partition_name_to_value
         return res
 
