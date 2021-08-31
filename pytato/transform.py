@@ -990,22 +990,19 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
     pf = GraphPartitioner(part_func)
     pf(expr)
 
-    partition_id_to_output_names: Dict[PartitionId, List[str]] = {}
-    partition_id_to_input_names: Dict[PartitionId, List[str]] = {}
+    partition_id_to_output_names: Dict[PartitionId, List[str]] = {
+        v: [] for _, v in pf.partition_pair_to_edges.keys()}
+    partition_id_to_input_names: Dict[PartitionId, List[str]] = {
+        k: [] for k, _ in pf.partition_pair_to_edges.keys()}
+
     partitions = set()
     partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
+
     for (pid_producer, pid_consumer), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_producer)
         partitions.add(pid_consumer)
-        if pid_producer not in partition_id_to_input_names:
-            partition_id_to_input_names[pid_producer] = []
-        if pid_producer not in partition_id_to_output_names:
-            partition_id_to_output_names[pid_producer] = []
-        if pid_consumer not in partition_id_to_input_names:
-            partition_id_to_input_names[pid_consumer] = []
-        if pid_consumer not in partition_id_to_output_names:
-            partition_id_to_output_names[pid_consumer] = []
+
         # FIXME?: Does this need to store *all* connected nodes?:
         partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
         for var_name in var_names:
