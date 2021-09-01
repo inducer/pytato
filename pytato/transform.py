@@ -787,7 +787,7 @@ class GraphPartitioner(CopyMapper):
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
-        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
+        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}  # FIXME?: unused
 
         self.var_name_to_result: Dict[str, Array] = {}
 
@@ -824,12 +824,12 @@ class GraphPartitioner(CopyMapper):
         return res
 
     def add_interpartition_edge(self, target: Array, dependency: Array,
-                                    name: str) -> None:
+                                placeholder_name: str) -> None:
         p1 = self.get_partition_id(target)
         p2 = self.get_partition_id(dependency)
 
         self.partition_pair_to_edges.setdefault(
-                (p1, p2), []).append(name)
+                (p1, p2), []).append(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
         new_name = self.make_new_placeholder_name()
@@ -850,49 +850,55 @@ class GraphPartitioner(CopyMapper):
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
+        new_shapes: List[Array] = []
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                (_, new_binding) = self._handle_new_binding(expr, dim)
+                new_shapes.append(new_binding)
+
         self.add_node_to_partition(expr)
 
         return Reshape(array=new_binding,
-                newshape=expr.newshape,
+                newshape=tuple(new_shapes),
                 order=expr.order,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.args:
-            (new_name, new_binding) = self._handle_new_binding(expr, c)
-            new_bindings[new_name] = new_binding
+            (_, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings.append(new_binding)
 
         self.add_node_to_partition(expr)
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(new_bindings.values()),
+                     args=tuple(new_bindings),
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.arrays:
-            (new_name, new_binding) = self._handle_new_binding(expr, c)
-            new_bindings[new_name] = new_binding
+            (_, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings.append(new_binding)
 
         self.add_node_to_partition(expr)
 
         return Concatenate(
-                     arrays=tuple(new_bindings.values()),
+                     arrays=tuple(new_bindings),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.arrays:
-            (new_name, new_binding) = self._handle_new_binding(expr, c)
-            new_bindings[new_name] = new_binding
+            (_, new_binding) = self._handle_new_binding(expr, c)
+            new_bindings.append(new_binding)
 
         self.add_node_to_partition(expr)
 
         return Stack(
-                     arrays=tuple(new_bindings.values()),
+                     arrays=tuple(new_bindings),
                      axis=expr.axis,
                      tags=expr.tags)
 
@@ -917,18 +923,18 @@ class GraphPartitioner(CopyMapper):
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        new_bindings: Dict[str, Array] = {}
+        new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                (new_name, new_binding) = self._handle_new_binding(expr, dim)
-                new_bindings[new_name] = new_binding
+                (_, new_binding) = self._handle_new_binding(expr, dim)
+                new_shapes.append(new_binding)
 
         self.add_node_to_partition(expr)
 
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=tuple(new_bindings.values()),
+                shape=tuple(new_shapes),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -948,14 +954,14 @@ class GraphPartitioner(CopyMapper):
             (new_name, new_binding) = self._handle_new_binding(expr, child)
             new_bindings[new_name] = new_binding
 
-        new_shapes: Dict[str, Array] = {}
+        new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                (new_name, new_binding) = self._handle_new_binding(expr, dim)
-                new_shapes[new_name] = new_binding
+                (_, new_binding) = self._handle_new_binding(expr, dim)
+                new_shapes.append(new_binding)
 
         return IndexLambda(expr=expr.expr,
-                shape=tuple(new_shapes.values()),
+                shape=tuple(new_shapes),
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
@@ -996,6 +1002,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
         k: [] for k, _ in pf.partition_pair_to_edges.keys()}
 
     partitions = set()
+
+    # Used to compute the topological order
     partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
 
     for (pid_producer, pid_consumer), var_names in \
@@ -1005,6 +1013,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
 
         # FIXME?: Does this need to store *all* connected nodes?:
         partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
+
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
                 pid_producer, []).append(var_name)
