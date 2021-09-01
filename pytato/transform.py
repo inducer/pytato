@@ -817,7 +817,7 @@ class GraphPartitioner(CopyMapper):
         self.var_name_to_result[name] = expr
         self.newly_created_expr_to_partition_id[expr] = pid
 
-    def make_new_name(self) -> str:
+    def make_new_placeholder_name(self) -> str:
         self.name_index += 1
         res = "_dist_ph_" + str(self.name_index)
         assert res not in self.cross_partition_name_to_value
@@ -832,7 +832,7 @@ class GraphPartitioner(CopyMapper):
                 (p1, p2), []).append(name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
-        new_name = self.make_new_name()
+        new_name = self.make_new_placeholder_name()
         if self.does_edge_cross_partition_boundary(expr, child):
             self.add_interpartition_edge(expr, child, new_name)
             new_binding: Array = make_placeholder(new_name, child.shape,
