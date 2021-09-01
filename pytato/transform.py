@@ -842,8 +842,11 @@ class GraphPartitioner(CopyMapper):
             self.register_placeholder(new_name, expr, new_binding)
         else:
             new_binding = self.rec(child)
-            self.add_node_to_partition(
-                new_binding, self.get_partition_id(child))
+
+        self.add_node_to_partition(
+            new_binding, self.get_partition_id(child))
+
+        print("handle", self.does_edge_cross_partition_boundary(expr, child), new_binding)
 
         return (new_name, new_binding)
 
@@ -856,7 +859,7 @@ class GraphPartitioner(CopyMapper):
                 (_, new_binding) = self._handle_new_binding(expr, dim)
                 new_shapes.append(new_binding)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Reshape(array=new_binding,
                 newshape=tuple(new_shapes),
@@ -869,7 +872,7 @@ class GraphPartitioner(CopyMapper):
             (_, new_binding) = self._handle_new_binding(expr, c)
             new_bindings.append(new_binding)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
@@ -882,7 +885,7 @@ class GraphPartitioner(CopyMapper):
             (_, new_binding) = self._handle_new_binding(expr, c)
             new_bindings.append(new_binding)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Concatenate(
                      arrays=tuple(new_bindings),
@@ -895,7 +898,7 @@ class GraphPartitioner(CopyMapper):
             (_, new_binding) = self._handle_new_binding(expr, c)
             new_bindings.append(new_binding)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Stack(
                      arrays=tuple(new_bindings),
@@ -905,7 +908,7 @@ class GraphPartitioner(CopyMapper):
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
         (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Roll(array=new_binding,
                 shift=expr.shift,
@@ -915,7 +918,7 @@ class GraphPartitioner(CopyMapper):
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         (_, new_binding) = self._handle_new_binding(expr, expr.array)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -929,8 +932,8 @@ class GraphPartitioner(CopyMapper):
                 (_, new_binding) = self._handle_new_binding(expr, dim)
                 new_shapes.append(new_binding)
 
-        self.add_node_to_partition(expr)
-
+        # self.add_node_to_partition(expr)
+#
         assert expr.name
 
         return Placeholder(name=expr.name,
@@ -943,22 +946,24 @@ class GraphPartitioner(CopyMapper):
         (_, new_x1) = self._handle_new_binding(expr, expr.x1)
         (_, new_x2) = self._handle_new_binding(expr, expr.x2)
 
-        self.add_node_to_partition(expr)
+        # self.add_node_to_partition(expr)
 
         return MatrixProduct(x1=new_x1, x2=new_x2,
                 tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         new_bindings: Dict[str, Array] = {}
-        for child in expr.bindings.values():
-            (new_name, new_binding) = self._handle_new_binding(expr, child)
-            new_bindings[new_name] = new_binding
+        for name, child in expr.bindings.items():
+            (_, new_binding) = self._handle_new_binding(expr, child)
+            new_bindings[name] = new_binding
 
         new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
                 (_, new_binding) = self._handle_new_binding(expr, dim)
                 new_shapes.append(new_binding)
+
+        # self.add_node_to_partition(expr)
 
         return IndexLambda(expr=expr.expr,
                 shape=tuple(new_shapes),
@@ -980,6 +985,7 @@ class CodePartitions:
     prg_per_partition: Dict[PartitionId, BoundProgram]
     partition_id_to_input_names: Dict[PartitionId, List[str]]
     partition_id_to_output_names: Dict[PartitionId, List[str]]
+    partition_id_to_nodes: Dict[PartitionId, List[Any]]
 
 
 def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
@@ -1033,7 +1039,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
             for pid in partitions}
 
     res = CodePartitions(toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names)
+            partition_id_to_input_names, partition_id_to_output_names,
+            pf.partition_id_to_nodes)
 
     return res
 
