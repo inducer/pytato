@@ -775,9 +775,14 @@ class GraphPartitioner(CopyMapper):
     def __init__(self, get_partition_id:
                                    Callable[[Array], PartitionId]) -> None:
         super().__init__()
+
+        # Function to determine the PartitionId
         self.get_partition_id_init = get_partition_id
+
+        # ???
         self.cross_partition_name_to_value: Dict[str, Array] = {}  # FIXME: unused?
 
+        # Naming index for newly created PlaceHolders at partition edges
         self.name_index = 0
 
         # "nodes" of the partitioned graph
@@ -826,11 +831,11 @@ class GraphPartitioner(CopyMapper):
 
     def add_interpartition_edge(self, target: Array, dependency: Array,
                                 placeholder_name: str) -> None:
-        p1 = self.get_partition_id(target)
-        p2 = self.get_partition_id(dependency)
+        pid_target = self.get_partition_id(target)
+        pid_dependency = self.get_partition_id(dependency)
 
         self.partition_pair_to_edges.setdefault(
-                (p1, p2), []).append(placeholder_name)
+                (pid_target, pid_dependency), []).append(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
         if self.does_edge_cross_partition_boundary(expr, child):
