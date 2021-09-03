@@ -29,8 +29,8 @@ def get_partition_id(topo_list, expr) -> MyPartitionId:
 def main():
     x_in = np.random.randn(2, 2)
     x = pt.make_data_wrapper(x_in)
-    y = pt.stack([x@x.T, 2*x, x + 6])
-    y = pt.roll(y, shift=1, axis=1)
+    y = pt.stack([x@x.T, 2*x])
+    # y = pt.roll(y, shift=1, axis=1)
     y = pt.reshape(y, newshape=(-1,))
 
     tm = TopoSortMapper()

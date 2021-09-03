@@ -776,19 +776,20 @@ class GraphPartitioner(CopyMapper):
                                    Callable[[Array], PartitionId]) -> None:
         super().__init__()
         self.get_partition_id_init = get_partition_id
-        self.cross_partition_name_to_value: Dict[str, Array] = {}
+        self.cross_partition_name_to_value: Dict[str, Array] = {}  # FIXME: unused?
 
         self.name_index = 0
 
-        # "nodes" of the coarsened graph
-        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
+        # "nodes" of the partitioned graph
+        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}   # FIXME: unused?
 
-        # "edges" of the coarsened graph
+        # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
         self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}  # FIXME?: unused
 
+        # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
 
         self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
@@ -818,8 +819,8 @@ class GraphPartitioner(CopyMapper):
         self.newly_created_expr_to_partition_id[expr] = pid
 
     def make_new_placeholder_name(self) -> str:
-        self.name_index += 1
         res = "_dist_ph_" + str(self.name_index)
+        self.name_index += 1
         assert res not in self.cross_partition_name_to_value
         return res
 
@@ -832,23 +833,31 @@ class GraphPartitioner(CopyMapper):
                 (p1, p2), []).append(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
-        new_name = self.make_new_placeholder_name()
         if self.does_edge_cross_partition_boundary(expr, child):
+            new_name = self.make_new_placeholder_name()
+            # If an edge crosses a partition boundary, replace the
+            # depended-upon node (that nominally lives in the other partition)
+            # with a Placeholder that lives in the current partition. For each
+            # partition, collect the placeholder names that it’s supposed to
+            # compute.
             self.add_interpartition_edge(expr, child, new_name)
             new_binding: Array = make_placeholder(new_name, child.shape,
                                                   child.dtype,
                                                   tags=child.tags)
             self.cross_partition_name_to_value[new_name] = self.rec(child)
-            self.register_placeholder(new_name, expr, new_binding)
+            self.register_placeholder(
+                new_name, expr, new_binding, self.get_partition_id(expr))
+            print(f"{self.cross_partition_name_to_value=}")
+
         else:
             new_binding = self.rec(child)
 
         self.add_node_to_partition(
-            new_binding, self.get_partition_id(child))
+                new_binding, self.get_partition_id(expr))
 
-        print("handle", self.does_edge_cross_partition_boundary(expr, child), new_binding)
+        print("handle", self.does_edge_cross_partition_boundary(expr, child), expr, child, new_binding)
 
-        return (new_name, new_binding)
+        return (None, new_binding)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         (_, new_binding) = self._handle_new_binding(expr, expr.array)
@@ -1012,18 +1021,18 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
     # Used to compute the topological order
     partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
 
-    for (pid_producer, pid_consumer), var_names in \
+    for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
-        partitions.add(pid_producer)
-        partitions.add(pid_consumer)
+        partitions.add(pid_target)
+        partitions.add(pid_dependency)
 
         # FIXME?: Does this need to store *all* connected nodes?:
-        partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
+        partitions_dict.setdefault(pid_dependency, []).append(pid_target)
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
-                pid_producer, []).append(var_name)
-            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
+                pid_target, []).append(var_name)
+            partition_id_to_input_names.setdefault(pid_dependency, []).append(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partitions_dict)
