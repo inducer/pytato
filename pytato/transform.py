@@ -808,11 +808,7 @@ class GraphPartitioner(CopyMapper):
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
     def add_node_to_partition(self, expr: Array,
-                              pid: Optional[PartitionId] = None) -> None:
-        if not pid:
-            pid = self.get_partition_id(expr)
-
-        assert pid
+                              pid: PartitionId) -> None:
         self.partition_id_to_nodes.setdefault(pid, []).append(expr)
 
     def register_placeholder(self, name: str, expr: Array, placeholder: Array,
