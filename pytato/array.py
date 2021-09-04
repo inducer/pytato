@@ -941,29 +941,46 @@ class Einsum(Array):
         self.access_descriptors = access_descriptors
         self.args = args
 
+    @memoize_method
+    def _access_descr_to_axis_len(self
+                                  ) -> PMap[EinsumAxisDescriptor, ShapeComponent]:
+        from pytato.utils import are_shape_components_equal
+        descr_to_axis_len: Dict[EinsumAxisDescriptor, ShapeComponent] = {}
+
+        for access_descrs, arg in zip(self.access_descriptors,
+                                      self.args):
+            assert arg.ndim == len(access_descrs)
+            for arg_axis_len, descr in zip(arg.shape, access_descrs):
+                if descr in descr_to_axis_len:
+                    seen_axis_len = descr_to_axis_len[descr]
+
+                    if not are_shape_components_equal(seen_axis_len,
+                                                      arg_axis_len):
+                        if are_shape_components_equal(arg_axis_len, 1):
+                            # this axis would be broadcasted
+                            pass
+                        else:
+                            assert are_shape_components_equal(seen_axis_len, 1)
+                            descr_to_axis_len[descr] = arg_axis_len
+                else:
+                    descr_to_axis_len[descr] = arg_axis_len
+
+        return pmap(descr_to_axis_len)
+
     # type-ignore reason: github.com/python/mypy/issues/1362
     @property  # type: ignore
     @memoize_method
     def shape(self) -> ShapeType:
-        from pytato.utils import are_shape_components_equal
         iaxis_to_len: Dict[int, ShapeComponent] = {}
 
-        for access_descr, arg in zip(self.access_descriptors,
-                                     self.args):
-            assert arg.ndim == len(access_descr)
-            for arg_axis_len, axis_op in zip(arg.shape, access_descr):
-                if isinstance(axis_op, ElementwiseAxis):
-                    if axis_op.dim in iaxis_to_len:
-                        # check that the accumulated shape-dim matches with the
-                        # current arg's axis len
-                        assert are_shape_components_equal(iaxis_to_len[axis_op.dim],
-                                                          arg_axis_len)
-                    else:
-                        iaxis_to_len[axis_op.dim] = arg_axis_len
-                elif isinstance(axis_op, ReductionAxis):
-                    pass
-                else:
-                    raise AssertionError
+        for descr, axis_len in self._access_descr_to_axis_len().items():
+            if isinstance(descr, ElementwiseAxis):
+                iaxis_to_len[descr.dim] = axis_len
+            elif isinstance(descr, ReductionAxis):
+                # reduction axes do not count towards einsum's shape
+                pass
+            else:
+                raise AssertionError
 
         assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
         return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
@@ -1082,8 +1099,17 @@ def _normalize_einsum_in_subscript(subscript: str,
                 seen_axis_len = index_to_axis_length[index_char]
                 if not are_shape_components_equal(in_axis_len,
                                                   seen_axis_len):
-                    raise ValueError(f"Got conflicting lengths for '{index_char}'"
-                                     f" -- {in_axis_len}, {seen_axis_len}.")
+                    if are_shape_components_equal(in_axis_len, 1):
+                        # Broadcast the current axis
+                        pass
+                    elif are_shape_components_equal(seen_axis_len, 1):
+                        # Broadcast to the length of the current axis
+                        index_to_axis_length = (index_to_axis_length
+                                                .set(index_char, in_axis_len))
+                    else:
+                        raise ValueError("Got conflicting lengths for"
+                                         f" '{index_char}' -- {in_axis_len},"
+                                         f" {seen_axis_len}.")
             else:
                 index_to_axis_length = index_to_axis_length.set(index_char,
                                                                 in_axis_len)

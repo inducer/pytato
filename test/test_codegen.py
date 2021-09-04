@@ -38,6 +38,7 @@ import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from pytato.transform import execute_partitions
 import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
@@ -827,9 +828,16 @@ def test_reductions(ctx_factory, axis, redn, shape):
 
                                              (" ij ->  ",  # np.sum
                                               [(10, 4)]),
-                                             ("dij,ej,ej,dej->ei",
+                                             ("dij,ej,ej,dej->ei",  # diff: curvimesh
                                               [(2, 10, 10), (100, 10),
                                                (100, 10), (2, 100, 10)]),
+
+                                             ("dij,ej,ej,dej->ei",  # diff: simplex
+                                              [(2, 10, 10), (100, 1),
+                                               (100, 1), (2, 100, 10)]),
+
+                                             ("ij,ij->ij",  # broadcasting
+                                              [(1, 3), (3, 1)]),
                                              ]))
 def test_einsum(ctx_factory, spec, argshapes):
     ctx = ctx_factory()
@@ -1077,27 +1085,16 @@ def test_partitionfinder(ctx_factory):
     from functools import partial
     part_func = partial(get_partition_id, tm.topological_order)
 
-    (toposorted_partitions, prg_per_partition,
-    partition_id_to_input_names, partition_id_to_output_names) \
-        = find_partitions(y, part_func)
+    parts = find_partitions(y, part_func)
 
+    # Execute the partitioned code
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    # Execute the partitioned code
-    context = {}
-    for pid in toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
-        for k in partition_id_to_input_names[pid]:
-            if k in context:
-                inputs[k] = context[k]
-        # prg_per_partition[f](**inputs)
-        res = prg_per_partition[pid](**inputs)
+    context = execute_partitions(parts, queue)
 
-        context.update(res[1])
-
-    final_res = context[partition_id_to_output_names[toposorted_partitions[-1]][0]]
+    final_res = context[parts.partition_id_to_output_names[
+                            parts.toposorted_partitions[-1]][0]]
 
     # Execute the non-partitioned code for comparison
     prg = pt.generate_loopy(y)

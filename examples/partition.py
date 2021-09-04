@@ -3,7 +3,7 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
+from pytato.transform import (TopoSortMapper, PartitionId, execute_partitions,
                               find_partitions)
 
 from dataclasses import dataclass
@@ -15,18 +15,15 @@ class MyPartitionId(PartitionId):
 
 
 def get_partition_id(topo_list, expr) -> MyPartitionId:
-    return MyPartitionId(topo_list.index(expr))
+    res = MyPartitionId(topo_list.index(expr)//2)
+    return res
 
 
 def main():
-    x_in = np.random.randn(20, 20)
+    x_in = np.random.randn(2, 2)
     x = pt.make_data_wrapper(x_in)
-    y = pt.stack([x@x.T, 2*x, x + 6])
-    y = pt.roll(y, shift=1, axis=1)
-    y = pt.reshape(y, newshape=(-1,))
-
-    gdm = GraphToDictMapper()
-    gdm(y)
+    y = pt.stack([x@x.T, 2*x, 42+x])
+    y = y + 55
 
     tm = TopoSortMapper()
     tm(y)
@@ -35,33 +32,24 @@ def main():
     pfunc = partial(get_partition_id, tm.topological_order)
 
     # Find the partitions
-    (toposorted_partitions, prg_per_partition,
-    partition_id_to_input_names, partition_id_to_output_names) \
-        = find_partitions(y, pfunc)
+    parts = find_partitions(y, pfunc)
 
     # Execute the partitions
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = {}
-    for pid in toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
-        for k in partition_id_to_input_names[pid]:
-            if k in context:
-                inputs[k] = context[k]
-        res = prg_per_partition[pid](**inputs)
+    context = execute_partitions(parts, queue)
 
-        context.update(res[1])
+    final_res = context[parts.partition_id_to_output_names[
+                            parts.toposorted_partitions[-1]][0]]
 
-    # Execute unpartitioned code for comparison
+    # Execute the unpartitioned code for comparison
     prg = pt.generate_loopy(y)
     evt, (out, ) = prg(queue)
 
-
-    final_res = context[partition_id_to_output_names[toposorted_partitions[-1]][0]]
-
     assert np.allclose(out, final_res)
+
+    print("Partitioning test succeeded.")
 
 
 if __name__ == "__main__":

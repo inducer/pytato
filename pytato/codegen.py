@@ -307,7 +307,8 @@ class CodeGenPreprocessor(CopyMapper):
         import operator
         from functools import reduce
         from pytato.scalar_expr import Reduce
-        from pytato.utils import dim_to_index_lambda_components
+        from pytato.utils import (dim_to_index_lambda_components,
+                                  are_shape_components_equal)
         from pytato.array import ElementwiseAxis, ReductionAxis
 
         bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
@@ -321,6 +322,14 @@ class CodeGenPreprocessor(CopyMapper):
                                             enumerate(expr.args)):
             subscript_indices = []
             for iaxis, axis in enumerate(access_descr):
+                if not are_shape_components_equal(
+                            arg.shape[iaxis],
+                            expr._access_descr_to_axis_len()[axis]):
+                    # axis is broadcasted
+                    assert are_shape_components_equal(arg.shape[iaxis], 1)
+                    subscript_indices.append(0)
+                    continue
+
                 if isinstance(axis, ElementwiseAxis):
                     subscript_indices.append(prim.Variable(f"_{axis.dim}"))
                 else:
@@ -429,7 +438,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
     """
     if not isinstance(result, (Array, DictOfNamedArrays, dict)):
         raise TypeError("outputs of the computation should be "
-               f"either an Array or a DictOfNamedArrays, not {type(result)}.")
+                "either an Array or a DictOfNamedArrays")
 
     if isinstance(result, Array):
         outputs = DictOfNamedArrays({"_pt_out": result})

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
@@ -43,6 +44,7 @@ __doc__ = """
 .. currentmodule:: pytato.transform
 
 .. autoclass:: CopyMapper
+.. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
 .. autoclass:: SizeParamGatherer
@@ -50,8 +52,14 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
+.. autoclass:: GraphToDictMapper
+.. autoclass:: GraphPartitioner
+.. autoclass:: CodePartitions
+.. autoclass:: PartitionId
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
+.. autofunction:: find_partitions
+.. autofunction:: execute_partitions
 
 """
 
@@ -290,6 +298,7 @@ class DependencyMapper(CombineMapper[R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
+
     .. warning::
 
         This returns every node in the graph! Consider a custom
@@ -584,8 +593,7 @@ class CachedWalkMapper(WalkMapper):
 class TopoSortMapper(CachedWalkMapper):
     """A mapper that creates a list of nodes in topological order.
 
-    .. attribute:: topological_order
-        A list of all nodes in the graph in topological order.
+    :members: topological_order
     """
 
     def __init__(self) -> None:
@@ -634,9 +642,7 @@ class GraphToDictMapper(Mapper):
     """
     Maps a graph to a dictionary representation.
 
-    .. attribute:: graph_dict
-        :class:`dict`, maps each node in the graph to the set of directly connected
-        nodes, obeying the direction of each edge.
+    :members: graph_dict
     """
 
     def __init__(self) -> None:
@@ -784,179 +790,147 @@ class PartitionId(ABC):
     pass
 
 
-class PartitionFinder(CopyMapper):
-    """Find partitions."""
+class GraphPartitioner(CopyMapper):
+    """Given a function *get_partition_id*, produces subgraphs representing
+    the computation. Users should not use this class directly, but use
+    :meth:`find_partitions` instead.
+    """
 
     def __init__(self, get_partition_id:
                                    Callable[[Array], PartitionId]) -> None:
         super().__init__()
+
+        # Function to determine the PartitionId
         self.get_partition_id_init = get_partition_id
+
+        # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
         self.cross_partition_name_to_value: Dict[str, Array] = {}
 
+        # Naming index for newly created PlaceHolders at partition edges
         self.name_index = 0
 
-        # "nodes" of the coarsened graph
+        # "nodes" of the partitioned graph  # FIXME: unused?
         self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
 
-        # "edges" of the coarsened graph
+        # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
+        # FIXME: unused
         self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
 
+        # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self.expr_to_partition_id: Dict[Array, PartitionId] = {}  # FIXME: unused?
+        self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
 
     def get_partition_id(self, expr: Array) -> PartitionId:
-        try:
-            return self.get_partition_id_init(expr)
-        except ValueError:
-            return self.expr_to_partition_id[expr]
+        return self.newly_created_expr_to_partition_id.get(expr,
+                    self.get_partition_id_init(expr))
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
-    def register_partition_id(self, expr: Array,
-                              pid: Optional[PartitionId] = None) -> None:
-        if not pid:
-            pid = self.get_partition_id(expr)
-
-        assert pid
-        self.partition_id_to_nodes.setdefault(pid, list()).append(expr)
+    def add_node_to_partition(self, expr: Array,
+                              pid: PartitionId) -> None:
+        self.partition_id_to_nodes.setdefault(pid, []).append(expr)
 
     def register_placeholder(self, name: str, expr: Array, placeholder: Array,
                              pid: Optional[PartitionId] = None) -> None:
         if not pid:
             pid = self.get_partition_id(expr)
         assert pid
-        self.partion_id_to_placeholders.setdefault(pid, list()).append(placeholder)
+        self.partion_id_to_placeholders.setdefault(pid, []).append(placeholder)
         self.var_name_to_result[name] = expr
-        self.expr_to_partition_id[expr] = pid
-        print("REG PH", expr, pid)
+        self.newly_created_expr_to_partition_id[expr] = pid
 
-    def make_new_name(self) -> str:
+    def make_new_placeholder_name(self) -> str:
+        res = "_dist_ph_" + str(self.name_index)
         self.name_index += 1
-        res = "placeholder_" + str(self.name_index)
         assert res not in self.cross_partition_name_to_value
         return res
 
-    def set_partition_pair_to_edges(self, expr1: Array, expr2: Array,
-                                    name: str) -> None:
-        p1 = self.get_partition_id(expr1)
-        p2 = self.get_partition_id(expr2)
+    def add_interpartition_edge(self, target: Array, dependency: Array,
+                                placeholder_name: str) -> None:
+        pid_target = self.get_partition_id(target)
+        pid_dependency = self.get_partition_id(dependency)
 
         self.partition_pair_to_edges.setdefault(
-                (p1, p2), list()).append(name)
+                (pid_target, pid_dependency), []).append(placeholder_name)
+
+    def _handle_new_binding(self, expr: Array, child: Array) -> Array:
+        if self.does_edge_cross_partition_boundary(expr, child):
+            new_name = self.make_new_placeholder_name()
+            # If an edge crosses a partition boundary, replace the
+            # depended-upon node (that nominally lives in the other partition)
+            # with a Placeholder that lives in the current partition. For each
+            # partition, collect the placeholder names that it’s supposed to
+            # compute.
+            self.add_interpartition_edge(expr, child, new_name)
+            new_binding: Array = make_placeholder(new_name, child.shape,
+                                                  child.dtype,
+                                                  tags=child.tags)
+            self.cross_partition_name_to_value[new_name] = self.rec(child)
+            self.register_placeholder(
+                new_name, expr, new_binding, self.get_partition_id(expr))
+            self.add_node_to_partition(
+                    new_binding, self.get_partition_id(expr))
+
+        else:
+            new_binding = self.rec(child)
+
+            self.add_node_to_partition(
+                    new_binding, self.get_partition_id(child))
+
+        return new_binding
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
-        else:
-            new_binding = self.rec(expr.array)
-            self.register_partition_id(
-                new_binding, self.get_partition_id(expr.array))
+        new_binding = self._handle_new_binding(expr, expr.array)
 
-        self.register_partition_id(expr)
+        new_shapes: List[Any] = []
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                new_shapes.append(self._handle_new_binding(expr, dim))
+            else:
+                new_shapes.append(dim)
 
         return Reshape(array=new_binding,
-                newshape=expr.newshape,
+                newshape=tuple(new_shapes),
                 order=expr.order,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.args:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.register_partition_id(
-                    new_bindings[name], self.get_partition_id(c))
-
-        self.register_partition_id(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     # FIXME: this is likely incorrect due to wrong type:
-                     args=new_bindings,  # type: ignore
+                     args=tuple(new_bindings),
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.arrays:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.register_partition_id(
-                    new_bindings[name], self.get_partition_id(c))
-
-        self.register_partition_id(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Concatenate(
-                     # FIXME: this is likely incorrect due to wrong type:
-                     arrays=new_bindings,  # type: ignore
+                     arrays=tuple(new_bindings),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        new_bindings: Dict[str, Array] = {}
+        new_bindings: List[Array] = []
         for c in expr.arrays:
-            if self.does_edge_cross_partition_boundary(expr, c):
-                name = self.make_new_name()
-                self.set_partition_pair_to_edges(expr, c, name)
-                new_bindings[name] = make_placeholder(name, c.shape,
-                                                    c.dtype,
-                                                    tags=c.tags)
-                self.cross_partition_name_to_value[name] = self.rec(c)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(c)
-            self.register_partition_id(
-                    new_bindings[name], self.get_partition_id(c))
-
-        self.register_partition_id(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Stack(
-                     # FIXME: this is likely incorrect due to wrong type:
-                     arrays=new_bindings,  # type: ignore
+                     arrays=tuple(new_bindings),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
-        else:
-            new_binding = self.rec(expr.array)
-            self.register_partition_id(
-                new_binding, self.get_partition_id(expr.array))
-
-        self.register_partition_id(expr)
+        new_binding = self._handle_new_binding(expr, expr.array)
 
         return Roll(array=new_binding,
                 shift=expr.shift,
@@ -964,20 +938,7 @@ class PartitionFinder(CopyMapper):
                 tags=expr.tags)
 
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
-        if self.does_edge_cross_partition_boundary(expr, expr.array):
-            name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.array, name)
-            new_binding: Array = make_placeholder(name, expr.array.shape,
-                                                  expr.array.dtype,
-                                                  tags=expr.array.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.array)
-            self.register_placeholder(name, expr, new_binding)
-        else:
-            new_binding = self.rec(expr.array)
-            self.register_partition_id(
-                new_binding, self.get_partition_id(expr.array))
-
-        self.register_partition_id(expr)
+        new_binding = self._handle_new_binding(expr, expr.array)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -985,113 +946,38 @@ class PartitionFinder(CopyMapper):
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        new_bindings: Dict[str, Array] = {}
+        new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
-                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_bindings[name])
-                else:
-                    new_bindings[name] = self.rec(dim)
-                self.register_partition_id(
-                    new_bindings[name], self.get_partition_id(dim))
-
-        self.register_partition_id(expr)
+                new_shapes.append(self._handle_new_binding(expr, dim))
 
         assert expr.name
 
         return Placeholder(name=expr.name,
-                # FIXME: this is likely incorrect due to wrong type:
-                shape=new_bindings,  # type: ignore
+                shape=tuple(new_shapes),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        new_bindings: Dict[str, Array] = {}  # FIXME: unused
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
-                    new_bindings[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_bindings[name])
-                else:
-                    new_bindings[name] = self.rec(dim)
-                self.register_partition_id(new_bindings[name])
 
-        if self.does_edge_cross_partition_boundary(expr, expr.x1):
-            name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.x1, name)
-            new_x1: Array = make_placeholder(name, expr.x1.shape,
-                                                  expr.x1.dtype,
-                                                  tags=expr.x1.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.x1)
-            self.register_placeholder(name, expr, new_x1)
-        else:
-            new_x1 = self.rec(expr.x1)
-        self.register_partition_id(
-                new_x1, self.get_partition_id(expr.x1))
-
-        if self.does_edge_cross_partition_boundary(expr, expr.x2):
-            name = self.make_new_name()
-            self.set_partition_pair_to_edges(expr, expr.x2, name)
-            new_x2: Array = make_placeholder(name, expr.x2.shape,
-                                                  expr.x2.dtype,
-                                                  tags=expr.x2.tags)
-            self.cross_partition_name_to_value[name] = self.rec(expr.x2)
-            self.register_placeholder(name, expr, new_x2)
-        else:
-            new_x2 = self.rec(expr.x2)
-        self.register_partition_id(
-                new_x2, self.get_partition_id(expr.x2))
-
-        self.register_partition_id(expr)
+        new_x1 = self._handle_new_binding(expr, expr.x1)
+        new_x2 = self._handle_new_binding(expr, expr.x2)
 
         return MatrixProduct(x1=new_x1, x2=new_x2,
                 tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         new_bindings: Dict[str, Array] = {}
-        for child in expr.bindings.values():
-            name = self.make_new_name()
-            if self.does_edge_cross_partition_boundary(expr, child):
-                self.set_partition_pair_to_edges(expr, child, name)
+        for name, child in expr.bindings.items():
+            new_bindings[name] = self._handle_new_binding(expr, child)
 
-                new_bindings[name] = make_placeholder(name, child.shape, child.dtype,
-                                                      tags=child.tags)
-                self.cross_partition_name_to_value[name] = self.rec(child)
-                self.register_placeholder(name, expr, new_bindings[name])
-            else:
-                new_bindings[name] = self.rec(child)
-
-            self.register_partition_id(
-                new_bindings[name], self.get_partition_id(child))
-
-        new_shapes: Dict[str, Array] = {}
+        new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                name = self.make_new_name()
-                if self.does_edge_cross_partition_boundary(expr, dim):
-                    self.set_partition_pair_to_edges(expr, dim, name)
-                    new_shapes[name] = make_placeholder(name, dim.shape, dim.dtype,
-                                                          tags=dim.tags)
-                    self.cross_partition_name_to_value[name] = self.rec(dim)
-                    self.register_placeholder(name, expr, new_shapes[name])
-                else:
-                    new_shapes[name] = self.rec(dim)
-
-                self.register_partition_id(
-                    new_shapes[name], self.get_partition_id(dim))
+                new_shapes.append(self._handle_new_binding(expr, dim))
 
         return IndexLambda(expr=expr.expr,
-                # FIXME: this is likely incorrect due to wrong type:
-                shape=new_shapes,  # type: ignore
+                shape=tuple(new_shapes),
                 dtype=expr.dtype,
                 bindings=new_bindings,
                 tags=expr.tags)
@@ -1134,51 +1020,59 @@ class PartitionFinder(CopyMapper):
         return self.rec(expr)
 
 
-def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> Any:
-    """Find partitions."""
+from pytato.target import BoundProgram
 
-    pf = PartitionFinder(part_func)
+
+@dataclass
+class CodePartitions:
+    """Store partitions and their code."""
+    toposorted_partitions: List[PartitionId]
+    prg_per_partition: Dict[PartitionId, BoundProgram]
+    partition_id_to_input_names: Dict[PartitionId, List[str]]
+    partition_id_to_output_names: Dict[PartitionId, List[str]]
+    partition_id_to_nodes: Dict[PartitionId, List[Any]]
+
+
+def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
+        CodePartitions:
+    """Partitions the `expr` according to `part_func` and generates code for
+    each partition.
+
+    :param expr: The expression to partition.
+    :param part_func: A callable that returns an instance of
+        :class:`PartitionId` for a node.
+    :returns: An instance of :class:`CodePartitions` that contains the partitions.
+    """
+
+    pf = GraphPartitioner(part_func)
     pf(expr)
-    # print(f"{pf.partition_pair_to_edges=}")
-    partition_id_to_output_names: Dict[PartitionId, List[str]] = {}
-    partition_id_to_input_names: Dict[PartitionId, List[str]] = {}
+
+    partition_id_to_output_names: Dict[PartitionId, List[str]] = {
+        v: [] for _, v in pf.partition_pair_to_edges.keys()}
+    partition_id_to_input_names: Dict[PartitionId, List[str]] = {
+        k: [] for k, _ in pf.partition_pair_to_edges.keys()}
+
     partitions = set()
+
+    # Used to compute the topological order
     partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
-    for (pid_producer, pid_consumer), var_names in \
+
+    for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
-        # print((pid_producer, pid_consumer), var_names)
-        partitions.add(pid_producer)
-        partitions.add(pid_consumer)
-        if pid_producer not in partition_id_to_input_names:
-            partition_id_to_input_names[pid_producer] = []
-        if pid_producer not in partition_id_to_output_names:
-            partition_id_to_output_names[pid_producer] = []
-        if pid_consumer not in partition_id_to_input_names:
-            partition_id_to_input_names[pid_consumer] = []
-        if pid_consumer not in partition_id_to_output_names:
-            partition_id_to_output_names[pid_consumer] = []
+        partitions.add(pid_target)
+        partitions.add(pid_dependency)
+
         # FIXME?: Does this need to store *all* connected nodes?:
-        partitions_dict.setdefault(pid_consumer, []).append(pid_producer)
+        partitions_dict.setdefault(pid_dependency, []).append(pid_target)
+
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
-                pid_producer, []).append(var_name)
-            partition_id_to_input_names.setdefault(pid_consumer, []).append(var_name)
-            # print(var_name)
+                pid_target, []).append(var_name)
+            partition_id_to_input_names.setdefault(
+                pid_dependency, []).append(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partitions_dict)
-
-    # print("========")
-    # print(f"{toposorted_partitions=}")
-
-    # for pid in partitions:
-    #     print(pid)
-
-    # for i in partition_id_to_output_names:
-    #     print(i)
-
-    print(f"{partition_id_to_input_names=}")
-    print(f"{partition_id_to_output_names=}")
 
     # codegen
     from pytato import generate_loopy
@@ -1190,8 +1084,36 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) -> A
                      }))
             for pid in partitions}
 
-    return (toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names)
+    res = CodePartitions(toposorted_partitions, prg_per_partition,
+            partition_id_to_input_names, partition_id_to_output_names,
+            pf.partition_id_to_nodes)
+
+    return res
+
+
+def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
+    """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
+
+    :param parts: An instance of :class:`CodePartitions` representing the
+        partitioned code.
+    :param queue: An instance of :class:`pyopencl.CommandQueue` to execute the
+        code on.
+    :returns: A dictionary of variable names mapped to their values.
+    """
+    context: Dict[str, Any] = {}
+    for pid in parts.toposorted_partitions:
+        # find names that are needed
+        inputs = {"queue": queue}
+
+        inputs.update({
+            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            if k in context})
+
+        res = parts.prg_per_partition[pid](**inputs)
+
+        context.update(res[1])
+
+    return context
 
 # }}}
 
