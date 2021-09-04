@@ -21,3 +21,7 @@ doc/_build
 
 *.dot
 *.svg
+
+# pylint stuff
+.pylintrc.yml
+.run-pylint.py
