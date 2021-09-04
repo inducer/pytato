@@ -827,9 +827,16 @@ def test_reductions(ctx_factory, axis, redn, shape):
 
                                              (" ij ->  ",  # np.sum
                                               [(10, 4)]),
-                                             ("dij,ej,ej,dej->ei",
+                                             ("dij,ej,ej,dej->ei",  # diff: curvimesh
                                               [(2, 10, 10), (100, 10),
                                                (100, 10), (2, 100, 10)]),
+
+                                             ("dij,ej,ej,dej->ei",  # diff: simplex
+                                              [(2, 10, 10), (100, 1),
+                                               (100, 1), (2, 100, 10)]),
+
+                                             ("ij,ij->ij",  # broadcasting
+                                              [(1, 3), (3, 1)]),
                                              ]))
 def test_einsum(ctx_factory, spec, argshapes):
     ctx = ctx_factory()
