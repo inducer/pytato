@@ -6,7 +6,8 @@ comm = MPI.COMM_WORLD
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (GraphToDictMapper, TopoSortMapper, PartitionId,
+from pytato.transform import (GraphToDictMapper, TopoSortMapper,
+                              PartitionId as PartitionIdBase,
                               find_partitions, reverse_graph,
                               tag_nodes_with_starting_point)
 
@@ -18,7 +19,7 @@ from pytato.array import (make_distributed_send, make_distributed_recv,
 
 
 @dataclass(frozen=True, eq=True)
-class PartitionId:
+class PartitionId(PartitionIdBase):
     fed_sends: object
     feeding_recvs: object
 
@@ -33,9 +34,9 @@ def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
     x = pt.make_placeholder(name="myph", shape=(10,), dtype=float)
-    bnd = pt.make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
+    bnd = make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
 
-    halo = pt.make_distributed_recv(x[9], src_rank=(rank+1) % size, comm_tag="halo",
+    halo = make_distributed_recv(x[9], src_rank=(rank+1) % size, comm_tag="halo",
             shape=(), dtype=float)
 
     y = x+bnd+halo
@@ -65,13 +66,13 @@ def main():
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-           tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
+            tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
 
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-           tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
+            tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
 
     from functools import partial
     pfunc = partial(get_partition_id, node_to_fed_sends,

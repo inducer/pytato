@@ -2235,12 +2235,7 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
 # {{{ Distributed execution
 
-from pytato.array import (Array, ShapeType, _SuppliedShapeAndDtypeMixin,
-                          IndexLambda, Placeholder, Slice)
 import numpy as np
-
-from typing import Any, Tuple, Callable, Dict, List, Set, Optional
-from pytato.transform import Mapper, CopyMapper
 
 
 # {{{ Communication nodes
@@ -2261,7 +2256,7 @@ class DistributedSend(Array):
         return self.data.shape
 
     @property
-    def dtype(self) -> np.dtype:
+    def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
 
@@ -2271,8 +2266,8 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     _mapper_method = "map_distributed_recv"
 
     def __init__(self, data: Array, src_rank: int = 0, comm_tag: object = None,
-                 shape: Tuple[int, ...] = (), dtype=float,
-                 tags=frozenset()) -> None:
+                 shape: Tuple[int, ...] = (), dtype: Any = float,
+                 tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
         self.comm_tag = comm_tag
@@ -2285,8 +2280,8 @@ def make_distributed_send(data: Array, dest_rank: int, comm_tag: object) -> \
 
 
 def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...] = (), dtype=float,
-                          tags=frozenset()) \
+                          shape: Tuple[int, ...] = (), dtype: Any = float,
+                          tags: Optional[TagsType] = frozenset()) \
                           -> DistributedRecv:
     return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
 

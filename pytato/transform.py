@@ -32,7 +32,8 @@ from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
         AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase)
+        IndexRemappingBase, Einsum, InputArgumentBase, DistributedSend,
+        DistributedRecv)
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
@@ -982,15 +983,15 @@ class GraphPartitioner(CopyMapper):
                 bindings=new_bindings,
                 tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> DistributedSend:
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
+            -> DistributedSend:
         new_binding = self._handle_new_binding(expr, expr.data)
-        from pytato import DistributedSend
 
         return DistributedSend(new_binding)  # FIXME: Return Placeholder instead?
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> DistributedRecv:
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
+            -> DistributedRecv:
         new_binding = self._handle_new_binding(expr, expr.data)
-        from pytato import DistributedRecv
 
         return DistributedRecv(new_binding)  # FIXME: Return Placeholder instead?
 
