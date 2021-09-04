@@ -779,20 +779,21 @@ class GraphPartitioner(CopyMapper):
         # Function to determine the PartitionId
         self.get_partition_id_init = get_partition_id
 
-        # ???
-        self.cross_partition_name_to_value: Dict[str, Array] = {}  # FIXME: unused?
+        # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
+        self.cross_partition_name_to_value: Dict[str, Array] = {}
 
         # Naming index for newly created PlaceHolders at partition edges
         self.name_index = 0
 
-        # "nodes" of the partitioned graph
-        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}   # FIXME: unused?
+        # "nodes" of the partitioned graph  # FIXME: unused?
+        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
 
         # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = {}
 
-        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}  # FIXME?: unused
+        # FIXME: unused
+        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
 
         # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
@@ -837,7 +838,7 @@ class GraphPartitioner(CopyMapper):
         self.partition_pair_to_edges.setdefault(
                 (pid_target, pid_dependency), []).append(placeholder_name)
 
-    def _handle_new_binding(self, expr: Array, child: Array) -> Tuple[str, Array]:
+    def _handle_new_binding(self, expr: Array, child: Array) -> Array:
         if self.does_edge_cross_partition_boundary(expr, child):
             new_name = self.make_new_placeholder_name()
             # If an edge crosses a partition boundary, replace the
@@ -852,28 +853,26 @@ class GraphPartitioner(CopyMapper):
             self.cross_partition_name_to_value[new_name] = self.rec(child)
             self.register_placeholder(
                 new_name, expr, new_binding, self.get_partition_id(expr))
-            print(f"{self.cross_partition_name_to_value=}")
+            self.add_node_to_partition(
+                    new_binding, self.get_partition_id(expr))
 
         else:
             new_binding = self.rec(child)
 
-        self.add_node_to_partition(
-                new_binding, self.get_partition_id(expr))
-
-        print("handle", self.does_edge_cross_partition_boundary(expr, child), expr, child, new_binding)
+            self.add_node_to_partition(
+                    new_binding, self.get_partition_id(child))
 
         return new_binding
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         new_binding = self._handle_new_binding(expr, expr.array)
 
-        new_shapes: List[Array] = []
+        new_shapes: List[Any] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                new_binding = self._handle_new_binding(expr, dim)
-                new_shapes.append(new_binding)
-
-        # self.add_node_to_partition(expr)
+                new_shapes.append(self._handle_new_binding(expr, dim))
+            else:
+                new_shapes.append(dim)
 
         return Reshape(array=new_binding,
                 newshape=tuple(new_shapes),
@@ -883,10 +882,7 @@ class GraphPartitioner(CopyMapper):
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         new_bindings: List[Array] = []
         for c in expr.args:
-            new_binding = self._handle_new_binding(expr, c)
-            new_bindings.append(new_binding)
-
-        # self.add_node_to_partition(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
@@ -896,10 +892,7 @@ class GraphPartitioner(CopyMapper):
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         new_bindings: List[Array] = []
         for c in expr.arrays:
-            new_binding = self._handle_new_binding(expr, c)
-            new_bindings.append(new_binding)
-
-        # self.add_node_to_partition(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Concatenate(
                      arrays=tuple(new_bindings),
@@ -909,10 +902,7 @@ class GraphPartitioner(CopyMapper):
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         new_bindings: List[Array] = []
         for c in expr.arrays:
-            new_binding = self._handle_new_binding(expr, c)
-            new_bindings.append(new_binding)
-
-        # self.add_node_to_partition(expr)
+            new_bindings.append(self._handle_new_binding(expr, c))
 
         return Stack(
                      arrays=tuple(new_bindings),
@@ -922,8 +912,6 @@ class GraphPartitioner(CopyMapper):
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
         new_binding = self._handle_new_binding(expr, expr.array)
 
-        # self.add_node_to_partition(expr)
-
         return Roll(array=new_binding,
                 shift=expr.shift,
                 axis=expr.axis,
@@ -931,8 +919,6 @@ class GraphPartitioner(CopyMapper):
 
     def map_slice(self, expr: Slice, *args: Any) -> Slice:
         new_binding = self._handle_new_binding(expr, expr.array)
-
-        # self.add_node_to_partition(expr)
 
         return Slice(array=new_binding,
                 starts=expr.starts,
@@ -943,11 +929,8 @@ class GraphPartitioner(CopyMapper):
         new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                new_binding = self._handle_new_binding(expr, dim)
-                new_shapes.append(new_binding)
+                new_shapes.append(self._handle_new_binding(expr, dim))
 
-        # self.add_node_to_partition(expr)
-#
         assert expr.name
 
         return Placeholder(name=expr.name,
@@ -957,10 +940,8 @@ class GraphPartitioner(CopyMapper):
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
 
-        (_, new_x1) = self._handle_new_binding(expr, expr.x1)
-        (_, new_x2) = self._handle_new_binding(expr, expr.x2)
-
-        # self.add_node_to_partition(expr)
+        new_x1 = self._handle_new_binding(expr, expr.x1)
+        new_x2 = self._handle_new_binding(expr, expr.x2)
 
         return MatrixProduct(x1=new_x1, x2=new_x2,
                 tags=expr.tags)
@@ -968,16 +949,12 @@ class GraphPartitioner(CopyMapper):
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         new_bindings: Dict[str, Array] = {}
         for name, child in expr.bindings.items():
-            new_binding = self._handle_new_binding(expr, child)
-            new_bindings[name] = new_binding
+            new_bindings[name] = self._handle_new_binding(expr, child)
 
         new_shapes: List[Array] = []
         for dim in expr.shape:
             if isinstance(dim, Array):
-                new_binding = self._handle_new_binding(expr, dim)
-                new_shapes.append(new_binding)
-
-        # self.add_node_to_partition(expr)
+                new_shapes.append(self._handle_new_binding(expr, dim))
 
         return IndexLambda(expr=expr.expr,
                 shape=tuple(new_shapes),
@@ -1037,7 +1014,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
                 pid_target, []).append(var_name)
-            partition_id_to_input_names.setdefault(pid_dependency, []).append(var_name)
+            partition_id_to_input_names.setdefault(
+                pid_dependency, []).append(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partitions_dict)
