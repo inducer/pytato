@@ -369,6 +369,14 @@ class SubsetDependencyMapper(DependencyMapper):
                       args,
                       frozenset())
 
+    def map_distributed_send(self, *args):
+        print("SEND")
+        return set()
+
+    def map_distributed_recv(self, *args):
+        print("RECV")
+        return set()
+
 # }}}
 
 
@@ -999,6 +1007,35 @@ class GraphPartitioner(CopyMapper):
         return self.rec(expr)
 
 
+class DistributedMapper(CopyMapper):
+    def __init__(self) -> None:
+        super().__init__()
+        self.name_index = 0
+        self.var_name_to_result: Dict[str, Array] = {}
+
+    def make_new_placeholder_name(self) -> str:
+        res = "_dist2_ph_" + str(self.name_index)
+        self.name_index += 1
+        # assert res not in self.cross_partition_name_to_value
+        return res
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any):
+        new_name = self.make_new_placeholder_name()
+        new_binding: Array = make_placeholder(new_name, expr.shape,
+                                                  expr.dtype,
+                                                  tags=expr.tags)
+        self.var_name_to_result[new_name] = expr.data
+        return new_binding
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any):
+        new_name = self.make_new_placeholder_name()
+        new_binding: Array = make_placeholder(new_name, expr.shape,
+                                                expr.dtype,
+                                                tags=expr.tags)
+        self.var_name_to_result[new_name] = expr.data
+        return new_binding
+
+
 from pytato.target import BoundProgram
 
 
@@ -1055,12 +1092,17 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
 
     # codegen
     from pytato import generate_loopy
+
+    dm = DistributedMapper()
+
     prg_per_partition = {pid:
             generate_loopy(
                 DictOfNamedArrays(
-                    {var_name: pf.var_name_to_result[var_name]
+                    {var_name: dm(pf.var_name_to_result[var_name])
                         for var_name in partition_id_to_output_names[pid]
-                     }))
+                     }.update({var_name: r
+                        for var_name, r in dm.var_name_to_result.items()
+                         })))
             for pid in partitions}
 
     res = CodePartitions(toposorted_partitions, prg_per_partition,
