@@ -33,7 +33,8 @@ def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
 def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
-    x = pt.make_placeholder(name="myph", shape=(10,), dtype=float)
+    x_in = np.random.randn(20, 20)
+    x = pt.make_data_wrapper(x_in)
     bnd = make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
 
     halo = make_distributed_recv(x[9], src_rank=(rank+1) % size, comm_tag="halo",
