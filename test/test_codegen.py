@@ -1062,6 +1062,34 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
+def test_broadcast_to(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    # fuzz testing
+    for _ in range(20):
+        broadcasted_ndim = rng.integers(1, 7)
+        broadcasted_shape = tuple(int(dim)
+                                  for dim in rng.integers(3, 7, broadcasted_ndim))
+
+        input_ndim = rng.integers(0, broadcasted_ndim+1)
+        input_shape = [
+            dim if rng.choice((0, 1)) else 1
+            for dim in broadcasted_shape[broadcasted_ndim-input_ndim:]]
+
+        x_in = rng.random(input_shape, dtype=np.float32)
+        x = pt.make_data_wrapper(x_in)
+        evt, (x_brdcst,) = pt.generate_loopy(
+                                pt.broadcast_to(x, broadcasted_shape))(queue)
+
+        np.testing.assert_allclose(np.broadcast_to(x_in, broadcasted_shape),
+                                   x_brdcst)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
