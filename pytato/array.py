@@ -75,6 +75,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: einsum
 .. autofunction:: dot
 .. autofunction:: vdot
+.. autofunction:: broadcast_to
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
@@ -2231,5 +2232,29 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
         b = b.reshape(-1)
 
     return pt.dot(pt.conj(a), b)
+
+
+def broadcast_to(array: Array, shape: ShapeType) -> Array:
+    """
+    Returns *array* broadcasted to *shape*.
+    """
+    from pytato.utils import (get_indexing_expression,
+                              are_shape_components_equal)
+
+    if len(shape) < array.ndim:
+        raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
+
+    for in_dim, brdcst_dim in zip(array.shape,
+                                  shape[-array.ndim:]):
+        if (not are_shape_components_equal(in_dim, brdcst_dim)
+                and not are_shape_components_equal(in_dim, 1)):
+            raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
+
+    return IndexLambda(expr=prim.Subscript(prim.Variable("in"),
+                                           get_indexing_expression(array.shape,
+                                                                   shape)),
+                       shape=shape,
+                       dtype=array.dtype,
+                       bindings={"in": array})
 
 # vim: foldmethod=marker

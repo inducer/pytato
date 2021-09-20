@@ -46,6 +46,8 @@ from pytato.array import (
 
         dot, vdot,
 
+        broadcast_to,
+
         )
 from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
@@ -92,5 +94,7 @@ __all__ = (
         "real", "imag",
 
         "dot", "vdot",
+
+        "broadcast_to",
 
 )
