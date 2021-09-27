@@ -750,10 +750,6 @@ class GraphToDictMapper(Mapper):
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
-    def map_slice(self, expr: Slice, *args: Any) -> None:
-        self.graph_dict.setdefault(expr.array, set()).add(expr)
-        self.rec(expr.array)
-
     def map_data_wrapper(self, expr: DataWrapper) -> None:
         if isinstance(expr.data, Array):
             self.graph_dict.setdefault(expr.data, set()).add(expr)
@@ -965,14 +961,6 @@ class GraphPartitioner(CopyMapper):
         return Roll(array=new_binding,
                 shift=expr.shift,
                 axis=expr.axis,
-                tags=expr.tags)
-
-    def map_slice(self, expr: Slice, *args: Any) -> Slice:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
-        return Slice(array=new_binding,
-                starts=expr.starts,
-                stops=expr.stops,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:

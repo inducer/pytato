@@ -15,6 +15,7 @@ class MyPartitionId(PartitionId):
 
 
 def get_partition_id(topo_list, expr) -> MyPartitionId:
+    # Partition nodes into groups of two
     res = MyPartitionId(topo_list.index(expr)//2)
     return res
 
