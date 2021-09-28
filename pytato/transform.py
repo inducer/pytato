@@ -799,25 +799,17 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
+def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
         starting_point: Optional[Array] = None,
-        result: Optional[Dict[Array, Set[Array]]] = None) -> None:
-    """Tags nodes with their starting point.
-
-    :arg node: An array node, to be added ...
-    :returns: a :class:`dict` mapping nodes to sets of nodes, where each node
-        reachable from *starting_point* has *node* added to its set.
-    """
-    if result is None:
-        result = {}
-    if starting_point is None:
-        starting_point = node
-
-    result.setdefault(node, set()).add(starting_point)
-    if node in graph:
-        for other_node_key in graph[node]:
-            tag_nodes_with_starting_point(graph, other_node_key, starting_point,
-                                          result)
+        node_to_tags: Optional[Dict[Array, Set[Array]]] = None) -> None:
+    """Tags nodes reachable from *starting_point*."""
+    if node_to_tags is None:
+        node_to_tags = {}
+    node_to_tags.setdefault(starting_point, set()).add(tag)
+    if starting_point in graph:
+        for other_node_key in graph[starting_point]:
+            tag_nodes_with_starting_point(graph, other_node_key, tag,
+                                          node_to_tags)
 
 
 class GraphPartitioner(CopyMapper):
