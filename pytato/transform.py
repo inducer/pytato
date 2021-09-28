@@ -678,7 +678,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
 class GraphToDictMapper(Mapper):
     """
-    Maps a graph to a dictionary representation.
+    Maps a graph to a dictionary representation mapping a node to its children.
 
     :members: graph_dict
     """
@@ -794,7 +794,12 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
 def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
         starting_point: Optional[Array] = None,
         result: Optional[Dict[Array, Set[Array]]] = None) -> None:
-    """Tags nodes with their starting point."""
+    """Tags nodes with their starting point.
+    
+    :arg node: An array node, to be added ...
+    :returns: a :class:`dict` mapping nodes to sets of nodes, where each node
+        reachable from *starting_point* has *node* added to its set.
+    """
     if result is None:
         result = {}
     if starting_point is None:
@@ -1049,7 +1054,6 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        # FIXME?: Does this need to store *all* connected nodes?:
         partitions_dict[pid_dependency].append(pid_target)
 
         for var_name in var_names:
