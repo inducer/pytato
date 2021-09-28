@@ -885,15 +885,13 @@ class GraphPartitioner(CopyMapper):
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         new_binding = self._handle_new_binding(expr, expr.array)
 
-        new_shapes: List[Any] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-            else:
-                new_shapes.append(dim)
+        new_shapes = tuple(self._handle_new_binding(expr, s)  # type: ignore
+                                      if isinstance(s, Array)
+                                      else s
+                                      for s in expr.newshape),
 
         return Reshape(array=new_binding,
-                newshape=tuple(new_shapes),
+                newshape=new_shapes,
                 order=expr.order,
                 tags=expr.tags)
 
