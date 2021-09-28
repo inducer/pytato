@@ -709,6 +709,16 @@ class GraphToDictMapper(Mapper):
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
+        children: Set[Array] = set()
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim, *args)
+
+        for c in children:
+            self.graph_dict[expr].add(c)
+
         self.graph_dict[expr].add(expr.array)
         self.rec(expr.array)
 
