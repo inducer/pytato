@@ -835,46 +835,24 @@ class GraphPartitioner(CopyMapper):
         # Function to determine the PartitionId
         self.get_partition_id = get_partition_id
 
-        # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
-        self.cross_partition_name_to_value: Dict[str, Array] = {}
-
-        # Naming index for newly created PlaceHolders at partition edges
+        # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
-
-        # "nodes" of the partitioned graph  # FIXME: unused?
-        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = defaultdict(list)
 
         # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 List[str]] = defaultdict(list)
 
-        # FIXME: unused
-        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = \
-                defaultdict(list)
-
-        # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
-    def add_node_to_partition(self, expr: Array,
-                              pid: PartitionId) -> None:
-        self.partition_id_to_nodes[pid].append(expr)
-
-    def register_placeholder(self, name: str, expr: Array, placeholder: Array,
-                             pid: Optional[PartitionId] = None) -> None:
-        if not pid:
-            pid = self.get_partition_id(expr)
-        assert pid
-        self.partion_id_to_placeholders[pid].append(placeholder)
+    def register_placeholder(self, name: str, expr: Array) -> None:
         self.var_name_to_result[name] = expr
 
     def make_new_placeholder_name(self) -> str:
-        res = self.name_generator()
-        assert res not in self.cross_partition_name_to_value
-        return res
+        return self.name_generator()
 
     def add_interpartition_edge(self, target: Array, dependency: Array,
                                 placeholder_name: str) -> None:
@@ -896,17 +874,10 @@ class GraphPartitioner(CopyMapper):
             new_binding: Array = make_placeholder(new_name, child.shape,
                                                   child.dtype,
                                                   tags=child.tags)
-            self.cross_partition_name_to_value[new_name] = self.rec(child)
-            self.register_placeholder(
-                new_name, expr, new_binding, self.get_partition_id(expr))
-            self.add_node_to_partition(
-                    new_binding, self.get_partition_id(expr))
+            self.register_placeholder(new_name, expr)
 
         else:
             new_binding = self.rec(child)
-
-            self.add_node_to_partition(
-                    new_binding, self.get_partition_id(child))
 
         return new_binding
 
@@ -1014,7 +985,6 @@ class CodePartitions:
     prg_per_partition: Dict[PartitionId, BoundProgram]
     partition_id_to_input_names: Dict[PartitionId, List[str]]
     partition_id_to_output_names: Dict[PartitionId, List[str]]
-    partition_id_to_nodes: Dict[PartitionId, List[Any]]
 
 
 def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
@@ -1069,8 +1039,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
             for pid in partitions}
 
     res = CodePartitions(toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names,
-            pf.partition_id_to_nodes)
+            partition_id_to_input_names, partition_id_to_output_names)
 
     return res
 
