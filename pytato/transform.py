@@ -833,7 +833,7 @@ class GraphPartitioner(CopyMapper):
         super().__init__()
 
         # Function to determine the PartitionId
-        self.get_partition_id_init = get_partition_id
+        self.get_partition_id = get_partition_id
 
         # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
         self.cross_partition_name_to_value: Dict[str, Array] = {}
@@ -856,12 +856,6 @@ class GraphPartitioner(CopyMapper):
         # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
-
-    def get_partition_id(self, expr: Array) -> PartitionId:
-        return self.newly_created_expr_to_partition_id.get(expr,
-                    self.get_partition_id_init(expr))
-
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
@@ -876,7 +870,6 @@ class GraphPartitioner(CopyMapper):
         assert pid
         self.partion_id_to_placeholders[pid].append(placeholder)
         self.var_name_to_result[name] = expr
-        self.newly_created_expr_to_partition_id[expr] = pid
 
     def make_new_placeholder_name(self) -> str:
         res = self.name_generator()
