@@ -57,7 +57,6 @@ __doc__ = """
 .. autoclass:: GraphToDictMapper
 .. autoclass:: GraphPartitioner
 .. autoclass:: CodePartitions
-.. autoclass:: PartitionId
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: find_partitions
@@ -833,7 +832,7 @@ class GraphPartitioner(CopyMapper):
         from collections import defaultdict
         super().__init__()
 
-        # Function to determine the PartitionId
+        # Function to determine the Partition ID
         self.get_partition_id = get_partition_id
 
         # Naming for newly created PlaceHolders at partition edges

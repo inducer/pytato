@@ -1069,11 +1069,10 @@ def test_partitionfinder(ctx_factory):
     y = 2*x
 
     from dataclasses import dataclass
-    from pytato.transform import (TopoSortMapper, PartitionId,
-                                  find_partitions)
+    from pytato.transform import (TopoSortMapper, find_partitions)
 
     @dataclass(frozen=True, eq=True)
-    class MyPartitionId(PartitionId):
+    class MyPartitionId():
         num: int
 
     def get_partition_id(topo_list, expr) -> MyPartitionId:
