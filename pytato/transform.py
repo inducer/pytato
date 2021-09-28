@@ -839,7 +839,8 @@ class GraphPartitioner(CopyMapper):
         self.cross_partition_name_to_value: Dict[str, Array] = {}
 
         # Naming index for newly created PlaceHolders at partition edges
-        self.name_index = 0
+        from pytools import UniqueNameGenerator
+        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
         # "nodes" of the partitioned graph  # FIXME: unused?
         self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = defaultdict(list)
