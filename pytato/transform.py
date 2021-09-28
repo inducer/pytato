@@ -684,27 +684,26 @@ class GraphToDictMapper(Mapper):
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
-        from collections import defaultdict
-        self.graph_dict: Dict[Any, Set[Any]] = defaultdict(set)
+        self.graph_dict: Dict[Any, Set[Any]] = {}
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
         for child in expr._data.values():
-            self.graph_dict[expr].add(child)
+            self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
     def map_named_array(self, expr: NamedArray, *args: Any) -> None:
-        self.graph_dict[expr].add(expr._container)
+        self.graph_dict.setdefault(expr._container, set()).add(expr)
         self.rec(expr._container)
 
     def map_loopy_call(self, expr: LoopyCall, *args: Any) -> None:
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
-                self.graph_dict[expr].add(child)
+                self.graph_dict.setdefault(child, set()).add(expr)
                 self.rec(child)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> None:
         for arg in expr.args:
-            self.graph_dict[expr].add(arg)
+            self.graph_dict.setdefault(arg, set()).add(expr)
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
@@ -716,9 +715,9 @@ class GraphToDictMapper(Mapper):
                 self.rec(dim, *args)
 
         for c in children:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
 
-        self.graph_dict[expr].add(expr.array)
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
@@ -730,26 +729,26 @@ class GraphToDictMapper(Mapper):
                 self.rec(dim, *args)
 
         for c in children:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
         children = (expr.x1, expr.x2)
         for c in children:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
             self.rec(c)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
         for c in expr.arrays:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
             self.rec(c)
 
     def map_stack(self, expr: Stack, *args: Any) -> None:
         for c in expr.arrays:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
             self.rec(c)
 
     def map_roll(self, expr: Roll, *args: Any) -> None:
-        self.graph_dict[expr].add(expr.array)
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
@@ -757,17 +756,17 @@ class GraphToDictMapper(Mapper):
         pass
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
-        self.graph_dict[expr].add(expr.array)
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_data_wrapper(self, expr: DataWrapper) -> None:
         if isinstance(expr.data, Array):
-            self.graph_dict[expr].add(expr.data)
+            self.graph_dict.setdefault(expr.data, set()).add(expr)
             self.rec(expr.data)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                self.graph_dict[expr].add(dim)
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
@@ -783,7 +782,7 @@ class GraphToDictMapper(Mapper):
                 self.rec(dim)
 
         for c in children:
-            self.graph_dict[expr].add(c)
+            self.graph_dict.setdefault(c, set()).add(expr)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args)
@@ -829,7 +828,6 @@ class GraphPartitioner(CopyMapper):
 
     def __init__(self, get_partition_id:
                                    Callable[[Array], Hashable]) -> None:
-        from collections import defaultdict
         super().__init__()
 
         # Function to determine the Partition ID
@@ -841,7 +839,7 @@ class GraphPartitioner(CopyMapper):
 
         # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
-                List[str]] = defaultdict(list)
+                List[str]] = {}
 
         self.var_name_to_result: Dict[str, Array] = {}
 
@@ -859,8 +857,8 @@ class GraphPartitioner(CopyMapper):
         pid_target = self.get_partition_id(target)
         pid_dependency = self.get_partition_id(dependency)
 
-        self.partition_pair_to_edges[
-                (pid_target, pid_dependency)].append(placeholder_name)
+        self.partition_pair_to_edges.setdefault(
+                (pid_target, pid_dependency), []).append(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Array:
         if self.does_edge_cross_partition_boundary(expr, child):
@@ -1007,15 +1005,14 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     partitions = set()
 
     # Used to compute the topological order
-    from collections import defaultdict
-    partitions_dict: Dict[Hashable, List[Hashable]] = defaultdict(list)
+    partitions_dict: Dict[Hashable, List[Hashable]] = {}
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        partitions_dict[pid_dependency].append(pid_target)
+        partitions_dict.setdefault(pid_dependency, []).append(pid_target)
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
