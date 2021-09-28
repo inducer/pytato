@@ -801,7 +801,7 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
 
 def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
         starting_point: Optional[Array] = None,
-        node_to_tags: Optional[Dict[Array, Set[Array]]] = None) -> None:
+        node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
     """Tags nodes reachable from *starting_point*."""
     if node_to_tags is None:
         node_to_tags = {}
@@ -877,7 +877,7 @@ class GraphPartitioner(CopyMapper):
         new_shapes = tuple(self._handle_new_binding(expr, s)  # type: ignore
                                       if isinstance(s, Array)
                                       else s
-                                      for s in expr.newshape),
+                                      for s in expr.newshape)
 
         return Reshape(array=new_binding,
                 newshape=new_shapes,
