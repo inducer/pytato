@@ -795,7 +795,7 @@ def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
         starting_point: Optional[Array] = None,
         result: Optional[Dict[Array, Set[Array]]] = None) -> None:
     """Tags nodes with their starting point.
-    
+
     :arg node: An array node, to be added ...
     :returns: a :class:`dict` mapping nodes to sets of nodes, where each node
         reachable from *starting_point* has *node* added to its set.
@@ -879,8 +879,7 @@ class GraphPartitioner(CopyMapper):
         self.newly_created_expr_to_partition_id[expr] = pid
 
     def make_new_placeholder_name(self) -> str:
-        res = "_dist_ph_" + str(self.name_index)
-        self.name_index += 1
+        res = self.name_generator()
         assert res not in self.cross_partition_name_to_value
         return res
 
