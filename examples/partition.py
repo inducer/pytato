@@ -3,14 +3,14 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (TopoSortMapper, PartitionId, execute_partitions,
+from pytato.transform import (TopoSortMapper, execute_partitions,
                               find_partitions)
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, eq=True)
-class MyPartitionId(PartitionId):
+class MyPartitionId():
     num: int
 
 

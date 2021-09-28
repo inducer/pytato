@@ -25,8 +25,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    Optional, List, Tuple)
+from typing import (Any, Callable, Dict, FrozenSet, Hashable, Union, TypeVar, Set,
+                    Generic, Optional, List, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -34,7 +34,7 @@ from pytato.array import (
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase,
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase)
+        IndexBase, make_placeholder)
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
@@ -822,15 +822,6 @@ def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
                                           result)
 
 
-from pytato.array import make_placeholder
-from abc import ABC
-
-
-class PartitionId(ABC):
-    """A class that represents a partition ID."""
-    pass
-
-
 class GraphPartitioner(CopyMapper):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
@@ -838,7 +829,7 @@ class GraphPartitioner(CopyMapper):
     """
 
     def __init__(self, get_partition_id:
-                                   Callable[[Array], PartitionId]) -> None:
+                                   Callable[[Array], Hashable]) -> None:
         from collections import defaultdict
         super().__init__()
 
@@ -850,7 +841,7 @@ class GraphPartitioner(CopyMapper):
         self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
         # "edges" of the partitioned graph
-        self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
+        self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 List[str]] = defaultdict(list)
 
         self.var_name_to_result: Dict[str, Array] = {}
@@ -991,36 +982,36 @@ from pytato.target import BoundProgram
 @dataclass
 class CodePartitions:
     """Store partitions and their code."""
-    toposorted_partitions: List[PartitionId]
-    prg_per_partition: Dict[PartitionId, BoundProgram]
-    partition_id_to_input_names: Dict[PartitionId, List[str]]
-    partition_id_to_output_names: Dict[PartitionId, List[str]]
+    toposorted_partitions: List[Hashable]
+    prg_per_partition: Dict[Hashable, BoundProgram]
+    partition_id_to_input_names: Dict[Hashable, List[str]]
+    partition_id_to_output_names: Dict[Hashable, List[str]]
 
 
-def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
+def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
         CodePartitions:
     """Partitions the `expr` according to `part_func` and generates code for
     each partition.
 
     :param expr: The expression to partition.
     :param part_func: A callable that returns an instance of
-        :class:`PartitionId` for a node.
+        :class:`Hashable` for a node.
     :returns: An instance of :class:`CodePartitions` that contains the partitions.
     """
 
     pf = GraphPartitioner(part_func)
     pf(expr)
 
-    partition_id_to_output_names: Dict[PartitionId, List[str]] = {
+    partition_id_to_output_names: Dict[Hashable, List[str]] = {
         v: [] for _, v in pf.partition_pair_to_edges.keys()}
-    partition_id_to_input_names: Dict[PartitionId, List[str]] = {
+    partition_id_to_input_names: Dict[Hashable, List[str]] = {
         k: [] for k, _ in pf.partition_pair_to_edges.keys()}
 
     partitions = set()
 
     # Used to compute the topological order
     from collections import defaultdict
-    partitions_dict: Dict[PartitionId, List[PartitionId]] = defaultdict(list)
+    partitions_dict: Dict[Hashable, List[Hashable]] = defaultdict(list)
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
