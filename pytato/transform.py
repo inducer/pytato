@@ -29,9 +29,11 @@ from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
-        AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
+        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase)
+        IndexRemappingBase, Einsum, InputArgumentBase,
+        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
+        IndexBase)
 from pytato.loopy import LoopyCall
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
@@ -155,11 +157,23 @@ class CopyMapper(Mapper):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_slice(self, expr: Slice) -> Array:
-        return Slice(array=self.rec(expr.array),
-                starts=expr.starts,
-                stops=expr.stops,
-                tags=expr.tags)
+    def _map_index_base(self, expr: IndexBase) -> Array:
+        return type(expr)(self.rec(expr.array),
+                          tuple(self.rec(idx) if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_basic_index(self, expr: BasicIndex) -> Array:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> Array:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> Array:
+        return self._map_index_base(expr)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         return DataWrapper(name=expr.name,
@@ -255,8 +269,24 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_axis_permutation(self, expr: AxisPermutation) -> CombineT:
         return self.combine(self.rec(expr.array))
 
-    def map_slice(self, expr: Slice) -> CombineT:
-        return self.combine(self.rec(expr.array))
+    def _map_index_base(self, expr: IndexBase) -> CombineT:
+        return self.combine(self.rec(expr.array),
+                            *(self.rec(idx)
+                              for idx in expr.indices
+                              if isinstance(idx, Array)))
+
+    def map_basic_index(self, expr: BasicIndex) -> CombineT:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> CombineT:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> CombineT:
+        return self._map_index_base(expr)
 
     def map_reshape(self, expr: Reshape) -> CombineT:
         return self.combine(self.rec(expr.array))
@@ -324,8 +354,8 @@ class DependencyMapper(CombineMapper[R]):
     def map_axis_permutation(self, expr: AxisPermutation) -> R:
         return self.combine(frozenset([expr]), super().map_axis_permutation(expr))
 
-    def map_slice(self, expr: Slice) -> R:
-        return self.combine(frozenset([expr]), super().map_slice(expr))
+    def _map_index_base(self, expr: IndexBase) -> R:
+        return self.combine(frozenset([expr]), super()._map_index_base(expr))
 
     def map_reshape(self, expr: Reshape) -> R:
         return self.combine(frozenset([expr]), super().map_reshape(expr))
@@ -475,8 +505,32 @@ class WalkMapper(Mapper):
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
-    map_slice = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
+
+    def _map_index_base(self, expr: IndexBase) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.array)
+
+        for idx in expr.indices:
+            if isinstance(idx, Array):
+                self.rec(idx)
+
+        self.post_visit(expr)
+
+    def map_basic_index(self, expr: BasicIndex) -> None:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> None:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> None:
+        return self._map_index_base(expr)
 
     def map_stack(self, expr: Stack) -> None:
         if not self.visit(expr):

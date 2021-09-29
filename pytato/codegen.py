@@ -30,10 +30,13 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
-                          DataWrapper, Roll, AxisPermutation, Slice,
+                          DataWrapper, Roll, AxisPermutation,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, MatrixProduct, Einsum)
+                          InputArgumentBase, MatrixProduct, Einsum,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes, BasicIndex,
+                          NormalizedSlice)
 
 from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
@@ -68,7 +71,7 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.DataWrapper`      :class:`~pytato.array.Placeholder`
     :class:`~pytato.array.Roll`             :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.AxisPermutation`  :class:`~pytato.array.IndexLambda`
-    :class:`~pytato.array.Slice`            :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.IndexBase`        :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
@@ -391,9 +394,6 @@ class CodeGenPreprocessor(CopyMapper):
             indices[to_index] = var(f"_{from_index}")
         return tuple(indices)
 
-    def _indices_for_slice(self, expr: Slice) -> SymbolicIndex:
-        return tuple(var(f"_{d}") + expr.starts[d] for d in range(expr.ndim))
-
     def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
         newstrides = [1]  # reshaped array strides
         for new_axis_len in reversed(expr.shape[1:]):
@@ -420,11 +420,146 @@ class CodeGenPreprocessor(CopyMapper):
     # https://github.com/python/mypy/issues/8619
     map_axis_permutation = (
             partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
-    map_slice = partialmethod(handle_index_remapping, _indices_for_slice)  # type: ignore  # noqa
     map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) #type: ignore # noqa
 
     # }}}
 
+    def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
+        vng = UniqueNameGenerator()
+        indices = []
+
+        in_ary = vng("in")
+        bindings = {in_ary: self.rec(expr.array)}
+        islice_idx = 0
+
+        for idx, axis_len in zip(expr.indices, expr.array.shape):
+            if isinstance(idx, int):
+                if isinstance(axis_len, int):
+                    indices.append(idx % axis_len)
+                else:
+                    bnd_name = vng("in")
+                    bindings[bnd_name] = axis_len
+                    indices.append(idx % prim.Variable(bnd_name))
+            elif isinstance(idx, NormalizedSlice):
+                indices.append(idx.start
+                               + idx.step * prim.Variable(f"_{islice_idx}"))
+                islice_idx += 1
+            else:
+                raise NotImplementedError
+
+        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
+                                               tuple(indices)),
+                           bindings=bindings,
+                           shape=expr.shape,
+                           dtype=expr.dtype)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> IndexLambda:
+        from pytato.utils import (get_shape_after_broadcasting,
+                                  get_indexing_expression)
+
+        i_adv_indices = tuple(i
+                              for i, idx_expr in enumerate(expr.indices)
+                              if isinstance(idx_expr, (Array, int)))
+        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
+                                                      for i_idx in i_adv_indices])
+
+        vng = UniqueNameGenerator()
+        indices = []
+
+        in_ary = vng("in")
+        bindings = {in_ary: self.rec(expr.array)}
+        islice_idx = 0
+
+        for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
+            if isinstance(idx, int):
+                if isinstance(axis_len, int):
+                    indices.append(idx % axis_len)
+                else:
+                    bnd_name = vng("in")
+                    bindings[bnd_name] = self.rec(axis_len)
+                    indices.append(idx % prim.Variable(bnd_name))
+            elif isinstance(idx, NormalizedSlice):
+                indices.append(idx.start
+                               + idx.step * prim.Variable(f"_{islice_idx}"))
+                islice_idx += 1
+            elif isinstance(idx, Array):
+                if isinstance(axis_len, int):
+                    bnd_name = vng("in")
+                    bindings[bnd_name] = self.rec(idx)
+                    indices.append(prim.Subscript(
+                                        prim.Variable(bnd_name),
+                                        get_indexing_expression(
+                                                idx.shape,
+                                                (1,)*i_adv_indices[0]+adv_idx_shape))
+                                   % axis_len)
+                else:
+                    raise NotImplementedError("Advanced indexing over"
+                                              " parametric axis lengths.")
+            else:
+                raise NotImplementedError(f"Indices of type {type(idx)}.")
+
+            if i_idx == i_adv_indices[-1]:
+                islice_idx += len(adv_idx_shape)
+
+        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
+                                               tuple(indices)),
+                           bindings=bindings,
+                           shape=expr.shape,
+                           dtype=expr.dtype)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> IndexLambda:
+        from pytato.utils import (get_shape_after_broadcasting,
+                                  get_indexing_expression)
+        i_adv_indices = tuple(i
+                              for i, idx_expr in enumerate(expr.indices)
+                              if isinstance(idx_expr, (Array, int)))
+        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
+                                                      for i_idx in i_adv_indices])
+
+        vng = UniqueNameGenerator()
+        indices = []
+
+        in_ary = vng("in")
+        bindings = {in_ary: self.rec(expr.array)}
+
+        islice_idx = len(adv_idx_shape)
+
+        for idx, axis_len in zip(expr.indices, expr.array.shape):
+            if isinstance(idx, int):
+                if isinstance(axis_len, int):
+                    indices.append(idx % axis_len)
+                else:
+                    bnd_name = vng("in")
+                    bindings[bnd_name] = self.rec(axis_len)
+                    indices.append(idx % prim.Variable(bnd_name))
+            elif isinstance(idx, NormalizedSlice):
+                indices.append(idx.start
+                               + idx.step * prim.Variable(f"_{islice_idx}"))
+                islice_idx += 1
+            elif isinstance(idx, Array):
+                if isinstance(axis_len, int):
+                    bnd_name = vng("in")
+                    bindings[bnd_name] = self.rec(idx)
+                    indices.append(prim.Subscript(
+                                        prim.Variable(bnd_name),
+                                        get_indexing_expression(idx.shape,
+                                                                adv_idx_shape))
+                                   % axis_len)
+                else:
+                    raise NotImplementedError("Advanced indexing over"
+                                              " parametric axis lengths.")
+            else:
+                raise NotImplementedError(f"Indices of type {type(idx)}.")
+
+        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
+                                               tuple(indices)),
+                           bindings=bindings,
+                           shape=expr.shape,
+                           dtype=expr.dtype)
 # }}}
 
 
