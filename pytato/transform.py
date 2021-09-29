@@ -850,20 +850,16 @@ class _GraphPartitioner(CopyMapper):
         return new_binding
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
         # type-ignore reason: mypy can't tell '_handle_new_binding' is being fed
         # only arrays
-        new_shapes = \
-            tuple(self._handle_new_binding(expr, s)  # type: ignore[arg-type]
-                                      if isinstance(s, Array)
-                                      else s
-                                      for s in expr.newshape)
-
-        return Reshape(array=new_binding,
-                newshape=new_shapes,
-                order=expr.order,
-                tags=expr.tags)
+        return Reshape(
+            array=self._handle_new_binding(expr, expr.array),
+            newshape=tuple(
+                       self._handle_new_binding(expr, s)  # type: ignore[arg-type]
+                       if isinstance(s, Array) else s
+                       for s in expr.newshape),
+            order=expr.order,
+            tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         return Einsum(
