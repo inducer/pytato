@@ -679,7 +679,7 @@ class GraphToDictMapper(Mapper):
     """
     Maps a graph to a dictionary representation mapping a node to its children.
 
-    :members: graph_dict
+    .. attribute:: graph_dict
     """
 
     def __init__(self) -> None:
