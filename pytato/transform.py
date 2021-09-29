@@ -817,6 +817,32 @@ class GraphToDictMapper(Mapper):
         self.graph_dict.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
 
+    def _map_index_base(self, expr: IndexBase) -> None:
+        children: Set[Array] = set()
+
+        for idx in expr.indices:
+            if isinstance(idx, Array):
+                children = children | {idx}
+                self.rec(idx)
+
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+
+
+    def map_basic_index(self, expr: BasicIndex) -> None:
+        self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> None:
+        self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> None:
+        self._map_index_base(expr)
+
+
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args)
 
@@ -860,7 +886,7 @@ class GraphPartitioner(CopyMapper):
 
         # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
+        self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
 
         # "edges" of the partitioned graph
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
@@ -1014,11 +1040,12 @@ class DistributedMapper(CopyMapper):
         self.name_index = 0
         self.var_name_to_result: Dict[str, Array] = {}
 
+        # Naming for newly created PlaceHolders at partition edges
+        from pytools import UniqueNameGenerator
+        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
+
     def make_new_placeholder_name(self) -> str:
-        res = "_dist2_ph_" + str(self.name_index)
-        self.name_index += 1
-        # assert res not in self.cross_partition_name_to_value
-        return res
+        return self.name_generator()
 
     def map_distributed_send(self, expr: DistributedSend, *args: Any):
         new_name = self.make_new_placeholder_name()
