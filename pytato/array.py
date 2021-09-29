@@ -1221,7 +1221,7 @@ class MatrixProduct(Array):
 # {{{ stack
 
 class Stack(Array):
-    """Join a sequence of arrays along an axis.
+    """Join a sequence of arrays along a new axis.
 
     .. attribute:: arrays
 
@@ -1362,6 +1362,8 @@ class Roll(IndexRemappingBase):
 
 class AxisPermutation(IndexRemappingBase):
     r"""Permute the axes of an array.
+
+    .. attribute:: array
 
     .. attribute:: axes
 
