@@ -806,7 +806,8 @@ class _GraphPartitioner(CopyMapper):
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
-        # "edges" of the partitioned graph
+        # "edges" of the partitioned graph, maps an edge between two partitions
+        # to its placeholder names.
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 List[str]] = {}
 
@@ -865,78 +866,53 @@ class _GraphPartitioner(CopyMapper):
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        new_bindings: List[Array] = []
-        for arg in expr.args:
-            new_bindings.append(self._handle_new_binding(expr, arg))
-
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(new_bindings),
+                     args=tuple(self._handle_new_binding(expr, arg)
+                                for arg in expr.args),
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        new_bindings: List[Array] = []
-        for ary in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, ary))
-
         return Concatenate(
-                     arrays=tuple(new_bindings),
+                     arrays=tuple(self._handle_new_binding(expr, ary)
+                                  for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        new_bindings: List[Array] = []
-        for ary in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, ary))
-
         return Stack(
-                     arrays=tuple(new_bindings),
+                     arrays=tuple(self._handle_new_binding(expr, ary)
+                                  for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
-        return Roll(array=new_binding,
+        return Roll(array=self._handle_new_binding(expr, expr.array),
                 shift=expr.shift,
                 axis=expr.axis,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        new_shapes: List[Array] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=tuple(new_shapes),
+                shape=tuple(self._handle_new_binding(expr, dim)
+                            for dim in expr.shape if isinstance(dim, Array)),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-
-        new_x1 = self._handle_new_binding(expr, expr.x1)
-        new_x2 = self._handle_new_binding(expr, expr.x2)
-
-        return MatrixProduct(x1=new_x1, x2=new_x2,
-                tags=expr.tags)
+        return MatrixProduct(x1=self._handle_new_binding(expr, expr.x1),
+                             x2=self._handle_new_binding(expr, expr.x2),
+                             tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
-        new_bindings: Dict[str, Array] = {}
-        for name, child in expr.bindings.items():
-            new_bindings[name] = self._handle_new_binding(expr, child)
-
-        new_shapes: List[Array] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-
         return IndexLambda(expr=expr.expr,
-                shape=tuple(new_shapes),
+                shape=tuple(self._handle_new_binding(expr, dim)
+                            for dim in expr.shape if isinstance(dim, Array)),
                 dtype=expr.dtype,
-                bindings=new_bindings,
+                bindings={name: self._handle_new_binding(expr, child)
+                          for name, child in expr.bindings.items()},
                 tags=expr.tags)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
