@@ -686,7 +686,7 @@ class GraphToDictMapper(Mapper):
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
-        self.graph_dict: Dict[Any, Set[Any]] = {}
+        self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
         for child in expr._data.values():
