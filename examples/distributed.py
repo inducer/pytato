@@ -7,7 +7,6 @@ import pytato as pt
 import pyopencl as cl
 import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper,
-                              PartitionId as PartitionIdBase,
                               find_partitions, reverse_graph,
                               tag_nodes_with_starting_point, execute_partitions)
 
@@ -19,7 +18,7 @@ from pytato.array import (make_distributed_send, make_distributed_recv,
 
 
 @dataclass(frozen=True, eq=True)
-class PartitionId(PartitionIdBase):
+class PartitionId():
     fed_sends: object
     feeding_recvs: object
 
