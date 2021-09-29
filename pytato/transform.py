@@ -678,7 +678,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
 class GraphToDictMapper(Mapper):
     """
-    Maps a graph to a dictionary representation mapping a node to its children.
+    Maps a graph to a dictionary representation mapping a node to its parents.
 
     .. attribute:: graph_dict
     """
