@@ -709,52 +709,40 @@ class GraphToDictMapper(Mapper):
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim, *args)
-
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
 
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim, *args)
 
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
-
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
-        children = (expr.x1, expr.x2)
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for child in (expr.x1, expr.x2):
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
-        for c in expr.arrays:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
 
     def map_stack(self, expr: Stack, *args: Any) -> None:
-        for c in expr.arrays:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
 
     def map_roll(self, expr: Roll, *args: Any) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
-        # FIXME: Anything we need to do here?
         pass
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
@@ -772,19 +760,14 @@ class GraphToDictMapper(Mapper):
                 self.rec(dim)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for child in expr.bindings.values():
-            children = children | {child}
+            self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
-
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args)
@@ -891,8 +874,8 @@ class GraphPartitioner(CopyMapper):
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         new_bindings: List[Array] = []
-        for c in expr.args:
-            new_bindings.append(self._handle_new_binding(expr, c))
+        for arg in expr.args:
+            new_bindings.append(self._handle_new_binding(expr, arg))
 
         return Einsum(
                      access_descriptors=expr.access_descriptors,
@@ -901,8 +884,8 @@ class GraphPartitioner(CopyMapper):
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         new_bindings: List[Array] = []
-        for c in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, c))
+        for ary in expr.arrays:
+            new_bindings.append(self._handle_new_binding(expr, ary))
 
         return Concatenate(
                      arrays=tuple(new_bindings),
@@ -911,8 +894,8 @@ class GraphPartitioner(CopyMapper):
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         new_bindings: List[Array] = []
-        for c in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, c))
+        for ary in expr.arrays:
+            new_bindings.append(self._handle_new_binding(expr, ary))
 
         return Stack(
                      arrays=tuple(new_bindings),
