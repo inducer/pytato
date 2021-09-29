@@ -977,7 +977,7 @@ class CodePartitions:
 
 def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
         CodePartitions:
-    """Partitions the `expr` according to `part_func` and generates code for
+    """Partitions the *expr* according to *part_func* and generates code for
     each partition.
 
     :param expr: The expression to partition.
