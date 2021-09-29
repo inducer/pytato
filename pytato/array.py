@@ -75,6 +75,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: einsum
 .. autofunction:: dot
 .. autofunction:: vdot
+.. autofunction:: broadcast_to
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
@@ -111,7 +112,10 @@ Index Remapping
 .. autoclass:: Roll
 .. autoclass:: AxisPermutation
 .. autoclass:: Reshape
-.. autoclass:: Slice
+.. autoclass:: IndexBase
+.. autoclass:: BasicIndex
+.. autoclass:: AdvancedIndexInContiguousAxes
+.. autoclass:: AdvancedIndexInNoncontiguousAxes
 
 Input Arguments
 ^^^^^^^^^^^^^^^
@@ -154,7 +158,7 @@ Internal stuff that is only here because the documentation tool wants it
 
 # }}}
 
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from functools import partialmethod
 import operator
 from dataclasses import dataclass
@@ -258,7 +262,8 @@ def normalize_shape(
 
 # {{{ array inteface
 
-SliceItem = Union[int, slice, None, EllipsisType]
+ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
+IndexExpr = Union[int, "NormalizedSlice", "Array", None, EllipsisType]
 DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
@@ -280,6 +285,31 @@ def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[A
         return np.dtype(np.float64)
     else:
         return dtype
+
+
+@dataclass(frozen=True, eq=True)
+class NormalizedSlice:
+    """
+    A normalized version of :class:`slice`. "Normalized" is explained in
+    :attr:`start` and :attr:`stop`.
+
+    .. attribute:: start
+
+        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        relation ``-1 <= start <= axis_len``, where ``axis_len`` is the length of the
+        axis being sliced.
+
+    .. attribute:: stop
+
+        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        relation ``-1 <= stop <= axis_len``, where ``axis_len`` is the length of
+        the axis being sliced.
+
+    .. attribute:: step
+    """
+    start: ShapeComponent
+    stop: ShapeComponent
+    step: int
 
 
 class Array(Taggable):
@@ -398,86 +428,20 @@ class Array(Taggable):
         return self.shape[0]
 
     def __getitem__(self,
-            slice_spec: Union[SliceItem, Tuple[SliceItem, ...]]) -> Array:
+                    slice_spec: Union[ConvertibleToIndexExpr,
+                                      Tuple[ConvertibleToIndexExpr, ...]]
+                    ) -> Array:
+        """
+        .. warning::
+
+            Out-of-bounds accesses via :class:`Array` indices are undefined
+            behavior and may pass silently.
+        """
         if not isinstance(slice_spec, tuple):
             slice_spec = (slice_spec,)
 
-        # FIXME: This doesn't support all NumPy basic indexing constructs,
-        # including:
-        #
-        # - newaxis
-        # - Ellipsis
-        # - slices with nontrivial strides
-        # - slices with bounds that exceed array dimensions
-        # - slices with negative indices
-        # - slices that yield an array with a zero dimension (lacks codegen support)
-        #
-        # Symbolic expression support is also limited.
-
-        starts = []
-        stops = []
-        kept_dims = []
-
-        slice_spec_expanded = []
-
-        for elem in slice_spec:
-            if elem is Ellipsis:
-                raise NotImplementedError("'...' is unsupported")
-            elif elem is None:
-                raise NotImplementedError("newaxis is unsupported")
-            else:
-                assert isinstance(elem, (int, slice))
-                slice_spec_expanded.append(elem)
-
-        slice_spec_expanded.extend(
-                [slice(None, None, None)] * (self.ndim - len(slice_spec)))
-
-        if len(slice_spec_expanded) > self.ndim:
-            raise IndexError("too many dimensions in index")
-
-        for i, elem in enumerate(slice_spec_expanded):
-            if isinstance(elem, slice):
-                start = elem.start
-                if start is None:
-                    start = 0
-                stop = elem.stop
-                if stop is None:
-                    stop = self.shape[i]
-                stride = elem.step
-                if stride is not None and stride != 1:
-                    raise ValueError("non-trivial strides unsupported")
-                starts.append(start)
-                stops.append(stop)
-                kept_dims.append(i)
-
-            elif isinstance(elem, int):
-                starts.append(elem)
-                stops.append(elem+1)
-
-            else:
-                raise ValueError("unknown index along dimension")
-
-        slice_ = _make_slice(self, starts, stops)
-
-        if len(kept_dims) != self.ndim:
-            # Return an IndexLambda that elides the indexed-into dimensions
-            # (as opposed to the ones that were sliced).
-            indices = [0] * self.ndim
-            shape = []
-            for i, dim in enumerate(kept_dims):
-                indices[dim] = var(f"_{i}")
-                shape.append(slice_.shape[dim])
-            expr = var("_in0")
-            if indices:
-                expr = expr[tuple(indices)]
-
-            # FIXME: Flatten into a single IndexLambda
-            return IndexLambda(expr,
-                    shape=tuple(shape),
-                    dtype=self.dtype,
-                    bindings=dict(_in0=slice_))
-        else:
-            return slice_
+        from pytato.utils import _index_into
+        return _index_into(self, slice_spec)
 
     @property
     def ndim(self) -> int:
@@ -561,6 +525,9 @@ class Array(Taggable):
 
     __sub__ = partialmethod(_binary_op, operator.sub)
     __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
+
+    __floordiv__ = partialmethod(_binary_op, operator.floordiv)
+    __rfloordiv__ = partialmethod(_binary_op, operator.floordiv, reverse=True)
 
     __truediv__ = partialmethod(_binary_op, operator.truediv,
             get_result_type=_truediv_result_type)
@@ -1430,31 +1397,125 @@ class Reshape(IndexRemappingBase):
 # }}}
 
 
-# {{{ slice
+# {{{ indexing
 
-class Slice(IndexRemappingBase):
-    """Extracts a slice of constant size from an array.
-
-    .. attribute:: starts
-    .. attribute:: stops
+class IndexBase(IndexRemappingBase, ABC):
     """
-    _fields = IndexRemappingBase._fields + ("starts", "stops")
-    _mapper_method = "map_slice"
+    Abstract class for all index expressions on an array.
+
+    .. attribute:: indices
+    """
+    _fields = IndexRemappingBase._fields + ("indices",)
 
     def __init__(self,
-            array: Array,
-            starts: Tuple[int, ...],
-            stops: Tuple[int, ...],
-            tags: TagsType = frozenset()):
+                 array: Array,
+                 indices: Tuple[IndexExpr, ...],
+                 tags: TagsType = frozenset()):
         super().__init__(array, tags)
+        self.indices = indices
 
-        self.starts = starts
-        self.stops = stops
+    @abstractproperty
+    def shape(self) -> ShapeType:
+        pass
+
+
+class BasicIndex(IndexBase):
+    """
+    An indexing expression with all indices being either an :class:`int` or
+    :class:`slice`.
+    """
+    _mapper_method = "map_basic_index"
 
     @property
-    def shape(self) -> Tuple[int, ...]:
-        return tuple((stop-start)
-                     for start, stop in zip(self.starts, self.stops))
+    def shape(self) -> ShapeType:
+        assert len(self.indices) == self.array.ndim
+        assert all(isinstance(idx, (NormalizedSlice, int)) for idx in self.indices)
+
+        from pytato.utils import _normalized_slice_len
+        return tuple(_normalized_slice_len(idx)
+                     for idx, axis_len in zip(self.indices, self.array.shape)
+                     if isinstance(idx, NormalizedSlice))
+
+
+class AdvancedIndexInContiguousAxes(IndexBase):
+    """
+    An indexing expression with at least one :class:`Array` index and all the
+    advanced indices (i.e. scalars/array) appearing contiguously in
+    :attr:`IndexBase.indices`.
+
+    The reason for the existence of this class and
+    :class:`AdvancedIndexInNoncontiguousAxes` is that :mod:`numpy` treats those
+    two cases differently, and we're bound to follow its precedent.
+    """
+    _mapper_method = "map_contiguous_advanced_index"
+
+    @property
+    def shape(self) -> ShapeType:
+        assert len(self.indices) == self.array.ndim
+        assert any(isinstance(idx, Array) for idx in self.indices)
+        from pytato.utils import (get_shape_after_broadcasting,
+                                  _normalized_slice_len, partition)
+
+        i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
+                                                                self.indices[idx],
+                                                                NormalizedSlice),
+                                                   range(len(self.indices)))
+
+        assert not any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
+                       for i_basic_idx in i_basic_indices)
+
+        adv_idx_shape = get_shape_after_broadcasting([self.indices[i_idx]
+                                                      for i_idx in i_adv_indices])
+
+        # type-ignored because mypy cannot figure out basic-indices only refer
+        # to slices
+        pre_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+                                    for i_idx in i_basic_indices
+                                    if i_idx < i_adv_indices[0])
+
+        # type-ignored because mypy cannot figure out basic-indices only refer
+        # to slices
+        post_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+                                     for i_idx in i_basic_indices
+                                     if i_idx > i_adv_indices[-1])
+
+        return pre_basic_idx_shape + adv_idx_shape + post_basic_idx_shape
+
+
+class AdvancedIndexInNoncontiguousAxes(IndexBase):
+    """
+    An indexing expression with advanced indices (i.e. scalars/arrays)
+    appearing non-contiguously in :attr:`IndexBase.indices`.
+
+    The reason for the existence of this class and
+    :class:`AdvancedIndexInContiguousAxes` is that :mod:`numpy` treats those
+    two cases differently, and we're bound to follow its precedent.
+    """
+    _mapper_method = "map_non_contiguous_advanced_index"
+
+    @property
+    def shape(self) -> ShapeType:
+        assert len(self.indices) == self.array.ndim
+        from pytato.utils import (get_shape_after_broadcasting,
+                                  _normalized_slice_len, partition)
+
+        i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
+                                                                self.indices[idx],
+                                                                NormalizedSlice),
+                                                   range(len(self.indices)))
+
+        assert len(i_adv_indices) >= 2
+        assert any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
+                   for i_basic_idx in i_basic_indices)
+
+        adv_idx_shape = get_shape_after_broadcasting([self.indices[i_idx]
+                                                      for i_idx in i_adv_indices])
+
+        # type-ignored because mypy cannot figure out basic-indices only refer slices
+        basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+                                for i_idx in i_basic_indices)
+
+        return adv_idx_shape + basic_idx_shape
 
 # }}}
 
@@ -1747,51 +1808,6 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
         raise ValueError("invalid axis")
 
     return Concatenate(tuple(arrays), axis)
-
-
-def _make_slice(array: Array, starts: Sequence[int], stops: Sequence[int]) -> Array:
-    """Extract a constant-sized slice from an array with constant offsets.
-
-    :param array: input array
-    :param starts: a sequence of length *array.ndim* containing slice
-        offsets. Must be in bounds.
-    :param stops: a sequence of length *array.ndim* containing slice stops
-        along each dimension. Must be in bounds and ``>= start`` for each
-        dimension.
-
-    .. note::
-
-        Support for slices is currently limited. Among other things, non-trivial
-        slices (i.e., not the length of the whole dimension) involving symbolic
-        expressions are unsupported.
-    """
-    if array.ndim != len(starts):
-        raise ValueError("'starts' and 'array' do not match in number of dimensions")
-
-    if len(starts) != len(stops):
-        raise ValueError("'starts' and 'stops' do not match in number of dimensions")
-
-    for i, (start, stop) in enumerate(zip(starts, stops)):
-        symbolic_index = not (
-                isinstance(array.shape[i], int)
-                and isinstance(start, int)
-                and isinstance(stop, int))
-
-        if symbolic_index:
-            if not (0 == start and stop == array.shape[i]):
-                raise ValueError(
-                        "slicing with symbolic dimensions is unsupported")
-            continue
-
-        ubound: int = cast(int, array.shape[i])
-        if not (0 <= start < ubound):
-            raise IndexError("index '%d' of 'begin' out of bounds" % i)
-
-        if not (start <= stop <= ubound):
-            raise ValueError("index '%d' of 'size' out of bounds" % i)
-
-    # FIXME: Generate IndexLambda when possible
-    return Slice(array, tuple(starts), tuple(stops))
 
 
 def reshape(array: Array, newshape: Union[int, Sequence[int]],
@@ -2285,7 +2301,30 @@ def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
                           -> DistributedRecv:
     return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
 
-
 # }}}
+
+
+def broadcast_to(array: Array, shape: ShapeType) -> Array:
+    """
+    Returns *array* broadcasted to *shape*.
+    """
+    from pytato.utils import (get_indexing_expression,
+                              are_shape_components_equal)
+
+    if len(shape) < array.ndim:
+        raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
+
+    for in_dim, brdcst_dim in zip(array.shape,
+                                  shape[-array.ndim:]):
+        if (not are_shape_components_equal(in_dim, brdcst_dim)
+                and not are_shape_components_equal(in_dim, 1)):
+            raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
+
+    return IndexLambda(expr=prim.Subscript(prim.Variable("in"),
+                                           get_indexing_expression(array.shape,
+                                                                   shape)),
+                       shape=shape,
+                       dtype=array.dtype,
+                       bindings={"in": array})
 
 # vim: foldmethod=marker

@@ -3,18 +3,19 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (TopoSortMapper, PartitionId, execute_partitions,
+from pytato.transform import (TopoSortMapper, execute_partitions,
                               find_partitions)
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, eq=True)
-class MyPartitionId(PartitionId):
+class MyPartitionId():
     num: int
 
 
 def get_partition_id(topo_list, expr) -> MyPartitionId:
+    # Partition nodes into groups of two
     res = MyPartitionId(topo_list.index(expr)//2)
     return res
 

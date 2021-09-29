@@ -1069,11 +1069,10 @@ def test_partitionfinder(ctx_factory):
     y = 2*x
 
     from dataclasses import dataclass
-    from pytato.transform import (TopoSortMapper, PartitionId,
-                                  find_partitions)
+    from pytato.transform import (TopoSortMapper, find_partitions)
 
     @dataclass(frozen=True, eq=True)
-    class MyPartitionId(PartitionId):
+    class MyPartitionId():
         num: int
 
     def get_partition_id(topo_list, expr) -> MyPartitionId:
@@ -1101,6 +1100,129 @@ def test_partitionfinder(ctx_factory):
     evt, (out,) = prg(queue)
 
     np.testing.assert_allclose(out, final_res)
+
+
+def test_broadcast_to(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+
+    # fuzz testing
+    for _ in range(20):
+        broadcasted_ndim = rng.integers(1, 7)
+        broadcasted_shape = tuple(int(dim)
+                                  for dim in rng.integers(3, 7, broadcasted_ndim))
+
+        input_ndim = rng.integers(0, broadcasted_ndim+1)
+        input_shape = [
+            dim if rng.choice((0, 1)) else 1
+            for dim in broadcasted_shape[broadcasted_ndim-input_ndim:]]
+
+        x_in = rng.random(input_shape, dtype=np.float32)
+        x = pt.make_data_wrapper(x_in)
+        evt, (x_brdcst,) = pt.generate_loopy(
+                                pt.broadcast_to(x, broadcasted_shape))(queue)
+
+        np.testing.assert_allclose(np.broadcast_to(x_in, broadcasted_shape),
+                                   x_brdcst)
+
+
+def test_advanced_indexing_with_broadcasting(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    x_in = rng.random((3, 3, 3, 3))
+    idx1_in = np.array([[-1], [1]])
+    idx2_in = np.array([0, 2])
+
+    x = pt.make_data_wrapper(x_in)
+    idx1 = pt.make_data_wrapper(idx1_in)
+    idx2 = pt.make_data_wrapper(idx2_in)
+
+    # Case 1
+    evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[:, ::-1, idx1_in, idx2_in])
+
+    # Case 2
+    evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
+    np.testing.assert_allclose(pt_out, x_in[-4:4:-1, idx1_in, idx2_in, :])
+
+    # Case 3
+    evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
+    np.testing.assert_allclose(pt_out, x_in[idx1_in, idx2_in, -2::-1, :])
+
+    # Case 4 (non-contiguous advanced indices)
+    evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[:, idx1_in, -2::-1, idx2_in])
+
+    # Case 5 (non-contiguous advanced indices with ellipsis)
+    evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
+    np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
+
+
+def test_advanced_indexing_fuzz(ctx_factory):
+    from numpy.random import default_rng
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+    rng = default_rng(seed=0)
+
+    NSAMPLES = 50  # noqa: N806
+
+    for i in range(NSAMPLES):
+        input_ndim = rng.integers(1, 8)
+
+        # choosing shape so that the max input size is approx 20MB
+        input_shape = [rng.integers(low=1, high=10)
+                       for i in range(input_ndim)]
+
+        indirection_shape = [rng.integers(low=1, high=5)
+                             for i in range(rng.integers(1, 4))]
+
+        x_in = rng.random(input_shape, dtype=np.float32)
+        x = pt.make_data_wrapper(x_in)
+
+        n_indices = rng.integers(low=1, high=input_ndim+1)
+        np_indices = []
+
+        for i in range(n_indices):
+            axis_len = input_shape[i]
+            idx_type = rng.choice(["INT", "SLICE", "ARRAY"])
+            if idx_type == "INT":
+                if axis_len == 0:
+                    # rng.integers does not like low == high
+                    np_indices.append(0)
+                else:
+                    np_indices.append(int(rng.integers(low=-axis_len,
+                                                       high=axis_len)))
+            elif idx_type == "SLICE":
+                start, stop, step = rng.integers(low=-2*axis_len, high=2*axis_len,
+                                                 size=3)
+                step = 1 if step == 0 else step
+
+                np_indices.append(slice(int(start), int(stop), int(step)))
+            elif idx_type == "ARRAY":
+                np_indices.append(rng.integers(low=-axis_len, high=axis_len,
+                                               size=indirection_shape))
+            else:
+                raise NotImplementedError
+
+        pt_indices = [idx if isinstance(idx, (int, slice))
+                      else pt.make_data_wrapper(idx)
+                      for idx in np_indices]
+
+        evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
+
+        np.testing.assert_allclose(pt_out, x_in[tuple(np_indices)],
+                                   err_msg=(f"input_shape={input_shape}, "
+                                            f"indirection_shape={indirection_shape},"
+                                            f" indices={pt_indices}"))
 
 
 if __name__ == "__main__":

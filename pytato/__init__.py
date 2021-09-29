@@ -46,6 +46,8 @@ from pytato.array import (
 
         dot, vdot,
 
+        broadcast_to,
+
         make_distributed_send, make_distributed_recv, DistributedRecv,
         DistributedSend
         )
@@ -95,6 +97,9 @@ __all__ = (
 
         "dot", "vdot",
 
+        "broadcast_to",
+
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend"
+
 )

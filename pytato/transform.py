@@ -25,14 +25,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    Optional, List, Tuple)
+from typing import (Any, Callable, Dict, FrozenSet, Hashable, Union, TypeVar, Set,
+                    Generic, Optional, List, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
-        AxisPermutation, Slice, DataWrapper, SizeParam, DictOfNamedArrays,
+        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase, DistributedSend,
+        IndexRemappingBase, Einsum, InputArgumentBase,
+        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
+        IndexBase, make_placeholder, DistributedSend,
         DistributedRecv)
 from pytato.loopy import LoopyCall
 
@@ -56,7 +58,6 @@ __doc__ = """
 .. autoclass:: GraphToDictMapper
 .. autoclass:: GraphPartitioner
 .. autoclass:: CodePartitions
-.. autoclass:: PartitionId
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: find_partitions
@@ -164,11 +165,23 @@ class CopyMapper(Mapper):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_slice(self, expr: Slice) -> Array:
-        return Slice(array=self.rec(expr.array),
-                starts=expr.starts,
-                stops=expr.stops,
-                tags=expr.tags)
+    def _map_index_base(self, expr: IndexBase) -> Array:
+        return type(expr)(self.rec(expr.array),
+                          tuple(self.rec(idx) if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_basic_index(self, expr: BasicIndex) -> Array:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> Array:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> Array:
+        return self._map_index_base(expr)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         return DataWrapper(name=expr.name,
@@ -264,8 +277,24 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_axis_permutation(self, expr: AxisPermutation) -> CombineT:
         return self.combine(self.rec(expr.array))
 
-    def map_slice(self, expr: Slice) -> CombineT:
-        return self.combine(self.rec(expr.array))
+    def _map_index_base(self, expr: IndexBase) -> CombineT:
+        return self.combine(self.rec(expr.array),
+                            *(self.rec(idx)
+                              for idx in expr.indices
+                              if isinstance(idx, Array)))
+
+    def map_basic_index(self, expr: BasicIndex) -> CombineT:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> CombineT:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> CombineT:
+        return self._map_index_base(expr)
 
     def map_reshape(self, expr: Reshape) -> CombineT:
         return self.combine(self.rec(expr.array))
@@ -334,8 +363,8 @@ class DependencyMapper(CombineMapper[R]):
     def map_axis_permutation(self, expr: AxisPermutation) -> R:
         return self.combine(frozenset([expr]), super().map_axis_permutation(expr))
 
-    def map_slice(self, expr: Slice) -> R:
-        return self.combine(frozenset([expr]), super().map_slice(expr))
+    def _map_index_base(self, expr: IndexBase) -> R:
+        return self.combine(frozenset([expr]), super()._map_index_base(expr))
 
     def map_reshape(self, expr: Reshape) -> R:
         return self.combine(frozenset([expr]), super().map_reshape(expr))
@@ -493,8 +522,32 @@ class WalkMapper(Mapper):
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
-    map_slice = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
+
+    def _map_index_base(self, expr: IndexBase) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.array)
+
+        for idx in expr.indices:
+            if isinstance(idx, Array):
+                self.rec(idx)
+
+        self.post_visit(expr)
+
+    def map_basic_index(self, expr: BasicIndex) -> None:
+        return self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> None:
+        return self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> None:
+        return self._map_index_base(expr)
 
     def map_stack(self, expr: Stack) -> None:
         if not self.visit(expr):
@@ -649,7 +702,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
 class GraphToDictMapper(Mapper):
     """
-    Maps a graph to a dictionary representation.
+    Maps a graph to a dictionary representation mapping a node to its children.
 
     :members: graph_dict
     """
@@ -679,6 +732,16 @@ class GraphToDictMapper(Mapper):
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
+        children: Set[Array] = set()
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                children = children | {dim}
+                self.rec(dim, *args)
+
+        for c in children:
+            self.graph_dict.setdefault(c, set()).add(expr)
+
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
@@ -721,10 +784,6 @@ class GraphToDictMapper(Mapper):
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
-    def map_slice(self, expr: Slice, *args: Any) -> None:
-        self.graph_dict.setdefault(expr.array, set()).add(expr)
-        self.rec(expr.array)
-
     def map_data_wrapper(self, expr: DataWrapper) -> None:
         if isinstance(expr.data, Array):
             self.graph_dict.setdefault(expr.data, set()).add(expr)
@@ -759,7 +818,6 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.data)
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
-        self.graph_dict[expr] = set()  # FIXME: Is this necessary?
         return self.rec(expr, *args)
 
 
@@ -774,29 +832,17 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], node: Array,
+def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
         starting_point: Optional[Array] = None,
-        result: Optional[Dict[Array, Set[Array]]] = None) -> None:
-    """Tags nodes with their starting point."""
-    if result is None:
-        result = {}
-    if starting_point is None:
-        starting_point = node
-
-    result.setdefault(node, set()).add(starting_point)
-    if node in graph:
-        for other_node_key in graph[node]:
-            tag_nodes_with_starting_point(graph, other_node_key, starting_point,
-                                          result)
-
-
-from pytato.array import make_placeholder
-from abc import ABC
-
-
-class PartitionId(ABC):
-    """A class that represents a partition ID."""
-    pass
+        node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
+    """Tags nodes reachable from *starting_point*."""
+    if node_to_tags is None:
+        node_to_tags = {}
+    node_to_tags.setdefault(starting_point, set()).add(tag)
+    if starting_point in graph:
+        for other_node_key in graph[starting_point]:
+            tag_nodes_with_starting_point(graph, other_node_key, tag,
+                                          node_to_tags)
 
 
 class GraphPartitioner(CopyMapper):
@@ -806,58 +852,30 @@ class GraphPartitioner(CopyMapper):
     """
 
     def __init__(self, get_partition_id:
-                                   Callable[[Array], PartitionId]) -> None:
+                                   Callable[[Array], Hashable]) -> None:
         super().__init__()
 
-        # Function to determine the PartitionId
-        self.get_partition_id_init = get_partition_id
+        # Function to determine the Partition ID
+        self.get_partition_id = get_partition_id
 
-        # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
-        self.cross_partition_name_to_value: Dict[str, Array] = {}
-
-        # Naming index for newly created PlaceHolders at partition edges
-        self.name_index = 0
-
-        # "nodes" of the partitioned graph  # FIXME: unused?
-        self.partition_id_to_nodes: Dict[PartitionId, List[Any]] = {}
+        # Naming for newly created PlaceHolders at partition edges
+        from pytools import UniqueNameGenerator
+        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
         # "edges" of the partitioned graph
-        self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
+        self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 List[str]] = {}
 
-        # FIXME: unused
-        self.partion_id_to_placeholders: Dict[PartitionId, List[Any]] = {}
-
-        # FIXME: same as self.cross_partition_name_to_value ?
         self.var_name_to_result: Dict[str, Array] = {}
-
-        self.newly_created_expr_to_partition_id: Dict[Array, PartitionId] = {}
-
-    def get_partition_id(self, expr: Array) -> PartitionId:
-        return self.newly_created_expr_to_partition_id.get(expr,
-                    self.get_partition_id_init(expr))
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
 
-    def add_node_to_partition(self, expr: Array,
-                              pid: PartitionId) -> None:
-        self.partition_id_to_nodes.setdefault(pid, []).append(expr)
-
-    def register_placeholder(self, name: str, expr: Array, placeholder: Array,
-                             pid: Optional[PartitionId] = None) -> None:
-        if not pid:
-            pid = self.get_partition_id(expr)
-        assert pid
-        self.partion_id_to_placeholders.setdefault(pid, []).append(placeholder)
+    def register_placeholder(self, name: str, expr: Array) -> None:
         self.var_name_to_result[name] = expr
-        self.newly_created_expr_to_partition_id[expr] = pid
 
     def make_new_placeholder_name(self) -> str:
-        res = "_dist_ph_" + str(self.name_index)
-        self.name_index += 1
-        assert res not in self.cross_partition_name_to_value
-        return res
+        return self.name_generator()
 
     def add_interpartition_edge(self, target: Array, dependency: Array,
                                 placeholder_name: str) -> None:
@@ -879,32 +897,23 @@ class GraphPartitioner(CopyMapper):
             new_binding: Array = make_placeholder(new_name, child.shape,
                                                   child.dtype,
                                                   tags=child.tags)
-            self.cross_partition_name_to_value[new_name] = self.rec(child)
-            self.register_placeholder(
-                new_name, expr, new_binding, self.get_partition_id(expr))
-            self.add_node_to_partition(
-                    new_binding, self.get_partition_id(expr))
+            self.register_placeholder(new_name, expr)
 
         else:
             new_binding = self.rec(child)
-
-            self.add_node_to_partition(
-                    new_binding, self.get_partition_id(child))
 
         return new_binding
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         new_binding = self._handle_new_binding(expr, expr.array)
 
-        new_shapes: List[Any] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-            else:
-                new_shapes.append(dim)
+        new_shapes = tuple(self._handle_new_binding(expr, s)  # type: ignore
+                                      if isinstance(s, Array)
+                                      else s
+                                      for s in expr.newshape)
 
         return Reshape(array=new_binding,
-                newshape=tuple(new_shapes),
+                newshape=new_shapes,
                 order=expr.order,
                 tags=expr.tags)
 
@@ -944,14 +953,6 @@ class GraphPartitioner(CopyMapper):
         return Roll(array=new_binding,
                 shift=expr.shift,
                 axis=expr.axis,
-                tags=expr.tags)
-
-    def map_slice(self, expr: Slice, *args: Any) -> Slice:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
-        return Slice(array=new_binding,
-                starts=expr.starts,
-                stops=expr.stops,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
@@ -1042,43 +1043,41 @@ from pytato.target import BoundProgram
 @dataclass
 class CodePartitions:
     """Store partitions and their code."""
-    toposorted_partitions: List[PartitionId]
-    prg_per_partition: Dict[PartitionId, BoundProgram]
-    partition_id_to_input_names: Dict[PartitionId, List[str]]
-    partition_id_to_output_names: Dict[PartitionId, List[str]]
-    partition_id_to_nodes: Dict[PartitionId, List[Any]]
+    toposorted_partitions: List[Hashable]
+    prg_per_partition: Dict[Hashable, BoundProgram]
+    partition_id_to_input_names: Dict[Hashable, List[str]]
+    partition_id_to_output_names: Dict[Hashable, List[str]]
 
 
-def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
+def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
         CodePartitions:
     """Partitions the `expr` according to `part_func` and generates code for
     each partition.
 
     :param expr: The expression to partition.
     :param part_func: A callable that returns an instance of
-        :class:`PartitionId` for a node.
+        :class:`Hashable` for a node.
     :returns: An instance of :class:`CodePartitions` that contains the partitions.
     """
 
     pf = GraphPartitioner(part_func)
     pf(expr)
 
-    partition_id_to_output_names: Dict[PartitionId, List[str]] = {
+    partition_id_to_output_names: Dict[Hashable, List[str]] = {
         v: [] for _, v in pf.partition_pair_to_edges.keys()}
-    partition_id_to_input_names: Dict[PartitionId, List[str]] = {
+    partition_id_to_input_names: Dict[Hashable, List[str]] = {
         k: [] for k, _ in pf.partition_pair_to_edges.keys()}
 
     partitions = set()
 
     # Used to compute the topological order
-    partitions_dict: Dict[PartitionId, List[PartitionId]] = {}
+    partitions_dict: Dict[Hashable, List[Hashable]] = {}
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        # FIXME?: Does this need to store *all* connected nodes?:
         partitions_dict.setdefault(pid_dependency, []).append(pid_target)
 
         for var_name in var_names:
@@ -1102,12 +1101,11 @@ def find_partitions(expr: Array, part_func: Callable[[Array], PartitionId]) ->\
                         for var_name in partition_id_to_output_names[pid]
                      }.update({var_name: r
                         for var_name, r in dm.var_name_to_result.items()
-                         })))
+                               })))
             for pid in partitions}
 
     res = CodePartitions(toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names,
-            pf.partition_id_to_nodes)
+            partition_id_to_input_names, partition_id_to_output_names)
 
     return res
 
