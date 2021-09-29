@@ -799,7 +799,7 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
+def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
         starting_point: Optional[Array] = None,
         node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
     """Tags nodes reachable from *starting_point*."""
