@@ -55,7 +55,6 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: GraphToDictMapper
-.. autoclass:: GraphPartitioner
 .. autoclass:: CodePartitions
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
@@ -790,7 +789,7 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
                                           node_to_tags)
 
 
-class GraphPartitioner(CopyMapper):
+class _GraphPartitioner(CopyMapper):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.
@@ -984,7 +983,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     :returns: An instance of :class:`CodePartitions` that contains the partitions.
     """
 
-    pf = GraphPartitioner(part_func)
+    pf = _GraphPartitioner(part_func)
     pf(expr)
 
     partition_id_to_output_names: Dict[Hashable, List[str]] = {
