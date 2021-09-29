@@ -973,7 +973,24 @@ from pytato.target import BoundProgram
 
 @dataclass
 class CodePartitions:
-    """Store partitions and their code."""
+    """Store partitions and their code.
+
+    .. attribute:: toposorted_partitions
+
+       List of topologically sorted partitions.
+
+    .. attribute:: prg_per_partition
+
+       A mapping of partitions to their :class:`pytato.target.BoundProgram`.
+
+    .. attribute:: partition_id_to_input_names
+
+       Mapping of partitions to their input names.
+
+    .. attribute:: partition_id_to_output_names
+
+       Mapping of partitions to their output names.
+    """
     toposorted_partitions: List[Hashable]
     prg_per_partition: Dict[Hashable, BoundProgram]
     partition_id_to_input_names: Dict[Hashable, List[str]]
