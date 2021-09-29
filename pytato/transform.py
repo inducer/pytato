@@ -59,6 +59,8 @@ __doc__ = """
 .. autoclass:: CodePartitions
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
+.. autofunction:: reverse_graph
+.. autofunction:: tag_child_nodes
 .. autofunction:: find_partitions
 .. autofunction:: execute_partitions
 
@@ -808,7 +810,7 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
     node_to_tags.setdefault(starting_point, set()).add(tag)
     if starting_point in graph:
         for other_node_key in graph[starting_point]:
-            tag_nodes_with_starting_point(graph, other_node_key, tag,
+            tag_child_nodes(graph, other_node_key, tag,
                                           node_to_tags)
 
 
@@ -874,7 +876,10 @@ class GraphPartitioner(CopyMapper):
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         new_binding = self._handle_new_binding(expr, expr.array)
 
-        new_shapes = tuple(self._handle_new_binding(expr, s)  # type: ignore
+        # type-ignore reason: mypy can't tell '_handle_new_binding' is being fed
+        # only arrays
+        new_shapes = \
+            tuple(self._handle_new_binding(expr, s)  # type: ignore[arg-type]
                                       if isinstance(s, Array)
                                       else s
                                       for s in expr.newshape)
