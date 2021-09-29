@@ -965,15 +965,15 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
 
     partitions = set()
 
-    # Used to compute the topological order
-    partitions_dict: Dict[Hashable, List[Hashable]] = {}
+    # Mapping of nodes to their successors; used to compute the topological order
+    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {}
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        partitions_dict.setdefault(pid_dependency, []).append(pid_target)
+        partition_nodes_to_targets.setdefault(pid_dependency, []).append(pid_target)
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
@@ -982,7 +982,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
                 pid_dependency, []).append(var_name)
 
     from pytools.graph import compute_topological_order
-    toposorted_partitions = compute_topological_order(partitions_dict)
+    toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
     # codegen
     from pytato import generate_loopy
