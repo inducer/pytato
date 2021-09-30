@@ -572,6 +572,8 @@ class Array(Taggable):
 
     def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
         import pytato as pt
+        if len(shape) == 0:
+            raise ValueError("reshape takes at least one argument (0 given)")
         if len(shape) == 1:
             # handle shape as single argument tuple
             return pt.reshape(self, shape[0], order=order)
@@ -1832,6 +1834,9 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
 
+    if newshape.count(-1) == 1 and newshape.count(0) > 0:
+        raise ValueError(f"cannot reshape {array.shape} into {newshape}")
+
     if not all(isinstance(axis_len, int) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
@@ -1844,9 +1849,9 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
         if not isinstance(new_axislen, int):
             raise ValueError("Symbolic reshapes not allowed.")
 
-        if not(new_axislen > 0 or new_axislen == -1):
-            raise ValueError("newshape should be either sequence of positive ints or"
-                    " -1")
+        if new_axislen < -1:
+            raise ValueError("newshape should be either sequence of non-negative"
+                             " ints or -1")
 
         # {{{ infer the axis length corresponding to axis marked "-1"
 
