@@ -923,17 +923,12 @@ from pytato.target import BoundProgram
 
 @dataclass
 class CodePartitions:
-    """Store partitions and their code.
+    """Store information about generated partitions.
 
     .. attribute:: toposorted_partitions
 
        List of topologically sorted partitions, represented by their
        identifiers.
-
-    .. attribute:: prg_per_partition
-
-       A mapping of partition identifiers to their
-       :class:`pytato.target.BoundProgram`.
 
     .. attribute:: partition_id_to_input_names
 
@@ -944,11 +939,16 @@ class CodePartitions:
 
        Mapping of partition IDs to the names of placeholders
        they provide as output.
+
+    .. attribute:: var_name_to_result
+
+       Mapping of placeholder names to their respective :class:`pytato.array.Array`
+       they represent.
     """
     toposorted_partitions: List[Hashable]
-    prg_per_partition: Dict[Hashable, BoundProgram]
     partition_id_to_input_names: Dict[Hashable, List[str]]
     partition_id_to_output_names: Dict[Hashable, List[str]]
+    var_name_to_result: Dict[str, Array]
 
 
 def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
@@ -991,21 +991,28 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
-    # codegen
+    return CodePartitions(toposorted_partitions, partition_id_to_input_names,
+                          partition_id_to_output_names, pf.var_name_to_result)
+
+
+def generate_code_for_partitions(parts: CodePartitions) \
+        -> Dict[Hashable, BoundProgram]:
+    """Return a mapping of partition identifiers to their
+       :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
     prg_per_partition = {pid:
             generate_loopy(
                 DictOfNamedArrays(
-                    {var_name: pf.var_name_to_result[var_name]
-                        for var_name in partition_id_to_output_names[pid]
+                    {var_name: parts.var_name_to_result[var_name]
+                        for var_name in parts.partition_id_to_output_names[pid]
                      }))
-            for pid in partitions}
+            for pid in parts.toposorted_partitions}
 
-    return CodePartitions(toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names)
+    return prg_per_partition
 
 
-def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
+def execute_partitions(parts: CodePartitions, prg_per_partition:
+                        Dict[Hashable, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`CodePartitions` representing the
@@ -1023,7 +1030,7 @@ def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
             k: context[k] for k in parts.partition_id_to_input_names[pid]
             if k in context})
 
-        res = parts.prg_per_partition[pid](**inputs)
+        res = prg_per_partition[pid](**inputs)
 
         context.update(res[1])
 
