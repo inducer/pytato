@@ -678,7 +678,8 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
 class GraphToDictMapper(Mapper):
     """
-    Maps a graph to a dictionary representation mapping a node to its parents.
+    Maps a graph to a dictionary representation mapping a node to its parents,
+    i.e. all the nodes using its value.
 
     .. attribute:: graph_dict
     """
@@ -742,6 +743,7 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
+        # no child nodes, nothing to do
         pass
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
@@ -806,8 +808,9 @@ class _GraphPartitioner(CopyMapper):
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
-        # "edges" of the partitioned graph, maps an edge between two partitions
-        # to its placeholder names.
+        # "edges" of the partitioned graph, maps an edge between two partitions,
+        # represented by a tuple of partition identifiers, to a list of placeholder
+        # names "conveying" information across the edge.
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 List[str]] = {}
 
@@ -924,19 +927,23 @@ class CodePartitions:
 
     .. attribute:: toposorted_partitions
 
-       List of topologically sorted partitions.
+       List of topologically sorted partitions, represented by their
+       identifiers.
 
     .. attribute:: prg_per_partition
 
-       A mapping of partitions to their :class:`pytato.target.BoundProgram`.
+       A mapping of partition identifiers to their
+       :class:`pytato.target.BoundProgram`.
 
     .. attribute:: partition_id_to_input_names
 
-       Mapping of partitions to their input names.
+       Mapping of partition identifiers to names of placeholders
+       the partition requires as input.
 
     .. attribute:: partition_id_to_output_names
 
-       Mapping of partitions to their output names.
+       Mapping of partition IDs to the names of placeholders
+       they provide as output.
     """
     toposorted_partitions: List[Hashable]
     prg_per_partition: Dict[Hashable, BoundProgram]
@@ -994,10 +1001,8 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
                      }))
             for pid in partitions}
 
-    res = CodePartitions(toposorted_partitions, prg_per_partition,
+    return CodePartitions(toposorted_partitions, prg_per_partition,
             partition_id_to_input_names, partition_id_to_output_names)
-
-    return res
 
 
 def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
