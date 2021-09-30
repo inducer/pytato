@@ -573,7 +573,7 @@ class Array(Taggable):
     def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
         import pytato as pt
         if len(shape) == 0:
-            raise ValueError("reshape takes at least one argument (0 given)")
+            raise TypeError("reshape takes at least one argument (0 given)")
         if len(shape) == 1:
             # handle shape as single argument tuple
             return pt.reshape(self, shape[0], order=order)
