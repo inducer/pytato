@@ -1850,7 +1850,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
             raise ValueError("Symbolic reshapes not allowed.")
 
         if new_axislen < -1:
-            raise ValueError("newshape should be either sequence of non-negative"
+            raise ValueError("newshape should be either a sequence of non-negative"
                              " ints or -1")
 
         # {{{ infer the axis length corresponding to axis marked "-1"
