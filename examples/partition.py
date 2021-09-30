@@ -4,7 +4,7 @@ import pytato as pt
 import pyopencl as cl
 import numpy as np
 from pytato.transform import (TopoSortMapper, execute_partitions,
-                              find_partitions)
+                              generate_code_for_partitions, find_partitions)
 
 from dataclasses import dataclass
 
@@ -39,7 +39,9 @@ def main():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions(parts, queue)
+    prg_per_partition = generate_code_for_partitions(parts)
+
+    context = execute_partitions(parts, prg_per_partition, queue)
 
     final_res = context[parts.partition_id_to_output_names[
                             parts.toposorted_partitions[-1]][0]]

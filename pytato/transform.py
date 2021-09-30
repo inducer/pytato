@@ -56,10 +56,11 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: GraphToDictMapper
-.. autoclass:: GraphPartitioner
 .. autoclass:: CodePartitions
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
+.. autofunction:: reverse_graph
+.. autofunction:: tag_child_nodes
 .. autofunction:: find_partitions
 .. autofunction:: execute_partitions
 
@@ -702,14 +703,15 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
 class GraphToDictMapper(Mapper):
     """
-    Maps a graph to a dictionary representation mapping a node to its children.
+    Maps a graph to a dictionary representation mapping a node to its parents,
+    i.e. all the nodes using its value.
 
-    :members: graph_dict
+    .. attribute:: graph_dict
     """
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
-        self.graph_dict: Dict[Any, Set[Any]] = {}
+        self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
         for child in expr._data.values():
@@ -732,52 +734,41 @@ class GraphToDictMapper(Mapper):
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim, *args)
-
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
 
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim, *args)
 
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
-
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
-        children = (expr.x1, expr.x2)
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for child in (expr.x1, expr.x2):
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
-        for c in expr.arrays:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
 
     def map_stack(self, expr: Stack, *args: Any) -> None:
-        for c in expr.arrays:
-            self.graph_dict.setdefault(c, set()).add(expr)
-            self.rec(c)
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
 
     def map_roll(self, expr: Roll, *args: Any) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
-        # FIXME: Anything we need to do here?
+        # no child nodes, nothing to do
         pass
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
@@ -785,29 +776,20 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.array)
 
     def map_data_wrapper(self, expr: DataWrapper) -> None:
-        if isinstance(expr.data, Array):
-            self.graph_dict.setdefault(expr.data, set()).add(expr)
-            self.rec(expr.data)
-
         for dim in expr.shape:
             if isinstance(dim, Array):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
-        children: Set[Array] = set()
-
         for child in expr.bindings.values():
-            children = children | {child}
+            self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
         for dim in expr.shape:
             if isinstance(dim, Array):
-                children = children | {dim}
+                self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
-
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
 
     def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
         self.graph_dict.setdefault(expr.data, set()).add(expr)
@@ -818,16 +800,10 @@ class GraphToDictMapper(Mapper):
         self.rec(expr.data)
 
     def _map_index_base(self, expr: IndexBase) -> None:
-        children: Set[Array] = set()
-
         for idx in expr.indices:
             if isinstance(idx, Array):
-                children = children | {idx}
+                self.graph_dict.setdefault(c, set()).add(expr)
                 self.rec(idx)
-
-        for c in children:
-            self.graph_dict.setdefault(c, set()).add(expr)
-
 
     def map_basic_index(self, expr: BasicIndex) -> None:
         self._map_index_base(expr)
@@ -858,7 +834,7 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
+def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
         starting_point: Optional[Array] = None,
         node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
     """Tags nodes reachable from *starting_point*."""
@@ -867,11 +843,11 @@ def tag_nodes_with_starting_point(graph: Dict[Array, Set[Array]], tag: Any,
     node_to_tags.setdefault(starting_point, set()).add(tag)
     if starting_point in graph:
         for other_node_key in graph[starting_point]:
-            tag_nodes_with_starting_point(graph, other_node_key, tag,
+            tag_child_nodes(graph, other_node_key, tag,
                                           node_to_tags)
 
 
-class GraphPartitioner(CopyMapper):
+class _GraphPartitioner(CopyMapper):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.
@@ -888,7 +864,9 @@ class GraphPartitioner(CopyMapper):
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
 
-        # "edges" of the partitioned graph
+        # "edges" of the partitioned graph, maps an edge between two partitions,
+        # represented by a tuple of partition identifiers, to a list of placeholder
+        # names "conveying" information across the edge.
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 List[str]] = {}
 
@@ -931,91 +909,65 @@ class GraphPartitioner(CopyMapper):
         return new_binding
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
-        new_shapes = tuple(self._handle_new_binding(expr, s)  # type: ignore
-                                      if isinstance(s, Array)
-                                      else s
-                                      for s in expr.newshape)
-
-        return Reshape(array=new_binding,
-                newshape=new_shapes,
-                order=expr.order,
-                tags=expr.tags)
+        # type-ignore reason: mypy can't tell '_handle_new_binding' is being fed
+        # only arrays
+        return Reshape(
+            array=self._handle_new_binding(expr, expr.array),
+            newshape=tuple(
+                       self._handle_new_binding(expr, s)  # type: ignore[arg-type]
+                       if isinstance(s, Array) else s
+                       for s in expr.newshape),
+            order=expr.order,
+            tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        new_bindings: List[Array] = []
-        for c in expr.args:
-            new_bindings.append(self._handle_new_binding(expr, c))
-
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(new_bindings),
+                     args=tuple(self._handle_new_binding(expr, arg)
+                                for arg in expr.args),
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        new_bindings: List[Array] = []
-        for c in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, c))
-
         return Concatenate(
-                     arrays=tuple(new_bindings),
+                     arrays=tuple(self._handle_new_binding(expr, ary)
+                                  for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        new_bindings: List[Array] = []
-        for c in expr.arrays:
-            new_bindings.append(self._handle_new_binding(expr, c))
-
         return Stack(
-                     arrays=tuple(new_bindings),
+                     arrays=tuple(self._handle_new_binding(expr, ary)
+                                  for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        new_binding = self._handle_new_binding(expr, expr.array)
-
-        return Roll(array=new_binding,
+        return Roll(array=self._handle_new_binding(expr, expr.array),
                 shift=expr.shift,
                 axis=expr.axis,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        new_shapes: List[Array] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=tuple(new_shapes),
+                shape=tuple(self._handle_new_binding(expr, dim)
+                            for dim in expr.shape if isinstance(dim, Array)),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-
-        new_x1 = self._handle_new_binding(expr, expr.x1)
-        new_x2 = self._handle_new_binding(expr, expr.x2)
-
-        return MatrixProduct(x1=new_x1, x2=new_x2,
-                tags=expr.tags)
+        return MatrixProduct(x1=self._handle_new_binding(expr, expr.x1),
+                             x2=self._handle_new_binding(expr, expr.x2),
+                             tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
-        new_bindings: Dict[str, Array] = {}
-        for name, child in expr.bindings.items():
-            new_bindings[name] = self._handle_new_binding(expr, child)
-
-        new_shapes: List[Array] = []
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                new_shapes.append(self._handle_new_binding(expr, dim))
-
         return IndexLambda(expr=expr.expr,
-                shape=tuple(new_shapes),
+                shape=tuple(self._handle_new_binding(expr, dim)
+                            for dim in expr.shape if isinstance(dim, Array)),
                 dtype=expr.dtype,
-                bindings=new_bindings,
+                bindings={name: self._handle_new_binding(expr, child)
+                          for name, child in expr.bindings.items()},
                 tags=expr.tags)
 
     def map_distributed_send(self, expr: DistributedSend, *args: Any) \
@@ -1069,16 +1021,37 @@ from pytato.target import BoundProgram
 
 @dataclass
 class CodePartitions:
-    """Store partitions and their code."""
+    """Store information about generated partitions.
+
+    .. attribute:: toposorted_partitions
+
+       List of topologically sorted partitions, represented by their
+       identifiers.
+
+    .. attribute:: partition_id_to_input_names
+
+       Mapping of partition identifiers to names of placeholders
+       the partition requires as input.
+
+    .. attribute:: partition_id_to_output_names
+
+       Mapping of partition IDs to the names of placeholders
+       they provide as output.
+
+    .. attribute:: var_name_to_result
+
+       Mapping of placeholder names to their respective :class:`pytato.array.Array`
+       they represent.
+    """
     toposorted_partitions: List[Hashable]
-    prg_per_partition: Dict[Hashable, BoundProgram]
     partition_id_to_input_names: Dict[Hashable, List[str]]
     partition_id_to_output_names: Dict[Hashable, List[str]]
+    var_name_to_result: Dict[str, Array]
 
 
 def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
         CodePartitions:
-    """Partitions the `expr` according to `part_func` and generates code for
+    """Partitions the *expr* according to *part_func* and generates code for
     each partition.
 
     :param expr: The expression to partition.
@@ -1087,7 +1060,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     :returns: An instance of :class:`CodePartitions` that contains the partitions.
     """
 
-    pf = GraphPartitioner(part_func)
+    pf = _GraphPartitioner(part_func)
     pf(expr)
 
     partition_id_to_output_names: Dict[Hashable, List[str]] = {
@@ -1097,15 +1070,15 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
 
     partitions = set()
 
-    # Used to compute the topological order
-    partitions_dict: Dict[Hashable, List[Hashable]] = {}
+    # Mapping of nodes to their successors; used to compute the topological order
+    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {}
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        partitions_dict.setdefault(pid_dependency, []).append(pid_target)
+        partition_nodes_to_targets.setdefault(pid_dependency, []).append(pid_target)
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
@@ -1114,9 +1087,16 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
                 pid_dependency, []).append(var_name)
 
     from pytools.graph import compute_topological_order
-    toposorted_partitions = compute_topological_order(partitions_dict)
+    toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
-    # codegen
+    return CodePartitions(toposorted_partitions, partition_id_to_input_names,
+                          partition_id_to_output_names, pf.var_name_to_result)
+
+
+def generate_code_for_partitions(parts: CodePartitions) \
+        -> Dict[Hashable, BoundProgram]:
+    """Return a mapping of partition identifiers to their
+       :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
 
     dm = DistributedMapper()
@@ -1124,20 +1104,18 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     prg_per_partition = {pid:
             generate_loopy(
                 DictOfNamedArrays(
-                    {var_name: dm(pf.var_name_to_result[var_name])
-                        for var_name in partition_id_to_output_names[pid]
+                    {var_name: dm(parts.var_name_to_result[var_name])
+                        for var_name in parts.partition_id_to_output_names[pid]
                      }.update({var_name: r
                         for var_name, r in dm.var_name_to_result.items()
                                })))
             for pid in partitions}
 
-    res = CodePartitions(toposorted_partitions, prg_per_partition,
-            partition_id_to_input_names, partition_id_to_output_names)
-
-    return res
+    return prg_per_partition
 
 
-def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
+def execute_partitions(parts: CodePartitions, prg_per_partition:
+                        Dict[Hashable, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`CodePartitions` representing the
@@ -1155,7 +1133,7 @@ def execute_partitions(parts: CodePartitions, queue: Any) -> Dict[str, Any]:
             k: context[k] for k in parts.partition_id_to_input_names[pid]
             if k in context})
 
-        res = parts.prg_per_partition[pid](**inputs)
+        res = prg_per_partition[pid](**inputs)
 
         context.update(res[1])
 

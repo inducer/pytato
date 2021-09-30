@@ -8,7 +8,7 @@ import pyopencl as cl
 import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper,
                               find_partitions, reverse_graph,
-                              tag_nodes_with_starting_point, execute_partitions)
+                              tag_child_nodes, execute_partitions)
 
 # from pytato.visualization import show_dot_graph
 
@@ -66,13 +66,13 @@ def main():
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-            tag_nodes_with_starting_point(graph, node, result=node_to_feeding_recvs)
+            tag_child_nodes(graph, node, result=node_to_feeding_recvs)
 
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-            tag_nodes_with_starting_point(rev_graph, node, result=node_to_fed_sends)
+            tag_child_nodes(rev_graph, node, result=node_to_fed_sends)
 
     from functools import partial
     pfunc = partial(get_partition_id, node_to_fed_sends,
