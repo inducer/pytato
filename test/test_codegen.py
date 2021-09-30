@@ -38,7 +38,6 @@ import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from pytato.transform import execute_partitions
 import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
@@ -1069,7 +1068,8 @@ def test_partitionfinder(ctx_factory):
     y = 2*x
 
     from dataclasses import dataclass
-    from pytato.transform import (TopoSortMapper, find_partitions)
+    from pytato.transform import (TopoSortMapper, find_partitions,
+                                  execute_partitions, generate_code_for_partitions)
 
     @dataclass(frozen=True, eq=True)
     class MyPartitionId():
@@ -1090,7 +1090,9 @@ def test_partitionfinder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions(parts, queue)
+    prg_per_partition = generate_code_for_partitions(parts)
+
+    context = execute_partitions(parts, prg_per_partition, queue)
 
     final_res = context[parts.partition_id_to_output_names[
                             parts.toposorted_partitions[-1]][0]]
