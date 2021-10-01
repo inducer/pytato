@@ -164,6 +164,11 @@ def test_reshape_input_validation():
         # 2 unknown dimensions
         pt.reshape(x, (-1, -1, 3))
 
+    # Reporter by alexfikl
+    # See https://github.com/inducer/pytato/issues/157
+    x = pt.make_placeholder("x", shape=(0,), dtype=np.float64)
+    assert pt.reshape(x, (128, 0, 17)).shape == (128, 0, 17)
+
 
 def test_binary_op_dispatch():
     class Foo:

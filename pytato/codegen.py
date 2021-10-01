@@ -395,6 +395,11 @@ class CodeGenPreprocessor(CopyMapper):
         return tuple(indices)
 
     def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
+        if expr.array.shape == ():
+            # RHS must be a scalar i.e. RHS' indices are empty
+            assert expr.size == 1
+            return ()
+
         newstrides = [1]  # reshaped array strides
         for new_axis_len in reversed(expr.shape[1:]):
             assert isinstance(new_axis_len, int)
