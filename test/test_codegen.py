@@ -1185,6 +1185,30 @@ def test_advanced_indexing_fuzz(ctx_factory):
                                             f" indices={pt_indices}"))
 
 
+def test_reshape_on_scalars(ctx_factory):
+    # Reported by alexfikl
+    # See https://github.com/inducer/pytato/issues/157
+    from numpy.random import default_rng
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+    rng = default_rng()
+
+    # () -> (1,)
+    x_in = rng.random(())
+    x = pt.make_data_wrapper(x_in)
+    assert_allclose_to_numpy(pt.reshape(x, (1,)), cq)
+
+    # (1,) -> ()
+    x_in = rng.random((1,))
+    x = pt.make_data_wrapper(x_in)
+    assert_allclose_to_numpy(pt.reshape(x, ()), cq)
+
+    # (1, 0, 2, 4) -> (192, 168, 0, 1)
+    x_in = rng.random((1, 0, 2, 4))
+    x = pt.make_data_wrapper(x_in)
+    assert_allclose_to_numpy(pt.reshape(x, (192, 168, 0, 1)), cq)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
