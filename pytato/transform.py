@@ -399,11 +399,11 @@ class SubsetDependencyMapper(DependencyMapper):
                       args,
                       frozenset())
 
-    def map_distributed_send(self, *args):
+    def map_distributed_send(self, *args: Any) -> Set[Any]:
         print("SEND")
         return set()
 
-    def map_distributed_recv(self, *args):
+    def map_distributed_recv(self, *args: Any) -> Set[Any]:
         print("RECV")
         return set()
 
@@ -802,7 +802,7 @@ class GraphToDictMapper(Mapper):
     def _map_index_base(self, expr: IndexBase) -> None:
         for idx in expr.indices:
             if isinstance(idx, Array):
-                self.graph_dict.setdefault(c, set()).add(expr)
+                self.graph_dict.setdefault(idx, set()).add(expr)
                 self.rec(idx)
 
     def map_basic_index(self, expr: BasicIndex) -> None:
@@ -817,7 +817,6 @@ class GraphToDictMapper(Mapper):
                                           expr: AdvancedIndexInNoncontiguousAxes
                                           ) -> None:
         self._map_index_base(expr)
-
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
         # Root node might have no predecessor
@@ -991,6 +990,8 @@ class _GraphPartitioner(CopyMapper):
 
 
 class DistributedMapper(CopyMapper):
+    """Support for distributed communication operations."""
+
     def __init__(self) -> None:
         super().__init__()
         self.name_index = 0
@@ -1003,7 +1004,7 @@ class DistributedMapper(CopyMapper):
     def make_new_placeholder_name(self) -> str:
         return self.name_generator()
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any):
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> Array:
         new_name = self.make_new_placeholder_name()
         new_binding: Array = make_placeholder(new_name, expr.shape,
                                                   expr.dtype,
@@ -1011,7 +1012,7 @@ class DistributedMapper(CopyMapper):
         self.var_name_to_result[new_name] = expr.data
         return new_binding
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any):
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> Array:
         new_name = self.make_new_placeholder_name()
         new_binding: Array = make_placeholder(new_name, expr.shape,
                                                 expr.dtype,

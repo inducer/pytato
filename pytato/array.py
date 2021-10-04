@@ -141,6 +141,16 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
+
+Distributed communication
+-------------------------
+
+Node types to support distributed communication operations.
+
+.. class:: DistributedSend
+.. class:: DistributedRecv
+
+
 Internal API
 ------------
 
@@ -2258,13 +2268,8 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
 # {{{ Distributed execution
 
-import numpy as np
-
-
-# {{{ Communication nodes
-
-
 class DistributedSend(Array):
+    """Class representing a distributed send operation."""
 
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data",)
@@ -2284,6 +2289,7 @@ class DistributedSend(Array):
 
 
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
+    """Class representing a distributed receive operation."""
 
     _fields = Array._fields + ("src_rank", "comm_tag", "data")
     _mapper_method = "map_distributed_recv"

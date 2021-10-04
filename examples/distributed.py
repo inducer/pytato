@@ -59,7 +59,6 @@ def main():
 
     print(tm.topological_order)
 
-
     # FIXME: Inefficient... too many traversals
     node_to_feeding_recvs = {}
     for node in graph:
