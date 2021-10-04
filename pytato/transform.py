@@ -806,7 +806,7 @@ class _GraphPartitioner(CopyMapper):
 
         # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
+        self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
 
         # "edges" of the partitioned graph, maps an edge between two partitions,
         # represented by a tuple of partition identifiers, to a list of placeholder
