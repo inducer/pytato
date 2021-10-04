@@ -989,38 +989,6 @@ class _GraphPartitioner(CopyMapper):
         return self.rec(expr)
 
 
-class DistributedMapper(CopyMapper):
-    """Support for distributed communication operations."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.name_index = 0
-        self.var_name_to_result: Dict[str, Array] = {}
-
-        # Naming for newly created PlaceHolders at partition edges
-        from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
-
-    def make_new_placeholder_name(self) -> str:
-        return self.name_generator()
-
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> Array:
-        new_name = self.make_new_placeholder_name()
-        new_binding: Array = make_placeholder(new_name, expr.shape,
-                                                  expr.dtype,
-                                                  tags=expr.tags)
-        self.var_name_to_result[new_name] = expr.data
-        return new_binding
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> Array:
-        new_name = self.make_new_placeholder_name()
-        new_binding: Array = make_placeholder(new_name, expr.shape,
-                                                expr.dtype,
-                                                tags=expr.tags)
-        self.var_name_to_result[new_name] = expr.data
-        return new_binding
-
-
 from pytato.target import BoundProgram
 
 
@@ -1097,6 +1065,84 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     return CodePartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, pf.var_name_to_result)
 
+# }}}
+
+
+# {{{ distributed info collection
+
+@dataclass
+class DistributedCommInfo:
+    """For one graph partition, record send/receive information for input/
+    output names as well as the computation in :attr:`results`.
+
+    .. attribute:: part_input_name_to_recv_node
+    .. attribute:: part_output_name_to_send_node
+    .. attribute:: results
+    """
+    # TODO Document these
+
+    part_input_name_to_recv_node: Dict[str, DistributedRecv]
+    part_output_name_to_send_node: Dict[str, DistributedSend]
+    results: Dict[str, Array]
+
+
+class _DistributedCommReplacer(CopyMapper):
+    """Support for distributed communication operations."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        from pytools import UniqueNameGenerator
+        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
+
+        self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
+        self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> Array:
+        # no children, no need to recurse
+
+        new_name = self.name_generator()
+        self.part_input_name_to_recv_node[new_name] = expr
+        return make_placeholder(new_name, expr.shape,
+                expr.dtype,
+                tags=expr.tags)
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> Array:
+        result = super().map_distributed_send(expr, *args)
+
+        new_name = self.name_generator()
+        self.part_output_name_to_send_node[new_name] = result
+        return result
+
+
+def gather_distributed_comm_info(parts: CodePartitions) -> List[DistributedCommInfo]:
+    result = []
+    for pid in parts.toposorted_partitions:
+        comm_replacer = _DistributedCommReplacer()
+        part_results = {var_name: comm_replacer(parts.var_name_to_result[var_name])
+                for var_name in parts.partition_id_to_output_names[pid]}
+
+        part_results.update({
+            name: send_node.data
+            for name, send_node in
+            comm_replacer.part_output_name_to_send_node.items()})
+
+        result.append(
+                DistributedCommInfo(
+                    part_input_name_to_recv_node=(
+                        comm_replacer.part_input_name_to_recv_node),
+                    part_output_name_to_send_node=(
+                        comm_replacer.part_output_name_to_send_node),
+                    results=part_results
+                    ))
+
+    return result
+
+
+# }}}
+
+
+# {{{ piecewise execution
 
 def generate_code_for_partitions(parts: CodePartitions) \
         -> Dict[Hashable, BoundProgram]:
@@ -1104,16 +1150,12 @@ def generate_code_for_partitions(parts: CodePartitions) \
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
 
-    dm = DistributedMapper()
-
     prg_per_partition = {pid:
             generate_loopy(
                 DictOfNamedArrays(
-                    {var_name: dm(parts.var_name_to_result[var_name])
+                    {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]
-                     }.update({var_name: r
-                        for var_name, r in dm.var_name_to_result.items()
-                               })))
+                     }))
             for pid in parts.toposorted_partitions}
 
     return prg_per_partition
@@ -1146,4 +1188,41 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 
 # }}}
 
+
+# {{{ distributed execute (VERY DRAFTY!)
+
+def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
+                        Dict[Hashable, BoundProgram], queue: Any,
+                        distributed_comm_infos: List[DistributedCommInfo]) \
+                                -> Dict[str, Any]:
+
+    all_receives = [
+            post_receives(part_dci)
+            for part_dci in distributed_comm_infos]
+
+    context: Dict[str, Any] = {}
+    for pid, part_dci, part_receives in zip(
+            distributed_comm_infos, parts.toposorted_partitions, all_receives):
+        # find names that are needed
+        inputs = {"queue": queue}
+
+        context.update(
+                {part.name: actx.from_numpy(recv.wait())
+                    for recv in part_receives})
+
+        inputs.update({
+            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            if k in context})
+
+        res = prg_per_partition[pid](**inputs)
+
+        context.update(res[1])
+
+        for name, send_node in part_dci.part_output_name_to_send_node.items():
+            mpi_send(send_node.rank, send_node.tag, context[name])
+            del context[name]
+
+    return context
+
+# }}}
 # vim: foldmethod=marker

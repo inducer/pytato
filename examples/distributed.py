@@ -40,6 +40,7 @@ def main():
     halo = make_distributed_recv(x[1], src_rank=(rank+1) % size, comm_tag="halo",
             shape=(), dtype=float)
 
+    # TODO: send returns scalar 0?
     y = x+bnd+halo
 
     # bnd2 = pt.make_distributed_send(y[0], dest_rank=(rank-1)%size, comm_tag="halo")
