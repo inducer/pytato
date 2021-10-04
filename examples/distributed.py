@@ -8,7 +8,8 @@ import pyopencl as cl
 import numpy as np
 from pytato.transform import (GraphToDictMapper, TopoSortMapper,
                               find_partitions, reverse_graph,
-                              tag_child_nodes, execute_partitions)
+                              tag_child_nodes, execute_partitions,
+                              generate_code_for_partitions)
 
 # from pytato.visualization import show_dot_graph
 
@@ -58,8 +59,6 @@ def main():
 
     print(tm.topological_order)
 
-    graph = gdm.graph_dict
-    rev_graph = reverse_graph(graph)
 
     # FIXME: Inefficient... too many traversals
     node_to_feeding_recvs = {}
@@ -84,6 +83,7 @@ def main():
 
     # Find the partitions
     parts = find_partitions(y, pfunc)
+    prg_per_partition = generate_code_for_partitions(parts)
 
     # Execute the partitions
     ctx = cl.create_some_context()

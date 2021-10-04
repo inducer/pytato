@@ -820,6 +820,8 @@ class GraphToDictMapper(Mapper):
 
 
     def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+        # Root node might have no predecessor
+        self.graph_dict[expr] = set()
         return self.rec(expr, *args)
 
 
@@ -828,6 +830,8 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     result: Dict[Array, Set[Array]] = {}
 
     for node_key, edges in graph.items():
+        if node_key not in result:
+            result[node_key] = set()
         for other_node_key in edges:
             result.setdefault(other_node_key, set()).add(node_key)
 
