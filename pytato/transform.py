@@ -1113,7 +1113,7 @@ def generate_code_for_partitions(parts: CodePartitions) \
                      }.update({var_name: r
                         for var_name, r in dm.var_name_to_result.items()
                                })))
-            for pid in partitions}
+            for pid in parts.toposorted_partitions}
 
     return prg_per_partition
 

@@ -89,7 +89,7 @@ def main():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions(parts, queue)
+    context = execute_partitions(parts, prg_per_partition, queue)
 
     final_res = context[parts.partition_id_to_output_names[
                             parts.toposorted_partitions[-1]][0]]
