@@ -353,6 +353,7 @@ class CodeGenMapper(Mapper):
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
+                offset=lp.auto,
                 is_input=True,
                 is_output=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
