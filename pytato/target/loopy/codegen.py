@@ -76,6 +76,16 @@ __doc__ = """
 def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     from loopy.symbolic import SubstitutionMapper
     from pymbolic.mapper.substitutor import make_subst_func
+
+    # {{{ early exit for identity substitution
+
+    if all(isinstance(v, prim.Variable) and v.name == k
+           for k, v in variable_assigments.items()):
+        # Nothing to do here, move on.
+        return expression
+
+    # }}}
+
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
@@ -343,6 +353,7 @@ class CodeGenMapper(Mapper):
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
+                offset=lp.auto,
                 is_input=True,
                 is_output=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
