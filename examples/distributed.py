@@ -6,8 +6,8 @@ comm = MPI.COMM_WORLD
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (GraphToDictMapper, TopoSortMapper,
-                              find_partitions, reverse_graph,
+from pytato.transform import (GraphToDictMapper, TopoSortMapper, execute_partitions_distributed,
+                              find_partitions, gather_distributed_comm_info, reverse_graph,
                               tag_child_nodes, execute_partitions,
                               generate_code_for_partitions)
 
@@ -85,13 +85,15 @@ def main():
 
     # Find the partitions
     parts = find_partitions(y, pfunc)
+    distributed_comm_infos = gather_distributed_comm_info(parts)
     prg_per_partition = generate_code_for_partitions(parts)
 
     # Execute the partitions
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions(parts, prg_per_partition, queue)
+    context = execute_partitions_distributed(parts, prg_per_partition,
+                                             queue, distributed_comm_infos)
 
     final_res = context[parts.partition_id_to_output_names[
                             parts.toposorted_partitions[-1]][0]]

@@ -328,6 +328,11 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
+    def map_distributed_send(self, expr: DistributedSend) -> CombineT:
+        return self.combine(self.rec(expr.data))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
+        return self.combine(self.rec(expr.data))
 # }}}
 
 
@@ -386,6 +391,12 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
+
+    def map_distributed_send(self, expr: DistributedSend) -> R:
+        return self.combine(frozenset([expr]), super().map_distributed_send(expr))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> R:
+        return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
 # }}}
 
@@ -1120,11 +1131,12 @@ class _DistributedCommReplacer(CopyMapper):
 
         new_name = self.name_generator()
         self.part_output_name_to_send_node[new_name] = result
-        return result
+        return expr.data  # FIXME: correct? (used to be 'return result')
 
 
-def gather_distributed_comm_info(parts: CodePartitions) -> List[DistributedCommInfo]:
-    result = []
+def gather_distributed_comm_info(parts: CodePartitions) -> Dict[Hashable, DistributedCommInfo]:
+    result = {}
+
     for pid in parts.toposorted_partitions:
         comm_replacer = _DistributedCommReplacer()
         part_results = {var_name: comm_replacer(parts.var_name_to_result[var_name])
@@ -1135,14 +1147,14 @@ def gather_distributed_comm_info(parts: CodePartitions) -> List[DistributedCommI
             for name, send_node in
             comm_replacer.part_output_name_to_send_node.items()})
 
-        result.append(
+        result[pid] = \
                 DistributedCommInfo(
                     part_input_name_to_recv_node=(
                         comm_replacer.part_input_name_to_recv_node),
                     part_output_name_to_send_node=(
                         comm_replacer.part_output_name_to_send_node),
                     results=part_results
-                    ))
+                    )
 
     return result
 
@@ -1158,10 +1170,12 @@ def generate_code_for_partitions(parts: CodePartitions) \
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
 
+    comm_replacer = _DistributedCommReplacer()
+
     prg_per_partition = {pid:
             generate_loopy(
                 DictOfNamedArrays(
-                    {var_name: parts.var_name_to_result[var_name]
+                    {var_name: comm_replacer(parts.var_name_to_result[var_name])
                         for var_name in parts.partition_id_to_output_names[pid]
                      }))
             for pid in parts.toposorted_partitions}
@@ -1197,11 +1211,18 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 # }}}
 
 
-# {{{ distributed execute (VERY DRAFTY!)
+# {{{ distributed execute
+
+def post_receives(dci: DistributedCommInfo) -> None:
+    print("post recv", dci)
+    return
+
+def mpi_send(rank, tag, data) -> None:
+    print("mpi send")
 
 def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
                         Dict[Hashable, BoundProgram], queue: Any,
-                        distributed_comm_infos: List[DistributedCommInfo]) \
+                        distributed_comm_infos: Dict[Hashable, DistributedCommInfo]) \
                                 -> Dict[str, Any]:
 
     all_receives = [
@@ -1215,6 +1236,9 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         inputs = {"queue": queue}
 
         context.update(
+
+        if part_receives:
+            context.update(
                 {part.name: actx.from_numpy(recv.wait())
                     for recv in part_receives})
 
@@ -1233,4 +1257,5 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
     return context
 
 # }}}
+
 # vim: foldmethod=marker
