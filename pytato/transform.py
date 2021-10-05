@@ -227,6 +227,14 @@ class CopyMapper(Mapper):
                        order=expr.order,
                        tags=expr.tags)
 
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        return DistributedSend(self.rec(expr.data),
+                               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+        return DistributedRecv(self.rec(expr.data),
+                               src_rank=expr.src_rank, comm_tag=expr.comm_tag)
+
 # }}}
 
 
@@ -1098,7 +1106,7 @@ class _DistributedCommReplacer(CopyMapper):
         self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> Array:
+    def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
         # no children, no need to recurse
 
         new_name = self.name_generator()
@@ -1107,8 +1115,8 @@ class _DistributedCommReplacer(CopyMapper):
                 expr.dtype,
                 tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> Array:
-        result = super().map_distributed_send(expr, *args)
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        result = super().map_distributed_send(expr)
 
         new_name = self.name_generator()
         self.part_output_name_to_send_node[new_name] = result

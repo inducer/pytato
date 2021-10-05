@@ -2272,12 +2272,14 @@ class DistributedSend(Array):
     """Class representing a distributed send operation."""
 
     _mapper_method = "map_distributed_send"
-    _fields = Array._fields + ("data",)
+    _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
     def __init__(self, data: Array, dest_rank: int = 0,
                  comm_tag: object = None) -> None:
         super().__init__()
         self.data = data
+        self.dest_rank = dest_rank
+        self.comm_tag = comm_tag
 
     @property
     def shape(self) -> ShapeType:
@@ -2291,7 +2293,7 @@ class DistributedSend(Array):
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation."""
 
-    _fields = Array._fields + ("src_rank", "comm_tag", "data")
+    _fields = Array._fields + ("data", "src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
     def __init__(self, data: Array, src_rank: int = 0, comm_tag: object = None,
