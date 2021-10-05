@@ -65,13 +65,15 @@ def main():
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-            tag_child_nodes(graph, node, node_to_tags=node_to_feeding_recvs)
+            tag_child_nodes(graph, node, node,
+                            node_to_tags=node_to_feeding_recvs)
 
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-            tag_child_nodes(rev_graph, node, node_to_tags=node_to_fed_sends)
+            tag_child_nodes(rev_graph, node, node,
+                            node_to_tags=node_to_fed_sends)
 
     from functools import partial
     pfunc = partial(get_partition_id, node_to_fed_sends,
