@@ -65,14 +65,14 @@ def main():
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-            tag_child_nodes(graph, node, node,
+            tag_child_nodes(graph, tag=node, starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
 
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-            tag_child_nodes(rev_graph, node, node,
+            tag_child_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
 
     from functools import partial
