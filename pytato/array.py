@@ -2268,15 +2268,16 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
 # {{{ Distributed execution
 
-class DistributedSend(Array):
+class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed send operation."""
 
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
-    def __init__(self, data: Array, dest_rank: int = 0,
-                 comm_tag: object = None) -> None:
-        super().__init__()
+    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: object = None,
+                 shape: Tuple[int, ...] = (), dtype: Any = float,
+                 tags: Optional[TagsType] = frozenset()) -> None:
+        super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.data = data
         self.dest_rank = dest_rank
         self.comm_tag = comm_tag
@@ -2305,10 +2306,11 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
         self.data = data
 
 
-def make_distributed_send(data: Array, dest_rank: int, comm_tag: object, shape: Tuple[int, ...] = (), dtype: Any = float,
+def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
+                          shape: Tuple[int, ...] = (), dtype: Any = float,
                           tags: Optional[TagsType] = frozenset()) -> \
          DistributedSend:
-    return DistributedSend(data, dest_rank, comm_tag)
+    return DistributedSend(data, dest_rank, comm_tag, shape, dtype, tags)
 
 
 def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
