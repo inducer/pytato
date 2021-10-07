@@ -35,10 +35,10 @@ def main():
     size = comm.Get_size()
     x_in = np.random.randn(4, 4)
     x = pt.make_data_wrapper(x_in)
-    bnd = make_distributed_send(x[0], dest_rank=(rank-1) % size, comm_tag="halo")
+    bnd = make_distributed_send(x, dest_rank=(rank-1) % size, comm_tag="halo", shape=(4,4))
 
-    halo = make_distributed_recv(x[1], src_rank=(rank+1) % size, comm_tag="halo",
-            shape=(), dtype=float)
+    halo = make_distributed_recv(x, src_rank=(rank+1) % size, comm_tag="halo",
+            shape=(4,4), dtype=float)
 
     # TODO: send returns scalar 0?
     y = x+bnd+halo
@@ -99,10 +99,10 @@ def main():
                             parts.toposorted_partitions[-1]][0]]
 
     # Execute the unpartitioned code for comparison
-    prg = pt.generate_loopy(y)
-    evt, (out, ) = prg(queue)
+    # prg = pt.generate_loopy(y)
+    # evt, (out, ) = prg(queue)
 
-    print(out)
+    # print(out)
     print("------------")
     print(final_res)
 

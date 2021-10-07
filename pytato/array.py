@@ -2305,7 +2305,8 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
         self.data = data
 
 
-def make_distributed_send(data: Array, dest_rank: int, comm_tag: object) -> \
+def make_distributed_send(data: Array, dest_rank: int, comm_tag: object, shape: Tuple[int, ...] = (), dtype: Any = float,
+                          tags: Optional[TagsType] = frozenset()) -> \
          DistributedSend:
     return DistributedSend(data, dest_rank, comm_tag)
 

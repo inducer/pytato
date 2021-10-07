@@ -418,14 +418,6 @@ class SubsetDependencyMapper(DependencyMapper):
                       args,
                       frozenset())
 
-    def map_distributed_send(self, *args: Any) -> Set[Any]:
-        print("SEND")
-        return set()
-
-    def map_distributed_recv(self, *args: Any) -> Set[Any]:
-        print("RECV")
-        return set()
-
 # }}}
 
 
@@ -1215,7 +1207,7 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 
 def post_receives(dci: DistributedCommInfo) -> None:
     print("post recv", dci)
-    return
+    return dci
 
 def mpi_send(rank, tag, data) -> None:
     print("mpi send")
@@ -1227,20 +1219,27 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
 
     all_receives = [
             post_receives(part_dci)
-            for part_dci in distributed_comm_infos]
+            for part_dci in distributed_comm_infos.values()]
 
     context: Dict[str, Any] = {}
     for pid, part_dci, part_receives in zip(
-            distributed_comm_infos, parts.toposorted_partitions, all_receives):
+            parts.toposorted_partitions, distributed_comm_infos.values(), all_receives):
         # find names that are needed
-        inputs = {"queue": queue}
 
-        context.update(
+        # FIXME: just for testing
+        import numpy as np
+        xx = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
+
+        inputs = {"queue": queue, "_dist_ph_id_1": xx}
 
         if part_receives:
-            context.update(
-                {part.name: actx.from_numpy(recv.wait())
-                    for recv in part_receives})
+            context.update(part_receives.results)
+                # {part.name: actx.from_numpy(recv.wait())
+                # {recv.results: None
+                #     for recv in part_receives})
+
+        print(f"{context=}")
+        # print(prg_per_partition[pid].program)
 
         inputs.update({
             k: context[k] for k in parts.partition_id_to_input_names[pid]
@@ -1251,7 +1250,7 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         context.update(res[1])
 
         for name, send_node in part_dci.part_output_name_to_send_node.items():
-            mpi_send(send_node.rank, send_node.tag, context[name])
+            mpi_send(send_node.dest_rank, send_node.comm_tag, context[name])
             del context[name]
 
     return context
