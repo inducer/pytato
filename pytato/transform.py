@@ -1238,7 +1238,7 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         import numpy as np
         xx = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
 
-        inputs = {"queue": queue, "_dist_ph_id_1": xx}
+        inputs = {"queue": queue, "_dist_ph_id_0": xx}
 
         if part_receives:
             context.update(part_receives.results)
