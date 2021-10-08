@@ -11,4 +11,4 @@ dependencies:
 - pyopencl
 - islpy
 - sphinx-autodoc-typehints
-- mpich
+- mpi4py

@@ -34,7 +34,6 @@ setup(
     ],
     python_requires="~=3.8",
     install_requires=[
-        "mpi4py",
         "loopy>=2020.2",
         "pytools>=2021.1",
         "pyrsistent"
