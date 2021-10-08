@@ -1211,10 +1211,15 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 
 def post_receives(dci: DistributedCommInfo) -> DistributedCommInfo:
     print("post recv", dci)
+
+    # FIXME: what should this actually do and return?
+    # post the (i)receive, and return the MPI request?
     return dci
 
 
 def mpi_send(rank: int, tag: Any, data: Any) -> None:
+    # FIXME: what should this actually do and return?
+    # post the (i)send, and return the MPI request?
     print("mpi send")
 
 
