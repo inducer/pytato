@@ -1209,18 +1209,32 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 
 # {{{ distributed execute
 
-def post_receives(dci: DistributedCommInfo) -> DistributedCommInfo:
+def post_receives(dci: DistributedCommInfo) -> \
+        Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
     print("post recv", dci)
 
-    # FIXME: what should this actually do and return?
-    # post the (i)receive, and return the MPI request?
-    return dci
+    from mpi4py import MPI  # type: ignore
+
+    recv_reqs = {}
+
+    for k, v in dci.part_input_name_to_recv_node.items():
+        src_rank = v.src_rank
+        tag = v.comm_tag
+
+        # FIXME
+        # buf = v.data  # does that need to_numpy()?
+        import numpy as np
+        buf = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
+
+        recv_reqs[k] = (MPI.COMM_WORLD.irecv(buf=buf, source=src_rank, tag=tag), buf)
+
+    return (recv_reqs, dci)
 
 
 def mpi_send(rank: int, tag: Any, data: Any) -> None:
-    # FIXME: what should this actually do and return?
-    # post the (i)send, and return the MPI request?
-    print("mpi send")
+    from mpi4py import MPI
+    MPI.COMM_WORLD.send(data, dest=rank, tag=tag)
+    print("mpi send", rank, tag, data)
 
 
 def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
@@ -1237,26 +1251,26 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
     for pid, part_dci, part_receives in zip(
             parts.toposorted_partitions, distributed_comm_infos.values(),
             all_receives):
-        # find names that are needed
 
-        # FIXME: just for testing
-        import numpy as np
-        xx = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
+        inputs = {"queue": queue}
 
-        inputs = {"queue": queue, "_dist_ph_id_0": xx}
+        # FIXME: necessary?
+        context.update(part_receives[1].results)
 
-        if part_receives:
-            context.update(part_receives.results)
-            # {part.name: actx.from_numpy(recv.wait())
-            # {recv.results: None
-            #     for recv in part_receives})
+        inputs.update({k: v[1] for k, v in part_receives[0].items()})
+        # {part.name: actx.from_numpy(recv.wait())
+        # {recv.results: None
+        #     for recv in part_receives})
+
+        # inputs.update(context)
 
         print(f"{context=}")
         # print(prg_per_partition[pid].program)
 
-        inputs.update({
-            k: context[k] for k in parts.partition_id_to_input_names[pid]
-            if k in context})
+        # FIXME: necessary?
+        # inputs.update({
+        #     k: context[k] for k in parts.partition_id_to_input_names[pid]
+        #     if k in context})
 
         res = prg_per_partition[pid](**inputs)
 

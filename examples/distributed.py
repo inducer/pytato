@@ -38,10 +38,10 @@ def main():
     x_in = np.random.randn(4, 4)
     x = pt.make_data_wrapper(x_in)
     bnd = make_distributed_send(
-        x, dest_rank=(rank-1) % size, comm_tag="halo", shape=(4, 4), dtype=float)
+        x, dest_rank=(rank-1) % size, comm_tag=42, shape=(4, 4), dtype=float)
 
     halo = make_distributed_recv(
-        x, src_rank=(rank+1) % size, comm_tag="halo", shape=(4, 4), dtype=float)
+        x, src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float)
 
     # TODO: send returns scalar 0?
     y = x+bnd+halo
