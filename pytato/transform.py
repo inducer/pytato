@@ -199,7 +199,7 @@ class CopyMapper(Mapper):
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg) for arg in expr.args))
 
-    def map_named_array(self, expr: NamedArray) -> NamedArray:
+    def map_named_array(self, expr: NamedArray) -> Array:
         return type(expr)(self.rec(expr._container), expr.name)
 
     def map_dict_of_named_arrays(self,
@@ -216,7 +216,7 @@ class CopyMapper(Mapper):
                          bindings=bindings,
                          entrypoint=expr.entrypoint)
 
-    def map_reshape(self, expr: Reshape) -> Reshape:
+    def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
                        # type-ignore reason: mypy can't tell 'rec' is being fed
                        # only arrays
