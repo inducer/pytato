@@ -857,8 +857,8 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
     node_to_tags.setdefault(starting_point, set()).add(tag)
     if starting_point in graph:
         for other_node_key in graph[starting_point]:
-            tag_child_nodes(graph, other_node_key, tag,
-                                          node_to_tags)
+            tag_child_nodes(graph, tag=tag,
+                    starting_point=other_node_key, node_to_tags=node_to_tags)
 
 
 class _GraphPartitioner(CopyMapper):
@@ -1224,6 +1224,7 @@ def post_receives(dci: DistributedCommInfo) -> \
 
         # FIXME
         # buf = v.data  # does that need to_numpy()?
+        # allocate numpy array of correct dtype and shape
         import numpy as np
         buf = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
 
@@ -1233,6 +1234,7 @@ def post_receives(dci: DistributedCommInfo) -> \
 
 
 # FIXME: Where to get communicator? Argument to make_distributed_send?
+# -> pass into execute_partitions_distributed
 def mpi_send(rank: int, tag: Any, data: Any) -> None:
     from mpi4py import MPI
     MPI.COMM_WORLD.send(data, dest=rank, tag=tag)
@@ -1274,9 +1276,9 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         #     k: context[k] for k in parts.partition_id_to_input_names[pid]
         #     if k in context})
 
-        res = prg_per_partition[pid](**inputs)
+        _evt, result_dict = prg_per_partition[pid](**inputs)
 
-        context.update(res[1])
+        context.update(result_dict)
 
         for name, send_node in part_dci.part_output_name_to_send_node.items():
             mpi_send(send_node.dest_rank, send_node.comm_tag, context[name])

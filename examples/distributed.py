@@ -70,6 +70,7 @@ def main():
         if isinstance(node, DistributedRecv):
             tag_child_nodes(graph, tag=node, starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
+    # FIXME test that node_to_feeding_recvs maps to recvs
 
     node_to_fed_sends = {}
     for node in rev_graph:
@@ -77,6 +78,7 @@ def main():
         if isinstance(node, DistributedSend):
             tag_child_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
+    # FIXME test that node_to_fed_sends maps to sends
 
     from functools import partial
     pfunc = partial(get_partition_id, node_to_fed_sends,
