@@ -1209,11 +1209,12 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
 
 # {{{ distributed execute
 
+# FIXME: Where to get communicator/actx? Argument to make_distributed_recv?
 def post_receives(dci: DistributedCommInfo) -> \
         Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
     print("post recv", dci)
 
-    from mpi4py import MPI  # type: ignore
+    from mpi4py import MPI
 
     recv_reqs = {}
 
@@ -1231,6 +1232,7 @@ def post_receives(dci: DistributedCommInfo) -> \
     return (recv_reqs, dci)
 
 
+# FIXME: Where to get communicator? Argument to make_distributed_send?
 def mpi_send(rank: int, tag: Any, data: Any) -> None:
     from mpi4py import MPI
     MPI.COMM_WORLD.send(data, dest=rank, tag=tag)

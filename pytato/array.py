@@ -2274,7 +2274,7 @@ class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
-    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: object = None,
+    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: Any = None,
                  shape: Tuple[int, ...] = (), dtype: Any = float,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
@@ -2297,7 +2297,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     _fields = Array._fields + ("data", "src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
-    def __init__(self, data: Array, src_rank: int = 0, comm_tag: object = None,
+    def __init__(self, data: Array, src_rank: int = 0, comm_tag: Any = None,
                  shape: Tuple[int, ...] = (), dtype: Any = float,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
