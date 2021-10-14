@@ -279,7 +279,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
 
 def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* on the terminal
-       using :mod:`asciidag`.
+       using the *asciidag* package.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`).
@@ -307,7 +307,7 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
     # Since 'asciidag' prints the DAG from top to bottom (ie, with the inputs
     # at the bottom), we need to invert our representation of it, that is, the
     # 'parents' constructor argument actually means 'children'.
-    from asciidag.node import Node
+    from asciidag.node import Node  # type: ignore[import]
     asciidag_nodes: Dict[Array, Node] = {}
 
     from collections import defaultdict
@@ -330,7 +330,7 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     input_node = Node("Inputs", parents=[asciidag_nodes[v] for v in input_arrays])
 
-    from asciidag.graph import Graph
+    from asciidag.graph import Graph  # type: ignore[import]
     graph = Graph()
     graph.show_nodes([input_node])
 
