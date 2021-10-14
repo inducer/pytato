@@ -278,8 +278,8 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
 # {{{ Show ASCII representation of DAG
 
 def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
-    """Show a graph representing the computation of *result* on the terminal
-       using the *asciidag* package.
+    """Show a graph representing the computation of *result* in the terminal
+    using the `asciidag <https://pypi.org/project/asciidag/>`_ package.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`).
