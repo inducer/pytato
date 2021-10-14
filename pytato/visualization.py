@@ -46,6 +46,7 @@ __doc__ = """
 
 .. autofunction:: get_dot_graph
 .. autofunction:: show_dot_graph
+.. autofunction:: show_ascii_graph
 """
 
 
@@ -257,11 +258,11 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`).
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
     """
     dot_code: str
 
@@ -272,3 +273,55 @@ def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     from pymbolic.imperative.utils import show_dot
     show_dot(dot_code)
+
+
+# {{{ Show ASCII representation of DAG
+
+def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
+    """Show a graph representing the computation of *result* on the terminal
+       using :mod:`asciidag`.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`).
+    """
+    outputs: DictOfNamedArrays = normalize_outputs(result)
+    del result
+
+    nodes: Dict[Array, DotNodeInfo] = {}
+    mapper = ArrayToDotNodeInfoMapper()
+    for elem in outputs._data.values():
+        mapper(elem, nodes)
+
+    input_arrays: List[Array] = []
+    internal_arrays: List[Array] = []
+    array_to_id: Dict[Array, str] = {}
+
+    id_gen = UniqueNameGenerator()
+    for array in nodes:
+        array_to_id[array] = id_gen("array")
+        if isinstance(array, InputArgumentBase):
+            input_arrays.append(array)
+        else:
+            internal_arrays.append(array)
+
+    from asciidag.node import Node
+
+
+    mynodes: Dict[Array, Node] = {}
+
+    for array in input_arrays:
+        # print(array, nodes[array])
+        mynodes[array] = Node(f"{nodes[array].title}", parents=[])
+    for array in internal_arrays:
+        myedges = [mynodes[v] for k, v in nodes[array].edges.items()]
+        # print("===", array, nodes[array].edges, myedges)
+        mynodes[array] = Node(f"{nodes[array].title}",
+                              parents=myedges)
+        # :
+        # Node(array, parents[])
+
+    from asciidag.graph import Graph
+    graph = Graph()
+    graph.show_nodes([mynodes[internal_arrays[-1]]])
+
+# }}}

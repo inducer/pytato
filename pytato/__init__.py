@@ -59,7 +59,7 @@ from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
-from pytato.visualization import get_dot_graph, show_dot_graph
+from pytato.visualization import get_dot_graph, show_dot_graph, show_ascii_graph
 
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
@@ -75,7 +75,7 @@ __all__ = (
 
         "Target", "LoopyPyOpenCLTarget",
 
-        "get_dot_graph", "show_dot_graph",
+        "get_dot_graph", "show_dot_graph", "show_ascii_graph",
 
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
