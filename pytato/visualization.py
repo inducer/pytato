@@ -304,24 +304,34 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
         else:
             internal_arrays.append(array)
 
+    # Since 'asciidag' prints the DAG from top to bottom (ie, with the inputs
+    # at the bottom), we need to invert our representation of it, that is, the
+    # 'parents' constructor actually means 'children'.
     from asciidag.node import Node
+    asciidag_nodes: Dict[Array, Node] = {}
 
+    from collections import defaultdict
+    asciidag_edges: Dict[Array, List[Array]] = defaultdict(list)
 
-    mynodes: Dict[Array, Node] = {}
+    for array in internal_arrays:
+        for _, v in nodes[array].edges.items():
+            asciidag_edges[v].append(array)
+
+    for array in internal_arrays[::-1]:
+        ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
+        if array == internal_arrays[-1]:
+            ary_edges.append(Node("Outputs"))
+        asciidag_nodes[array] = Node(f"{nodes[array].title}",
+                              parents=ary_edges)
 
     for array in input_arrays:
-        # print(array, nodes[array])
-        mynodes[array] = Node(f"{nodes[array].title}", parents=[])
-    for array in internal_arrays:
-        myedges = [mynodes[v] for k, v in nodes[array].edges.items()]
-        # print("===", array, nodes[array].edges, myedges)
-        mynodes[array] = Node(f"{nodes[array].title}",
-                              parents=myedges)
-        # :
-        # Node(array, parents[])
+        ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
+        asciidag_nodes[array] = Node(f"{nodes[array].title}", parents=ary_edges)
+
+    input_node = Node("Inputs", parents=[asciidag_nodes[v] for v in input_arrays])
 
     from asciidag.graph import Graph
     graph = Graph()
-    graph.show_nodes([mynodes[internal_arrays[-1]]])
+    graph.show_nodes([input_node])
 
 # }}}
