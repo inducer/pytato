@@ -306,7 +306,7 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     # Since 'asciidag' prints the DAG from top to bottom (ie, with the inputs
     # at the bottom), we need to invert our representation of it, that is, the
-    # 'parents' constructor actually means 'children'.
+    # 'parents' constructor argument actually means 'children'.
     from asciidag.node import Node
     asciidag_nodes: Dict[Array, Node] = {}
 

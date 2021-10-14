@@ -11,3 +11,5 @@ dependencies:
 - pyopencl
 - islpy
 - sphinx-autodoc-typehints
+- pip:
+  - asciidag
