@@ -306,24 +306,29 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     # Since 'asciidag' prints the DAG from top to bottom (ie, with the inputs
     # at the bottom), we need to invert our representation of it, that is, the
-    # 'parents' constructor argument actually means 'children'.
+    # 'parents' constructor argument to Node() actually means 'children'.
     from asciidag.node import Node  # type: ignore[import]
     asciidag_nodes: Dict[Array, Node] = {}
 
     from collections import defaultdict
     asciidag_edges: Dict[Array, List[Array]] = defaultdict(list)
 
+    # Reverse edge directions
     for array in internal_arrays:
         for _, v in nodes[array].edges.items():
             asciidag_edges[v].append(array)
 
+    # Add the internal arrays in reversed order
     for array in internal_arrays[::-1]:
         ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
+
         if array == internal_arrays[-1]:
             ary_edges.append(Node("Outputs"))
+
         asciidag_nodes[array] = Node(f"{nodes[array].title}",
                               parents=ary_edges)
 
+    # Add the input arrays last since they have no predecessors
     for array in input_arrays:
         ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
         asciidag_nodes[array] = Node(f"{nodes[array].title}", parents=ary_edges)
