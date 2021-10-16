@@ -46,6 +46,7 @@ __doc__ = """
 
 .. autofunction:: get_dot_graph
 .. autofunction:: show_dot_graph
+.. autofunction:: get_ascii_graph
 .. autofunction:: show_ascii_graph
 """
 
@@ -277,8 +278,8 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
 
 # {{{ Show ASCII representation of DAG
 
-def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
-    """Show a graph representing the computation of *result* in the terminal
+def get_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> str:
+    """Return a string representing the computation of *result*
     using the `asciidag <https://pypi.org/project/asciidag/>`_ package.
 
     :arg result: Outputs of the computation (cf.
@@ -337,6 +338,21 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     from asciidag.graph import Graph  # type: ignore[import]
     graph = Graph()
-    graph.show_nodes([input_node])
 
+    import io
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+        graph.show_nodes([input_node])
+
+    return f.getvalue()
+
+
+def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
+    """Show a graph representing the computation of *result* in a browser.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
+    """
+
+    print(get_ascii_graph(result))
 # }}}
