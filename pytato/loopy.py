@@ -32,7 +32,7 @@ from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
                     Tuple, Iterable, Mapping)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam)
+                          NamedArray, ArrayOrScalar, SizeParam, AxesT)
 from pytato.scalar_expr import SubstitutionMapper, ScalarExpression, EvaluationMapper
 from pytools import memoize_method
 from pytools.tag import TagsType
@@ -89,9 +89,17 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     @memoize_method
     def __getitem__(self, name: str) -> LoopyCallResult:
+        from pytato.array import _get_default_axes
+
         if name not in self._result_names:
             raise KeyError(name)
-        return LoopyCallResult(self, name)
+
+        # TODO: Attach a filtered set of tags from loopy's arg.
+        return LoopyCallResult(self, name,
+                               axes=_get_default_axes(len(self
+                                                          ._entry_kernel
+                                                          .arg_dict[name]
+                                                          .shape)))
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -123,20 +131,24 @@ class LoopyCallResult(NamedArray):
     def __init__(self,
             loopy_call: LoopyCall,
             name: str,
+            axes: AxesT,
             tags: TagsType = frozenset()) -> None:
-        super().__init__(loopy_call, name, tags=tags)
+        super().__init__(loopy_call, name, axes=axes, tags=tags)
 
     # type-ignore reason: `copy` signature incompatible with super-class
     def copy(self, *,  # type: ignore[override]
              loopy_call: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
+             axes: Optional[AxesT] = None,
              tags: Optional[TagsType] = None) -> LoopyCallResult:
         loopy_call = self._container if loopy_call is None else loopy_call
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
+        axes = self.axes if axes is None else axes
         assert isinstance(loopy_call, LoopyCall)
         return LoopyCallResult(loopy_call=loopy_call,
                                name=name,
+                               axes=axes,
                                tags=tags)
 
     def expr(self) -> Array:

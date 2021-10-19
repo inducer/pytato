@@ -169,6 +169,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         ) -> ArrayOrScalar:
+    from pytato.array import _get_default_axes
+
     if np.isscalar(a1) and np.isscalar(a2):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
@@ -187,7 +189,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     return IndexLambda(op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=bindings)
+                       bindings=bindings,
+                       axes=_get_default_axes(len(result_shape)))
 
 
 # {{{ dim_to_index_lambda_components
@@ -449,6 +452,7 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
     from pytato.diagnostic import CannotBroadcastError
+    from pytato.array import _get_default_axes
 
     # {{{ handle ellipsis
 
@@ -480,9 +484,8 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
     # {{{ validate broadcastability of the array indices
 
     try:
-        get_shape_after_broadcasting([idx
-                                      for idx in indices
-                                      if isinstance(idx, Array)])
+        array_idx_shape = get_shape_after_broadcasting(
+                [idx for idx in indices if isinstance(idx, Array)])
     except CannotBroadcastError as e:
         raise IndexError(str(e))
 
@@ -528,11 +531,24 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
         if any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
                for i_basic_idx in i_basic_indices):
             # non contiguous advanced indices
-            return AdvancedIndexInNoncontiguousAxes(ary, tuple(normalized_indices))
+            return AdvancedIndexInNoncontiguousAxes(
+                ary,
+                tuple(normalized_indices),
+                axes=_get_default_axes(len(array_idx_shape)
+                                       + len(i_basic_indices)))
         else:
-            return AdvancedIndexInContiguousAxes(ary, tuple(normalized_indices))
+            return AdvancedIndexInContiguousAxes(
+                ary,
+                tuple(normalized_indices),
+                axes=_get_default_axes(len(array_idx_shape)
+                                       + len(i_basic_indices)))
     else:
         # basic indexing expression
-        return BasicIndex(ary, tuple(normalized_indices))
+        return BasicIndex(ary,
+                          tuple(normalized_indices),
+                          axes=_get_default_axes(
+                              len([idx
+                                   for idx in normalized_indices
+                                   if isinstance(idx, NormalizedSlice)])))
 
 # }}}
