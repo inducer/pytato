@@ -104,6 +104,7 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
@@ -167,6 +168,7 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
@@ -203,6 +205,7 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 bindings=bindings,
                 tags=expr.tags)
 
@@ -250,6 +253,7 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
@@ -275,6 +279,7 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings={name: self.rec(bnd)
                                      for name, bnd in bindings.items()},
+                           axes=expr.axes,
                            tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct) -> Array:
@@ -309,6 +314,7 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
@@ -373,6 +379,7 @@ class CodeGenPreprocessor(CopyMapper):
                                        for s in expr.shape),
                            dtype=expr.dtype,
                            bindings=bindings,
+                           axes=expr.axes,
                            tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)
@@ -393,11 +400,12 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=dict(_in0=array),
+                axes=expr.axes,
                 tags=expr.tags)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
         indices = [None] * expr.ndim
-        for from_index, to_index in enumerate(expr.axes):
+        for from_index, to_index in enumerate(expr.axis_permutation):
             indices[to_index] = var(f"_{from_index}")
         return tuple(indices)
 
@@ -463,7 +471,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
@@ -523,7 +534,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 
     def map_non_contiguous_advanced_index(self,
                                           expr: AdvancedIndexInNoncontiguousAxes
@@ -580,7 +594,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 # }}}
 
 
