@@ -41,6 +41,7 @@ Array Interface
 ---------------
 
 .. autoclass:: Array
+.. autoclass:: Axis
 .. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
 .. autoclass:: AbstractResultWithNamedArrays
@@ -155,13 +156,14 @@ import operator
 from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar)
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
+        FrozenSet)
 
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Taggable, TagsType
+from pytools.tag import Tag, Taggable, TagsType
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression)
@@ -189,6 +191,7 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
+AxesT = Tuple["Axis", ...]
 ArrayT = TypeVar("ArrayT", bound="Array")
 
 
@@ -304,6 +307,19 @@ class NormalizedSlice:
     step: int
 
 
+@dataclass(eq=True, frozen=True)
+class Axis(Taggable):
+    """
+    A type for recording the information about an :class:`~pytato.Array`'s
+    axis.
+    """
+    tags: FrozenSet[Tag]
+
+    def copy(self, **kwargs: Any) -> Axis:
+        from dataclasses import replace
+        return replace(self, **kwargs)
+
+
 class Array(Taggable):
     r"""
     A base class (abstract interface + supplemental functionality) for lazily
@@ -339,9 +355,14 @@ class Array(Taggable):
 
         An instance of :class:`numpy.dtype`.
 
+    .. attribute:: axes
+
+        A :class:`tuple` of :class:`~pytato.Axis` instances. One
+        corresponding to each dimension of the array.
+
     .. attribute:: tags
 
-        A :class:`tuple` of :class:`pytools.tag.Tag` instances.
+        A :class:`frozenset` of :class:`pytools.tag.Tag` instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -378,6 +399,7 @@ class Array(Taggable):
     .. method:: conj
     .. automethod:: all
     .. automethod:: any
+    .. automethod:: with_tagged_axis
 
     .. autoattribute:: real
     .. autoattribute:: imag
@@ -390,9 +412,13 @@ class Array(Taggable):
     _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
-    _fields: ClassVar[Tuple[str, ...]] = ("tags",)
+    _fields: ClassVar[Tuple[str, ...]] = ("axes", "tags",)
 
     __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
+    def __init__(self, axes: AxesT, tags: FrozenSet[Tag]) -> None:
+        self.axes = axes
+        self.tags = tags
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         for field in self._fields:
@@ -585,6 +611,16 @@ class Array(Taggable):
         """
         import pytato as pt
         return pt.any(self, axis)
+
+    def with_tagged_axis(self, iaxis: int,
+                         tags: Union[Sequence[Tag], Tag]) -> Array:
+        """
+        Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
+        """
+        new_axes = (self.axes[:iaxis]
+                    + (self.axes[iaxis].tagged(tags),)
+                    + self.axes[iaxis+1:])
+        return self.copy(axes=new_axes)
 
 # }}}
 
