@@ -46,6 +46,8 @@ __doc__ = """
 
 .. autofunction:: get_dot_graph
 .. autofunction:: show_dot_graph
+.. autofunction:: get_ascii_graph
+.. autofunction:: show_ascii_graph
 """
 
 
@@ -257,11 +259,11 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`).
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
     """
     dot_code: str
 
@@ -272,3 +274,90 @@ def show_dot_graph(result: Union[Array, DictOfNamedArrays]) -> None:
 
     from pymbolic.imperative.utils import show_dot
     show_dot(dot_code)
+
+
+# {{{ Show ASCII representation of DAG
+
+def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
+                    use_color: bool = True) -> str:
+    """Return a string representing the computation of *result*
+    using the `asciidag <https://pypi.org/project/asciidag/>`_ package.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`).
+    :arg use_color: Colorized output
+    """
+    outputs: DictOfNamedArrays = normalize_outputs(result)
+    del result
+
+    nodes: Dict[Array, DotNodeInfo] = {}
+    mapper = ArrayToDotNodeInfoMapper()
+    for elem in outputs._data.values():
+        mapper(elem, nodes)
+
+    input_arrays: List[Array] = []
+    internal_arrays: List[Array] = []
+    array_to_id: Dict[Array, str] = {}
+
+    id_gen = UniqueNameGenerator()
+    for array in nodes:
+        array_to_id[array] = id_gen("array")
+        if isinstance(array, InputArgumentBase):
+            input_arrays.append(array)
+        else:
+            internal_arrays.append(array)
+
+    # Since 'asciidag' prints the DAG from top to bottom (ie, with the inputs
+    # at the bottom), we need to invert our representation of it, that is, the
+    # 'parents' constructor argument to Node() actually means 'children'.
+    from asciidag.node import Node  # type: ignore[import]
+    asciidag_nodes: Dict[Array, Node] = {}
+
+    from collections import defaultdict
+    asciidag_edges: Dict[Array, List[Array]] = defaultdict(list)
+
+    # Reverse edge directions
+    for array in internal_arrays:
+        for _, v in nodes[array].edges.items():
+            asciidag_edges[v].append(array)
+
+    # Add the internal arrays in reversed order
+    for array in internal_arrays[::-1]:
+        ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
+
+        if array == internal_arrays[-1]:
+            ary_edges.append(Node("Outputs"))
+
+        asciidag_nodes[array] = Node(f"{nodes[array].title}",
+                              parents=ary_edges)
+
+    # Add the input arrays last since they have no predecessors
+    for array in input_arrays:
+        ary_edges = [asciidag_nodes[v] for v in asciidag_edges[array]]
+        asciidag_nodes[array] = Node(f"{nodes[array].title}", parents=ary_edges)
+
+    input_node = Node("Inputs", parents=[asciidag_nodes[v] for v in input_arrays])
+
+    from asciidag.graph import Graph  # type: ignore[import]
+    from io import StringIO
+
+    f = StringIO()
+    graph = Graph(fh=f, use_color=use_color)
+
+    graph.show_nodes([input_node])
+
+    # Get the graph and remove trailing whitespace
+    res = "\n".join([s.rstrip() for s in f.getvalue().split("\n")])
+
+    return res
+
+
+def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
+    """Show a graph representing the computation of *result* in a browser.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
+    """
+
+    print(get_ascii_graph(result, use_color=True))
+# }}}
