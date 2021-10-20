@@ -316,18 +316,19 @@ def test_asciidag():
 
     ref_str = r"""* Inputs
 *-.   Placeholder
-|\ \  
+|\ \
 * | | IndexLambda
-| |/  
-|/|   
+| |/
+|/|
 | * IndexLambda
-|/  
+|/
 *   Stack
-|\  
+|\
 * | AxisPermutation
-|/  
+|/
 * MatrixProduct
-* Outputs"""  # noqa: W291 (trailing whitespace)
+* Outputs
+"""
 
     assert res == ref_str
 

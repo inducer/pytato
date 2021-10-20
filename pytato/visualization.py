@@ -344,7 +344,10 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
     graph.show_nodes([input_node])
 
-    return f.getvalue().rstrip()
+    # Get the graph and remove trailing whitespace
+    res = "\n".join([s.rstrip() for s in f.getvalue().split("\n")])
+
+    return res
 
 
 def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
