@@ -337,14 +337,14 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     input_node = Node("Inputs", parents=[asciidag_nodes[v] for v in input_arrays])
 
     from asciidag.graph import Graph  # type: ignore[import]
-    graph = Graph()
+    from io import StringIO
 
-    import io
-    f = io.StringIO()
-    with contextlib.redirect_stdout(f):
-        graph.show_nodes([input_node])
+    f = StringIO()
+    graph = Graph(fh=f, use_color=False)
 
-    return f.getvalue()
+    graph.show_nodes([input_node])
+
+    return f.getvalue().rstrip()
 
 
 def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:

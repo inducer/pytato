@@ -304,6 +304,34 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
+def test_asciidag():
+    n = pt.make_size_param("n")
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    stack = pt.stack([array, 2*array, array + 6])
+    y = stack @ stack.T
+
+    from pytato import get_ascii_graph
+
+    res = get_ascii_graph(y)
+
+    ref_str = r"""* Inputs
+*-.   Placeholder
+|\ \  
+* | | IndexLambda
+| |/  
+|/|   
+| * IndexLambda
+|/  
+*   Stack
+|\  
+* | AxisPermutation
+|/  
+* MatrixProduct
+* Outputs"""  # noqa: W291 (trailing whitespace)
+
+    assert res == ref_str
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
