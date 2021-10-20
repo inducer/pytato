@@ -847,6 +847,7 @@ class _GraphPartitioner(CopyMapper):
 
             # FIXME: only used for the self.rec() call
             self.cross_partition_name_to_value[new_name] = self.rec(child)
+
             self.add_interpartition_edge(expr, child, new_name)
             new_binding: Array = make_placeholder(new_name, child.shape,
                                                   child.dtype,
@@ -969,7 +970,7 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     """
 
     pf = _GraphPartitioner(part_func)
-    pf(expr)
+    r = pf(expr)
 
     partition_id_to_output_names: Dict[Hashable, List[str]] = {
         v: [] for _, v in pf.partition_pair_to_edges.keys()}
@@ -997,6 +998,22 @@ def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
+    dict_per_partition = {pid:
+            # generate_loopy(
+                DictOfNamedArrays(
+                    {var_name: pf.var_name_to_result[var_name]
+                        for var_name in partition_id_to_output_names[pid]
+                     })
+            for pid in toposorted_partitions}
+
+    from pytato import show_ascii_graph
+
+    print("Result from partitionfinder:")
+    show_ascii_graph(r)
+
+    for k, v in dict_per_partition.items():
+        print(k)
+        show_ascii_graph(v)
     return CodePartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, pf.var_name_to_result)
 
