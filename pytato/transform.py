@@ -801,6 +801,9 @@ class _GraphPartitioner(CopyMapper):
                                    Callable[[Array], Hashable]) -> None:
         super().__init__()
 
+        # FIXME: Purpose unclear, appears unused (cf. self.var_name_to_result)
+        self.cross_partition_name_to_value: Dict[str, Array] = {}
+
         # Function to determine the Partition ID
         self.get_partition_id = get_partition_id
 
@@ -841,6 +844,9 @@ class _GraphPartitioner(CopyMapper):
             # with a Placeholder that lives in the current partition. For each
             # partition, collect the placeholder names that it’s supposed to
             # compute.
+
+            # FIXME: only used for the self.rec() call
+            self.cross_partition_name_to_value[new_name] = self.rec(child)
             self.add_interpartition_edge(expr, child, new_name)
             new_binding: Array = make_placeholder(new_name, child.shape,
                                                   child.dtype,
