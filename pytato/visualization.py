@@ -278,12 +278,14 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
 
 # {{{ Show ASCII representation of DAG
 
-def get_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> str:
+def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
+                    use_color: bool = True) -> str:
     """Return a string representing the computation of *result*
     using the `asciidag <https://pypi.org/project/asciidag/>`_ package.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`).
+    :arg use_color: Colorized output
     """
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
@@ -340,7 +342,7 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     from io import StringIO
 
     f = StringIO()
-    graph = Graph(fh=f, use_color=False)
+    graph = Graph(fh=f, use_color=use_color)
 
     graph.show_nodes([input_node])
 
@@ -357,5 +359,5 @@ def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
     """
 
-    print(get_ascii_graph(result))
+    print(get_ascii_graph(result, use_color=True))
 # }}}

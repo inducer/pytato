@@ -312,7 +312,7 @@ def test_asciidag():
 
     from pytato import get_ascii_graph
 
-    res = get_ascii_graph(y)
+    res = get_ascii_graph(y, use_color=False)
 
     ref_str = r"""* Inputs
 *-.   Placeholder
