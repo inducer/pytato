@@ -33,7 +33,7 @@ def main():
     pfunc = partial(get_partition_id, tm.topological_order)
 
     # Find the partitions
-    parts = find_partitions(y, pfunc)
+    parts = find_partitions(pt.DictOfNamedArrays({"out": y}), pfunc)
 
     # Show the partitions
     pt.show_dot_graph(y, pfunc)
