@@ -28,7 +28,7 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping
+from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable, Optional
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -204,7 +204,8 @@ def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
 # }}}
 
 
-def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
+def get_dot_graph(result: Union[Array, DictOfNamedArrays],
+                  parts_func: Optional[Callable[[Array], Hashable]] = None) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
@@ -223,8 +224,14 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     internal_arrays: List[Array] = []
     array_to_id: Dict[Array, str] = {}
 
+    partition_to_array: Dict[Hashable, List[Array]] = {}
+
     id_gen = UniqueNameGenerator()
     for array in nodes:
+        if parts_func:
+            pid = parts_func(array)
+            partition_to_array.setdefault(pid, []).append(array)
+
         array_to_id[array] = id_gen("array")
         if isinstance(array, InputArgumentBase):
             input_arrays.append(array)
@@ -256,10 +263,22 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
         # Emit output/namespace name mappings.
         _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
 
+        # Emit the partitions (if any)
+        cpart = 0
+        for k, v in partition_to_array.items():
+            with emit.block(f"subgraph cluster_part_{cpart}"):
+                emit(f'label="{k}"')
+                emit("style=dashed")
+                emit("color=blue")
+                for x in v:
+                    emit(array_to_id[x])
+            cpart += 1
+
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays],
+                   parts_func: Optional[Callable[[Array], Hashable]] = None) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
@@ -270,7 +289,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
     if isinstance(result, str):
         dot_code = result
     else:
-        dot_code = get_dot_graph(result)
+        dot_code = get_dot_graph(result, parts_func)
 
     from pymbolic.imperative.utils import show_dot
     show_dot(dot_code)

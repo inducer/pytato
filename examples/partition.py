@@ -35,6 +35,9 @@ def main():
     # Find the partitions
     parts = find_partitions(y, pfunc)
 
+    # Show the partitions
+    pt.show_dot_graph(y, pfunc)
+
     # Execute the partitions
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
