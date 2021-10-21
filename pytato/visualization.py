@@ -36,15 +36,20 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum)
+        Stack, ShapeType, Einsum, Placeholder)
 from pytato.codegen import normalize_outputs
 import pytato.transform
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pytato.transform import CodePartitions
 
 
 __doc__ = """
 .. currentmodule:: pytato
 
 .. autofunction:: get_dot_graph
+.. autofunction:: get_dot_graph_from_partitions
 .. autofunction:: show_dot_graph
 .. autofunction:: get_ascii_graph
 .. autofunction:: show_ascii_graph
@@ -220,6 +225,93 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays],
     for elem in outputs._data.values():
         mapper(elem, nodes)
 
+    input_arrays: List[Array] = []
+    internal_arrays: List[Array] = []
+    array_to_id: Dict[Array, str] = {}
+
+    partition_to_array: Dict[Hashable, List[Array]] = {}
+
+    id_gen = UniqueNameGenerator()
+    for array in nodes:
+        if parts_func:
+            pid = parts_func(array)
+            partition_to_array.setdefault(pid, []).append(array)
+
+        array_to_id[array] = id_gen("array")
+        if isinstance(array, InputArgumentBase):
+            input_arrays.append(array)
+        else:
+            internal_arrays.append(array)
+
+    emit = DotEmitter()
+
+    with emit.block("digraph computation"):
+        emit("node [shape=rectangle]")
+
+        # Emit inputs.
+        with emit.block("subgraph cluster_Inputs"):
+            emit('label="Inputs"')
+            for array in input_arrays:
+                _emit_array(emit, nodes[array], array_to_id[array])
+
+        # Emit non-inputs.
+        for array in internal_arrays:
+            _emit_array(emit, nodes[array], array_to_id[array])
+
+        # Emit edges.
+        for array, node in nodes.items():
+            for label, tail_array in node.edges.items():
+                tail = array_to_id[tail_array]
+                head = array_to_id[array]
+                emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
+
+        # Emit output/namespace name mappings.
+        _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
+
+        # Emit the partitions (if any)
+        cpart = 0
+        for k, v in partition_to_array.items():
+            with emit.block(f"subgraph cluster_part_{cpart}"):
+                emit(f'label="{k}"')
+                emit("style=dashed")
+                emit("color=blue")
+                for x in v:
+                    emit(array_to_id[x])
+            cpart += 1
+
+    return emit.get()
+
+
+def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
+    r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
+    graph of the computation of *result*.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`).
+    """
+    part_id_to_node_to_node_info = {}
+
+    for part_id, out_names in parts.partition_id_to_output_names.items():
+        part_node_to_info: Dict[Array, DotNodeInfo] = {}
+
+        mapper = ArrayToDotNodeInfoMapper()
+        for out_name in out_names:
+            mapper(parts.var_name_to_result[out_name], part_node_to_info)
+
+        # check disjointness
+        for my_node in part_node_to_info.keys():
+            for other_part_id, other_node_to_info in \
+                    part_id_to_node_to_node_info.items():
+                assert (
+                    isinstance(my_node, Placeholder)
+                    or my_node not in other_node_to_info), (
+                        "partitions not disjoint: "
+                        f"{my_node.__class__.__name__} (id={id(my_node)}) "
+                        f"in both '{part_id}' and '{other_part_id}'")
+
+        part_id_to_node_to_node_info[part_id] = part_node_to_info
+
+    1/0
     input_arrays: List[Array] = []
     internal_arrays: List[Array] = []
     array_to_id: Dict[Array, str] = {}

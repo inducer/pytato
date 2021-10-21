@@ -35,6 +35,9 @@ def main():
     # Find the partitions
     parts = find_partitions(pt.DictOfNamedArrays({"out": y}), pfunc)
 
+    # FIXME: Test for disjointness of partitions
+    from pytato.visualization import get_dot_graph_from_partitions
+    get_dot_graph_from_partitions(parts)
     # Show the partitions
     pt.show_dot_graph(y, pfunc)
 
