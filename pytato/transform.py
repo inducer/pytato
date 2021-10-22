@@ -865,6 +865,11 @@ class _GraphPartitioner(Mapper):
         else:
             return self.rec(child)
 
+    def _handle_shape(self, expr, shape):
+        return tuple([
+            self._handle_new_binding(expr, dim) if isinstance(dim, Array) else dim
+            for dim in shape])
+
     # }}}
 
     # {{{ map_xxx methods
@@ -874,8 +879,7 @@ class _GraphPartitioner(Mapper):
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         return IndexLambda(expr=expr.expr,
-                shape=tuple(self._handle_new_binding(expr, dim)
-                            for dim in expr.shape if isinstance(dim, Array)),
+                shape=self._handle_shape(expr, expr.shape),
                 dtype=expr.dtype,
                 bindings={name: self._handle_new_binding(expr, child)
                           for name, child in expr.bindings.items()},
@@ -924,10 +928,7 @@ class _GraphPartitioner(Mapper):
         # only arrays
         return Reshape(
             array=self._handle_new_binding(expr, expr.array),
-            newshape=tuple(
-                       self._handle_new_binding(expr, s)  # type: ignore[arg-type]
-                       if isinstance(s, Array) else s
-                       for s in expr.newshape),
+            newshape=self._handle_shape(expr, expr.newshape),
             order=expr.order,
             tags=expr.tags)
 
@@ -944,16 +945,14 @@ class _GraphPartitioner(Mapper):
         return DataWrapper(
                 name=expr.name,
                 data=expr.data,
-                shape=tuple(self._handle_new_binding(expr, dim)
-                            for dim in expr.shape if isinstance(dim, Array)),
+                shape=self._handle_shape(expr, expr.shape),
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=tuple(self._handle_new_binding(expr, dim)
-                            for dim in expr.shape if isinstance(dim, Array)),
+                shape=self._handle_shape(expr, expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
