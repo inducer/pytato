@@ -1587,6 +1587,18 @@ class DataWrapper(InputArgumentBase):
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
 
+    .. attribute:: shape
+
+        The shape of the array is represented separately from array
+        to allow symbolic shapes to be used, and to ease :mod:`pytato`'s
+        job in recognizing shapes of arrays as equal. For example,
+        if the shape of :attr:`data` is ``(3, 4)``, and :attr:`shape` is
+        ``(nrows, ncolumns)``, then this represents a (global) constraint that
+        that ``nrows == 3`` and ``ncolumns == 4``. Arithmetic and other
+        operations in :mod:`pytato` do not currently resolve these constraints
+        to assess whether shapes match, and thus it is important that a canonical
+        (symbolic) form of the shape tuple is used.
+
     .. note::
 
         Since we cannot compare instances of :class:`DataInterface` being
