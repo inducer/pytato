@@ -464,11 +464,9 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
-        return (
-                isinstance(other, type(self))
-                and all(
-                    getattr(self, field) == getattr(other, field)
-                    for field in self._fields))
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -788,8 +786,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         if self is other:
             return True
 
-        return (isinstance(other, DictOfNamedArrays)
-                and self._data == other._data)
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
 # }}}
 

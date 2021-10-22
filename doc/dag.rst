@@ -8,6 +8,11 @@ Visualizing Array Expression Graphs
 
 .. automodule:: pytato.visualization
 
+Comparing two expression Graphs
+===============================
+
+.. automodule:: pytato.equality
+
 Utilities and Diagnostics
 =========================
 

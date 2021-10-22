@@ -304,6 +304,61 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
+def test_asciidag():
+    n = pt.make_size_param("n")
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    stack = pt.stack([array, 2*array, array + 6])
+    y = stack @ stack.T
+
+    from pytato import get_ascii_graph
+
+    res = get_ascii_graph(y, use_color=False)
+
+    ref_str = r"""* Inputs
+*-.   Placeholder
+|\ \
+* | | IndexLambda
+| |/
+|/|
+| * IndexLambda
+|/
+*   Stack
+|\
+* | AxisPermutation
+|/
+* MatrixProduct
+* Outputs
+"""
+
+    assert res == ref_str
+
+
+def test_linear_complexity_inequality():
+    # See https://github.com/inducer/pytato/issues/163
+    import pytato as pt
+    from pytato.equality import EqualityComparer
+    from numpy.random import default_rng
+
+    def construct_intestine_graph(depth=100, seed=0):
+        rng = default_rng(seed)
+        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+
+        for _ in range(depth):
+            coeff1, coeff2 = rng.integers(0, 10, 2)
+            x = coeff1 * x + coeff2 * x
+
+        return x
+
+    graph1 = construct_intestine_graph()
+    graph2 = construct_intestine_graph()
+    graph3 = construct_intestine_graph(seed=3)
+
+    assert EqualityComparer()(graph1, graph2)
+    assert EqualityComparer()(graph2, graph1)
+    assert not EqualityComparer()(graph1, graph3)
+    assert not EqualityComparer()(graph2, graph3)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
