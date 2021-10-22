@@ -673,7 +673,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 # }}}
 
 
-# {{{ Graph partitioning
+# {{{ graph-to-dict
 
 class GraphToDictMapper(Mapper):
     """
@@ -765,6 +765,10 @@ class GraphToDictMapper(Mapper):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
+# }}}
+
+
+# {{{ operations on graphs in dict form
 
 def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     """Reverses a graph."""
@@ -789,6 +793,10 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
             tag_child_nodes(graph, other_node_key, tag,
                                           node_to_tags)
 
+# }}}
+
+
+# {{{ graph partitioning
 
 class _GraphPartitioner(Mapper):
     """Given a function *get_partition_id*, produces subgraphs representing
