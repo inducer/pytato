@@ -62,6 +62,8 @@ from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.visualization import (get_dot_graph, show_dot_graph,
                                   get_ascii_graph, show_ascii_graph)
 
+import pytato.match as match
+
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
@@ -97,5 +99,8 @@ __all__ = (
         "dot", "vdot",
 
         "broadcast_to",
+
+        # sub-modules
+        "match",
 
 )
