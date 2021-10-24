@@ -5,12 +5,12 @@ from __future__ import annotations, absolute_import
 import abc
 
 from typing import (Union, ClassVar, Optional, Iterator, Mapping,
-                    Generic, TypeVar, Sequence)
+                    Generic, TypeVar, Tuple)
 from dataclasses import dataclass, fields, field
 
 from pytato.scalar_expr import ScalarType
 from pytato.array import (ArrayOrScalar,  _dtype_any,
-                          DataWrapper as PtDataWrapper)
+                          Array)
 
 from matchpy import (Operation, Arity, Symbol, Expression,
                      Atom as BaseAtom,
@@ -39,7 +39,7 @@ class Constant(BaseAtom, Generic[ConstantT]):
         return self
 
     def __lt__(self, other):
-        if not isinstance(other, Expression):
+        if not isinstance(other, (Expression, Array)):
             return NotImplemented
         if type(other) is type(self):
             if self.value == other.value:
@@ -60,45 +60,61 @@ class Id(Constant[str]):
     _mapper_method: ClassVar[str] = "map_id"
 
 
+@np_op_dataclass
 class TupleOp(Operation, Generic[TupleOpT]):
-    arity = Arity.variadic
-    name = "tuple"
-    _mapper_method = "map_tuple_op"
+    _operands: Tuple[Expression]
+    variable_name: Optional[str] = field(default=None,
+                                         metadata=_NOT_OPERAND_METADATA)
 
-    def __init__(self,
-                 operands: Sequence[Expression],
-                 variable_name=None) -> None:
-        super().__init__(*operands, variable_name=variable_name)
+    arity: ClassVar[Arity] = Arity.variadic
+    name: ClassVar[str] = "tuple"
+    _mapper_method: ClassVar[str] = "map_tuple_op"
+    unpacked_args_to_init: ClassVar[bool] = True
+
+    @property
+    def operands(self):
+        return self._operands
 
 
+@np_op_dataclass
 class NumpyOp(abc.ABC, Operation):
     """
     A base class for all Numpy-like operations that can end up as a
     :class:`pytato.IndexLambda` after calling functions from :mod:`pytato`'s
     frontend.
     """
+    pt_expr: Optional[Array] = field(metadata=_NOT_OPERAND_METADATA)
     unpacked_args_to_init: ClassVar[bool] = True
 
     @property
-    def operands(self):
+    def operands(self) -> Tuple[Expression]:
         return tuple(getattr(self, field.name)
                      for field in fields(self)
                      if not field.metadata.get("not_an_operand", False))
 
+    def __lt__(self, other):
+        if not isinstance(other, (Expression, Array)):
+            return NotImplemented
+        if type(other) is type(self):
+            if self.operands == other.operands:
+                return (self.variable_name or "") < (other.variable_name or "")
+            return str(self.operands) < str(other.operands)
+        return type(self).__name__ < type(other).__name__
+
     def __add__(self, other):
-        return Sum(self, other)
+        return Sum(None, self, other)
 
     def __radd__(self, other):
-        return Sum(other, self)
+        return Sum(None, other, self)
 
     def __mul__(self, other):
-        return Product(self, other)
+        return Product(None, self, other)
 
     def __rmul__(self, other):
-        return Product(other, self)
+        return Product(None, other, self)
 
     def __matmul__(self, other):
-        return MatMul(self, other)
+        return MatMul(None, self, other)
 
 
 @np_op_dataclass
@@ -107,21 +123,18 @@ class _Input(NumpyOp):
     shape: TupleOp[Expression]
     dtype: Symbol
     arity: ClassVar[Arity] = Arity.unary
+    variable_name: Optional[str] = field(default=None,
+                                         metadata=_NOT_OPERAND_METADATA)
 
 
 @np_op_dataclass
 class DataWrapper(_Input):
     name: ClassVar[str] = "DataWrapper"
-    _pt_counterpart: PtDataWrapper = field(metadata=_NOT_OPERAND_METADATA)
-    variable_name: Optional[str] = field(default=None,
-                                         metadata=_NOT_OPERAND_METADATA)
     _mapper_method: ClassVar[str] = "map_data_wrapper"
 
 
 @np_op_dataclass
 class Placeholder(_Input):
-    variable_name: Optional[str] = field(default=None,
-                                         metadata=_NOT_OPERAND_METADATA)
     name: ClassVar[str] = "Placeholder"
     _mapper_method: ClassVar[str] = "map_placeholder"
 
@@ -138,15 +151,15 @@ class _BinaryOp(NumpyOp):
 @np_op_dataclass
 class Sum(_BinaryOp):
     name: ClassVar[str] = "Sum"
-    commutative: ClassVar[bool] = True
     associative: ClassVar[bool] = True
     _mapper_method: ClassVar[str] = "map_sum"
+
+    # TODO: [kk, discuss] -- Should we mark this op as commutative?
 
 
 @np_op_dataclass
 class Product(_BinaryOp):
     name: ClassVar[str] = "Product"
-    commutative: ClassVar[bool] = True
     associative: ClassVar[bool] = True
     _mapper_method: ClassVar[str] = "map_product"
 
@@ -169,14 +182,12 @@ class Modulo(_BinaryOp):
 @np_op_dataclass
 class LogicalOr(_BinaryOp):
     name: ClassVar[str] = "LogicalOr"
-    commutative: ClassVar[bool] = True
     associative: ClassVar[bool] = True
 
 
 @np_op_dataclass
 class LogicalAnd(_BinaryOp):
     name: ClassVar[str] = "LogicalAnd"
-    commutative: ClassVar[bool] = True
     associative: ClassVar[bool] = True
 
 
@@ -294,19 +305,19 @@ class Index(NumpyOp):
 
 class Wildcard(BaseWildcard):
     def __add__(self, other):
-        return Sum(self, other)
+        return Sum(None, self, other)
 
     def __radd__(self, other):
-        return Sum(other, self)
+        return Sum(None, other, self)
 
     def __mul__(self, other):
-        return Product(self, other)
+        return Product(None, self, other)
 
     def __rmul__(self, other):
-        return Product(other, self)
+        return Product(None, other, self)
 
     def __matmul__(self, other):
-        return MatMul(self, other)
+        return MatMul(None, self, other)
 
     @classmethod
     def dot(cls, name=None) -> "Wildcard":

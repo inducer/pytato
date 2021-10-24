@@ -37,15 +37,16 @@ class ToMatchpyExpressionMapper:
                           else self.rec(dim)
                           for dim in expr.shape)
 
-        return MpDataWrapper(Id(expr.name), TupleOp(rec_shape),
-                             Dtype(expr.dtype), _pt_counterpart=expr)
+        return MpDataWrapper(expr,
+                             Id(expr.name), TupleOp(rec_shape), Dtype(expr.dtype))
 
     def map_placeholder(self, expr: PtPlaceholder) -> Expression:
         rec_shape = tuple(Scalar(dim) if np.isscalar(dim)
                           else self.rec(dim)
                           for dim in expr.shape)
 
-        return MpPlaceholder(Id(expr.name), TupleOp(rec_shape), Dtype(expr.dtype))
+        return MpPlaceholder(expr,
+                             Id(expr.name), TupleOp(rec_shape), Dtype(expr.dtype))
 
     def map_index_lambda(self, expr: IndexLambda) -> Expression:
         # FIXME: Please FIXME, please.
@@ -55,7 +56,8 @@ class ToMatchpyExpressionMapper:
                  and np.isscalar(expr.expr.children[0]))
                 and len(expr.bindings) == 1
                 and frozenset(expr.bindings) == frozenset(["_in1"])):
-            return Product(Scalar(expr.expr.children[0]),
+            return Product(expr,
+                           Scalar(expr.expr.children[0]),
                            self.rec(expr.bindings["_in1"]))
         elif (
                 (isinstance(expr.expr, prim.Sum)
@@ -63,20 +65,23 @@ class ToMatchpyExpressionMapper:
                  and np.isscalar(expr.expr.children[1]))
                 and len(expr.bindings) == 1
                 and frozenset(expr.bindings) == frozenset(["_in0"])):
-            return Sum(Scalar(expr.expr.children[1]),
+            return Sum(expr,
+                       Scalar(expr.expr.children[1]),
                        self.rec(expr.bindings["_in0"]))
         elif (
                 (isinstance(expr.expr, prim.Sum)
                  and len(expr.expr.children) == 2)
                 and len(expr.bindings) == 2
                 and frozenset(expr.bindings) == frozenset(["_in0", "_in1"])):
-            return Sum(self.rec(expr.bindings["_in0"]),
+            return Sum(expr,
+                       self.rec(expr.bindings["_in0"]),
                        self.rec(expr.bindings["_in1"]))
         else:
             raise NotImplementedError
 
     def map_matrix_product(self, expr: MatrixProduct) -> Expression:
-        return MatMul(self.rec(expr.x1), self.rec(expr.x2))
+        return MatMul(expr,
+                      self.rec(expr.x1), self.rec(expr.x2))
 
 
 class FromMatchpyExpressionMapper:
