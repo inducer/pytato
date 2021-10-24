@@ -13,6 +13,7 @@ from pytato.match import (MatMul, Sum, Product, Id, Scalar, Dtype,
                           TupleOp,
                           Placeholder as MpPlaceholder,
                           DataWrapper as MpDataWrapper)
+from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarType
 
 from matchpy import Expression
@@ -66,13 +67,15 @@ class ToMatchpyExpressionMapper:
                 and len(expr.bindings) == 1
                 and frozenset(expr.bindings) == frozenset(["_in0"])):
             return Sum(expr,
-                       Scalar(expr.expr.children[1]),
-                       self.rec(expr.bindings["_in0"]))
+                       self.rec(expr.bindings["_in0"]),
+                       Scalar(expr.expr.children[1]))
         elif (
                 (isinstance(expr.expr, prim.Sum)
                  and len(expr.expr.children) == 2)
                 and len(expr.bindings) == 2
                 and frozenset(expr.bindings) == frozenset(["_in0", "_in1"])):
+            assert expr.expr.children[0].aggregate.name == "_in0"
+            assert expr.expr.children[1].aggregate.name == "_in1"
             return Sum(expr,
                        self.rec(expr.bindings["_in0"]),
                        self.rec(expr.bindings["_in1"]))
@@ -123,3 +126,91 @@ class FromMatchpyExpressionMapper:
 
     def map_matmul(self, expr: MatMul) -> Array:
         return MatrixProduct(self.rec(expr.x1), self.rec(expr.x2))
+
+
+class SubExpressionAtPathFinder(Mapper):
+    def rec(self, expr: Array, path: Tuple[int, ...]) -> Array:
+        method: Callable[[Array, Tuple[int, ...]], Expression]
+        method = getattr(self, expr._mapper_method)
+        return method(expr, path)
+
+    __call__ = rec
+
+    def map_data_wrapper(self, expr: PtDataWrapper, path: Tuple[int, ...]) -> Array:
+        if path == ():
+            return expr
+
+        if path[0] == 0:
+            return self.rec(expr.name, path[1:])
+        elif path[0] == 1:
+            return self.rec(expr.shape, path[1:])
+        elif path[0] == 2:
+            return self.rec(expr.dtype, path[1:])
+        else:
+            raise AssertionError
+
+    def map_placeholder(self, expr: PtPlaceholder, path: Tuple[int, ...]) -> Array:
+        if path == ():
+            return expr
+
+        if path[0] == 0:
+            return self.rec(expr.name, path[1:])
+        elif path[0] == 1:
+            return self.rec(expr.shape, path[1:])
+        elif path[0] == 2:
+            return self.rec(expr.dtype, path[1:])
+        else:
+            raise AssertionError
+
+    def map_index_lambda(self, expr: IndexLambda, path: Tuple[int, ...]) -> Array:
+        if path == ():
+            return expr
+
+        # FIXME: Please FIXME, please.
+        if (
+                (isinstance(expr.expr, prim.Product)
+                 and len(expr.expr.children) == 2
+                 and np.isscalar(expr.expr.children[0]))
+                and len(expr.bindings) == 1
+                and frozenset(expr.bindings) == frozenset(["_in1"])):
+            assert path[0] == 1
+            return self.rec(expr.bindings["_in1"], path[1:])
+        elif (
+                (isinstance(expr.expr, prim.Sum)
+                 and len(expr.expr.children) == 2
+                 and np.isscalar(expr.expr.children[1]))
+                and len(expr.bindings) == 1
+                and frozenset(expr.bindings) == frozenset(["_in0"])):
+            assert path[0] == 0
+            return self.rec(expr.bindings["_in0"], path[1:])
+        elif (
+                (isinstance(expr.expr, prim.Sum)
+                 and len(expr.expr.children) == 2)
+                and len(expr.bindings) == 2
+                and frozenset(expr.bindings) == frozenset(["_in0", "_in1"])):
+            assert expr.expr.children[0].aggregate.name == "_in0"
+            assert expr.expr.children[1].aggregate.name == "_in1"
+
+            if path[0] == 0:
+                return self.rec(expr.bindings["_in0"], path[1:])
+            elif path[0] == 1:
+                return self.rec(expr.bindings["_in1"], path[1:])
+            else:
+                raise AssertionError
+        else:
+            raise NotImplementedError
+
+    def map_matrix_product(self,
+                           expr: MatrixProduct,
+                           path: Tuple[int, ...]) -> Array:
+        if path == ():
+            return expr
+
+        assert (0 <= path[0] <= 1)
+
+        if path[0] == 0:
+            return self.rec(expr.x1, path[1:])
+        elif path[0] == 1:
+            return self.rec(expr.x2, path[1:])
+        else:
+            raise AssertionError

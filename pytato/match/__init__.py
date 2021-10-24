@@ -327,7 +327,7 @@ class Wildcard(BaseWildcard):
 
 def match_anywhere(subject, pattern) -> Iterator[Mapping[str, ArrayOrScalar]]:
     from matchpy import match_anywhere, Pattern
-    from .tofrom import ToMatchpyExpressionMapper, FromMatchpyExpressionMapper
+    from .tofrom import ToMatchpyExpressionMapper, SubExpressionAtPathFinder
 
     m_subject = ToMatchpyExpressionMapper()(subject)
     m_pattern = Pattern(pattern)
@@ -336,8 +336,8 @@ def match_anywhere(subject, pattern) -> Iterator[Mapping[str, ArrayOrScalar]]:
     # 1. Wildcards -> Array entries
     # 2. From the path, extract the entire matched sub-expression
 
-    return match_anywhere(m_subject, m_pattern)
+    matches = match_anywhere(m_subject, m_pattern)
 
-    # from_matchpy_expr = FromMatchpyExpressionMapper()
-    # for subst, _ in match_anywhere(matchpy_subject, Pattern(pattern)):
-    #     yield {name: from_matchpy_expr(expr) for name, expr in subst.items()}
+    for subst, path in matches:
+        yield ({name: expr.pt_expr for name, expr in subst.items()},
+               SubExpressionAtPathFinder()(subject, path))

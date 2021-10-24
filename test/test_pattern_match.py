@@ -12,13 +12,13 @@ from pytato.match import Wildcard
 
 
 def test_match_linear_combo():
-    A = pt.make_placeholder("A", shape=(10, 10), dtype=np.float64)
-    B = pt.make_placeholder("B", shape=(10, 10), dtype=np.float64)
-    C = pt.make_placeholder("C", shape=(10, 10), dtype=np.float64)
+    a = pt.make_placeholder("a", shape=(10, 10), dtype=np.float64)
+    b = pt.make_placeholder("b", shape=(10, 10), dtype=np.float64)
+    c = pt.make_placeholder("c", shape=(10, 10), dtype=np.float64)
     x1 = pt.make_placeholder("x1", shape=(10,), dtype=np.float64)
     x2 = pt.make_placeholder("x2", shape=(10,), dtype=np.float64)
 
-    expr = 3 * (A @ (2 * B @ x2 + 3 * C @ x1)) + 4
+    expr = 3 * (a @ (2 * b @ x2 + 3 * c @ x1)) + 4
 
     w1_ = Wildcard.dot("w1_")
     w2_ = Wildcard.dot("w2_")
@@ -29,13 +29,14 @@ def test_match_linear_combo():
     pattern = w1_ @ (w2_ @ w3_ + w4_ @ w5_)
 
     matches = pt.match.match_anywhere(expr, pattern)
-    (match, _, _), = list(matches)
+    (subst, match), = list(matches)
 
-    assert match["w1_"] == A
-    assert match["w2_"] == 2 * B
-    assert match["w3_"] == x2
-    assert match["w4_"] == 3 * C
-    assert match["w5_"] == x1
+    assert subst["w1_"] == a
+    assert subst["w2_"] == 2 * b
+    assert subst["w3_"] == x2
+    assert subst["w4_"] == 3 * c
+    assert subst["w5_"] == x1
+    assert match == (a @ (2 * b @ x2 + 3 * c @ x1))
 
 
 if __name__ == "__main__":
