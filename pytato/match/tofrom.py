@@ -15,7 +15,7 @@ from pytato.match import (MatMul, Sum, Product, Id, Scalar, Dtype,
                           DataWrapper as MpDataWrapper)
 from pytato.scalar_expr import ScalarType
 
-from matchpy import Expression, Symbol
+from matchpy import Expression
 
 
 class ToMatchpyExpressionMapper:
@@ -37,17 +37,15 @@ class ToMatchpyExpressionMapper:
                           else self.rec(dim)
                           for dim in expr.shape)
 
-        return MpDataWrapper(Id(expr.name),
-                             rec_shape,
-                             Dtype(expr.dtype),
-                             _pt_counterpart=expr)
+        return MpDataWrapper(Id(expr.name), TupleOp(rec_shape),
+                             Dtype(expr.dtype), _pt_counterpart=expr)
 
     def map_placeholder(self, expr: PtPlaceholder) -> Expression:
         rec_shape = tuple(Scalar(dim) if np.isscalar(dim)
                           else self.rec(dim)
                           for dim in expr.shape)
 
-        return MpPlaceholder(Id(expr.name), rec_shape, Dtype(expr.dtype))
+        return MpPlaceholder(Id(expr.name), TupleOp(rec_shape), Dtype(expr.dtype))
 
     def map_index_lambda(self, expr: IndexLambda) -> Expression:
         # FIXME: Please FIXME, please.
@@ -57,7 +55,7 @@ class ToMatchpyExpressionMapper:
                  and np.isscalar(expr.expr.children[0]))
                 and len(expr.bindings) == 1
                 and frozenset(expr.bindings) == frozenset(["_in1"])):
-            return Product(Symbol(str(expr.expr.children[0])),
+            return Product(Scalar(expr.expr.children[0]),
                            self.rec(expr.bindings["_in1"]))
         elif (
                 (isinstance(expr.expr, prim.Sum)
@@ -65,7 +63,7 @@ class ToMatchpyExpressionMapper:
                  and np.isscalar(expr.expr.children[1]))
                 and len(expr.bindings) == 1
                 and frozenset(expr.bindings) == frozenset(["_in0"])):
-            return Sum(Symbol(expr.expr.children[1]),
+            return Sum(Scalar(expr.expr.children[1]),
                        self.rec(expr.bindings["_in0"]))
         elif (
                 (isinstance(expr.expr, prim.Sum)

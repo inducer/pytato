@@ -61,13 +61,14 @@ class Id(Constant[str]):
 
 
 class TupleOp(Operation, Generic[TupleOpT]):
-    arity = Arity.variadict
+    arity = Arity.variadic
     name = "tuple"
     _mapper_method = "map_tuple_op"
 
-    def __init__(self, operands: Sequence[TupleOpT],
+    def __init__(self,
+                 operands: Sequence[Expression],
                  variable_name=None) -> None:
-        super().__init__(tuple(operands), variable_name)
+        super().__init__(*operands, variable_name=variable_name)
 
 
 class NumpyOp(abc.ABC, Operation):
@@ -309,6 +310,7 @@ class Wildcard(BaseWildcard):
 
     @classmethod
     def dot(cls, name=None) -> "Wildcard":
+        # FIXME: This should go into matchpy itself.
         return cls(min_count=1, fixed_size=True, variable_name=name)
 
 
@@ -316,8 +318,15 @@ def match_anywhere(subject, pattern) -> Iterator[Mapping[str, ArrayOrScalar]]:
     from matchpy import match_anywhere, Pattern
     from .tofrom import ToMatchpyExpressionMapper, FromMatchpyExpressionMapper
 
-    matchpy_subject = ToMatchpyExpressionMapper()(subject)
-    from_matchpy_expr = FromMatchpyExpressionMapper()
+    m_subject = ToMatchpyExpressionMapper()(subject)
+    m_pattern = Pattern(pattern)
 
-    for subst, _ in match_anywhere(matchpy_subject, Pattern(pattern)):
-        yield {name: from_matchpy_expr(expr) for name, expr in subst.items()}
+    # FIXME: Convert these matches into
+    # 1. Wildcards -> Array entries
+    # 2. From the path, extract the entire matched sub-expression
+
+    return match_anywhere(m_subject, m_pattern)
+
+    # from_matchpy_expr = FromMatchpyExpressionMapper()
+    # for subst, _ in match_anywhere(matchpy_subject, Pattern(pattern)):
+    #     yield {name: from_matchpy_expr(expr) for name, expr in subst.items()}
