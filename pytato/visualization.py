@@ -311,7 +311,6 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
         part_id_to_node_to_node_info[part_id] = part_node_to_info
 
-    1/0
     input_arrays: List[Array] = []
     internal_arrays: List[Array] = []
     array_to_id: Dict[Array, str] = {}
@@ -319,10 +318,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
     partition_to_array: Dict[Hashable, List[Array]] = {}
 
     id_gen = UniqueNameGenerator()
-    for array in nodes:
-        if parts_func:
-            pid = parts_func(array)
-            partition_to_array.setdefault(pid, []).append(array)
+    for array, _ in part_node_to_info.items():
 
         array_to_id[array] = id_gen("array")
         if isinstance(array, InputArgumentBase):
@@ -339,14 +335,14 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
         with emit.block("subgraph cluster_Inputs"):
             emit('label="Inputs"')
             for array in input_arrays:
-                _emit_array(emit, nodes[array], array_to_id[array])
+                _emit_array(emit, part_node_to_info[array], array_to_id[array])
 
         # Emit non-inputs.
         for array in internal_arrays:
-            _emit_array(emit, nodes[array], array_to_id[array])
+            _emit_array(emit, part_node_to_info[array], array_to_id[array])
 
         # Emit edges.
-        for array, node in nodes.items():
+        for array, node in part_node_to_info.items():
             for label, tail_array in node.edges.items():
                 tail = array_to_id[tail_array]
                 head = array_to_id[array]
@@ -369,8 +365,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays],
-                   parts_func: Optional[Callable[[Array], Hashable]] = None) -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
@@ -381,7 +376,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays],
     if isinstance(result, str):
         dot_code = result
     else:
-        dot_code = get_dot_graph(result, parts_func)
+        dot_code = get_dot_graph(result)
 
     from pymbolic.imperative.utils import show_dot
     show_dot(dot_code)

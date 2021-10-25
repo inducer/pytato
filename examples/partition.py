@@ -35,30 +35,31 @@ def main():
     # Find the partitions
     parts = find_partitions(pt.DictOfNamedArrays({"out": y}), pfunc)
 
-    # FIXME: Test for disjointness of partitions
-    from pytato.visualization import get_dot_graph_from_partitions
-    get_dot_graph_from_partitions(parts)
+    from pytato.visualization import get_dot_graph_from_partitions, show_dot_graph
+    show_dot_graph(get_dot_graph_from_partitions(parts))
+
+
     # Show the partitions
-    pt.show_dot_graph(y, pfunc)
+    # pt.show_dot_graph(y, pfunc)
 
-    # Execute the partitions
-    ctx = cl.create_some_context()
-    queue = cl.CommandQueue(ctx)
+    # # Execute the partitions
+    # ctx = cl.create_some_context()
+    # queue = cl.CommandQueue(ctx)
 
-    prg_per_partition = generate_code_for_partitions(parts)
+    # prg_per_partition = generate_code_for_partitions(parts)
 
-    context = execute_partitions(parts, prg_per_partition, queue)
+    # context = execute_partitions(parts, prg_per_partition, queue)
 
-    final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
+    # final_res = context[parts.partition_id_to_output_names[
+    #                         parts.toposorted_partitions[-1]][0]]
 
-    # Execute the unpartitioned code for comparison
-    prg = pt.generate_loopy(y)
-    evt, (out, ) = prg(queue)
+    # # Execute the unpartitioned code for comparison
+    # prg = pt.generate_loopy(y)
+    # evt, (out, ) = prg(queue)
 
-    assert np.allclose(out, final_res)
+    # assert np.allclose(out, final_res)
 
-    print("Partitioning test succeeded.")
+    # print("Partitioning test succeeded.")
 
 
 if __name__ == "__main__":
