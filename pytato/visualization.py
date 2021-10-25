@@ -320,12 +320,13 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
     with emit.block("digraph computation"):
         emit("node [shape=rectangle]")
+        array_to_id: Dict[Array, str] = {}
 
-        for part_id, part_node_to_info in part_id_to_node_to_node_info.items():
+        for part_id in parts.toposorted_partitions:
+            part_node_to_info = part_id_to_node_to_node_info[part_id]
             input_arrays: List[Array] = []
             output_arrays: Set[Array] = set()
             internal_arrays: List[Array] = []
-            array_to_id: Dict[Array, str] = {}
 
             for array, _ in part_node_to_info.items():
                 array_to_id[array] = id_gen("array")
@@ -343,29 +344,32 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
             with emit.block(f"subgraph \"cluster_part_{part_id}\""):
                 emit("style=dashed")
                 emit(f'label="{part_id}"')
+
+                # Emit inputs
                 for array in input_arrays:
                     _emit_array(emit, part_node_to_info[array],
                                 array_to_id[array], "deepskyblue")
 
-                # Emit non-inputs.
+                    if array.name:
+                        tgt = array_to_id[parts.var_name_to_result[array.name]]
+                        emit(f"{tgt} -> {array_to_id[array]}")
+
+                # Emit internal nodes
                 for array in internal_arrays:
                     _emit_array(emit, part_node_to_info[array], array_to_id[array])
 
+                # Emit outputs
                 for array in output_arrays:
                     _emit_array(emit, part_node_to_info[array],
                                 array_to_id[array], "gold")
 
-                # Emit edges.
+                # Emit intra-partition edges
                 for array, node in part_node_to_info.items():
                     for label, tail_array in node.edges.items():
                         tail = array_to_id[tail_array]
                         head = array_to_id[array]
                         emit('%s -> %s [label="%s"]' %
                             (tail, head, dot_escape(label)))
-
-                # Emit output/namespace name mappings.
-                # _emit_name_cluster(emit, outputs._data, array_to_id, id_gen,
-                #                    label="Outputs")
 
     return emit.get()
 
