@@ -28,7 +28,8 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable, Optional
+from typing import (Callable, Dict, Union, Iterator, List, Mapping, Hashable,
+                    Optional, Set)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -168,7 +169,8 @@ class DotEmitter(CodeGeneratorBase):
         self("}")
 
 
-def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str, color: str = "white") -> None:
+def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
+                color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
@@ -289,7 +291,8 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`).
     """
-    part_id_to_node_to_node_info = {}
+    # Maps each partition to a dict of its arrays with the node info
+    part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
 
     for part_id, out_names in parts.partition_id_to_output_names.items():
         part_node_to_info: Dict[Array, DotNodeInfo] = {}
@@ -341,24 +344,28 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
                 emit("style=dashed")
                 emit(f'label="{part_id}"')
                 for array in input_arrays:
-                    _emit_array(emit, part_node_to_info[array], array_to_id[array], "deepskyblue")
+                    _emit_array(emit, part_node_to_info[array],
+                                array_to_id[array], "deepskyblue")
 
                 # Emit non-inputs.
                 for array in internal_arrays:
                     _emit_array(emit, part_node_to_info[array], array_to_id[array])
 
                 for array in output_arrays:
-                    _emit_array(emit, part_node_to_info[array], array_to_id[array], "gold")
+                    _emit_array(emit, part_node_to_info[array],
+                                array_to_id[array], "gold")
 
                 # Emit edges.
                 for array, node in part_node_to_info.items():
                     for label, tail_array in node.edges.items():
                         tail = array_to_id[tail_array]
                         head = array_to_id[array]
-                        emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
+                        emit('%s -> %s [label="%s"]' %
+                            (tail, head, dot_escape(label)))
 
                 # Emit output/namespace name mappings.
-                # _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
+                # _emit_name_cluster(emit, outputs._data, array_to_id, id_gen,
+                #                    label="Outputs")
 
     return emit.get()
 

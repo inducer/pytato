@@ -35,31 +35,28 @@ def main():
     # Find the partitions
     parts = find_partitions(pt.DictOfNamedArrays({"out": y}), pfunc)
 
+    # Show the partitions
     from pytato.visualization import get_dot_graph_from_partitions, show_dot_graph
     show_dot_graph(get_dot_graph_from_partitions(parts))
 
+    # Execute the partitions
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
 
-    # Show the partitions
-    # pt.show_dot_graph(y, pfunc)
+    prg_per_partition = generate_code_for_partitions(parts)
 
-    # # Execute the partitions
-    # ctx = cl.create_some_context()
-    # queue = cl.CommandQueue(ctx)
+    context = execute_partitions(parts, prg_per_partition, queue)
 
-    # prg_per_partition = generate_code_for_partitions(parts)
+    final_res = context[parts.partition_id_to_output_names[
+                            parts.toposorted_partitions[-1]][0]]
 
-    # context = execute_partitions(parts, prg_per_partition, queue)
+    # Execute the unpartitioned code for comparison
+    prg = pt.generate_loopy(y)
+    evt, (out, ) = prg(queue)
 
-    # final_res = context[parts.partition_id_to_output_names[
-    #                         parts.toposorted_partitions[-1]][0]]
+    assert np.allclose(out, final_res)
 
-    # # Execute the unpartitioned code for comparison
-    # prg = pt.generate_loopy(y)
-    # evt, (out, ) = prg(queue)
-
-    # assert np.allclose(out, final_res)
-
-    # print("Partitioning test succeeded.")
+    print("Partitioning test succeeded.")
 
 
 if __name__ == "__main__":

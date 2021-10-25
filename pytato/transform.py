@@ -820,11 +820,11 @@ class _GraphPartitioner(Mapper):
         # represented by a tuple of partition identifiers, to a list of placeholder
         # names "conveying" information across the edge.
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
-                List[str]] = {}
+                Set[str]] = {}
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self._seen_node_to_name = {}
+        self._seen_node_to_name: Dict[Array, str] = {}
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
@@ -840,7 +840,7 @@ class _GraphPartitioner(Mapper):
         self.partition_pair_to_edges.setdefault(
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
-    def _handle_new_binding(self, expr: Array, child: Array) -> Array:
+    def _handle_new_binding(self, expr: Array, child: Array) -> Any:
         if self.does_edge_cross_partition_boundary(expr, child):
             try:
                 ph_name = self._seen_node_to_name[child]
@@ -865,7 +865,7 @@ class _GraphPartitioner(Mapper):
         else:
             return self.rec(child)
 
-    def _handle_shape(self, expr, shape):
+    def _handle_shape(self, expr: Array, shape: Any) -> Tuple[Any, ...]:
         return tuple([
             self._handle_new_binding(expr, dim) if isinstance(dim, Array) else dim
             for dim in shape])
@@ -874,7 +874,7 @@ class _GraphPartitioner(Mapper):
 
     # {{{ map_xxx methods
 
-    def map_named_array(self, expr: NamedArray):
+    def map_named_array(self, expr: NamedArray) -> None:
         raise NotImplementedError
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
@@ -917,7 +917,8 @@ class _GraphPartitioner(Mapper):
                 axis=expr.axis,
                 tags=expr.tags)
 
-    def map_axis_permutation(self, expr):
+    def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
+            -> AxisPermutation:
         return AxisPermutation(
                 array=self._handle_new_binding(expr, expr.array),
                 axes=expr.axes,
@@ -932,16 +933,16 @@ class _GraphPartitioner(Mapper):
             order=expr.order,
             tags=expr.tags)
 
-    def map_basic_index(self, expr):
+    def map_basic_index(self, expr: BasicIndex) -> None:
         raise NotImplementedError
 
-    def map_contiguous_advanced_index(self, expr):
+    def map_contiguous_advanced_index(self, expr: Array) -> None:
         raise NotImplementedError
 
-    def map_non_contiguous_advanced_index(self, expr):
+    def map_non_contiguous_advanced_index(self, expr: Array) -> None:
         raise NotImplementedError
 
-    def map_data_wrapper(self, expr):
+    def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
         return DataWrapper(
                 name=expr.name,
                 data=expr.data,
@@ -956,7 +957,7 @@ class _GraphPartitioner(Mapper):
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_size_param(self, expr):
+    def map_size_param(self, expr: SizeParam) -> None:
         raise NotImplementedError
 
     # }}}
@@ -1016,9 +1017,9 @@ def find_partitions(outputs: DictOfNamedArrays,
             {pid for _, pid in pf.partition_pair_to_edges.keys()})
 
     partition_id_to_output_names: Dict[Hashable, List[str]] = {
-        pid: set() for pid in partition_ids}
+        pid: list() for pid in partition_ids}
     partition_id_to_input_names: Dict[Hashable, List[str]] = {
-        pid: set() for pid in partition_ids}
+        pid: list() for pid in partition_ids}
 
     partitions = set()
 
@@ -1026,7 +1027,7 @@ def find_partitions(outputs: DictOfNamedArrays,
 
     for out_name, rewritten_output in rewritten_outputs.items():
         out_part_id = part_func(outputs._data[out_name])
-        partition_id_to_output_names.setdefault(out_part_id, []).add(out_name)
+        partition_id_to_output_names.setdefault(out_part_id, []).append(out_name)
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
@@ -1041,30 +1042,12 @@ def find_partitions(outputs: DictOfNamedArrays,
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
-                pid_dependency, []).add(var_name)
+                pid_dependency, []).append(var_name)
             partition_id_to_input_names.setdefault(
-                pid_target, []).add(var_name)
+                pid_target, []).append(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
-
-    dict_per_partition = {pid:
-            # generate_loopy(
-                DictOfNamedArrays(
-                    {var_name: var_name_to_result[var_name]
-                        for var_name in partition_id_to_output_names[pid]
-                     })
-            for pid in toposorted_partitions}
-
-    from pytato import show_ascii_graph
-
-    if 0:
-        print("Result from partitionfinder:")
-        show_ascii_graph(r)
-
-        for k, v in dict_per_partition.items():
-            print(k)
-            show_ascii_graph(v)
 
     return CodePartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, var_name_to_result)
