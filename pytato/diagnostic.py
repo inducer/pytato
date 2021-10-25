@@ -30,6 +30,7 @@ Pytato-specific exceptions
 
 .. autoclass:: NameClashError
 .. autoclass:: CannotBroadcastError
+.. autoclass:: UnknownIndexLambdaExpr
 """
 
 
@@ -42,4 +43,12 @@ class NameClashError(RuntimeError):
 
 
 class CannotBroadcastError(ValueError):
+    pass
+
+
+class UnknownIndexLambdaExpr(ValueError):
+    """
+    Raised when the structure :class:`pytato.array.IndexLambda` could not be
+    inferred.
+    """
     pass
