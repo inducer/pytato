@@ -5,6 +5,12 @@ Array Expressions
 
 .. automodule:: pytato.array
 
+
+Raising :class:`~pytato.array.IndexLambda` nodes
+------------------------------------------------
+
+.. automodule:: pytato.raising
+
 Calling :mod:`loopy` kernels in an array expression
 ---------------------------------------------------
 
