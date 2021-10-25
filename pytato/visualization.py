@@ -168,7 +168,7 @@ class DotEmitter(CodeGeneratorBase):
         self("}")
 
 
-def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
+def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
@@ -184,7 +184,7 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
                 % (td_attrib, dot_escape(name), td_attrib, dot_escape(field)))
 
     table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s>]" % (id, table))
+    emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
 
 
 def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
@@ -311,56 +311,54 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
         part_id_to_node_to_node_info[part_id] = part_node_to_info
 
-    input_arrays: List[Array] = []
-    internal_arrays: List[Array] = []
-    array_to_id: Dict[Array, str] = {}
-
-    partition_to_array: Dict[Hashable, List[Array]] = {}
-
     id_gen = UniqueNameGenerator()
-    for array, _ in part_node_to_info.items():
-
-        array_to_id[array] = id_gen("array")
-        if isinstance(array, InputArgumentBase):
-            input_arrays.append(array)
-        else:
-            internal_arrays.append(array)
 
     emit = DotEmitter()
 
     with emit.block("digraph computation"):
         emit("node [shape=rectangle]")
 
-        # Emit inputs.
-        with emit.block("subgraph cluster_Inputs"):
-            emit('label="Inputs"')
-            for array in input_arrays:
-                _emit_array(emit, part_node_to_info[array], array_to_id[array])
+        for part_id, part_node_to_info in part_id_to_node_to_node_info.items():
+            input_arrays: List[Array] = []
+            output_arrays: Set[Array] = set()
+            internal_arrays: List[Array] = []
+            array_to_id: Dict[Array, str] = {}
 
-        # Emit non-inputs.
-        for array in internal_arrays:
-            _emit_array(emit, part_node_to_info[array], array_to_id[array])
+            for array, _ in part_node_to_info.items():
+                array_to_id[array] = id_gen("array")
+                if isinstance(array, InputArgumentBase):
+                    input_arrays.append(array)
+                else:
+                    internal_arrays.append(array)
 
-        # Emit edges.
-        for array, node in part_node_to_info.items():
-            for label, tail_array in node.edges.items():
-                tail = array_to_id[tail_array]
-                head = array_to_id[array]
-                emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
+            for out_name in parts.partition_id_to_output_names[part_id]:
+                ary = parts.var_name_to_result[out_name]
+                output_arrays.add(ary)
+                if ary in internal_arrays:
+                    internal_arrays.remove(ary)
 
-        # Emit output/namespace name mappings.
-        _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
-
-        # Emit the partitions (if any)
-        cpart = 0
-        for k, v in partition_to_array.items():
-            with emit.block(f"subgraph cluster_part_{cpart}"):
-                emit(f'label="{k}"')
+            with emit.block(f"subgraph \"cluster_part_{part_id}\""):
                 emit("style=dashed")
-                emit("color=blue")
-                for x in v:
-                    emit(array_to_id[x])
-            cpart += 1
+                emit(f'label="{part_id}"')
+                for array in input_arrays:
+                    _emit_array(emit, part_node_to_info[array], array_to_id[array], "deepskyblue")
+
+                # Emit non-inputs.
+                for array in internal_arrays:
+                    _emit_array(emit, part_node_to_info[array], array_to_id[array])
+
+                for array in output_arrays:
+                    _emit_array(emit, part_node_to_info[array], array_to_id[array], "gold")
+
+                # Emit edges.
+                for array, node in part_node_to_info.items():
+                    for label, tail_array in node.edges.items():
+                        tail = array_to_id[tail_array]
+                        head = array_to_id[array]
+                        emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
+
+                # Emit output/namespace name mappings.
+                # _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
 
     return emit.get()
 
