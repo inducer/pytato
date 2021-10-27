@@ -676,6 +676,10 @@ class CachedMapAndCopyMapper(CopyMapper):
 
 @dataclass(frozen=True, eq=True)
 class MPMSMaterializerAccumulator:
+    """This class serves as the return value of :class:`MPMSMaterializer`. It
+    contains the set of materialized predecessors and the rewritten expression
+    (i.e. the expression with tags for materialization applied).
+    """
     materialized_predecessors: FrozenSet[Array]
     expr: Array
 
@@ -704,6 +708,7 @@ def _materialize_if_mpms(expr: Array,
 
 
 class MPMSMaterializer(Mapper):
+    """See :func:`materialize_with_mpms` for an explanation."""
     def __init__(self, nsuccessors: Mapping[Array, int]):
         super().__init__()
         self.nsuccessors = nsuccessors
