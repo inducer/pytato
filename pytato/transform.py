@@ -96,23 +96,35 @@ class Mapper:
 # }}}
 
 
-# {{{ CopyMapper
+# {{{ CachedMapper
 
-class CopyMapper(Mapper):
+class CachedMapper(Mapper):
     """Performs a deep copy of a :class:`pytato.array.Array`.
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
     """
 
     def __init__(self) -> None:
-        self.cache: Dict[ArrayOrNames, ArrayOrNames] = {}
+        self._cache = {}
 
     def rec(self, expr: T) -> T:  # type: ignore
-        if expr in self.cache:
-            return self.cache[expr]  # type: ignore
-        result: T = super().rec(expr)
-        self.cache[expr] = result
-        return result
+        try:
+            return self._cache[expr]  # type: ignore
+        except KeyError:
+            result: T = super().rec(expr)
+            self._cache[expr] = result
+            return result
+
+# }}}
+
+
+# {{{ CopyMapper
+
+class CopyMapper(CachedMapper):
+    """Performs a deep copy of a :class:`pytato.array.Array`.
+    The typical use of this mapper is to override individual ``map_`` methods
+    in subclasses to permit term rewriting on an expression graph.
+    """
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings: Dict[str, Array] = {
