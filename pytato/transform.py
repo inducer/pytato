@@ -1123,19 +1123,20 @@ class _GraphPartitioner(Mapper):
     def _handle_new_binding(self, expr: Array, child: Array) -> Any:
         print(expr, child, self.does_edge_cross_partition_boundary(expr, child))
         if self.does_edge_cross_partition_boundary(expr, child):
-            try:
-                ph_name = self._seen_node_to_name[child]
-            except KeyError:
-                ph_name = self.make_new_placeholder_name()
-                # If an edge crosses a partition boundary, replace the
-                # depended-upon node (that nominally lives in the other partition)
-                # with a Placeholder that lives in the current partition. For each
-                # partition, collect the placeholder names that it’s supposed to
-                # compute.
+            # FIXME: restore this?
+            # try:
+                # ph_name = self._seen_node_to_name[child]
+            # except KeyError:
+            ph_name = self.make_new_placeholder_name()
+            # If an edge crosses a partition boundary, replace the
+            # depended-upon node (that nominally lives in the other partition)
+            # with a Placeholder that lives in the current partition. For each
+            # partition, collect the placeholder names that it’s supposed to
+            # compute.
 
-                self.var_name_to_result[ph_name] = self.rec(child)
+            self.var_name_to_result[ph_name] = self.rec(child)
 
-                self._seen_node_to_name[child] = ph_name
+            self._seen_node_to_name[child] = ph_name
 
             self.add_interpartition_edge(expr, child, ph_name)
             return make_placeholder(ph_name,
@@ -1341,7 +1342,7 @@ def generate_code_for_partitions(parts: CodePartitions) \
 
     # import pudb
     # pu.db
-    for pid in parts.toposorted_partitions[::-1]:
+    for pid in parts.toposorted_partitions:
         d = DictOfNamedArrays(
                     {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]

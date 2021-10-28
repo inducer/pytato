@@ -40,19 +40,19 @@ def main():
     show_dot_graph(get_dot_graph_from_partitions(parts))
 
     # Execute the partitions
-    # ctx = cl.create_some_context()
-    # queue = cl.CommandQueue(ctx)
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
 
     prg_per_partition = generate_code_for_partitions(parts)
 
     context = execute_partitions(parts, prg_per_partition, queue)
 
     final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
+                            parts.toposorted_partitions[-1]].pop()]
 
     # Execute the unpartitioned code for comparison
     prg = pt.generate_loopy(y)
-    evt, (out, ) = prg(queue)
+    _, (out, ) = prg(queue)
 
     assert np.allclose(out, final_res)
 
