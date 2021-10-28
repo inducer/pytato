@@ -676,6 +676,63 @@ def test_basic_index_equality_traverses_underlying_arrays():
     assert a[0] != b[0]
 
 
+def test_idx_lambda_to_hlo():
+    from pytato.raising import index_lambda_to_high_level_op
+    from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
+                                C99CallOp, BroadcastOp)
+    from pyrsistent import pmap
+    from pytato.reductions import (SumReductionOperation,
+                                   ProductReductionOperation)
+
+    a = pt.make_placeholder("a", (10, 4), dtype=np.float64)
+    b = pt.make_placeholder("b", (10, 4), dtype=np.float64)
+
+    assert index_lambda_to_high_level_op(a + b) == BinaryOp(BinaryOpType.ADD,
+                                                            a, b)
+    assert index_lambda_to_high_level_op(a / 42) == BinaryOp(BinaryOpType.TRUEDIV,
+                                                             a, 42)
+    assert index_lambda_to_high_level_op(42 * a) == BinaryOp(BinaryOpType.MULT,
+                                                             42, a)
+    assert index_lambda_to_high_level_op(a ** b) == BinaryOp(BinaryOpType.POWER,
+                                                             a, b)
+    assert index_lambda_to_high_level_op(a - b) == BinaryOp(BinaryOpType.SUB,
+                                                            a, b)
+    assert (index_lambda_to_high_level_op(a & b)
+            == BinaryOp(BinaryOpType.BITWISE_AND, a, b))
+    assert (index_lambda_to_high_level_op(a ^ b)
+            == BinaryOp(BinaryOpType.BITWISE_XOR, a, b))
+    assert (index_lambda_to_high_level_op(a | b)
+            == BinaryOp(BinaryOpType.BITWISE_OR, a, b))
+    assert (index_lambda_to_high_level_op(pt.equal(a, b))
+            == BinaryOp(BinaryOpType.EQUAL, a, b))
+    assert (index_lambda_to_high_level_op(pt.not_equal(a, b))
+            == BinaryOp(BinaryOpType.NOT_EQUAL, a, b))
+    assert (index_lambda_to_high_level_op(pt.less(a, b))
+            == BinaryOp(BinaryOpType.LESS, a, b))
+    assert (index_lambda_to_high_level_op(pt.less_equal(a, b))
+            == BinaryOp(BinaryOpType.LESS_EQUAL, a, b))
+    assert (index_lambda_to_high_level_op(pt.greater(a, b))
+            == BinaryOp(BinaryOpType.GREATER, a, b))
+    assert (index_lambda_to_high_level_op(pt.greater_equal(a, b))
+            == BinaryOp(BinaryOpType.GREATER_EQUAL, a, b))
+
+    assert index_lambda_to_high_level_op(pt.zeros(6)) == FullOp(0)
+    assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
+            == ReduceOp(SumReductionOperation(),
+                        b,
+                        pmap({1: "_r0"})))
+    assert (index_lambda_to_high_level_op(pt.prod(a))
+            == ReduceOp(ProductReductionOperation(),
+                        a,
+                        {0: "_r0",
+                         1: "_r1"}))
+    assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
+    assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
+                                                                        (b, a))
+    assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
+            == BroadcastOp(a))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
