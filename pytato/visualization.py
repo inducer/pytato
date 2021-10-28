@@ -350,6 +350,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
                     _emit_array(emit, part_node_to_info[array],
                                 array_to_id[array], "deepskyblue")
 
+                    # Emit cross-partition edges
                     if array.name:  # type: ignore [attr-defined]
                         tgt = array_to_id[
                                 parts.var_name_to_result[array.name]]  # type: ignore

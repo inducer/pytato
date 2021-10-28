@@ -817,7 +817,7 @@ class _GraphPartitioner(Mapper):
         self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
 
         # "edges" of the partitioned graph, maps an edge between two partitions,
-        # represented by a tuple of partition identifiers, to a list of placeholder
+        # represented by a tuple of partition identifiers, to a set of placeholder
         # names "conveying" information across the edge.
         self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
                 Set[str]] = {}
@@ -925,8 +925,6 @@ class _GraphPartitioner(Mapper):
                 tags=expr.tags)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        # type-ignore reason: mypy can't tell '_handle_new_binding' is being fed
-        # only arrays
         return Reshape(
             array=self._handle_new_binding(expr, expr.array),
             newshape=self._handle_shape(expr, expr.newshape),
@@ -991,8 +989,8 @@ class CodePartitions:
        they represent.
     """
     toposorted_partitions: List[Hashable]
-    partition_id_to_input_names: Dict[Hashable, List[str]]
-    partition_id_to_output_names: Dict[Hashable, List[str]]
+    partition_id_to_input_names: Dict[Hashable, Set[str]]
+    partition_id_to_output_names: Dict[Hashable, Set[str]]
     var_name_to_result: Dict[str, Array]
 
 
@@ -1016,10 +1014,10 @@ def find_partitions(outputs: DictOfNamedArrays,
             |
             {pid for _, pid in pf.partition_pair_to_edges.keys()})
 
-    partition_id_to_output_names: Dict[Hashable, List[str]] = {
-        pid: list() for pid in partition_ids}
-    partition_id_to_input_names: Dict[Hashable, List[str]] = {
-        pid: list() for pid in partition_ids}
+    partition_id_to_output_names: Dict[Hashable, Set[str]] = {
+        pid: set() for pid in partition_ids}
+    partition_id_to_input_names: Dict[Hashable, Set[str]] = {
+        pid: set() for pid in partition_ids}
 
     partitions = set()
 
@@ -1027,7 +1025,7 @@ def find_partitions(outputs: DictOfNamedArrays,
 
     for out_name, rewritten_output in rewritten_outputs.items():
         out_part_id = part_func(outputs._data[out_name])
-        partition_id_to_output_names.setdefault(out_part_id, []).append(out_name)
+        partition_id_to_output_names.setdefault(out_part_id, []).add(out_name)
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
@@ -1042,9 +1040,9 @@ def find_partitions(outputs: DictOfNamedArrays,
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
-                pid_dependency, []).append(var_name)
+                pid_dependency, set()).add(var_name)
             partition_id_to_input_names.setdefault(
-                pid_target, []).append(var_name)
+                pid_target, set()).add(var_name)
 
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
