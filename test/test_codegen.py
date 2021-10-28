@@ -1084,7 +1084,8 @@ def test_partitionfinder(ctx_factory):
     from functools import partial
     part_func = partial(get_partition_id, tm.topological_order)
 
-    parts = find_partitions(y, part_func)
+    outputs = pt.DictOfNamedArrays({"out": y})
+    parts = find_partitions(outputs, part_func)
 
     # Execute the partitioned code
     ctx = ctx_factory()
@@ -1094,14 +1095,13 @@ def test_partitionfinder(ctx_factory):
 
     context = execute_partitions(parts, prg_per_partition, queue)
 
-    final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
+    final_res = [context[k] for k in outputs]
 
     # Execute the non-partitioned code for comparison
     prg = pt.generate_loopy(y)
     evt, (out,) = prg(queue)
 
-    np.testing.assert_allclose(out, final_res)
+    np.testing.assert_allclose([out], final_res)
 
 
 def test_broadcast_to(ctx_factory):
