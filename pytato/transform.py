@@ -1346,8 +1346,9 @@ def generate_code_for_partitions(parts: CodePartitions) \
                     {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]
                      })
-        for x in d:
-            print(x)
+        print(pid, d)
+        # for x in d:
+        #     print(x)
         prg_per_partition[pid] = generate_loopy(d)
 
     # prg_per_partition = {pid:
