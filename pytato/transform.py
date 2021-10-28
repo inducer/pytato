@@ -1141,6 +1141,7 @@ class _GraphPartitioner(Mapper):
 
                 self._seen_node_to_placeholder[child] = ph
 
+            assert ph.name
             self.add_interpartition_edge(expr, child, ph.name)
             return ph
 
@@ -1157,6 +1158,7 @@ class _GraphPartitioner(Mapper):
     # {{{ map_xxx methods
 
     def map_named_array(self, expr: NamedArray) -> None:
+        # FIXME
         raise NotImplementedError
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
@@ -1214,12 +1216,15 @@ class _GraphPartitioner(Mapper):
             tags=expr.tags)
 
     def map_basic_index(self, expr: BasicIndex) -> None:
+        # FIXME
         raise NotImplementedError
 
     def map_contiguous_advanced_index(self, expr: Array) -> None:
+        # FIXME
         raise NotImplementedError
 
     def map_non_contiguous_advanced_index(self, expr: Array) -> None:
+        # FIXME
         raise NotImplementedError
 
     def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
@@ -1238,6 +1243,7 @@ class _GraphPartitioner(Mapper):
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> None:
+        # FIXME
         raise NotImplementedError
 
     # }}}

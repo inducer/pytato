@@ -40,10 +40,8 @@ from pytato.array import (
         Stack, ShapeType, Einsum, Placeholder)
 from pytato.codegen import normalize_outputs
 import pytato.transform
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from pytato.transform import CodePartitions
+from pytato.transform import CodePartitions
 
 
 __doc__ = """

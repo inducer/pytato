@@ -37,7 +37,7 @@ def main():
 
     # Show the partitions
     from pytato.visualization import get_dot_graph_from_partitions, show_dot_graph
-    show_dot_graph(get_dot_graph_from_partitions(parts))
+    get_dot_graph_from_partitions(parts)
 
     # Execute the partitions
     ctx = cl.create_some_context()
