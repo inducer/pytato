@@ -72,7 +72,7 @@ def partition(pred: Callable[[Tpart], bool],
 
 
 def get_shape_after_broadcasting(
-        exprs: Sequence[Union[Array, ScalarExpression]]) -> ShapeType:
+        exprs: Iterable[Union[Array, ScalarExpression]]) -> ShapeType:
     """
     Returns the shape after broadcasting *exprs* in an operation.
     """
