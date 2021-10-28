@@ -1090,7 +1090,7 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
 
 # {{{ graph partitioning
 
-class _GraphPartitioner(Mapper):
+class _GraphPartitioner(CachedMapper):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.
@@ -1100,6 +1100,7 @@ class _GraphPartitioner(Mapper):
 
     def __init__(self, get_partition_id:
                                    Callable[[Array], Hashable]) -> None:
+        super().__init__()
 
         # Function to determine the Partition ID
         self.get_partition_id = get_partition_id
