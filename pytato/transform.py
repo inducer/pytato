@@ -103,9 +103,9 @@ class Mapper:
 # {{{ CachedMapper
 
 class CachedMapper(Mapper):
-    """Performs a deep copy of a :class:`pytato.array.Array`.
-    The typical use of this mapper is to override individual ``map_`` methods
-    in subclasses to permit term rewriting on an expression graph.
+    """Mapper class that maps each node in the DAG exactly once. This loses some
+    information compared to :class:`Mapper` as a node is visited only from
+    one of its predecessors.
     """
 
     def __init__(self) -> None:
@@ -337,6 +337,7 @@ class DependencyMapper(CombineMapper[R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
+
     .. warning::
 
         This returns every node in the graph! Consider a custom
