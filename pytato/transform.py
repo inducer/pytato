@@ -1104,7 +1104,7 @@ class _GraphPartitioner(Mapper):
 
         self.var_name_to_result: Dict[str, Array] = {}
 
-        self._seen_node_to_name: Dict[Array, str] = {}
+        self._seen_node_to_placeholder: Dict[Array, Placeholder] = {}
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
@@ -1122,26 +1122,27 @@ class _GraphPartitioner(Mapper):
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Any:
         if self.does_edge_cross_partition_boundary(expr, child):
-            # FIXME: restore this?
-            # try:
-            #     ph_name = self._seen_node_to_name[child]
-            # except KeyError:
-            ph_name = self.make_new_placeholder_name()
-            # If an edge crosses a partition boundary, replace the
-            # depended-upon node (that nominally lives in the other partition)
-            # with a Placeholder that lives in the current partition. For each
-            # partition, collect the placeholder names that it’s supposed to
-            # compute.
+            try:
+                ph = self._seen_node_to_placeholder[child]
+            except KeyError:
+                ph_name = self.make_new_placeholder_name()
+                # If an edge crosses a partition boundary, replace the
+                # depended-upon node (that nominally lives in the other partition)
+                # with a Placeholder that lives in the current partition. For each
+                # partition, collect the placeholder names that it’s supposed to
+                # compute.
 
-            self.var_name_to_result[ph_name] = self.rec(child)
-
-            self._seen_node_to_name[child] = ph_name
-
-            self.add_interpartition_edge(expr, child, ph_name)
-            return make_placeholder(ph_name,
+                ph = make_placeholder(ph_name,
                     shape=child.shape,
                     dtype=child.dtype,
                     tags=child.tags)
+
+                self.var_name_to_result[ph_name] = self.rec(child)
+
+                self._seen_node_to_placeholder[child] = ph
+
+            self.add_interpartition_edge(expr, child, ph.name)
+            return ph
 
         else:
             return self.rec(child)
