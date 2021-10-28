@@ -1121,6 +1121,7 @@ class _GraphPartitioner(Mapper):
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Any:
+        print(expr, child, self.does_edge_cross_partition_boundary(expr, child))
         if self.does_edge_cross_partition_boundary(expr, child):
             try:
                 ph_name = self._seen_node_to_name[child]
@@ -1336,13 +1337,27 @@ def generate_code_for_partitions(parts: CodePartitions) \
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
-    prg_per_partition = {pid:
-            generate_loopy(
-                DictOfNamedArrays(
+    prg_per_partition = {}
+
+    # import pudb
+    # pu.db
+    for pid in parts.toposorted_partitions[::-1]:
+        d = DictOfNamedArrays(
                     {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]
-                     }))
-            for pid in parts.toposorted_partitions}
+                     })
+        for x in d:
+            print(x)
+        prg_per_partition[pid] = generate_loopy(d)
+
+    # prg_per_partition = {pid:
+    #         generate_loopy(
+    #             DictOfNamedArrays(
+    #                 {var_name: parts.var_name_to_result[var_name]
+    #                     for var_name in parts.partition_id_to_output_names[pid]
+    #                  })
+    #             )
+    #         for pid in parts.toposorted_partitions}
 
     return prg_per_partition
 
