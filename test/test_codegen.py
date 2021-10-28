@@ -1209,6 +1209,32 @@ def test_reshape_on_scalars(ctx_factory):
     assert_allclose_to_numpy(pt.reshape(x, (192, 168, 0, 1)), cq)
 
 
+def test_materialize_reduces_flops(ctx_factory):
+    x1 = pt.make_placeholder("x1", (10, 4), np.float64)
+    x2 = pt.make_placeholder("x2", (10, 4), np.float64)
+    x3 = pt.make_placeholder("x3", (10, 4), np.float64)
+    x4 = pt.make_placeholder("x4", (10, 4), np.float64)
+    x5 = pt.make_placeholder("x5", (10, 4), np.float64)
+    cse = x1 + x2 + x3
+    y1 = x4 * cse
+    y2 = cse / x5
+    bad_graph = pt.make_dict_of_named_arrays({"y1": y1, "y2": y2})
+
+    good_graph = pt.transform.materialize_with_mpms(bad_graph)
+
+    bad_t_unit = pt.generate_loopy(bad_graph)
+    good_t_unit = pt.generate_loopy(good_graph)
+    bad_flops = (lp.get_op_map(bad_t_unit.program,
+                              subgroup_size="guess")
+                 .filter_by(dtype=[np.float64])
+                 .eval_and_sum({}))
+    good_flops = (lp.get_op_map(good_t_unit.program,
+                               subgroup_size="guess")
+                  .filter_by(dtype=[np.float64])
+                  .eval_and_sum({}))
+    assert good_flops == (bad_flops - 80)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

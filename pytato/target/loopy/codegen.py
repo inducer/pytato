@@ -46,6 +46,7 @@ from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
+from pytato.tags import ImplStored
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -76,6 +77,16 @@ __doc__ = """
 def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     from loopy.symbolic import SubstitutionMapper
     from pymbolic.mapper.substitutor import make_subst_func
+
+    # {{{ early exit for identity substitution
+
+    if all(isinstance(v, prim.Variable) and v.name == k
+           for k, v in variable_assigments.items()):
+        # Nothing to do here, move on.
+        return expression
+
+    # }}}
+
     return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
 
 
@@ -194,7 +205,7 @@ class ImplementedResult(ABC):
 class StoredResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` array.
 
-    See also: :class:`pytato.array.ImplStored`.
+    See also: :class:`pytato.tags.ImplStored`.
     """
     def __init__(self, name: str, num_indices: int, depends_on: FrozenSet[str]):
         self.name = name
@@ -219,7 +230,7 @@ class InlinedResult(ImplementedResult):
     """An array expression generated as a :mod:`loopy` expression containing inlined
     sub-expressions.
 
-    See also: :class:`pytato.array.ImplInlined`.
+    See also: :class:`pytato.tags.ImplInlined`.
     """
     def __init__(self, expr: ScalarExpression,
             num_indices: int,
@@ -343,6 +354,7 @@ class CodeGenMapper(Mapper):
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
+                offset=lp.auto,
                 is_input=True,
                 is_output=False)
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
@@ -357,19 +369,29 @@ class CodeGenMapper(Mapper):
         if expr in state.results:
             return state.results[expr]
 
-        # TODO: Respect tags.
-
         prstnt_ctx = PersistentExpressionContext(state)
         local_ctx = LocalExpressionContext(local_namespace=expr.bindings,
                                               num_indices=expr.ndim,
                                               reduction_bounds={})
         loopy_expr = self.exprgen_mapper(expr.expr, prstnt_ctx, local_ctx)
 
-        result = InlinedResult(loopy_expr, expr.ndim, prstnt_ctx.depends_on)
-        state.results[expr] = result
+        result: ImplementedResult = InlinedResult(loopy_expr,
+                                                  expr.ndim,
+                                                  prstnt_ctx.depends_on)
 
         shape_to_scalar_expression(expr.shape, self, state)  # walk over size params
 
+        # {{{ implementation tag
+
+        if expr.tags_of_type(ImplStored):
+            name = state.var_name_gen("_pt_temp")
+            result = StoredResult(name, expr.ndim,
+                                  frozenset([add_store(name, expr,
+                                                       result, state,
+                                                       self, True)]))
+        # }}}
+
+        state.results[expr] = result
         return result
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,

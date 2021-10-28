@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List)
+                    List, Mapping, Iterable)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -34,7 +34,9 @@ from pytato.array import (
         IndexRemappingBase, Einsum, InputArgumentBase,
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         IndexBase)
-from pytato.loopy import LoopyCall
+from pytato.loopy import LoopyCall, LoopyCallResult
+from dataclasses import dataclass
+from pytato.tags import ImplStored
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -52,9 +54,11 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
+.. autoclass:: CachedMapAndCopyMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
-
+.. autofunction:: map_and_copy
+.. autofunction:: materialize_with_mpms
 """
 
 
@@ -90,7 +94,7 @@ class Mapper:
 
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         return self.rec(expr, *args, **kwargs)
 
 # }}}
@@ -200,10 +204,11 @@ class CopyMapper(CachedMapper):
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec(arg) for arg in expr.args))
+                      tuple(self.rec(arg) for arg in expr.args),
+                      tags=expr.tags)
 
-    def map_named_array(self, expr: NamedArray) -> NamedArray:
-        return type(expr)(self.rec(expr._container), expr.name)
+    def map_named_array(self, expr: NamedArray) -> Array:
+        return type(expr)(self.rec(expr._container), expr.name, tags=expr.tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -219,7 +224,7 @@ class CopyMapper(CachedMapper):
                          bindings=bindings,
                          entrypoint=expr.entrypoint)
 
-    def map_reshape(self, expr: Reshape) -> Reshape:
+    def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
                        # type-ignore reason: mypy can't tell 'rec' is being fed
                        # only arrays
@@ -553,7 +558,14 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    map_concatenate = map_stack
+    def map_concatenate(self, expr: Concatenate) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.arrays:
+            self.rec(child)
+
+        self.post_visit(expr)
 
     def map_einsum(self, expr: Einsum) -> None:
         if not self.visit(expr):
@@ -644,6 +656,201 @@ class TopoSortMapper(CachedWalkMapper):
 # }}}
 
 
+# {{{ MapAndCopyMapper
+
+class CachedMapAndCopyMapper(CopyMapper):
+    """
+    Mapper that applies *map_fn* to each node and copies it. Results of
+    traversals are memoized i.e. each node is mapped via *map_fn* exactly once.
+    """
+
+    def __init__(self, map_fn: Callable[[ArrayOrNames], ArrayOrNames]) -> None:
+        super().__init__()
+        self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
+
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+
+        # type-ignore reason: ArrayOrNames not compatible with 'T'
+        result = super().rec(self.map_fn(expr))  # type: ignore[type-var]
+        self.cache[expr] = result
+        return result
+
+    # type-ignore-reason: Mapper.__call__ returns Any
+    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+        return self.rec(expr)
+
+# }}}
+
+
+# {{{ MPMS materializer
+
+@dataclass(frozen=True, eq=True)
+class MPMSMaterializerAccumulator:
+    """This class serves as the return value of :class:`MPMSMaterializer`. It
+    contains the set of materialized predecessors and the rewritten expression
+    (i.e. the expression with tags for materialization applied).
+    """
+    materialized_predecessors: FrozenSet[Array]
+    expr: Array
+
+
+def _materialize_if_mpms(expr: Array,
+                         nsuccessors: int,
+                         predecessors: Iterable[MPMSMaterializerAccumulator]
+                         ) -> MPMSMaterializerAccumulator:
+    """
+    Returns an instance of :class:`MPMSMaterializerAccumulator`, that
+    materializes *expr* if it has more than 1 successors and more than 1
+    materialized predecessors.
+    """
+    from functools import reduce
+
+    materialized_predecessors: FrozenSet[Array] = reduce(
+                                                    frozenset.union,
+                                                    (pred.materialized_predecessors
+                                                     for pred in predecessors),
+                                                    frozenset())
+    if nsuccessors > 1 and len(materialized_predecessors) > 1:
+        new_expr = expr.tagged(ImplStored())
+        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+    else:
+        return MPMSMaterializerAccumulator(materialized_predecessors, expr)
+
+
+class MPMSMaterializer(Mapper):
+    """See :func:`materialize_with_mpms` for an explanation."""
+    def __init__(self, nsuccessors: Mapping[Array, int]):
+        super().__init__()
+        self.nsuccessors = nsuccessors
+        self.cache: Dict[ArrayOrNames, MPMSMaterializerAccumulator] = {}
+
+    # type-ignore reason: return type not compatible with Mapper.rec's type
+    def rec(self, expr: ArrayOrNames) -> MPMSMaterializerAccumulator:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+        # type-ignore reason: type not compatible with super.rec() type
+        result: MPMSMaterializerAccumulator = super().rec(expr)  # type: ignore
+        self.cache[expr] = result
+        return result
+
+    def _map_input_base(self, expr: InputArgumentBase
+                        ) -> MPMSMaterializerAccumulator:
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
+    map_placeholder = _map_input_base
+    map_data_wrapper = _map_input_base
+    map_size_param = _map_input_base
+
+    def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
+        if not isinstance(expr, LoopyCallResult):
+            raise NotImplementedError("only LoopyCallResult named array"
+                                      " supported for now.")
+
+        # loopy call result is always materialized
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
+    def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
+        children_rec = {bnd_name: self.rec(bnd)
+                        for bnd_name, bnd in expr.bindings.items()}
+
+        new_expr = IndexLambda(expr.expr,
+                               expr.shape,
+                               expr.dtype,
+                               {bnd_name: bnd.expr
+                                for bnd_name, bnd in children_rec.items()},
+                               tags=expr.tags)
+        return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
+                                    children_rec.values())
+
+    def map_matrix_product(self, expr: MatrixProduct) -> MPMSMaterializerAccumulator:
+        x1_rec, x2_rec = self.rec(expr.x1), self.rec(expr.x2)
+        new_expr = MatrixProduct(x1_rec.expr, x2_rec.expr, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (x1_rec, x2_rec))
+
+    def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.arrays]
+        new_expr = Stack(tuple(ary.expr for ary in rec_arrays), expr.axis, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.arrays]
+        new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
+                               expr.axis,
+                               expr.tags)
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, expr.tags)
+        return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def map_axis_permutation(self, expr: AxisPermutation
+                             ) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = AxisPermutation(rec_array.expr, expr.axes, expr.tags)
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def _map_index_base(self, expr: IndexBase) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        rec_indices = {i: self.rec(idx)
+                       for i, idx in enumerate(expr.indices)
+                       if isinstance(idx, Array)}
+
+        new_expr = type(expr)(rec_array.expr,
+                              tuple(rec_indices[i].expr
+                                    if i in rec_indices
+                                    else expr.indices[i]
+                                    for i in range(
+                                        len(expr.indices))),
+                              expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,) + tuple(rec_indices.values())
+                                    )
+
+    map_basic_index = _map_index_base
+    map_contiguous_advanced_index = _map_index_base
+    map_non_contiguous_advanced_index = _map_index_base
+
+    def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = Reshape(rec_array.expr, expr.newshape, expr.order, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.args]
+        new_expr = Einsum(expr.access_descriptors,
+                          tuple(ary.expr for ary in rec_arrays),
+                          expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
+                                 ) -> MPMSMaterializerAccumulator:
+        raise NotImplementedError
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -669,6 +876,80 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     dep_mapper = DependencyMapper()
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
+
+
+def map_and_copy(expr: T,
+                 map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+                 ) -> ArrayOrNames:
+    """
+    Returns a copy of *expr* with every array expression reachable from *expr*
+    mapped via *map_fn*.
+
+    .. note::
+
+        Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
+        caching nature each node is mapped exactly once.
+    """
+    return CachedMapAndCopyMapper(map_fn)(expr)
+
+
+def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+    r"""
+    Materialize nodes in *expr* with MPMS materialization strategy.
+    MPMS stands for Multiple-Predecessors, Multiple-Successors.
+
+    .. note::
+
+        - MPMS materialization strategy is a greedy materialization algorithm in
+          which any node with more than 1 materialized predecessors and more than
+          1 successors is materialized.
+        - Materializing here corresponds to tagging a node with
+          :class:`~pytato.tags.ImplStored`.
+        - Does not attempt to materialize sub-expressions in
+          :attr:`pytato.Array.shape`.
+
+    .. warning::
+
+        This is a greedy materialization algorithm and thereby this algorithm
+        might be too eager to materialize. Consider the graph below:
+
+        ::
+
+                           I1          I2
+                            \         /
+                             \       /
+                              \     /
+                               🡦   🡧
+                                 T
+                                / \
+                               /   \
+                              /     \
+                             🡧       🡦
+                            O1        O2
+
+        where, 'I1', 'I2' correspond to instances of
+        :class:`pytato.array.InputArgumentBase`, and, 'O1' and 'O2' are the outputs
+        required to be evaluated in the computation graph. MPMS materialization
+        algorithm will materialize the intermediate node 'T' as it has 2
+        predecessors and 2 successors. However, the total number of memory
+        accesses after applying MPMS goes up as shown by the table below.
+
+        ======  ========  =======
+        ..        Before    After
+        ======  ========  =======
+        Reads          4        4
+        Writes         2        3
+        Total          6        7
+        ======  ========  =======
+
+    """
+    from pytato.analysis import get_nusers
+    materializer = MPMSMaterializer(get_nusers(expr))
+    new_data = {}
+    for name, ary in expr.items():
+        new_data[name] = materializer(ary.expr).expr
+
+    return DictOfNamedArrays(new_data)
 
 # }}}
 

@@ -202,7 +202,8 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
-                bindings=bindings)
+                bindings=bindings,
+                tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
         from pymbolic.primitives import If, Comparison, Subscript
@@ -247,7 +248,8 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
-                bindings=bindings)
+                bindings=bindings,
+                tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
         from pytato.utils import dim_to_index_lambda_components
@@ -271,7 +273,8 @@ class CodeGenPreprocessor(CopyMapper):
                                        for s in expr.shape),
                            dtype=expr.dtype,
                            bindings={name: self.rec(bnd)
-                                     for name, bnd in bindings.items()})
+                                     for name, bnd in bindings.items()},
+                           tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct) -> Array:
         from pytato.utils import dim_to_index_lambda_components
@@ -304,7 +307,8 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
-                bindings=bindings)
+                bindings=bindings,
+                tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         import operator
@@ -367,7 +371,8 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=tuple(self.rec(s) if isinstance(s, Array) else s
                                        for s in expr.shape),
                            dtype=expr.dtype,
-                           bindings=bindings)
+                           bindings=bindings,
+                           tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)
 
@@ -386,7 +391,8 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
-                bindings=dict(_in0=array))
+                bindings=dict(_in0=array),
+                tags=expr.tags)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
         indices = [None] * expr.ndim

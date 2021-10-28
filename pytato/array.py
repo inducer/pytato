@@ -86,16 +86,6 @@ Concrete Array Data
 
 .. autoclass:: DataInterface
 
-Pre-Defined Tags
-----------------
-
-.. autoclass:: ImplementAs
-.. autoclass:: ImplementationStrategy
-.. autoclass:: CountNamed
-.. autoclass:: ImplStored
-.. autoclass:: ImplInlined
-.. autoclass:: ImplDefault
-
 Built-in Expression Nodes
 -------------------------
 
@@ -170,7 +160,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
+from pytools.tag import Taggable, TagsType
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression)
@@ -464,11 +454,9 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
-        return (
-                isinstance(other, type(self))
-                and all(
-                    getattr(self, field) == getattr(other, field)
-                    for field in self._fields))
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -626,52 +614,6 @@ class _SuppliedShapeAndDtypeMixin(object):
 # }}}
 
 
-# {{{ pre-defined tag: ImplementAs
-
-@tag_dataclass
-class ImplementationStrategy(Tag):
-    pass
-
-
-@tag_dataclass
-class ImplStored(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplInlined(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplDefault(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplementAs(UniqueTag):
-    """
-    .. attribute:: strategy
-    """
-
-    strategy: ImplementationStrategy
-
-# }}}
-
-
-# {{{ pre-defined tag: CountNamed
-
-@tag_dataclass
-class CountNamed(UniqueTag):
-    """
-    .. attribute:: name
-    """
-
-    name: str
-
-# }}}
-
-
 # {{{ dict of named arrays
 
 class NamedArray(Array):
@@ -788,8 +730,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         if self is other:
             return True
 
-        return (isinstance(other, DictOfNamedArrays)
-                and self._data == other._data)
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
 # }}}
 
@@ -1586,6 +1528,18 @@ class DataWrapper(InputArgumentBase):
 
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
+
+    .. attribute:: shape
+
+        The shape of the array is represented separately from array
+        to allow symbolic shapes to be used, and to ease :mod:`pytato`'s
+        job in recognizing shapes of arrays as equal. For example,
+        if the shape of :attr:`data` is ``(3, 4)``, and :attr:`shape` is
+        ``(nrows, ncolumns)``, then this represents a (global) constraint that
+        that ``nrows == 3`` and ``ncolumns == 4``. Arithmetic and other
+        operations in :mod:`pytato` do not currently resolve these constraints
+        to assess whether shapes match, and thus it is important that a canonical
+        (symbolic) form of the shape tuple is used.
 
     .. note::
 
