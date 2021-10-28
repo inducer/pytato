@@ -1,5 +1,4 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
@@ -26,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Optional)
+                    List, Mapping, Iterable, Optional, Hashable, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -59,8 +58,6 @@ __doc__ = """
 .. autoclass:: GraphToDictMapper
 .. autoclass:: CodePartitions
 .. autoclass:: CachedMapAndCopyMapper
-.. autofunction:: copy_dict_of_named_arrays
-.. autofunction:: get_dependencies
 .. autofunction:: reverse_graph
 .. autofunction:: tag_child_nodes
 .. autofunction:: find_partitions
