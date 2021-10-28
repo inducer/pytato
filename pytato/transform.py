@@ -1121,11 +1121,10 @@ class _GraphPartitioner(Mapper):
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
     def _handle_new_binding(self, expr: Array, child: Array) -> Any:
-        print(expr, child, self.does_edge_cross_partition_boundary(expr, child))
         if self.does_edge_cross_partition_boundary(expr, child):
             # FIXME: restore this?
             # try:
-                # ph_name = self._seen_node_to_name[child]
+            #     ph_name = self._seen_node_to_name[child]
             # except KeyError:
             ph_name = self.make_new_placeholder_name()
             # If an edge crosses a partition boundary, replace the
@@ -1307,7 +1306,7 @@ def find_partitions(outputs: DictOfNamedArrays,
 
     for out_name, rewritten_output in rewritten_outputs.items():
         out_part_id = part_func(outputs._data[out_name])
-        partition_id_to_output_names.setdefault(out_part_id, []).add(out_name)
+        partition_id_to_output_names.setdefault(out_part_id, set()).add(out_name)
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
@@ -1340,26 +1339,12 @@ def generate_code_for_partitions(parts: CodePartitions) \
     from pytato import generate_loopy
     prg_per_partition = {}
 
-    # import pudb
-    # pu.db
     for pid in parts.toposorted_partitions:
         d = DictOfNamedArrays(
                     {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]
                      })
-        print(pid, d)
-        # for x in d:
-        #     print(x)
         prg_per_partition[pid] = generate_loopy(d)
-
-    # prg_per_partition = {pid:
-    #         generate_loopy(
-    #             DictOfNamedArrays(
-    #                 {var_name: parts.var_name_to_result[var_name]
-    #                     for var_name in parts.partition_id_to_output_names[pid]
-    #                  })
-    #             )
-    #         for pid in parts.toposorted_partitions}
 
     return prg_per_partition
 

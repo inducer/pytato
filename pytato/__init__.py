@@ -60,7 +60,8 @@ from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.visualization import (get_dot_graph, show_dot_graph,
-                                  get_ascii_graph, show_ascii_graph)
+                                  get_ascii_graph, show_ascii_graph,
+                                  get_dot_graph_from_partitions)
 import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.transform as transform
@@ -79,8 +80,8 @@ __all__ = (
 
         "Target", "LoopyPyOpenCLTarget",
 
-        "get_dot_graph", "show_dot_graph", "get_ascii_graph", "show_ascii_graph",
-
+        "get_dot_graph", "show_dot_graph", "get_ascii_graph",
+        "show_ascii_graph", "get_dot_graph_from_partitions",
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan", "sqrt", "conj", "arctan2",

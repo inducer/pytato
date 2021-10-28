@@ -341,7 +341,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
                 if ary in internal_arrays:
                     internal_arrays.remove(ary)
 
-            with emit.block(f"subgraph \"cluster_part_{part_id}\""):
+            with emit.block(f'subgraph "cluster_part_{part_id}"'):
                 emit("style=dashed")
                 emit(f'label="{part_id}"')
 
