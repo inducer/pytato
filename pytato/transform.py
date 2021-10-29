@@ -116,7 +116,7 @@ class CachedMapper(Mapper):
     """
 
     def __init__(self) -> None:
-        self._cache = {}
+        self._cache: Dict[ArrayOrNames, ArrayOrNames] = {}
 
     def rec(self, expr: T) -> T:  # type: ignore
         try:
@@ -680,12 +680,12 @@ class CachedMapAndCopyMapper(CopyMapper):
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore
-        if expr in self.cache:
-            return self.cache[expr]
+        if expr in self._cache:
+            return self._cache[expr]
 
         # type-ignore reason: ArrayOrNames not compatible with 'T'
         result = super().rec(self.map_fn(expr))  # type: ignore[type-var]
-        self.cache[expr] = result
+        self._cache[expr] = result
         return result
 
     # type-ignore-reason: Mapper.__call__ returns Any
