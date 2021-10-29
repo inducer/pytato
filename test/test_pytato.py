@@ -424,6 +424,32 @@ def test_idx_lambda_to_hlo():
             == BroadcastOp(a))
 
 
+def test_stringify():
+    x = pt.make_placeholder("x", (10, 4), np.int64)
+    y = pt.make_placeholder("y", (10, 4), np.int64)
+
+    assert(str(3*x+4*y)
+           == "3*x + 4*y")
+    assert(str(pt.roll(x.reshape(2, 20).reshape(-1), 3))
+           == "roll(reshape(reshape(x, (2, 20)), 40), 3)")
+    assert(str(pt.roll(x.reshape(2, 20).reshape(-1), 3))
+           == "roll(reshape(reshape(x, (2, 20)), 40), 3)")
+    assert(str(y * pt.not_equal(x, 3))
+           == "y*(x != 3)")
+    assert(str(3 * y @ pt.sum(x, axis=0))
+           == "3*y @ sum(x, axis=0)")
+    assert(str(x[y[:, 2:3], x[2, :]])
+           == "x[y[::, 2:3:], x[2]]")
+    assert(str(pt.stack([x[y[:, 2:3], x[2, :]].T, y[x[:, 2:3], y[2, :]].T]))
+           == ("stack([transpose(x[y[::, 2:3:], x[2]]),"
+                     " transpose(y[x[::, 2:3:], y[2]])])"))
+    assert(str(pt.concatenate([x[y[:, 2:3], x[2, :]],
+                                        y[x[:, 2:3], y[2, :]]]))
+           == "concatenate([x[y[::, 2:3:], x[2]], y[x[::, 2:3:], y[2]]])")
+    assert(str(pt.einsum("ij,i->i", 2*x, pt.sum(y, axis=1)))
+           == 'einsum("ij, i -> i", 2*x, sum(y, axis=1))')
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
