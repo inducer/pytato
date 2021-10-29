@@ -1203,9 +1203,11 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
 
     # {{{ map_xxx methods
 
-    def map_named_array(self, expr: NamedArray) -> None:
-        # FIXME
-        raise NotImplementedError
+    def map_named_array(self, expr: NamedArray) -> NamedArray:
+        return NamedArray(
+            container=self._handle_new_binding(expr, expr._container),
+            name=expr.name,
+            tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         return IndexLambda(expr=expr.expr,
@@ -1261,17 +1263,29 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
             order=expr.order,
             tags=expr.tags)
 
-    def map_basic_index(self, expr: BasicIndex) -> None:
-        # FIXME
-        raise NotImplementedError
+    def map_basic_index(self, expr: BasicIndex) -> BasicIndex:
+        return BasicIndex(
+                array=self._handle_new_binding(expr, expr.array),
+                indices=tuple(self._handle_new_binding(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
 
-    def map_contiguous_advanced_index(self, expr: Array) -> None:
-        # FIXME
-        raise NotImplementedError
+    def map_contiguous_advanced_index(self,
+            expr: AdvancedIndexInContiguousAxes) -> AdvancedIndexInContiguousAxes:
+        return AdvancedIndexInContiguousAxes(
+                array=self._handle_new_binding(expr, expr.array),
+                indices=tuple(self._handle_new_binding(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
 
-    def map_non_contiguous_advanced_index(self, expr: Array) -> None:
-        # FIXME
-        raise NotImplementedError
+    def map_non_contiguous_advanced_index(self,
+            expr: AdvancedIndexInNoncontiguousAxes) \
+            -> AdvancedIndexInNoncontiguousAxes:
+        return AdvancedIndexInNoncontiguousAxes(
+                array=self._handle_new_binding(expr, expr.array),
+                indices=tuple(self._handle_new_binding(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
 
     def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
         return DataWrapper(
@@ -1288,9 +1302,9 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_size_param(self, expr: SizeParam) -> None:
-        # FIXME
-        raise NotImplementedError
+    def map_size_param(self, expr: SizeParam) -> SizeParam:
+        assert expr.name
+        return SizeParam(name=expr.name, tags=expr.tags)
 
     # }}}
 
