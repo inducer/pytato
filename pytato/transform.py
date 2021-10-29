@@ -40,12 +40,15 @@ from pytato.tags import ImplStored
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
+CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 R = FrozenSet[Array]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
 
+.. autoclass:: Mapper
+.. autoclass:: CachedMapper
 .. autoclass:: CopyMapper
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
@@ -76,6 +79,22 @@ class UnsupportedArrayError(ValueError):
 # {{{ mapper base class
 
 class Mapper:
+    """A class that when called with a :class:`pytato.Array` recursively iterates over
+    the DAG, calling the *_mapper_method* of each node. Users of this
+    class are expected to override the methods of this class or create a
+    subclass.
+
+    .. note::
+
+       This class might visit a node multiple times. Use a :class:`CachedMapper`
+       if this is not desired.
+
+    .. automethod:: handle_unsupported_array
+    .. automethod:: map_foreign
+    .. automethod:: rec
+    .. automethod:: __call__
+    """
+
     def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
@@ -85,10 +104,14 @@ class Mapper:
                 % (type(self).__name__, type(expr)))
 
     def map_foreign(self, expr: Any, *args: Any, **kwargs: Any) -> Any:
+        """Mapper method that is invoked for an object of class for which a
+        mapper method does not exist in this mapper.
+        """
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
     def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+        """Call the mapper method of *expr* and return the result."""
         method: Callable[..., Array]
 
         try:
@@ -102,6 +125,7 @@ class Mapper:
         return method(expr, *args, **kwargs)
 
     def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+        """Handle the mapping of *expr*."""
         return self.rec(expr, *args, **kwargs)
 
 # }}}
@@ -109,21 +133,26 @@ class Mapper:
 
 # {{{ CachedMapper
 
-class CachedMapper(Mapper):
-    """Performs a deep copy of a :class:`pytato.array.Array`.
-    The typical use of this mapper is to override individual ``map_`` methods
-    in subclasses to permit term rewriting on an expression graph.
+class CachedMapper(Mapper, Generic[CachedMapperT]):
+    """Mapper class that maps each node in the DAG exactly once. This loses some
+    information compared to :class:`Mapper` as a node is visited only from
+    one of its predecessors.
     """
 
     def __init__(self) -> None:
-        self._cache: Dict[ArrayOrNames, ArrayOrNames] = {}
+        self._cache: Dict[CachedMapperT, Any] = {}
 
-    def rec(self, expr: T) -> T:  # type: ignore
+    def cache_key(self, expr: CachedMapperT) -> Any:
+        return expr
+
+    # type-ignore-reason: incompatible with super class
+    def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
+        key = self.cache_key(expr)
         try:
-            return self._cache[expr]  # type: ignore
+            return self._cache[key]
         except KeyError:
-            result: T = super().rec(expr)
-            self._cache[expr] = result
+            result = super().rec(expr)  # type: ignore[type-var]
+            self._cache[key] = result
             return result
 
 # }}}
@@ -131,10 +160,14 @@ class CachedMapper(Mapper):
 
 # {{{ CopyMapper
 
-class CopyMapper(CachedMapper):
+class CopyMapper(CachedMapper[ArrayOrNames]):
     """Performs a deep copy of a :class:`pytato.array.Array`.
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
+
+    .. note::
+
+       This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
@@ -347,8 +380,8 @@ class DependencyMapper(CombineMapper[R]):
 
     .. warning::
 
-        This returns every node in the graph! Consider a custom
-        :class:`CombineMapper` or a :class:`SubsetDependencyMapper` instead.
+       This returns every node in the graph! Consider a custom
+       :class:`CombineMapper` or a :class:`SubsetDependencyMapper` instead.
     """
 
     def combine(self, *args: R) -> R:
@@ -679,14 +712,14 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore
+    # type-ignore-reason:incompatible with Mapper.rec()
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
         if expr in self._cache:
-            return self._cache[expr]
+            return self._cache[expr]  # type: ignore[no-any-return]
 
-        # type-ignore reason: ArrayOrNames not compatible with 'T'
-        result = super().rec(self.map_fn(expr))  # type: ignore[type-var]
+        result = super().rec(self.map_fn(expr))
         self._cache[expr] = result
-        return result
+        return result  # type: ignore[no-any-return]
 
     # type-ignore-reason: Mapper.__call__ returns Any
     def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
