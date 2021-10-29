@@ -1123,7 +1123,7 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
 
 # {{{ graph partitioning
 
-class _GraphPartitioner(CachedMapper):
+class _GraphPartitioner(CachedMapper[ArrayOrNames]):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.

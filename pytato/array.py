@@ -618,7 +618,7 @@ class _SuppliedShapeAndDtypeMixin(object):
 
 class NamedArray(Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
-    back to thecontaining instance as well as the name by which *self* is
+    back to the containing instance as well as the name by which *self* is
     known there.
 
     .. automethod:: __init__
