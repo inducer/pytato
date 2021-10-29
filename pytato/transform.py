@@ -50,6 +50,7 @@ __doc__ = """
 .. autoclass:: Mapper
 .. autoclass:: CachedMapper
 .. autoclass:: CopyMapper
+.. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
 .. autoclass:: SizeParamGatherer
