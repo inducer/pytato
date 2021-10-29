@@ -37,7 +37,7 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder)
+        Stack, ShapeType, Einsum)
 from pytato.codegen import normalize_outputs
 import pytato.transform
 
@@ -298,17 +298,6 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
         mapper = ArrayToDotNodeInfoMapper()
         for out_name in out_names:
             mapper(parts.var_name_to_result[out_name], part_node_to_info)
-
-        # check disjointness
-        for my_node in part_node_to_info.keys():
-            for other_part_id, other_node_to_info in \
-                    part_id_to_node_to_node_info.items():
-                assert (
-                    isinstance(my_node, Placeholder)
-                    or my_node not in other_node_to_info), (
-                        "partitions not disjoint: "
-                        f"{my_node.__class__.__name__} (id={id(my_node)}) "
-                        f"in both '{part_id}' and '{other_part_id}'")
 
         part_id_to_node_to_node_info[part_id] = part_node_to_info
 

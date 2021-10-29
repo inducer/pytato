@@ -1395,6 +1395,37 @@ def find_partitions(outputs: DictOfNamedArrays,
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
+    # Check disjointness
+    class DisjointWalkMapper(CachedWalkMapper):
+        def __init__(self) -> None:
+            super().__init__()
+            self.seen_nodes: Set[ArrayOrNames] = set()
+
+        def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
+            super().rec(expr)
+            self.seen_nodes.add(expr)
+
+    part_id_to_nodes: Dict[Hashable, Set[ArrayOrNames]] = {}
+
+    for part_id, out_names in partition_id_to_output_names.items():
+
+        mapper = DisjointWalkMapper()
+        for out_name in out_names:
+            mapper(var_name_to_result[out_name])
+
+        # check disjointness
+        for my_node in mapper.seen_nodes:
+            for other_part_id, other_node_set in \
+                    part_id_to_nodes.items():
+                assert (
+                    isinstance(my_node, Placeholder)
+                    or my_node not in other_node_set), (
+                        "partitions not disjoint: "
+                        f"{my_node.__class__.__name__} (id={id(my_node)}) "
+                        f"in both '{part_id}' and '{other_part_id}'")
+
+        part_id_to_nodes[part_id] = mapper.seen_nodes
+
     return CodePartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, var_name_to_result)
 
