@@ -1923,8 +1923,7 @@ def zeros(shape: ConvertibleToShape, dtype: Any = float,
     """
     Returns an array of shape *shape* with all entries equal to 0.
     """
-    # https://github.com/python/mypy/issues/3186
-    return full(shape, 0, dtype)  # type: ignore
+    return full(shape, 0, dtype)
 
 
 def ones(shape: ConvertibleToShape, dtype: Any = float,
@@ -1932,8 +1931,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
     """
     Returns an array of shape *shape* with all entries equal to 1.
     """
-    # https://github.com/python/mypy/issues/3186
-    return full(shape, 1, dtype)  # type: ignore
+    return full(shape, 1, dtype)
 
 # }}}
 
