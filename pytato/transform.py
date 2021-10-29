@@ -157,6 +157,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     """Performs a deep copy of a :class:`pytato.array.Array`.
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
+
+    .. note::
+
+       This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
