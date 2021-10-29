@@ -135,13 +135,17 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def __init__(self) -> None:
         self._cache: Dict[CachedMapperT, Any] = {}
 
+    def cache_key(self, expr: CachedMapperT) -> Any:
+        return expr
+
     # type-ignore-reason: incompatible with super class
     def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
+        key = self.cache_key(expr)
         try:
-            return self._cache[expr]
+            return self._cache[key]
         except KeyError:
             result = super().rec(expr)  # type: ignore[type-var]
-            self._cache[expr] = result
+            self._cache[key] = result
             return result
 
 # }}}
