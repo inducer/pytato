@@ -109,11 +109,12 @@ class CachedMapper(Mapper):
     """
 
     def __init__(self) -> None:
-        self._cache: Dict[ArrayOrNames, ArrayOrNames] = {}
+        self._cache: Dict[Any, Any] = {}
 
-    def rec(self, expr: T) -> T:  # type: ignore
+    # type-ignore-reason: incompatible with super class
+    def rec(self, expr: T) -> Any:  # type: ignore[override]
         try:
-            return self._cache[expr]  # type: ignore
+            return self._cache[expr]
         except KeyError:
             result: T = super().rec(expr)
             self._cache[expr] = result
@@ -669,14 +670,15 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore
+    # type-ignore-reason:incompatible with Mapper.rec()
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
         if expr in self._cache:
-            return self._cache[expr]
+            return self._cache[expr]  # type: ignore[no-any-return]
 
         # type-ignore reason: ArrayOrNames not compatible with 'T'
         result = super().rec(self.map_fn(expr))  # type: ignore[type-var]
         self._cache[expr] = result
-        return result
+        return result  # type: ignore[no-any-return]
 
     # type-ignore-reason: Mapper.__call__ returns Any
     def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
