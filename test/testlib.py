@@ -108,15 +108,15 @@ def make_random_dag_inner(rdagc):
     v = rng.integers(0, 1500)
 
     if v < 500:
-        return make_random_array(rng, naxes=rng.integers(1, 3))
+        return make_random_array(rdagc, naxes=rng.integers(1, 3))
 
     elif v < 1000:
         op1 = make_random_dag(rdagc)
         op2 = make_random_dag(rdagc)
-        m = min(len(op1.shape), len(op2.shape))
-        naxes = rng.integers(m, m+2)
-        op1 = op1.reshape(*make_random_reshape(rng, op1.shape, naxes))
-        op2 = op2.reshape(*make_random_reshape(rng, op1.shape, naxes))
+        # m = min(len(op1.shape), len(op2.shape))
+        # naxes = rng.integers(m, m+2)
+        # op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
+        # op2 = op2.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
 
         which_op = rng.choice(_BINOPS)
 
@@ -128,10 +128,11 @@ def make_random_dag_inner(rdagc):
     elif v < 1075:
         return make_random_dag(rdagc) @ make_random_dag(rdagc)
 
-    elif v < 1275:
-        return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
+    # elif v < 1275:
+    #     ul = len(rdagc.past_results)
+    #     return rdagc.past_results[rng.integers(0, ul) if ul > 0 else 1]
 
-    elif v < 1375:
+    elif v < 1500:
         result = make_random_dag(rdagc)
         return pt.transpose(result,
                 tuple(rng.permuted(list(range(len(result.shape))))))
@@ -144,7 +145,10 @@ def make_random_dag_inner(rdagc):
     # FIXME: include <<, >>
 
 
-def make_random_dag(rdagc):
+def make_random_dag(rdagc=None):
+    if not rdagc:
+        from numpy.random import default_rng
+        rdagc = RandomDAGContext(default_rng(), 2)
     rng = rdagc.rng
     result = make_random_dag_inner(rdagc)
 
@@ -166,6 +170,8 @@ def make_random_dag(rdagc):
 
         else:
             raise AssertionError()
+
+    return result
 
 # }}}
 

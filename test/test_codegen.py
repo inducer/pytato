@@ -1250,6 +1250,12 @@ def test_squeeze(ctx_factory, shape):
     np.testing.assert_allclose(pt_result.shape, np_result)
 
 
+def test_random_dag(ctx_factory):
+    from testlib import make_random_dag
+    for _ in range(5):
+        d = make_random_dag()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
