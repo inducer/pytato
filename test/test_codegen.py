@@ -26,6 +26,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Union
+
 import itertools
 import operator
 import sys
@@ -1233,6 +1235,35 @@ def test_materialize_reduces_flops(ctx_factory):
                   .filter_by(dtype=[np.float64])
                   .eval_and_sum({}))
     assert good_flops == (bad_flops - 80)
+
+
+def test_named_temporaries(ctx_factory):
+    x = pt.make_placeholder("x", (10, 4), np.float32)
+    y = pt.make_placeholder("y", (10, 4), np.float32)
+    tmp1 = 2 * x + 3 * y
+    tmp2 = 7 * x + 8 * y
+
+    dag = pt.make_dict_of_named_arrays({"out1": 10 * tmp1 + 11 * tmp2,
+                                        "out2": 22 * tmp1 + 53 * tmp2
+                                        })
+    dag = pt.transform.materialize_with_mpms(dag)
+
+    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
+                                                  pt.AbstractResultWithNamedArrays]
+                                       ) -> pt.Array:
+        if isinstance(ary, pt.AbstractResultWithNamedArrays):
+            return ary
+
+        if ary.tags_of_type(pt.tags.ImplStored):
+            return ary.tagged(pt.tags.PrefixNamed("cse"))
+        else:
+            return ary
+
+    dag = pt.transform.map_and_copy(dag, mark_materialized_nodes_as_cse)
+    t_unit = pt.generate_loopy(dag).program
+    assert len([tv.name.startswith("cse")
+               for tv in t_unit.default_entrypoint.temporary_variables.values()]
+               ) == 2
 
 
 if __name__ == "__main__":
