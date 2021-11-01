@@ -1235,6 +1235,23 @@ def test_materialize_reduces_flops(ctx_factory):
     assert good_flops == (bad_flops - 80)
 
 
+@pytest.mark.parametrize("shape", [(1, 3, 1), (1, 1), (2, 2, 3)])
+def test_squeeze(ctx_factory, shape):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_in = np.ones(shape=shape, dtype=np.int64)
+    x = pt.make_data_wrapper(x_in)
+
+    np_result = np.squeeze(x_in)
+
+    print(np_result)
+
+    _, (pt_result,) = pt.generate_loopy(pt.squeeze(x))(cq)
+
+    np.testing.assert_allclose(pt_result, np_result)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
