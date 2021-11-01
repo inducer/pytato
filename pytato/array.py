@@ -2237,7 +2237,7 @@ def squeeze(array: Array) -> Array:
     """Remove single-dimensional entries from the shape of an array."""
 
     return array[tuple(
-            0 if s_i == 1 else slice()
+            0 if are_shape_components_equal(s_i, 1) else slice()
             for i, s_i in enumerate(array.shape))]
 
 
