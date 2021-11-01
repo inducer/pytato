@@ -1274,7 +1274,7 @@ def test_random_dag(ctx_factory):
         dict_named_arys = pt.DictOfNamedArrays({"result": dag})
         dict_named_arys = materialize_with_mpms(dict_named_arys)
         if 0:
-            pt.show_dot_graph()
+            pt.show_dot_graph(dict_named_arys)
 
         _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
 
