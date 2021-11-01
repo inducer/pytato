@@ -1251,9 +1251,34 @@ def test_squeeze(ctx_factory, shape):
 
 
 def test_random_dag(ctx_factory):
-    from testlib import make_random_dag
-    for _ in range(5):
-        d = make_random_dag()
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+    axis_len = 5
+
+    #from warnings import filterwarnings
+    #filterwarnings("error")
+
+    for i in range(50):
+        print(i)
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False)
+        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=True)
+
+        ref_result = make_random_dag(rdagc_np)
+        dag = make_random_dag(rdagc_pt)
+        from pytato.transform import materialize_with_mpms
+        dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+        dict_named_arys = materialize_with_mpms(dict_named_arys)
+        if 0:
+            pt.show_dot_graph()
+
+        _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
+
+        assert np.allclose(pt_result["result"], ref_result)
 
 
 if __name__ == "__main__":
