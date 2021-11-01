@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional
+import operator
 import pyopencl as cl
 import numpy
 import pytato as pt
@@ -68,3 +69,104 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.dtype == np_result.dtype
 
     numpy.testing.assert_allclose(np_result, pt_result, rtol=rtol)
+
+
+# {{{ random DAG generation
+
+class RandomDAGContext:
+    def __init__(self, rng, axis_len):
+        self.rng = rng
+        self.axis_len = axis_len
+        self.past_results = []
+
+
+def make_random_array(rdagc: RandomDAGContext, naxes: int, axis_len=None):
+    shape = (rdagc.axis_len,) * naxes
+
+    return pt.make_data_wrapper(rdagc.rng.normal(size=shape))
+
+
+def make_random_reshape(rdagc, s, shape_len):
+    rng = rdagc.rng
+
+    s = list(s)
+    naxes = rng.integers(len(s), len(s)+2)
+    while len(s) < naxes:
+        insert_at = rng.integers(0, len(s)+1)
+        s.insert(insert_at, 1)
+
+    return tuple(s)
+
+
+_BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
+        operator.pow, operator.floordiv, "maximum", "minimum"]
+
+
+def make_random_dag_inner(rdagc):
+    rng = rdagc.rng
+
+    v = rng.integers(0, 1500)
+
+    if v < 500:
+        return make_random_array(rng, naxes=rng.integers(1, 3))
+
+    elif v < 1000:
+        op1 = make_random_dag(rdagc)
+        op2 = make_random_dag(rdagc)
+        m = min(len(op1.shape), len(op2.shape))
+        naxes = rng.integers(m, m+2)
+        op1 = op1.reshape(*make_random_reshape(rng, op1.shape, naxes))
+        op2 = op2.reshape(*make_random_reshape(rng, op1.shape, naxes))
+
+        which_op = rng.choice(_BINOPS)
+
+        if isinstance(which_op, str):
+            return pt.squeeze(getattr(pt, which_op)(op1, op2))
+        else:
+            return pt.squeeze(which_op(op1, op2))
+
+    elif v < 1075:
+        return make_random_dag(rdagc) @ make_random_dag(rdagc)
+
+    elif v < 1275:
+        return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
+
+    elif v < 1375:
+        result = make_random_dag(rdagc)
+        return pt.transpose(result,
+                tuple(rng.permuted(list(range(len(result.shape))))))
+
+    else:
+        raise AssertionError()
+
+    # FIXME: include Stack
+    # FIXME: include comparisons/booleans
+    # FIXME: include <<, >>
+
+
+def make_random_dag(rdagc):
+    rng = rdagc.rng
+    result = make_random_dag_inner(rdagc)
+
+    if len(result.shape) > 2:
+        v = rng.integers(0, 2)
+        if v == 0:
+            # reduce away an axis
+
+            # FIXME do reductions other than sum?
+            return pt.sum(result, axis=rng.integers(0, len(result.shape)))
+
+        elif v == 1:
+            # index away an axis
+            subscript = [slice()] * len(result.shape)
+            subscript[rng.integers(0, len(result.shape))] = \
+                    rng.integers(0, rdagc.axis_len)
+
+            return result[tuple(subscript)]
+
+        else:
+            raise AssertionError()
+
+# }}}
+
+# vim: foldmethod=marker
