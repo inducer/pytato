@@ -1088,43 +1088,45 @@ def make_random_dag():
 
 
 def test_partitionfinder(ctx_factory):
-    y = make_random_dag()
 
-    from dataclasses import dataclass
-    from pytato.transform import (TopoSortMapper, find_partitions,
-                                  execute_partitions, generate_code_for_partitions)
+    for _ in range(5):
+        y = make_random_dag()
 
-    @dataclass(frozen=True, eq=True)
-    class MyPartitionId():
-        num: int
+        from dataclasses import dataclass
+        from pytato.transform import (TopoSortMapper, find_partitions,
+                                    execute_partitions, generate_code_for_partitions)
 
-    def get_partition_id(topo_list, expr) -> MyPartitionId:
-        return MyPartitionId(topo_list.index(expr))
+        @dataclass(frozen=True, eq=True)
+        class MyPartitionId():
+            num: int
 
-    tm = TopoSortMapper()
-    tm(y)
+        def get_partition_id(topo_list, expr) -> MyPartitionId:
+            return MyPartitionId(topo_list.index(expr))
 
-    from functools import partial
-    part_func = partial(get_partition_id, tm.topological_order)
+        tm = TopoSortMapper()
+        tm(y)
 
-    outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partitions(outputs, part_func)
+        from functools import partial
+        part_func = partial(get_partition_id, tm.topological_order)
 
-    # Execute the partitioned code
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
+        outputs = pt.DictOfNamedArrays({"out": y})
+        parts = find_partitions(outputs, part_func)
 
-    prg_per_partition = generate_code_for_partitions(parts)
+        # Execute the partitioned code
+        ctx = ctx_factory()
+        queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions(parts, prg_per_partition, queue)
+        prg_per_partition = generate_code_for_partitions(parts)
 
-    final_res = [context[k] for k in outputs]
+        context = execute_partitions(parts, prg_per_partition, queue)
 
-    # Execute the non-partitioned code for comparison
-    prg = pt.generate_loopy(y)
-    evt, (out,) = prg(queue)
+        final_res = [context[k] for k in outputs]
 
-    np.testing.assert_allclose([out], final_res)
+        # Execute the non-partitioned code for comparison
+        prg = pt.generate_loopy(y)
+        evt, (out,) = prg(queue)
+
+        np.testing.assert_allclose([out], final_res)
 
 
 def test_broadcast_to(ctx_factory):
