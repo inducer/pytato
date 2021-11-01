@@ -2242,8 +2242,10 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
 def squeeze(array: Array) -> Array:
     """Remove single-dimensional entries from the shape of an array."""
 
+    from pytato.utils import are_shape_components_equal
+
     return array[tuple(
-            0 if s_i == 1 else slice()
+            0 if are_shape_components_equal(s_i, 1) else slice(s_i)
             for i, s_i in enumerate(array.shape))]
 
 

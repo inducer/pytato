@@ -44,7 +44,7 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
-        dot, vdot,
+        dot, vdot, squeeze,
 
         broadcast_to,
 
@@ -98,7 +98,7 @@ __all__ = (
 
         "real", "imag",
 
-        "dot", "vdot",
+        "dot", "vdot", "squeeze",
 
         "broadcast_to",
 
