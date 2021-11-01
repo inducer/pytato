@@ -1,13 +1,15 @@
 from typing import Any, Dict, Optional
 import operator
 import pyopencl as cl
-import numpy
+import numpy as np
 import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
                           AxisPermutation, DataWrapper, Reshape,
                           Concatenate)
 
+
+# {{{ tools for comparison to numpy
 
 class NumpyBasedEvaluator(Mapper):
     """
@@ -59,7 +61,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     if parameters is None:
         parameters = {}
 
-    np_result = NumpyBasedEvaluator(numpy, parameters)(expr)
+    np_result = NumpyBasedEvaluator(np, parameters)(expr)
     prog = pt.generate_loopy(expr, cl_device=queue.device)
 
     evt, (pt_result,) = prog(queue, **{placeholder.name: data
@@ -68,22 +70,34 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    numpy.testing.assert_allclose(np_result, pt_result, rtol=rtol)
+    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)
+
+# }}}
 
 
 # {{{ random DAG generation
 
 class RandomDAGContext:
-    def __init__(self, rng, axis_len):
+    def __init__(self, rng, axis_len, use_numpy):
         self.rng = rng
         self.axis_len = axis_len
         self.past_results = []
+        self.use_numpy = use_numpy
+
+        if self.use_numpy:
+            self.np = np
+        else:
+            self.np = pt
 
 
 def make_random_array(rdagc: RandomDAGContext, naxes: int, axis_len=None):
     shape = (rdagc.axis_len,) * naxes
 
-    return pt.make_data_wrapper(rdagc.rng.normal(size=shape))
+    result = rdagc.rng.uniform(1e-3, 1, size=shape)
+    if rdagc.use_numpy:
+        return result
+    else:
+        return pt.make_data_wrapper(result)
 
 
 def make_random_reshape(rdagc, s, shape_len):
@@ -99,73 +113,94 @@ def make_random_reshape(rdagc, s, shape_len):
 
 
 _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
-        operator.pow, operator.floordiv, "maximum", "minimum"]
+        operator.pow, "maximum", "minimum"]
 
 
 def make_random_dag_inner(rdagc):
     rng = rdagc.rng
 
-    v = rng.integers(0, 1500)
+    while True:
+        v = rng.integers(0, 1500)
 
-    if v < 500:
-        return make_random_array(rng, naxes=rng.integers(1, 3))
+        if v < 600:
+            return make_random_array(rdagc, naxes=rng.integers(1, 3))
 
-    elif v < 1000:
-        op1 = make_random_dag(rdagc)
-        op2 = make_random_dag(rdagc)
-        m = min(len(op1.shape), len(op2.shape))
-        naxes = rng.integers(m, m+2)
-        op1 = op1.reshape(*make_random_reshape(rng, op1.shape, naxes))
-        op2 = op2.reshape(*make_random_reshape(rng, op1.shape, naxes))
+        elif v < 1000:
+            op1 = make_random_dag(rdagc)
+            op2 = make_random_dag(rdagc)
+            m = min(len(op1.shape), len(op2.shape))
+            naxes = rng.integers(m, m+2)
+            op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
+            op2 = op2.reshape(*make_random_reshape(rdagc, op2.shape, naxes))
 
-        which_op = rng.choice(_BINOPS)
+            which_op = rng.choice(_BINOPS)
 
-        if isinstance(which_op, str):
-            return pt.squeeze(getattr(pt, which_op)(op1, op2))
+            if which_op is operator.pow:
+                op1 = abs(op1)
+
+            if isinstance(which_op, str):
+                return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))
+            else:
+                return rdagc.np.squeeze(which_op(op1, op2))
+
+        elif v < 1075:
+            op1 = make_random_dag(rdagc)
+            op2 = make_random_dag(rdagc)
+            if len(op1.shape) <= 1 and len(op2.shape) <= 1:
+                continue
+
+            return op1 @ op2
+
+        elif v < 1275:
+            if not rdagc.past_results:
+                continue
+            return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
+
+        elif v < 1500:
+            result = make_random_dag(rdagc)
+            return rdagc.np.transpose(result,
+                    tuple(rng.permuted(list(range(len(result.shape))))))
+
         else:
-            return pt.squeeze(which_op(op1, op2))
-
-    elif v < 1075:
-        return make_random_dag(rdagc) @ make_random_dag(rdagc)
-
-    elif v < 1275:
-        return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
-
-    elif v < 1375:
-        result = make_random_dag(rdagc)
-        return pt.transpose(result,
-                tuple(rng.permuted(list(range(len(result.shape))))))
-
-    else:
-        raise AssertionError()
+            raise AssertionError()
 
     # FIXME: include Stack
     # FIXME: include comparisons/booleans
     # FIXME: include <<, >>
 
 
-def make_random_dag(rdagc):
+def make_random_dag(rdagc=None):
+    if not rdagc:
+        from numpy.random import default_rng
+        rdagc = RandomDAGContext(default_rng(), 2)
     rng = rdagc.rng
     result = make_random_dag_inner(rdagc)
 
     if len(result.shape) > 2:
-        v = rng.integers(0, 2)
+
+        # FIXME Enable this to provoke reduction errors
+        #v = rng.integers(0, 2)
+        v = rng.integers(0, 1)
         if v == 0:
-            # reduce away an axis
-
-            # FIXME do reductions other than sum?
-            return pt.sum(result, axis=rng.integers(0, len(result.shape)))
-
-        elif v == 1:
             # index away an axis
-            subscript = [slice()] * len(result.shape)
+            subscript = [slice(None)] * len(result.shape)
             subscript[rng.integers(0, len(result.shape))] = \
-                    rng.integers(0, rdagc.axis_len)
+                    int(rng.integers(0, rdagc.axis_len))
 
             return result[tuple(subscript)]
 
+        elif v == 1:
+            # reduce away an axis
+
+            # FIXME do reductions other than sum?
+            return rdagc.np.sum(result, axis=int(rng.integers(0, len(result.shape))))
+
         else:
             raise AssertionError()
+
+    rdagc.past_results.append(result)
+
+    return result
 
 # }}}
 
