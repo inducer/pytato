@@ -1240,16 +1240,14 @@ def test_squeeze(ctx_factory, shape):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    x_in = np.ones(shape=shape, dtype=np.int64)
+    x_in = np.ones(shape=shape, dtype=np.float64)
     x = pt.make_data_wrapper(x_in)
 
-    np_result = np.squeeze(x_in)
-
-    print(np_result)
+    np_result = np.squeeze(x_in).shape
 
     _, (pt_result,) = pt.generate_loopy(pt.squeeze(x))(cq)
 
-    np.testing.assert_allclose(pt_result, np_result)
+    np.testing.assert_allclose(pt_result.shape, np_result)
 
 
 if __name__ == "__main__":
