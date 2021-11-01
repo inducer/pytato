@@ -1062,10 +1062,33 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
-def test_partitionfinder(ctx_factory):
-    x_in = np.random.randn(20, 10)
+
+def make_random_dag():
+    x_in = np.random.randn(20, 20)
     x = pt.make_data_wrapper(x_in)
-    y = 2*x
+
+    y = x
+    from random import randrange
+
+    for _ in range(10):
+        v = randrange(1500)
+
+        if v < 500:
+            y *= 4
+        elif v < 750:
+            y += 13
+        elif v < 1250:
+            y = y@x
+        elif v < 1500:
+            y = y.T
+        else:
+            raise AssertionError()
+
+    return y
+
+
+def test_partitionfinder(ctx_factory):
+    y = make_random_dag()
 
     from dataclasses import dataclass
     from pytato.transform import (TopoSortMapper, find_partitions,
