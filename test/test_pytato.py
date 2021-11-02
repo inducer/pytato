@@ -304,6 +304,27 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
+def test_userscollector():
+    from testlib import RandomDAGContext, make_random_dag
+    from pytato.transform import UsersCollector, reverse_graph
+
+    axis_len = 5
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+
+        dag = make_random_dag(rdagc)
+
+        gdm = UsersCollector()
+        gdm(dag)
+
+        rev_graph = reverse_graph(gdm.node_to_users)
+        rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+        assert rev_graph2 == rev_graph
+
+
 def test_asciidag():
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)

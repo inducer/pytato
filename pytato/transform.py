@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable)
+                    List, Mapping, Iterable, Optional)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -63,6 +63,13 @@ __doc__ = """
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: materialize_with_mpms
+
+Dict representation of DAGs
+---------------------------
+
+.. autoclass:: UsersCollector
+.. autofunction:: reverse_graph
+.. autofunction:: tag_child_nodes
 """
 
 
@@ -985,6 +992,175 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
         new_data[name] = materializer(ary.expr).expr
 
     return DictOfNamedArrays(new_data)
+
+# }}}
+
+
+# {{{ UsersCollector
+
+class UsersCollector(CachedMapper[ArrayOrNames]):
+    """
+    Maps a graph to a dictionary representation mapping a node to its users,
+    i.e. all the nodes using its value.
+
+    .. attribute:: node_to_users
+
+       Mapping of each node in the graph to its users.
+
+    .. automethod:: __init__
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        for child in expr._data.values():
+            self.node_to_users.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+    def map_named_array(self, expr: NamedArray) -> None:
+        self.node_to_users.setdefault(expr._container, set()).add(expr)
+        self.rec(expr._container)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        for _, child in sorted(expr.bindings.items()):
+            if isinstance(child, Array):
+                self.node_to_users.setdefault(child, set()).add(expr)
+                self.rec(child)
+
+    def map_einsum(self, expr: Einsum) -> None:
+        for arg in expr.args:
+            self.node_to_users.setdefault(arg, set()).add(expr)
+            self.rec(arg)
+
+    def map_reshape(self, expr: Reshape) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_placeholder(self, expr: Placeholder) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+    def map_matrix_product(self, expr: MatrixProduct) -> None:
+        for child in (expr.x1, expr.x2):
+            self.node_to_users.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+    def map_concatenate(self, expr: Concatenate) -> None:
+        for ary in expr.arrays:
+            self.node_to_users.setdefault(ary, set()).add(expr)
+            self.rec(ary)
+
+    def map_stack(self, expr: Stack) -> None:
+        for ary in expr.arrays:
+            self.node_to_users.setdefault(ary, set()).add(expr)
+            self.rec(ary)
+
+    def map_roll(self, expr: Roll) -> None:
+        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_size_param(self, expr: SizeParam) -> None:
+        # no child nodes, nothing to do
+        pass
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> None:
+        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_data_wrapper(self, expr: DataWrapper) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+    def map_index_lambda(self, expr: IndexLambda) -> None:
+        for child in expr.bindings.values():
+            self.node_to_users.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+    def _map_index_base(self, expr: IndexBase) -> None:
+        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+        for idx in expr.indices:
+            if isinstance(idx, Array):
+                self.node_to_users.setdefault(idx, set()).add(expr)
+                self.rec(idx)
+
+    def map_basic_index(self, expr: BasicIndex) -> None:
+        self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> None:
+        self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> None:
+        self._map_index_base(expr)
+
+# }}}
+
+
+# {{{ operations on graphs in dict form
+
+def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
+        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
+    """Reverses a graph.
+
+    :param graph: A :class:`dict` representation of a directed graph, mapping each
+        node to other nodes to which it is connected by edges. A possible
+        use case for this function is the graph in
+        :attr:`UsersCollector.node_to_users`.
+    :returns: A :class:`dict` representing *graph* with edges reversed.
+    """
+    result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+
+    for node_key, edges in graph.items():
+        for other_node_key in edges:
+            result.setdefault(other_node_key, set()).add(node_key)
+
+    return result
+
+
+def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
+        starting_point: ArrayOrNames,
+        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None) \
+        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
+    """Tags all nodes reachable from *starting_point* with *tag*.
+
+    :param graph: A :class:`dict` representation of a directed graph, mapping each
+        node to other nodes to which it is connected by edges. A possible
+        use case for this function is the graph in
+        :attr:`UsersCollector.node_to_users`.
+    :param tag: The value to tag the nodes with.
+    :param starting_point: An optional starting point in *graph*.
+    :param node_to_tags: The resulting mapping of nodes to tags.
+    :returns: the updated value of *node_to_tags*.
+    """
+    if node_to_tags is None:
+        node_to_tags = {}
+    node_to_tags.setdefault(starting_point, set()).add(tag)
+    if starting_point in graph:
+        for other_node_key in graph[starting_point]:
+            tag_child_nodes(graph, other_node_key, tag, node_to_tags)
+
+    return node_to_tags
 
 # }}}
 
