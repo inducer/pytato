@@ -309,6 +309,16 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
         emit("node [shape=rectangle]")
         array_to_id: Dict[Array, str] = {}
 
+        # Fill array_to_id in a first pass. Technically, this isn't
+        # necessary, if parts.toposorted_partitions is *actually* topologically
+        # sorted. But if *cough* hypothetically parts.toposorted_partitions
+        # were not actually topologically sorted, like if you were in the
+        # middle of investigating a bug with the topological sort, ...
+        for part_id in parts.toposorted_partitions:
+            for array, _ in part_id_to_node_to_node_info[part_id].items():
+                array_to_id[array] = id_gen("array")
+
+        # Second pass: emit the graph.
         for part_id in parts.toposorted_partitions:
             part_node_to_info = part_id_to_node_to_node_info[part_id]
             input_arrays: List[Array] = []
@@ -316,7 +326,6 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
             internal_arrays: List[Array] = []
 
             for array, _ in part_node_to_info.items():
-                array_to_id[array] = id_gen("array")
                 if isinstance(array, InputArgumentBase):
                     input_arrays.append(array)
                 else:
