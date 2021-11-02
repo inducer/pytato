@@ -304,15 +304,15 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
-def test_graphtodictmapper():
+def test_userscollector():
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
     y = stack @ stack.T
 
-    from pytato.transform import GraphToDictMapper, reverse_graph
+    from pytato.transform import UsersCollector, reverse_graph
 
-    gdm = GraphToDictMapper()
+    gdm = UsersCollector()
     gdm(y)
 
     rev_graph = reverse_graph(gdm.graph_dict)

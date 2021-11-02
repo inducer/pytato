@@ -990,11 +990,11 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 # }}}
 
 
-# {{{ graph-to-dict
+# {{{ UsersCollector
 
-class GraphToDictMapper(CachedMapper):
+class UsersCollector(CachedMapper[ArrayOrNames]):
     """
-    Maps a graph to a dictionary representation mapping a node to its parents,
+    Maps a graph to a dictionary representation mapping a node to its users,
     i.e. all the nodes using its value.
 
     .. attribute:: graph_dict
@@ -1083,14 +1083,36 @@ class GraphToDictMapper(CachedMapper):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
+    def _map_index_base(self, expr: IndexBase) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+        for idx in expr.indices:
+            if isinstance(idx, Array):
+                self.graph_dict.setdefault(idx, set()).add(expr)
+                self.rec(idx)
+
+    def map_basic_index(self, expr: BasicIndex) -> None:
+        self._map_index_base(expr)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes
+                                      ) -> None:
+        self._map_index_base(expr)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes
+                                          ) -> None:
+        self._map_index_base(expr)
+
 # }}}
 
 
 # {{{ operations on graphs in dict form
 
-def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
+def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
     """Reverses a graph."""
-    result: Dict[Array, Set[Array]] = {}
+    result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     for node_key, edges in graph.items():
         for other_node_key in edges:
@@ -1099,9 +1121,9 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
-        starting_point: Optional[Array] = None,
-        node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
+def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
+        starting_point: Optional[ArrayOrNames] = None,
+        node_to_tags: Optional[Dict[Optional[ArrayOrNames], Set[ArrayOrNames]]] = None) -> None:
     """Tags nodes reachable from *starting_point*."""
     if node_to_tags is None:
         node_to_tags = {}
