@@ -619,7 +619,7 @@ class _SuppliedShapeAndDtypeMixin(object):
 
 class NamedArray(Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
-    back to the containing instance as well as the name by which *self* is
+    back to thecontaining instance as well as the name by which *self* is
     known there.
 
     .. automethod:: __init__
@@ -2243,7 +2243,6 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
 
 def squeeze(array: Array) -> Array:
     """Remove single-dimensional entries from the shape of an array."""
-
     from pytato.utils import are_shape_components_equal
 
     return array[tuple(
