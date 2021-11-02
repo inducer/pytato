@@ -66,7 +66,8 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         super().__init__()
 
         # Function to determine the Partition ID
-        self._get_partition_id: Callable[[ArrayOrNames], PartitionId] = get_partition_id
+        self._get_partition_id: Callable[[ArrayOrNames], PartitionId] = \
+                get_partition_id
 
         # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
@@ -404,7 +405,7 @@ def generate_code_for_partitions(parts: CodePartitions) \
 
 
 def execute_partitions(parts: CodePartitions, prg_per_partition:
-                        Dict[PartitionId, BoundProgram], queue: Any) -> Dict[str, Any]:
+        Dict[PartitionId, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`CodePartitions` representing the
