@@ -1265,6 +1265,56 @@ def test_named_temporaries(ctx_factory):
                for tv in t_unit.default_entrypoint.temporary_variables.values()]
                ) == 2
 
+    
+@pytest.mark.parametrize("shape", [(1, 3, 1), (1, 1), (2, 2, 3)])
+def test_squeeze(ctx_factory, shape):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_in = np.ones(shape=shape, dtype=np.float64)
+    x = pt.make_data_wrapper(x_in)
+
+    np_result = np.squeeze(x_in).shape
+
+    _, (pt_result,) = pt.generate_loopy(pt.squeeze(x))(cq)
+
+    np.testing.assert_allclose(pt_result.shape, np_result)
+
+
+def test_random_dag_against_numpy(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+    axis_len = 5
+
+    # Warn about
+    from warnings import filterwarnings, catch_warnings
+    with catch_warnings():
+        # We'd like to know if Numpy divides by zero.
+        filterwarnings("error")
+
+        for i in range(50):
+            print(i)  # progress indicator for somewhat slow test
+
+            seed = 120 + i
+            rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=False)
+            rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=True)
+
+            ref_result = make_random_dag(rdagc_np)
+            dag = make_random_dag(rdagc_pt)
+            from pytato.transform import materialize_with_mpms
+            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = materialize_with_mpms(dict_named_arys)
+            if 0:
+                pt.show_dot_graph(dict_named_arys)
+
+            _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
+
+            assert np.allclose(pt_result["result"], ref_result)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

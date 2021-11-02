@@ -76,6 +76,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: dot
 .. autofunction:: vdot
 .. autofunction:: broadcast_to
+.. autofunction:: squeeze
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
@@ -1510,8 +1511,16 @@ class DataInterface(Protocol):
     .. attribute:: dtype
     """
 
-    shape: ShapeType
-    dtype: np.dtype[Any]
+    # That's how mypy spells "read-only attribute".
+    # https://github.com/python/typing/discussions/903
+
+    @property
+    def shape(self) -> ShapeType:
+        pass
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        pass
 
 
 class DataWrapper(InputArgumentBase):
@@ -2230,5 +2239,15 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        shape=shape,
                        dtype=array.dtype,
                        bindings={"in": array})
+
+
+def squeeze(array: Array) -> Array:
+    """Remove single-dimensional entries from the shape of an array."""
+    from pytato.utils import are_shape_components_equal
+
+    return array[tuple(
+            0 if are_shape_components_equal(s_i, 1) else slice(s_i)
+            for i, s_i in enumerate(array.shape))]
+
 
 # vim: foldmethod=marker
