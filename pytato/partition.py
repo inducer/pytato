@@ -49,18 +49,6 @@ T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 PartitionId = Hashable
 
 
-# {{{
-
-class _PartitionSplitter(EdgeCachedMapper):
-    def __init__(self) -> None:
-        self.old_part_id_to_new_part_ids: Dict[PartitionId, List[PartitionId]] = {}
-
-    def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
-        pass
-
-# }}}
-
-
 # {{{ graph partitioner
 
 class _GraphPartitioner(EdgeCachedMapper):
