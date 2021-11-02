@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+import types
+from typing import Any, Dict, Optional, List, Tuple, cast, Union
 import operator
 import pyopencl as cl
 import numpy as np
@@ -16,7 +17,7 @@ class NumpyBasedEvaluator(Mapper):
     Mapper to return the result according to an eager evaluation array package
     *np*.
     """
-    def __init__(self, np: Any, placeholders):
+    def __init__(self, np: Any, placeholders: Dict[Placeholder, Array]) -> None:
         self.np = np
         self.placeholders = placeholders
         super().__init__()
@@ -50,7 +51,7 @@ class NumpyBasedEvaluator(Mapper):
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
                               parameters: Optional[Dict[Placeholder, Any]] = None,
-                              rtol=1e-7):
+                              rtol: float = 1e-7) -> None:
     """
     Raises an :class:`AssertionError`, if there is a discrepancy between *expr*
     evaluated lazily via :mod:`pytato` and eagerly via :mod:`numpy`.
@@ -64,13 +65,13 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     np_result = NumpyBasedEvaluator(np, parameters)(expr)
     prog = pt.generate_loopy(expr, cl_device=queue.device)
 
-    evt, (pt_result,) = prog(queue, **{placeholder.name: data
+    evt, (pt_result,) = prog(queue, **{cast(str, placeholder.name): data
                                 for placeholder, data in parameters.items()})
 
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)
+    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)  # type: ignore[no-untyped-call]  # noqa: E501
 
 # }}}
 
@@ -78,19 +79,20 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
 # {{{ random DAG generation
 
 class RandomDAGContext:
-    def __init__(self, rng, axis_len, use_numpy):
+    def __init__(self, rng: np.random.Generator, axis_len: int, use_numpy: bool) \
+            -> None:
         self.rng = rng
         self.axis_len = axis_len
-        self.past_results = []
+        self.past_results: List[Array] = []
         self.use_numpy = use_numpy
 
         if self.use_numpy:
-            self.np = np
+            self.np: types.ModuleType = np
         else:
             self.np = pt
 
 
-def make_random_array(rdagc: RandomDAGContext, naxes: int, axis_len=None):
+def make_random_array(rdagc: RandomDAGContext, naxes: int) -> Any:
     shape = (rdagc.axis_len,) * naxes
 
     result = rdagc.rng.uniform(1e-3, 1, size=shape)
@@ -100,23 +102,25 @@ def make_random_array(rdagc: RandomDAGContext, naxes: int, axis_len=None):
         return pt.make_data_wrapper(result)
 
 
-def make_random_reshape(rdagc, s, shape_len):
+def make_random_reshape(
+        rdagc: RandomDAGContext, s: Tuple[int, ...], shape_len: int) \
+        -> Tuple[int, ...]:
     rng = rdagc.rng
 
-    s = list(s)
+    s_list = list(s)
     naxes = rng.integers(len(s), len(s)+2)
     while len(s) < naxes:
         insert_at = rng.integers(0, len(s)+1)
-        s.insert(insert_at, 1)
+        s_list.insert(insert_at, 1)
 
-    return tuple(s)
+    return tuple(s_list)
 
 
 _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
         operator.pow, "maximum", "minimum"]
 
 
-def make_random_dag_inner(rdagc):
+def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     rng = rdagc.rng
 
     while True:
@@ -133,15 +137,21 @@ def make_random_dag_inner(rdagc):
             op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
             op2 = op2.reshape(*make_random_reshape(rdagc, op2.shape, naxes))
 
-            which_op = rng.choice(_BINOPS)
+            # type ignore because rng.choice doesn't have broad enough type
+            # annotation to represent choosing callables.
+            which_op = rng.choice(_BINOPS)  # type: ignore[arg-type]
 
             if which_op is operator.pow:
                 op1 = abs(op1)
 
             if isinstance(which_op, str):
-                return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))
+                # type ignore because we haven't told mypy what's in rdagc.np.
+                return rdagc.np.squeeze(  # type: ignore[attr-defined]
+                        getattr(rdagc.np, which_op)(op1, op2))
             else:
-                return rdagc.np.squeeze(which_op(op1, op2))
+                # type ignore because we haven't told mypy what's in rdagc.np.
+                return rdagc.np.squeeze(  # type: ignore[attr-defined]
+                        which_op(op1, op2))
 
         elif v < 1075:
             op1 = make_random_dag(rdagc)
@@ -158,7 +168,9 @@ def make_random_dag_inner(rdagc):
 
         elif v < 1500:
             result = make_random_dag(rdagc)
-            return rdagc.np.transpose(result,
+            # type ignore because we haven't told mypy what's in rdagc.np.
+            return rdagc.np.transpose(  # type: ignore[attr-defined]  # noqa: E501
+                    result,
                     tuple(rng.permuted(list(range(len(result.shape))))))
 
         else:
@@ -169,10 +181,7 @@ def make_random_dag_inner(rdagc):
     # FIXME: include <<, >>
 
 
-def make_random_dag(rdagc=None):
-    if not rdagc:
-        from numpy.random import default_rng
-        rdagc = RandomDAGContext(default_rng(), 2)
+def make_random_dag(rdagc: RandomDAGContext) -> Any:
     rng = rdagc.rng
     result = make_random_dag_inner(rdagc)
 
@@ -183,7 +192,7 @@ def make_random_dag(rdagc=None):
         v = rng.integers(0, 1)
         if v == 0:
             # index away an axis
-            subscript = [slice(None)] * len(result.shape)
+            subscript: List[Union[int, slice]] = [slice(None)] * len(result.shape)
             subscript[rng.integers(0, len(result.shape))] = \
                     int(rng.integers(0, rdagc.axis_len))
 
@@ -193,7 +202,9 @@ def make_random_dag(rdagc=None):
             # reduce away an axis
 
             # FIXME do reductions other than sum?
-            return rdagc.np.sum(result, axis=int(rng.integers(0, len(result.shape))))
+            # type ignore because we haven't told mypy what's in rdagc.np.
+            return rdagc.np.sum(  # type: ignore[attr-defined]
+                    result, axis=int(rng.integers(0, len(result.shape))))
 
         else:
             raise AssertionError()
