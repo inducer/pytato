@@ -1134,16 +1134,16 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
         pass
 
-    def _handle_shape(self, expr: Array, shape: Any) -> Tuple[Any, ...]:
+    def _handle_shape(self, expr: Array, shape: Any, *args: Any) -> Tuple[Any, ...]:
         return tuple([
-            self.handle_edge(expr, dim) if isinstance(dim, Array) else dim
+            self.handle_edge(expr, dim, *args) if isinstance(dim, Array) else dim
             for dim in shape])
 
     # {{{ map_xxx methods
 
-    def map_named_array(self, expr: NamedArray) -> NamedArray:
+    def map_named_array(self, expr: NamedArray, *args: Any) -> NamedArray:
         return NamedArray(
-            container=self.handle_edge(expr, expr._container),
+            container=self.handle_edge(expr, expr._container, *args),
             name=expr.name,
             tags=expr.tags)
 
@@ -1158,31 +1158,31 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(self.handle_edge(expr, arg)
+                     args=tuple(self.handle_edge(expr, arg, *args)
                                 for arg in expr.args),
                      tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        return MatrixProduct(x1=self.handle_edge(expr, expr.x1),
-                             x2=self.handle_edge(expr, expr.x2),
+        return MatrixProduct(x1=self.handle_edge(expr, expr.x1, *args),
+                             x2=self.handle_edge(expr, expr.x2, *args),
                              tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         return Stack(
-                     arrays=tuple(self.handle_edge(expr, ary)
+                     arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         return Concatenate(
-                     arrays=tuple(self.handle_edge(expr, ary)
+                     arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        return Roll(array=self.handle_edge(expr, expr.array),
+        return Roll(array=self.handle_edge(expr, expr.array, *args),
                 shift=expr.shift,
                 axis=expr.axis,
                 tags=expr.tags)
@@ -1190,57 +1190,58 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
             -> AxisPermutation:
         return AxisPermutation(
-                array=self.handle_edge(expr, expr.array),
+                array=self.handle_edge(expr, expr.array, *args),
                 axes=expr.axes,
                 tags=expr.tags)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(
-            array=self.handle_edge(expr, expr.array),
+            array=self.handle_edge(expr, expr.array, *args),
             newshape=self._handle_shape(expr, expr.newshape),
             order=expr.order,
             tags=expr.tags)
 
-    def map_basic_index(self, expr: BasicIndex) -> BasicIndex:
+    def map_basic_index(self, expr: BasicIndex, *args: Any) -> BasicIndex:
         return BasicIndex(
-                array=self.handle_edge(expr, expr.array),
-                indices=tuple(self.handle_edge(expr, idx)
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
     def map_contiguous_advanced_index(self,
-            expr: AdvancedIndexInContiguousAxes) -> AdvancedIndexInContiguousAxes:
+            expr: AdvancedIndexInContiguousAxes, *args: Any) \
+                    -> AdvancedIndexInContiguousAxes:
         return AdvancedIndexInContiguousAxes(
-                array=self.handle_edge(expr, expr.array),
-                indices=tuple(self.handle_edge(expr, idx)
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
     def map_non_contiguous_advanced_index(self,
-            expr: AdvancedIndexInNoncontiguousAxes) \
+            expr: AdvancedIndexInNoncontiguousAxes, *args: Any) \
             -> AdvancedIndexInNoncontiguousAxes:
         return AdvancedIndexInNoncontiguousAxes(
-                array=self.handle_edge(expr, expr.array),
-                indices=tuple(self.handle_edge(expr, idx)
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
-    def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
+    def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
         return DataWrapper(
                 name=expr.name,
                 data=expr.data,
-                shape=self._handle_shape(expr, expr.shape),
+                shape=self._handle_shape(expr, expr.shape, *args),
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=self._handle_shape(expr, expr.shape),
+                shape=self._handle_shape(expr, expr.shape, *args),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_size_param(self, expr: SizeParam) -> SizeParam:
+    def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
 
