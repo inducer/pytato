@@ -289,9 +289,7 @@ def test_toposortmapper():
     stack = pt.stack([array, 2*array, array + 6])
     y = stack @ stack.T
 
-    from pytato.transform import TopoSortMapper
-
-    tm = TopoSortMapper()
+    tm = pt.transform.TopoSortMapper()
     tm(y)
 
     from pytato.array import (AxisPermutation, IndexLambda, MatrixProduct,
@@ -306,21 +304,25 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
-def test_graphtodictmapper():
-    n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
-    stack = pt.stack([array, 2*array, array + 6])
-    y = stack @ stack.T
+def test_userscollector():
+    from testlib import RandomDAGContext, make_random_dag
+    from pytato.transform import UsersCollector, reverse_graph
 
-    from pytato.transform import GraphToDictMapper, reverse_graph
+    axis_len = 5
 
-    gdm = GraphToDictMapper()
-    gdm(y)
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
 
-    rev_graph = reverse_graph(gdm.graph_dict)
-    rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+        dag = make_random_dag(rdagc)
 
-    assert rev_graph2 == rev_graph
+        gdm = UsersCollector()
+        gdm(dag)
+
+        rev_graph = reverse_graph(gdm.graph_dict)
+        rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+        assert rev_graph2 == rev_graph
 
 
 def test_asciidag():

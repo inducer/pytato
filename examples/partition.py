@@ -3,8 +3,10 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (TopoSortMapper, execute_partitions,
+from pytato.partition import (execute_partitions,
                               generate_code_for_partitions, find_partitions)
+
+from pytato.transform import TopoSortMapper
 
 from dataclasses import dataclass
 
