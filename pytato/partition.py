@@ -38,6 +38,7 @@ from pytato.target import BoundProgram
 
 __doc__ = """
 .. autoclass:: CodePartitions
+.. autoexception:: PartitionInducedCycleError
 
 .. autofunction:: find_partitions
 .. autofunction:: execute_partitions
@@ -185,13 +186,32 @@ class CodePartitions:
 # }}}
 
 
+class PartitionInducedCycleError(Exception):
+    """Raised by :func:`find_partitions` if the partitioning induced a
+    cycle in the graph of partitions.
+    """
+
+
 # {{{ find_partitions
 
 def find_partitions(outputs: DictOfNamedArrays,
         part_func: Callable[[ArrayOrNames], PartitionId]) ->\
         CodePartitions:
     """Partitions the *expr* according to *part_func* and generates code for
-    each partition.
+    each partition. Raises :exc:`PartitionInducedCycleError` if the partitioning
+    induces a cycle, e.g. for a graph like the following::
+
+           ┌───┐
+        ┌──┤ A ├──┐
+        │  └───┘  │
+        │       ┌─▼─┐
+        │       │ B │
+        │       └─┬─┘
+        │  ┌───┐  │
+        └─►│ C │◄─┘
+           └───┘
+
+    where ``A`` and ``C`` are in partition 1, and ``B`` is in partition 2.
 
     :param expr: The expression to partition.
     :param part_func: A callable that returns an instance of
@@ -233,8 +253,11 @@ def find_partitions(outputs: DictOfNamedArrays,
             partition_id_to_input_names.setdefault(
                 pid_target, set()).add(var_name)
 
-    from pytools.graph import compute_topological_order
-    toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
+    from pytools.graph import compute_topological_order, CycleError
+    try:
+        toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
+    except CycleError:
+        raise PartitionInducedCycleError
 
     result = CodePartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, var_name_to_result)
