@@ -59,11 +59,17 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
-.. autoclass:: GraphToDictMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: materialize_with_mpms
+
+Dict representation of DAGs
+---------------------------
+
+.. autoclass:: UsersCollector
+.. autofunction:: reverse_graph
+.. autofunction:: tag_child_nodes
 """
 
 
@@ -998,6 +1004,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     i.e. all the nodes using its value.
 
     .. attribute:: graph_dict
+
+       Mapping of each node in the graph to its users.
     """
 
     def __init__(self) -> None:
@@ -1112,7 +1120,13 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
 def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
         -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
-    """Reverses a graph."""
+    """Reverses a graph.
+
+    :param graph: A dict representation of the graph created by
+        :class:`UsersCollector`.
+    :returns: A dict representation of *graph* where used nodes and using
+        nodes are reversed.
+    """
     result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     for node_key, edges in graph.items():
@@ -1127,7 +1141,14 @@ def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
         node_to_tags:
             Optional[Dict[Optional[ArrayOrNames], Set[ArrayOrNames]]] = None) \
         -> None:
-    """Tags nodes reachable from *starting_point*."""
+    """Tags all nodes reachable from *starting_point* with *tag*.
+
+    :param graph: A dict representation of the graph created by
+        :class:`UsersCollector`.
+    :param tag: The value to tag the nodes with.
+    :param starting_point: An optional starting point in *graph*.
+    :param node_to_tags: The resulting mapping of nodes to tags.
+    """
     if node_to_tags is None:
         node_to_tags = {}
     node_to_tags.setdefault(starting_point, set()).add(tag)
