@@ -1511,8 +1511,16 @@ class DataInterface(Protocol):
     .. attribute:: dtype
     """
 
-    shape: ShapeType
-    dtype: np.dtype[Any]
+    # That's how mypy spells "read-only attribute".
+    # https://github.com/python/typing/discussions/903
+
+    @property
+    def shape(self) -> ShapeType:
+        pass
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        pass
 
 
 class DataWrapper(InputArgumentBase):
