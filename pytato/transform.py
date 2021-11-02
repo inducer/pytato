@@ -1408,23 +1408,33 @@ def find_partitions(outputs: DictOfNamedArrays,
     from pytools.graph import compute_topological_order
     toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
 
-    # Check disjointness
-    class DisjointWalkMapper(CachedWalkMapper):
-        def __init__(self) -> None:
-            super().__init__()
-            self.seen_nodes: Set[ArrayOrNames] = set()
+    result = CodePartitions(toposorted_partitions, partition_id_to_input_names,
+                          partition_id_to_output_names, var_name_to_result)
 
-        def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
-            super().rec(expr)
-            self.seen_nodes.add(expr)
+    if __debug__:
+        _check_partition_disjointness(result)
 
+    return result
+
+
+class _SeenNodesWalkMapper(CachedWalkMapper):
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_nodes: Set[ArrayOrNames] = set()
+
+    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
+        super().rec(expr)
+        self.seen_nodes.add(expr)
+
+
+def _check_partition_disjointness(parts: CodePartitions):
     part_id_to_nodes: Dict[Hashable, Set[ArrayOrNames]] = {}
 
-    for part_id, out_names in partition_id_to_output_names.items():
+    for part_id, out_names in parts.partition_id_to_output_names.items():
 
-        mapper = DisjointWalkMapper()
+        mapper = _SeenNodesWalkMapper()
         for out_name in out_names:
-            mapper(var_name_to_result[out_name])
+            mapper(parts.var_name_to_result[out_name])
 
         # check disjointness
         for my_node in mapper.seen_nodes:
@@ -1438,9 +1448,6 @@ def find_partitions(outputs: DictOfNamedArrays,
                         f"in both '{part_id}' and '{other_part_id}'")
 
         part_id_to_nodes[part_id] = mapper.seen_nodes
-
-    return CodePartitions(toposorted_partitions, partition_id_to_input_names,
-                          partition_id_to_output_names, var_name_to_result)
 
 
 def generate_code_for_partitions(parts: CodePartitions) \
