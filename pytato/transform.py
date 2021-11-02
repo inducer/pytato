@@ -1009,7 +1009,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     """
 
     def __init__(self) -> None:
-        """Initialize the GraphToDictMapper."""
+        """Initialize the UsersCollector."""
         super().__init__()
         self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
