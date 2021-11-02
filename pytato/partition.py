@@ -111,7 +111,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         self.partition_pair_to_edges.setdefault(
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
-    def _handle_new_binding(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
+    def _handle_parent_child(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
         if self.does_edge_cross_partition_boundary(expr, child):
             try:
                 ph = self._seen_node_to_placeholder[child]
@@ -146,7 +146,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
 
     def _handle_shape(self, expr: Array, shape: Any) -> Tuple[Any, ...]:
         return tuple([
-            self._handle_new_binding(expr, dim) if isinstance(dim, Array) else dim
+            self._handle_parent_child(expr, dim) if isinstance(dim, Array) else dim
             for dim in shape])
 
     def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
@@ -161,7 +161,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
 
     def map_named_array(self, expr: NamedArray) -> NamedArray:
         return NamedArray(
-            container=self._handle_new_binding(expr, expr._container),
+            container=self._handle_parent_child(expr, expr._container),
             name=expr.name,
             tags=expr.tags)
 
@@ -169,38 +169,38 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         return IndexLambda(expr=expr.expr,
                 shape=self._handle_shape(expr, expr.shape),
                 dtype=expr.dtype,
-                bindings={name: self._handle_new_binding(expr, child)
+                bindings={name: self._handle_parent_child(expr, child)
                           for name, child in expr.bindings.items()},
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(self._handle_new_binding(expr, arg)
+                     args=tuple(self._handle_parent_child(expr, arg)
                                 for arg in expr.args),
                      tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        return MatrixProduct(x1=self._handle_new_binding(expr, expr.x1),
-                             x2=self._handle_new_binding(expr, expr.x2),
+        return MatrixProduct(x1=self._handle_parent_child(expr, expr.x1),
+                             x2=self._handle_parent_child(expr, expr.x2),
                              tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         return Stack(
-                     arrays=tuple(self._handle_new_binding(expr, ary)
+                     arrays=tuple(self._handle_parent_child(expr, ary)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
         return Concatenate(
-                     arrays=tuple(self._handle_new_binding(expr, ary)
+                     arrays=tuple(self._handle_parent_child(expr, ary)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        return Roll(array=self._handle_new_binding(expr, expr.array),
+        return Roll(array=self._handle_parent_child(expr, expr.array),
                 shift=expr.shift,
                 axis=expr.axis,
                 tags=expr.tags)
@@ -208,29 +208,29 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
     def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
             -> AxisPermutation:
         return AxisPermutation(
-                array=self._handle_new_binding(expr, expr.array),
+                array=self._handle_parent_child(expr, expr.array),
                 axes=expr.axes,
                 tags=expr.tags)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(
-            array=self._handle_new_binding(expr, expr.array),
+            array=self._handle_parent_child(expr, expr.array),
             newshape=self._handle_shape(expr, expr.newshape),
             order=expr.order,
             tags=expr.tags)
 
     def map_basic_index(self, expr: BasicIndex) -> BasicIndex:
         return BasicIndex(
-                array=self._handle_new_binding(expr, expr.array),
-                indices=tuple(self._handle_new_binding(expr, idx)
+                array=self._handle_parent_child(expr, expr.array),
+                indices=tuple(self._handle_parent_child(expr, idx)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
     def map_contiguous_advanced_index(self,
             expr: AdvancedIndexInContiguousAxes) -> AdvancedIndexInContiguousAxes:
         return AdvancedIndexInContiguousAxes(
-                array=self._handle_new_binding(expr, expr.array),
-                indices=tuple(self._handle_new_binding(expr, idx)
+                array=self._handle_parent_child(expr, expr.array),
+                indices=tuple(self._handle_parent_child(expr, idx)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
@@ -238,8 +238,8 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
             expr: AdvancedIndexInNoncontiguousAxes) \
             -> AdvancedIndexInNoncontiguousAxes:
         return AdvancedIndexInNoncontiguousAxes(
-                array=self._handle_new_binding(expr, expr.array),
-                indices=tuple(self._handle_new_binding(expr, idx)
+                array=self._handle_parent_child(expr, expr.array),
+                indices=tuple(self._handle_parent_child(expr, idx)
                                 if isinstance(idx, Array) else idx
                                 for idx in expr.indices))
 
