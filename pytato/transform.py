@@ -1006,10 +1006,11 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     .. attribute:: node_to_users
 
        Mapping of each node in the graph to its users.
+
+    .. automethod:: __init__
     """
 
     def __init__(self) -> None:
-        """Initialize the UsersCollector."""
         super().__init__()
         self.node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
