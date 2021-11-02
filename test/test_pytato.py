@@ -304,6 +304,23 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[6], MatrixProduct)
 
 
+def test_graphtodictmapper():
+    n = pt.make_size_param("n")
+    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    stack = pt.stack([array, 2*array, array + 6])
+    y = stack @ stack.T
+
+    from pytato.transform import GraphToDictMapper, reverse_graph
+
+    gdm = GraphToDictMapper()
+    gdm(y)
+
+    rev_graph = reverse_graph(gdm.graph_dict)
+    rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+    assert rev_graph2 == rev_graph
+
+
 def test_asciidag():
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)

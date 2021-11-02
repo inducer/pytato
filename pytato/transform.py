@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable)
+                    List, Mapping, Iterable, Optional)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -59,6 +59,7 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
+.. autoclass:: GraphToDictMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -985,6 +986,128 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
         new_data[name] = materializer(ary.expr).expr
 
     return DictOfNamedArrays(new_data)
+
+# }}}
+
+
+# {{{ graph-to-dict
+
+class GraphToDictMapper(Mapper):
+    """
+    Maps a graph to a dictionary representation mapping a node to its parents,
+    i.e. all the nodes using its value.
+    .. attribute:: graph_dict
+    """
+
+    def __init__(self) -> None:
+        """Initialize the GraphToDictMapper."""
+        self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
+        for child in expr._data.values():
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+    def map_named_array(self, expr: NamedArray, *args: Any) -> None:
+        self.graph_dict.setdefault(expr._container, set()).add(expr)
+        self.rec(expr._container)
+
+    def map_loopy_call(self, expr: LoopyCall, *args: Any) -> None:
+        for _, child in sorted(expr.bindings.items()):
+            if isinstance(child, Array):
+                self.graph_dict.setdefault(child, set()).add(expr)
+                self.rec(child)
+
+    def map_einsum(self, expr: Einsum, *args: Any) -> None:
+        for arg in expr.args:
+            self.graph_dict.setdefault(arg, set()).add(expr)
+            self.rec(arg)
+
+    def map_reshape(self, expr: Reshape, *args: Any) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.graph_dict.setdefault(dim, set()).add(expr)
+                self.rec(dim, *args)
+
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.graph_dict.setdefault(dim, set()).add(expr)
+                self.rec(dim, *args)
+
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
+        for child in (expr.x1, expr.x2):
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+    def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
+
+    def map_stack(self, expr: Stack, *args: Any) -> None:
+        for ary in expr.arrays:
+            self.graph_dict.setdefault(ary, set()).add(expr)
+            self.rec(ary)
+
+    def map_roll(self, expr: Roll, *args: Any) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_size_param(self, expr: SizeParam) -> None:
+        # no child nodes, nothing to do
+        pass
+
+    def map_axis_permutation(self, expr: AxisPermutation) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
+    def map_data_wrapper(self, expr: DataWrapper) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.graph_dict.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+        for child in expr.bindings.values():
+            self.graph_dict.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.graph_dict.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
+# }}}
+
+
+# {{{ operations on graphs in dict form
+
+def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
+    """Reverses a graph."""
+    result: Dict[Array, Set[Array]] = {}
+
+    for node_key, edges in graph.items():
+        for other_node_key in edges:
+            result.setdefault(other_node_key, set()).add(node_key)
+
+    return result
+
+
+def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
+        starting_point: Optional[Array] = None,
+        node_to_tags: Optional[Dict[Optional[Array], Set[Array]]] = None) -> None:
+    """Tags nodes reachable from *starting_point*."""
+    if node_to_tags is None:
+        node_to_tags = {}
+    node_to_tags.setdefault(starting_point, set()).add(tag)
+    if starting_point in graph:
+        for other_node_key in graph[starting_point]:
+            tag_child_nodes(graph, other_node_key, tag,
+                                          node_to_tags)
 
 # }}}
 
