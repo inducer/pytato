@@ -1110,7 +1110,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
 # {{{ operations on graphs in dict form
 
-def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
+def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
+        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
     """Reverses a graph."""
     result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
@@ -1123,7 +1124,9 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) -> Dict[ArrayOrN
 
 def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
         starting_point: Optional[ArrayOrNames] = None,
-        node_to_tags: Optional[Dict[Optional[ArrayOrNames], Set[ArrayOrNames]]] = None) -> None:
+        node_to_tags:
+            Optional[Dict[Optional[ArrayOrNames], Set[ArrayOrNames]]] = None) \
+        -> None:
     """Tags nodes reachable from *starting_point*."""
     if node_to_tags is None:
         node_to_tags = {}
