@@ -37,6 +37,8 @@ from pytato.array import (
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         make_placeholder)
 
+from pytato.target import BoundProgram
+
 
 __doc__ = """
 .. autoclass:: CodePartitions
@@ -51,7 +53,7 @@ T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 PartitionId = Hashable
 
 
-# {{{ graph partitioning
+# {{{ graph partitioner
 
 class _GraphPartitioner(CachedMapper[ArrayOrNames]):
     """Given a function *get_partition_id*, produces subgraphs representing
@@ -262,9 +264,10 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
 
     # }}}
 
+# }}}
 
-from pytato.target import BoundProgram
 
+# {{{ code partitions
 
 @dataclass
 class CodePartitions:
@@ -295,6 +298,10 @@ class CodePartitions:
     partition_id_to_output_names: Dict[PartitionId, Set[str]]
     var_name_to_result: Dict[str, Array]
 
+# }}}
+
+
+# {{{ find_partitions
 
 def find_partitions(outputs: DictOfNamedArrays,
         part_func: Callable[[ArrayOrNames], PartitionId]) ->\
@@ -386,6 +393,10 @@ def _check_partition_disjointness(parts: CodePartitions) -> None:
 
         part_id_to_nodes[part_id] = mapper.seen_nodes
 
+# }}}
+
+
+# {{{ generate_code_for_partitions
 
 def generate_code_for_partitions(parts: CodePartitions) \
         -> Dict[PartitionId, BoundProgram]:
@@ -403,6 +414,10 @@ def generate_code_for_partitions(parts: CodePartitions) \
 
     return prg_per_partition
 
+# }}}
+
+
+# {{{ execute_partitions
 
 def execute_partitions(parts: CodePartitions, prg_per_partition:
         Dict[PartitionId, BoundProgram], queue: Any) -> Dict[str, Any]:
