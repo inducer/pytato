@@ -319,7 +319,7 @@ def test_userscollector():
         gdm = UsersCollector()
         gdm(dag)
 
-        rev_graph = reverse_graph(gdm.graph_dict)
+        rev_graph = reverse_graph(gdm.node_to_users)
         rev_graph2 = reverse_graph(reverse_graph(rev_graph))
 
         assert rev_graph2 == rev_graph
