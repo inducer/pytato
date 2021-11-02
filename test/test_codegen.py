@@ -1265,7 +1265,7 @@ def test_named_temporaries(ctx_factory):
                for tv in t_unit.default_entrypoint.temporary_variables.values()]
                ) == 2
 
-    
+
 @pytest.mark.parametrize("shape", [(1, 3, 1), (1, 1), (2, 2, 3)])
 def test_squeeze(ctx_factory, shape):
     ctx = ctx_factory()
