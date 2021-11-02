@@ -1314,7 +1314,6 @@ def test_random_dag_against_numpy(ctx_factory):
             assert np.allclose(pt_result["result"], ref_result)
 
 
-
 def test_partitioner(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
