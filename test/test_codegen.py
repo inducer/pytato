@@ -26,6 +26,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Union
+
 import itertools
 import operator
 import sys
@@ -1062,48 +1064,6 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
-def test_partitionfinder(ctx_factory):
-    x_in = np.random.randn(20, 10)
-    x = pt.make_data_wrapper(x_in)
-    y = 2*x
-
-    from dataclasses import dataclass
-    from pytato.transform import (TopoSortMapper, find_partitions,
-                                  execute_partitions, generate_code_for_partitions)
-
-    @dataclass(frozen=True, eq=True)
-    class MyPartitionId():
-        num: int
-
-    def get_partition_id(topo_list, expr) -> MyPartitionId:
-        return MyPartitionId(topo_list.index(expr))
-
-    tm = TopoSortMapper()
-    tm(y)
-
-    from functools import partial
-    part_func = partial(get_partition_id, tm.topological_order)
-
-    parts = find_partitions(y, part_func)
-
-    # Execute the partitioned code
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
-
-    prg_per_partition = generate_code_for_partitions(parts)
-
-    context = execute_partitions(parts, prg_per_partition, queue)
-
-    final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
-
-    # Execute the non-partitioned code for comparison
-    prg = pt.generate_loopy(y)
-    evt, (out,) = prg(queue)
-
-    np.testing.assert_allclose(out, final_res)
-
-
 def test_broadcast_to(ctx_factory):
     from numpy.random import default_rng
 
@@ -1249,6 +1209,173 @@ def test_reshape_on_scalars(ctx_factory):
     x_in = rng.random((1, 0, 2, 4))
     x = pt.make_data_wrapper(x_in)
     assert_allclose_to_numpy(pt.reshape(x, (192, 168, 0, 1)), cq)
+
+
+def test_materialize_reduces_flops(ctx_factory):
+    x1 = pt.make_placeholder("x1", (10, 4), np.float64)
+    x2 = pt.make_placeholder("x2", (10, 4), np.float64)
+    x3 = pt.make_placeholder("x3", (10, 4), np.float64)
+    x4 = pt.make_placeholder("x4", (10, 4), np.float64)
+    x5 = pt.make_placeholder("x5", (10, 4), np.float64)
+    cse = x1 + x2 + x3
+    y1 = x4 * cse
+    y2 = cse / x5
+    bad_graph = pt.make_dict_of_named_arrays({"y1": y1, "y2": y2})
+
+    good_graph = pt.transform.materialize_with_mpms(bad_graph)
+
+    bad_t_unit = pt.generate_loopy(bad_graph)
+    good_t_unit = pt.generate_loopy(good_graph)
+    bad_flops = (lp.get_op_map(bad_t_unit.program,
+                              subgroup_size="guess")
+                 .filter_by(dtype=[np.float64])
+                 .eval_and_sum({}))
+    good_flops = (lp.get_op_map(good_t_unit.program,
+                               subgroup_size="guess")
+                  .filter_by(dtype=[np.float64])
+                  .eval_and_sum({}))
+    assert good_flops == (bad_flops - 80)
+
+
+def test_named_temporaries(ctx_factory):
+    x = pt.make_placeholder("x", (10, 4), np.float32)
+    y = pt.make_placeholder("y", (10, 4), np.float32)
+    tmp1 = 2 * x + 3 * y
+    tmp2 = 7 * x + 8 * y
+
+    dag = pt.make_dict_of_named_arrays({"out1": 10 * tmp1 + 11 * tmp2,
+                                        "out2": 22 * tmp1 + 53 * tmp2
+                                        })
+    dag = pt.transform.materialize_with_mpms(dag)
+
+    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
+                                                  pt.AbstractResultWithNamedArrays]
+                                       ) -> pt.Array:
+        if isinstance(ary, pt.AbstractResultWithNamedArrays):
+            return ary
+
+        if ary.tags_of_type(pt.tags.ImplStored):
+            return ary.tagged(pt.tags.PrefixNamed("cse"))
+        else:
+            return ary
+
+    dag = pt.transform.map_and_copy(dag, mark_materialized_nodes_as_cse)
+    t_unit = pt.generate_loopy(dag).program
+    assert len([tv.name.startswith("cse")
+               for tv in t_unit.default_entrypoint.temporary_variables.values()]
+               ) == 2
+
+
+@pytest.mark.parametrize("shape", [(1, 3, 1), (1, 1), (2, 2, 3)])
+def test_squeeze(ctx_factory, shape):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_in = np.ones(shape=shape, dtype=np.float64)
+    x = pt.make_data_wrapper(x_in)
+
+    np_result = np.squeeze(x_in).shape
+
+    _, (pt_result,) = pt.generate_loopy(pt.squeeze(x))(cq)
+
+    np.testing.assert_allclose(pt_result.shape, np_result)
+
+
+def test_random_dag_against_numpy(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+    axis_len = 5
+    from warnings import filterwarnings, catch_warnings
+    with catch_warnings():
+        # We'd like to know if Numpy divides by zero.
+        filterwarnings("error")
+
+        for i in range(50):
+            print(i)  # progress indicator for somewhat slow test
+
+            seed = 120 + i
+            rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=False)
+            rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=True)
+
+            ref_result = make_random_dag(rdagc_np)
+            dag = make_random_dag(rdagc_pt)
+            from pytato.transform import materialize_with_mpms
+            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = materialize_with_mpms(dict_named_arys)
+            if 0:
+                pt.show_dot_graph(dict_named_arys)
+
+            _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
+
+            assert np.allclose(pt_result["result"], ref_result)
+
+
+def test_partitioner(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+
+    axis_len = 5
+
+    ntests = 50
+    ncycles = 0
+    for i in range(ntests):
+        print(i)
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False)
+        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=True)
+
+        ref_result = make_random_dag(rdagc_np)
+
+        from pytato.transform import materialize_with_mpms
+        dict_named_arys = materialize_with_mpms(pt.DictOfNamedArrays(
+                {"result": make_random_dag(rdagc_pt)}))
+
+        from dataclasses import dataclass
+        from pytato.transform import TopoSortMapper
+        from pytato.partition import (find_partitions,
+                execute_partitions, generate_code_for_partitions,
+                PartitionInducedCycleError)
+
+        @dataclass(frozen=True, eq=True)
+        class MyPartitionId():
+            num: int
+
+        def get_partition_id(topo_list, expr) -> MyPartitionId:
+            return topo_list.index(expr) // 3
+
+        tm = TopoSortMapper()
+        tm(dict_named_arys)
+
+        from functools import partial
+        part_func = partial(get_partition_id, tm.topological_order)
+
+        try:
+            parts = find_partitions(dict_named_arys, part_func)
+        except PartitionInducedCycleError:
+            print("CYCLE!")
+            # FIXME *shrug* nothing preventing that currently
+            ncycles += 1
+            continue
+
+        # Execute the partitioned code
+        prg_per_partition = generate_code_for_partitions(parts)
+
+        context = execute_partitions(parts, prg_per_partition, queue)
+
+        pt_part_res, = [context[k] for k in dict_named_arys]
+
+        np.testing.assert_allclose(pt_part_res, ref_result)
+
+    # Assert that at least 2/3 of our tests did not get skipped because of cycles
+    assert ncycles < ntests // 3
 
 
 if __name__ == "__main__":

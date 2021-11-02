@@ -3,8 +3,10 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (TopoSortMapper, execute_partitions,
+from pytato.partition import (execute_partitions,
                               generate_code_for_partitions, find_partitions)
+
+from pytato.transform import TopoSortMapper
 
 from dataclasses import dataclass
 
@@ -33,7 +35,12 @@ def main():
     pfunc = partial(get_partition_id, tm.topological_order)
 
     # Find the partitions
-    parts = find_partitions(y, pfunc)
+    outputs = pt.DictOfNamedArrays({"out": y})
+    parts = find_partitions(outputs, pfunc)
+
+    # Show the partitions
+    from pytato.visualization import get_dot_graph_from_partitions
+    get_dot_graph_from_partitions(parts)
 
     # Execute the partitions
     ctx = cl.create_some_context()
@@ -43,14 +50,13 @@ def main():
 
     context = execute_partitions(parts, prg_per_partition, queue)
 
-    final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
+    final_res = [context[k] for k in outputs.keys()]
 
     # Execute the unpartitioned code for comparison
     prg = pt.generate_loopy(y)
-    evt, (out, ) = prg(queue)
+    _, (out, ) = prg(queue)
 
-    assert np.allclose(out, final_res)
+    np.testing.assert_allclose([out], final_res)
 
     print("Partitioning test succeeded.")
 

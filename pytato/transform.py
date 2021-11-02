@@ -1,5 +1,4 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
@@ -25,8 +24,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Callable, Dict, FrozenSet, Hashable, Union, TypeVar, Set,
-                    Generic, Optional, List, Tuple)
+from abc import ABC, abstractmethod
+from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
+                    List, Mapping, Iterable, Optional, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -34,18 +34,26 @@ from pytato.array import (
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase,
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase, make_placeholder, DistributedSend,
-        DistributedRecv)
-from pytato.loopy import LoopyCall
+        IndexBase)
+
+from pytato.loopy import LoopyCall, LoopyCallResult
+from dataclasses import dataclass
+from pytato.tags import ImplStored
+
+# Circular import :-(
+# from pytato.distributed import DistributedSend, DistributedRecv
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
+CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 R = FrozenSet[Array]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
 
+.. autoclass:: Mapper
+.. autoclass:: CachedMapper
 .. autoclass:: CopyMapper
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
@@ -56,14 +64,21 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: GraphToDictMapper
-.. autoclass:: CodePartitions
-.. autofunction:: copy_dict_of_named_arrays
-.. autofunction:: get_dependencies
+.. autoclass:: CachedMapAndCopyMapper
+.. autoclass:: EdgeCachedMapper
 .. autofunction:: reverse_graph
 .. autofunction:: tag_child_nodes
-.. autofunction:: find_partitions
-.. autofunction:: execute_partitions
+.. autofunction:: copy_dict_of_named_arrays
+.. autofunction:: get_dependencies
+.. autofunction:: map_and_copy
+.. autofunction:: materialize_with_mpms
 
+Dict representation of DAGs
+---------------------------
+
+.. autoclass:: UsersCollector
+.. autofunction:: reverse_graph
+.. autofunction:: tag_child_nodes
 """
 
 
@@ -74,6 +89,22 @@ class UnsupportedArrayError(ValueError):
 # {{{ mapper base class
 
 class Mapper:
+    """A class that when called with a :class:`pytato.Array` recursively iterates over
+    the DAG, calling the *_mapper_method* of each node. Users of this
+    class are expected to override the methods of this class or create a
+    subclass.
+
+    .. note::
+
+       This class might visit a node multiple times. Use a :class:`CachedMapper`
+       if this is not desired.
+
+    .. automethod:: handle_unsupported_array
+    .. automethod:: map_foreign
+    .. automethod:: rec
+    .. automethod:: __call__
+    """
+
     def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
@@ -83,10 +114,14 @@ class Mapper:
                 % (type(self).__name__, type(expr)))
 
     def map_foreign(self, expr: Any, *args: Any, **kwargs: Any) -> Any:
+        """Mapper method that is invoked for an object of class for which a
+        mapper method does not exist in this mapper.
+        """
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
     def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+        """Call the mapper method of *expr* and return the result."""
         method: Callable[..., Array]
 
         try:
@@ -99,29 +134,51 @@ class Mapper:
 
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+        """Handle the mapping of *expr*."""
         return self.rec(expr, *args, **kwargs)
+
+# }}}
+
+
+# {{{ CachedMapper
+
+class CachedMapper(Mapper, Generic[CachedMapperT]):
+    """Mapper class that maps each node in the DAG exactly once. This loses some
+    information compared to :class:`Mapper` as a node is visited only from
+    one of its predecessors.
+    """
+
+    def __init__(self) -> None:
+        self._cache: Dict[CachedMapperT, Any] = {}
+
+    def cache_key(self, expr: CachedMapperT) -> Any:
+        return expr
+
+    # type-ignore-reason: incompatible with super class
+    def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
+        key = self.cache_key(expr)
+        try:
+            return self._cache[key]
+        except KeyError:
+            result = super().rec(expr)  # type: ignore[type-var]
+            self._cache[key] = result
+            return result
 
 # }}}
 
 
 # {{{ CopyMapper
 
-class CopyMapper(Mapper):
+class CopyMapper(CachedMapper[ArrayOrNames]):
     """Performs a deep copy of a :class:`pytato.array.Array`.
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
+
+    .. note::
+
+       This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
-
-    def __init__(self) -> None:
-        self.cache: Dict[ArrayOrNames, ArrayOrNames] = {}
-
-    def rec(self, expr: T) -> T:  # type: ignore
-        if expr in self.cache:
-            return self.cache[expr]  # type: ignore
-        result: T = super().rec(expr)
-        self.cache[expr] = result
-        return result
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings: Dict[str, Array] = {
@@ -197,10 +254,11 @@ class CopyMapper(Mapper):
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec(arg) for arg in expr.args))
+                      tuple(self.rec(arg) for arg in expr.args),
+                      tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
-        return type(expr)(self.rec(expr._container), expr.name)
+        return type(expr)(self.rec(expr._container), expr.name, tags=expr.tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -227,11 +285,13 @@ class CopyMapper(Mapper):
                        order=expr.order,
                        tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+    def map_distributed_send(self, expr: Any) -> Any:
+        from pytato.distributed import DistributedSend
         return DistributedSend(self.rec(expr.data),
                                dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+    def map_distributed_recv(self, expr: Any) -> Any:
+        from pytato.distributed import DistributedRecv
         return DistributedRecv(self.rec(expr.data),
                                src_rank=expr.src_rank, comm_tag=expr.comm_tag)
 
@@ -328,10 +388,10 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
-    def map_distributed_send(self, expr: DistributedSend) -> CombineT:
+    def map_distributed_send(self, expr: Any) -> CombineT:
         return self.combine(self.rec(expr.data))
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
+    def map_distributed_recv(self, expr: Any) -> CombineT:
         return self.combine(self.rec(expr.data))
 # }}}
 
@@ -345,8 +405,8 @@ class DependencyMapper(CombineMapper[R]):
 
     .. warning::
 
-        This returns every node in the graph! Consider a custom
-        :class:`CombineMapper` or a :class:`SubsetDependencyMapper` instead.
+       This returns every node in the graph! Consider a custom
+       :class:`CombineMapper` or a :class:`SubsetDependencyMapper` instead.
     """
 
     def combine(self, *args: R) -> R:
@@ -392,10 +452,10 @@ class DependencyMapper(CombineMapper[R]):
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
-    def map_distributed_send(self, expr: DistributedSend) -> R:
+    def map_distributed_send(self, expr: Any) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_send(expr))
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> R:
+    def map_distributed_recv(self, expr: Any) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
 # }}}
@@ -570,7 +630,14 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    map_concatenate = map_stack
+    def map_concatenate(self, expr: Concatenate) -> None:
+        if not self.visit(expr):
+            return
+
+        for child in expr.arrays:
+            self.rec(child)
+
+        self.post_visit(expr)
 
     def map_einsum(self, expr: Einsum) -> None:
         if not self.visit(expr):
@@ -612,17 +679,23 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+    def map_distributed_send(self, expr: Array, *args: Any) -> None:
         if not self.visit(expr):
             return
+
+        from pytato.distributed import DistributedSend
+        assert isinstance(expr, DistributedSend)
 
         self.rec(expr.data)
 
         self.post_visit(expr)
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+    def map_distributed_recv(self, expr: Array, *args: Any) -> None:
         if not self.visit(expr):
             return
+
+        from pytato.distributed import DistributedRecv
+        assert isinstance(expr, DistributedRecv)
 
         self.rec(expr.data)
 
@@ -680,6 +753,201 @@ class TopoSortMapper(CachedWalkMapper):
 # }}}
 
 
+# {{{ MapAndCopyMapper
+
+class CachedMapAndCopyMapper(CopyMapper):
+    """
+    Mapper that applies *map_fn* to each node and copies it. Results of
+    traversals are memoized i.e. each node is mapped via *map_fn* exactly once.
+    """
+
+    def __init__(self, map_fn: Callable[[ArrayOrNames], ArrayOrNames]) -> None:
+        super().__init__()
+        self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
+
+    # type-ignore-reason:incompatible with Mapper.rec()
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+        if expr in self._cache:
+            return self._cache[expr]  # type: ignore[no-any-return]
+
+        result = super().rec(self.map_fn(expr))
+        self._cache[expr] = result
+        return result  # type: ignore[no-any-return]
+
+    # type-ignore-reason: Mapper.__call__ returns Any
+    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+        return self.rec(expr)
+
+# }}}
+
+
+# {{{ MPMS materializer
+
+@dataclass(frozen=True, eq=True)
+class MPMSMaterializerAccumulator:
+    """This class serves as the return value of :class:`MPMSMaterializer`. It
+    contains the set of materialized predecessors and the rewritten expression
+    (i.e. the expression with tags for materialization applied).
+    """
+    materialized_predecessors: FrozenSet[Array]
+    expr: Array
+
+
+def _materialize_if_mpms(expr: Array,
+                         nsuccessors: int,
+                         predecessors: Iterable[MPMSMaterializerAccumulator]
+                         ) -> MPMSMaterializerAccumulator:
+    """
+    Returns an instance of :class:`MPMSMaterializerAccumulator`, that
+    materializes *expr* if it has more than 1 successors and more than 1
+    materialized predecessors.
+    """
+    from functools import reduce
+
+    materialized_predecessors: FrozenSet[Array] = reduce(
+                                                    frozenset.union,
+                                                    (pred.materialized_predecessors
+                                                     for pred in predecessors),
+                                                    frozenset())
+    if nsuccessors > 1 and len(materialized_predecessors) > 1:
+        new_expr = expr.tagged(ImplStored())
+        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+    else:
+        return MPMSMaterializerAccumulator(materialized_predecessors, expr)
+
+
+class MPMSMaterializer(Mapper):
+    """See :func:`materialize_with_mpms` for an explanation."""
+    def __init__(self, nsuccessors: Mapping[Array, int]):
+        super().__init__()
+        self.nsuccessors = nsuccessors
+        self.cache: Dict[ArrayOrNames, MPMSMaterializerAccumulator] = {}
+
+    # type-ignore reason: return type not compatible with Mapper.rec's type
+    def rec(self, expr: ArrayOrNames) -> MPMSMaterializerAccumulator:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+        # type-ignore reason: type not compatible with super.rec() type
+        result: MPMSMaterializerAccumulator = super().rec(expr)  # type: ignore
+        self.cache[expr] = result
+        return result
+
+    def _map_input_base(self, expr: InputArgumentBase
+                        ) -> MPMSMaterializerAccumulator:
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
+    map_placeholder = _map_input_base
+    map_data_wrapper = _map_input_base
+    map_size_param = _map_input_base
+
+    def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
+        if not isinstance(expr, LoopyCallResult):
+            raise NotImplementedError("only LoopyCallResult named array"
+                                      " supported for now.")
+
+        # loopy call result is always materialized
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
+    def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
+        children_rec = {bnd_name: self.rec(bnd)
+                        for bnd_name, bnd in expr.bindings.items()}
+
+        new_expr = IndexLambda(expr.expr,
+                               expr.shape,
+                               expr.dtype,
+                               {bnd_name: bnd.expr
+                                for bnd_name, bnd in children_rec.items()},
+                               tags=expr.tags)
+        return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
+                                    children_rec.values())
+
+    def map_matrix_product(self, expr: MatrixProduct) -> MPMSMaterializerAccumulator:
+        x1_rec, x2_rec = self.rec(expr.x1), self.rec(expr.x2)
+        new_expr = MatrixProduct(x1_rec.expr, x2_rec.expr, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (x1_rec, x2_rec))
+
+    def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.arrays]
+        new_expr = Stack(tuple(ary.expr for ary in rec_arrays), expr.axis, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.arrays]
+        new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
+                               expr.axis,
+                               expr.tags)
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, expr.tags)
+        return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def map_axis_permutation(self, expr: AxisPermutation
+                             ) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = AxisPermutation(rec_array.expr, expr.axes, expr.tags)
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def _map_index_base(self, expr: IndexBase) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        rec_indices = {i: self.rec(idx)
+                       for i, idx in enumerate(expr.indices)
+                       if isinstance(idx, Array)}
+
+        new_expr = type(expr)(rec_array.expr,
+                              tuple(rec_indices[i].expr
+                                    if i in rec_indices
+                                    else expr.indices[i]
+                                    for i in range(
+                                        len(expr.indices))),
+                              expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,) + tuple(rec_indices.values())
+                                    )
+
+    map_basic_index = _map_index_base
+    map_contiguous_advanced_index = _map_index_base
+    map_non_contiguous_advanced_index = _map_index_base
+
+    def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
+        rec_array = self.rec(expr.array)
+        new_expr = Reshape(rec_array.expr, expr.newshape, expr.order, expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    (rec_array,))
+
+    def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
+        rec_arrays = [self.rec(ary) for ary in expr.args]
+        new_expr = Einsum(expr.access_descriptors,
+                          tuple(ary.expr for ary in rec_arrays),
+                          expr.tags)
+
+        return _materialize_if_mpms(new_expr,
+                                    self.nsuccessors[expr],
+                                    rec_arrays)
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
+                                 ) -> MPMSMaterializerAccumulator:
+        raise NotImplementedError
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -706,75 +974,151 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
 
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
+
+def map_and_copy(expr: T,
+                 map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+                 ) -> ArrayOrNames:
+    """
+    Returns a copy of *expr* with every array expression reachable from *expr*
+    mapped via *map_fn*.
+
+    .. note::
+
+        Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
+        caching nature each node is mapped exactly once.
+    """
+    return CachedMapAndCopyMapper(map_fn)(expr)
+
+
+def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+    r"""
+    Materialize nodes in *expr* with MPMS materialization strategy.
+    MPMS stands for Multiple-Predecessors, Multiple-Successors.
+
+    .. note::
+
+        - MPMS materialization strategy is a greedy materialization algorithm in
+          which any node with more than 1 materialized predecessors and more than
+          1 successors is materialized.
+        - Materializing here corresponds to tagging a node with
+          :class:`~pytato.tags.ImplStored`.
+        - Does not attempt to materialize sub-expressions in
+          :attr:`pytato.Array.shape`.
+
+    .. warning::
+
+        This is a greedy materialization algorithm and thereby this algorithm
+        might be too eager to materialize. Consider the graph below:
+
+        ::
+
+                           I1          I2
+                            \         /
+                             \       /
+                              \     /
+                               🡦   🡧
+                                 T
+                                / \
+                               /   \
+                              /     \
+                             🡧       🡦
+                            O1        O2
+
+        where, 'I1', 'I2' correspond to instances of
+        :class:`pytato.array.InputArgumentBase`, and, 'O1' and 'O2' are the outputs
+        required to be evaluated in the computation graph. MPMS materialization
+        algorithm will materialize the intermediate node 'T' as it has 2
+        predecessors and 2 successors. However, the total number of memory
+        accesses after applying MPMS goes up as shown by the table below.
+
+        ======  ========  =======
+        ..        Before    After
+        ======  ========  =======
+        Reads          4        4
+        Writes         2        3
+        Total          6        7
+        ======  ========  =======
+
+    """
+    from pytato.analysis import get_nusers
+    materializer = MPMSMaterializer(get_nusers(expr))
+    new_data = {}
+    for name, ary in expr.items():
+        new_data[name] = materializer(ary.expr).expr
+
+    return DictOfNamedArrays(new_data)
+
 # }}}
 
 
-# {{{ Graph partitioning
+# {{{ UsersCollector
 
-
-class GraphToDictMapper(Mapper):
+class UsersCollector(CachedMapper[ArrayOrNames]):
     """
-    Maps a graph to a dictionary representation mapping a node to its parents,
+    Maps a graph to a dictionary representation mapping a node to its users,
     i.e. all the nodes using its value.
 
     .. attribute:: graph_dict
+
+       Mapping of each node in the graph to its users.
     """
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
+        super().__init__()
         self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for child in expr._data.values():
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
-    def map_named_array(self, expr: NamedArray, *args: Any) -> None:
+    def map_named_array(self, expr: NamedArray) -> None:
         self.graph_dict.setdefault(expr._container, set()).add(expr)
         self.rec(expr._container)
 
-    def map_loopy_call(self, expr: LoopyCall, *args: Any) -> None:
+    def map_loopy_call(self, expr: LoopyCall) -> None:
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
                 self.graph_dict.setdefault(child, set()).add(expr)
                 self.rec(child)
 
-    def map_einsum(self, expr: Einsum, *args: Any) -> None:
+    def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:
             self.graph_dict.setdefault(arg, set()).add(expr)
             self.rec(arg)
 
-    def map_reshape(self, expr: Reshape, *args: Any) -> None:
+    def map_reshape(self, expr: Reshape) -> None:
         for dim in expr.shape:
             if isinstance(dim, Array):
                 self.graph_dict.setdefault(dim, set()).add(expr)
-                self.rec(dim, *args)
+                self.rec(dim)
 
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
-    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+    def map_placeholder(self, expr: Placeholder) -> None:
         for dim in expr.shape:
             if isinstance(dim, Array):
                 self.graph_dict.setdefault(dim, set()).add(expr)
-                self.rec(dim, *args)
+                self.rec(dim)
 
-    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
+    def map_matrix_product(self, expr: MatrixProduct) -> None:
         for child in (expr.x1, expr.x2):
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
-    def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
+    def map_concatenate(self, expr: Concatenate) -> None:
         for ary in expr.arrays:
             self.graph_dict.setdefault(ary, set()).add(expr)
             self.rec(ary)
 
-    def map_stack(self, expr: Stack, *args: Any) -> None:
+    def map_stack(self, expr: Stack) -> None:
         for ary in expr.arrays:
             self.graph_dict.setdefault(ary, set()).add(expr)
             self.rec(ary)
 
-    def map_roll(self, expr: Roll, *args: Any) -> None:
+    def map_roll(self, expr: Roll) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
@@ -792,7 +1136,7 @@ class GraphToDictMapper(Mapper):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
-    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+    def map_index_lambda(self, expr: IndexLambda) -> None:
         for child in expr.bindings.values():
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
@@ -802,15 +1146,24 @@ class GraphToDictMapper(Mapper):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+    def map_distributed_send(self, expr: Array, *args: Any) -> None:
+        from pytato.distributed import DistributedSend
+        assert isinstance(expr, DistributedSend)
+
         self.graph_dict.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+    def map_distributed_recv(self, expr: Array, *args: Any) -> None:
+        from pytato.distributed import DistributedRecv
+        assert isinstance(expr, DistributedRecv)
+
         self.graph_dict.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
 
     def _map_index_base(self, expr: IndexBase) -> None:
+        self.graph_dict.setdefault(expr.array, set()).add(expr)
+        self.rec(expr.array)
+
         for idx in expr.indices:
             if isinstance(idx, Array):
                 self.graph_dict.setdefault(idx, set()).add(expr)
@@ -829,15 +1182,25 @@ class GraphToDictMapper(Mapper):
                                           ) -> None:
         self._map_index_base(expr)
 
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         # Root node might have no predecessor
         self.graph_dict[expr] = set()
         return self.rec(expr, *args)
+# }}}
 
 
-def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
-    """Reverses a graph."""
-    result: Dict[Array, Set[Array]] = {}
+# {{{ operations on graphs in dict form
+
+def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
+        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
+    """Reverses a graph.
+
+    :param graph: A dict representation of the graph created by
+        :class:`UsersCollector`.
+    :returns: A dict representation of *graph* where used nodes and using
+        nodes are reversed.
+    """
+    result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     for node_key, edges in graph.items():
         if node_key not in result:
@@ -848,10 +1211,19 @@ def reverse_graph(graph: Dict[Array, Set[Array]]) -> Dict[Array, Set[Array]]:
     return result
 
 
-def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
-        starting_point: Array,
-        node_to_tags: Dict[Optional[Array], Set[Array]]) -> None:
-    """Tags nodes reachable from *starting_point*."""
+def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
+        starting_point: Optional[ArrayOrNames] = None,
+        node_to_tags:
+            Optional[Dict[Optional[ArrayOrNames], Set[ArrayOrNames]]] = None) \
+        -> None:
+    """Tags all nodes reachable from *starting_point* with *tag*.
+
+    :param graph: A dict representation of the graph created by
+        :class:`UsersCollector`.
+    :param tag: The value to tag the nodes with.
+    :param starting_point: An optional starting point in *graph*.
+    :param node_to_tags: The resulting mapping of nodes to tags.
+    """
     if node_to_tags is None:
         node_to_tags = {}
     node_to_tags.setdefault(starting_point, set()).add(tag)
@@ -860,431 +1232,147 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
             tag_child_nodes(graph, tag=tag,
                     starting_point=other_node_key, node_to_tags=node_to_tags)
 
+# }}}
 
-class _GraphPartitioner(CopyMapper):
-    """Given a function *get_partition_id*, produces subgraphs representing
-    the computation. Users should not use this class directly, but use
-    :meth:`find_partitions` instead.
+
+# {{{ EdgeCachedMapper
+
+class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
+    """
+    Mapper class to execute a rewriting method (:meth:`handle_edge`) on each
+    edge in the graph.
+
+    .. automethod:: handle_edge
     """
 
-    def __init__(self, get_partition_id:
-                                   Callable[[Array], Hashable]) -> None:
-        super().__init__()
+    @abstractmethod
+    def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
+        pass
 
-        # Function to determine the Partition ID
-        self.get_partition_id = get_partition_id
+    def _handle_shape(self, expr: Array, shape: Any, *args: Any) -> Tuple[Any, ...]:
+        return tuple([
+            self.handle_edge(expr, dim, *args) if isinstance(dim, Array) else dim
+            for dim in shape])
 
-        # Naming for newly created PlaceHolders at partition edges
-        from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
+    # {{{ map_xxx methods
 
-        # "edges" of the partitioned graph, maps an edge between two partitions,
-        # represented by a tuple of partition identifiers, to a list of placeholder
-        # names "conveying" information across the edge.
-        self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
-                List[str]] = {}
-
-        self.var_name_to_result: Dict[str, Array] = {}
-
-    def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
-        return self.get_partition_id(node1) != self.get_partition_id(node2)
-
-    def register_placeholder(self, name: str, expr: Array) -> None:
-        self.var_name_to_result[name] = expr
-
-    def make_new_placeholder_name(self) -> str:
-        return self.name_generator()
-
-    def add_interpartition_edge(self, target: Array, dependency: Array,
-                                placeholder_name: str) -> None:
-        pid_target = self.get_partition_id(target)
-        pid_dependency = self.get_partition_id(dependency)
-
-        self.partition_pair_to_edges.setdefault(
-                (pid_target, pid_dependency), []).append(placeholder_name)
-
-    def _handle_new_binding(self, expr: Array, child: Array) -> Array:
-        if self.does_edge_cross_partition_boundary(expr, child):
-            new_name = self.make_new_placeholder_name()
-            # If an edge crosses a partition boundary, replace the
-            # depended-upon node (that nominally lives in the other partition)
-            # with a Placeholder that lives in the current partition. For each
-            # partition, collect the placeholder names that it’s supposed to
-            # compute.
-            self.add_interpartition_edge(expr, child, new_name)
-            new_binding: Array = make_placeholder(new_name, child.shape,
-                                                  child.dtype,
-                                                  tags=child.tags)
-            self.register_placeholder(new_name, expr)
-
-        else:
-            new_binding = self.rec(child)
-
-        return new_binding
-
-    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        # type-ignore reason: mypy can't tell '_handle_new_binding' is being fed
-        # only arrays
-        return Reshape(
-            array=self._handle_new_binding(expr, expr.array),
-            newshape=tuple(
-                       self._handle_new_binding(expr, s)  # type: ignore[arg-type]
-                       if isinstance(s, Array) else s
-                       for s in expr.newshape),
-            order=expr.order,
+    def map_named_array(self, expr: NamedArray, *args: Any) -> NamedArray:
+        return NamedArray(
+            container=self.handle_edge(expr, expr._container, *args),
+            name=expr.name,
             tags=expr.tags)
+
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
+        return IndexLambda(expr=expr.expr,
+                shape=self._handle_shape(expr, expr.shape),
+                dtype=expr.dtype,
+                bindings={name: self.handle_edge(expr, child)
+                          for name, child in expr.bindings.items()},
+                tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
         return Einsum(
                      access_descriptors=expr.access_descriptors,
-                     args=tuple(self._handle_new_binding(expr, arg)
+                     args=tuple(self.handle_edge(expr, arg, *args)
                                 for arg in expr.args),
                      tags=expr.tags)
 
-    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        return Concatenate(
-                     arrays=tuple(self._handle_new_binding(expr, ary)
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
+        return MatrixProduct(x1=self.handle_edge(expr, expr.x1, *args),
+                             x2=self.handle_edge(expr, expr.x2, *args),
+                             tags=expr.tags)
+
+    def map_stack(self, expr: Stack, *args: Any) -> Stack:
+        return Stack(
+                     arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
-    def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        return Stack(
-                     arrays=tuple(self._handle_new_binding(expr, ary)
+    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
+        return Concatenate(
+                     arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        return Roll(array=self._handle_new_binding(expr, expr.array),
+        return Roll(array=self.handle_edge(expr, expr.array, *args),
                 shift=expr.shift,
                 axis=expr.axis,
+                tags=expr.tags)
+
+    def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
+            -> AxisPermutation:
+        return AxisPermutation(
+                array=self.handle_edge(expr, expr.array, *args),
+                axes=expr.axes,
+                tags=expr.tags)
+
+    def map_distributed_send(self, expr: Any, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedSend
+        # FIXME: Return Placeholder instead?
+        return DistributedSend(self.handle_edge(expr, expr.data))
+
+    def map_distributed_recv(self, expr: Any, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedRecv
+        # FIXME: Return Placeholder instead?
+        return DistributedRecv(self.handle_edge(expr, expr.data))
+
+    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
+        return Reshape(
+            array=self.handle_edge(expr, expr.array, *args),
+            newshape=self._handle_shape(expr, expr.newshape),
+            order=expr.order,
+            tags=expr.tags)
+
+    def map_basic_index(self, expr: BasicIndex, *args: Any) -> BasicIndex:
+        return BasicIndex(
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_contiguous_advanced_index(self,
+            expr: AdvancedIndexInContiguousAxes, *args: Any) \
+                    -> AdvancedIndexInContiguousAxes:
+        return AdvancedIndexInContiguousAxes(
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_non_contiguous_advanced_index(self,
+            expr: AdvancedIndexInNoncontiguousAxes, *args: Any) \
+            -> AdvancedIndexInNoncontiguousAxes:
+        return AdvancedIndexInNoncontiguousAxes(
+                array=self.handle_edge(expr, expr.array, *args),
+                indices=tuple(self.handle_edge(expr, idx, *args)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
+        return DataWrapper(
+                name=expr.name,
+                data=expr.data,
+                shape=self._handle_shape(expr, expr.shape, *args),
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=tuple(self._handle_new_binding(expr, dim)
-                            for dim in expr.shape if isinstance(dim, Array)),
+                shape=self._handle_shape(expr, expr.shape, *args),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
-    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        return MatrixProduct(x1=self._handle_new_binding(expr, expr.x1),
-                             x2=self._handle_new_binding(expr, expr.x2),
-                             tags=expr.tags)
-
-    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
-        return IndexLambda(expr=expr.expr,
-                shape=tuple(self._handle_new_binding(expr, dim)
-                            for dim in expr.shape if isinstance(dim, Array)),
-                dtype=expr.dtype,
-                bindings={name: self._handle_new_binding(expr, child)
-                          for name, child in expr.bindings.items()},
-                tags=expr.tags)
-
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
-            -> DistributedSend:
-        new_binding = self._handle_new_binding(expr, expr.data)
-
-        return DistributedSend(new_binding)  # FIXME: Return Placeholder instead?
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
-            -> DistributedRecv:
-        new_binding = self._handle_new_binding(expr, expr.data)
-
-        return DistributedRecv(new_binding)  # FIXME: Return Placeholder instead?
-
-    def __call__(self, expr: Array, *args: Any, **kwargs: Any) -> Array:
-        return self.rec(expr)
-
-
-from pytato.target import BoundProgram
-
-
-@dataclass
-class CodePartitions:
-    """Store information about generated partitions.
-
-    .. attribute:: toposorted_partitions
-
-       List of topologically sorted partitions, represented by their
-       identifiers.
-
-    .. attribute:: partition_id_to_input_names
-
-       Mapping of partition identifiers to names of placeholders
-       the partition requires as input.
-
-    .. attribute:: partition_id_to_output_names
-
-       Mapping of partition IDs to the names of placeholders
-       they provide as output.
-
-    .. attribute:: var_name_to_result
-
-       Mapping of placeholder names to their respective :class:`pytato.array.Array`
-       they represent.
-    """
-    toposorted_partitions: List[Hashable]
-    partition_id_to_input_names: Dict[Hashable, List[str]]
-    partition_id_to_output_names: Dict[Hashable, List[str]]
-    var_name_to_result: Dict[str, Array]
-
-
-def find_partitions(expr: Array, part_func: Callable[[Array], Hashable]) ->\
-        CodePartitions:
-    """Partitions the *expr* according to *part_func* and generates code for
-    each partition.
-
-    :param expr: The expression to partition.
-    :param part_func: A callable that returns an instance of
-        :class:`Hashable` for a node.
-    :returns: An instance of :class:`CodePartitions` that contains the partitions.
-    """
-
-    pf = _GraphPartitioner(part_func)
-    pf(expr)
-
-    partition_id_to_output_names: Dict[Hashable, List[str]] = {
-        v: [] for _, v in pf.partition_pair_to_edges.keys()}
-    partition_id_to_input_names: Dict[Hashable, List[str]] = {
-        k: [] for k, _ in pf.partition_pair_to_edges.keys()}
-
-    partitions = set()
-
-    # Mapping of nodes to their successors; used to compute the topological order
-    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {}
-
-    for (pid_target, pid_dependency), var_names in \
-            pf.partition_pair_to_edges.items():
-        partitions.add(pid_target)
-        partitions.add(pid_dependency)
-
-        partition_nodes_to_targets.setdefault(pid_dependency, []).append(pid_target)
-
-        for var_name in var_names:
-            partition_id_to_output_names.setdefault(
-                pid_target, []).append(var_name)
-            partition_id_to_input_names.setdefault(
-                pid_dependency, []).append(var_name)
-
-    from pytools.graph import compute_topological_order
-    toposorted_partitions = compute_topological_order(partition_nodes_to_targets)
-
-    return CodePartitions(toposorted_partitions, partition_id_to_input_names,
-                          partition_id_to_output_names, pf.var_name_to_result)
-
-# }}}
-
-
-# {{{ distributed info collection
-
-@dataclass
-class DistributedCommInfo:
-    """For one graph partition, record send/receive information for input/
-    output names as well as the computation in :attr:`results`.
-
-    .. attribute:: part_input_name_to_recv_node
-    .. attribute:: part_output_name_to_send_node
-    .. attribute:: results
-    """
-    # TODO Document these
-
-    part_input_name_to_recv_node: Dict[str, DistributedRecv]
-    part_output_name_to_send_node: Dict[str, DistributedSend]
-    results: Dict[str, Array]
-
-
-class _DistributedCommReplacer(CopyMapper):
-    """Support for distributed communication operations."""
-
-    def __init__(self) -> None:
-        super().__init__()
-
-        from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
-
-        self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
-        self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
-
-    def map_distributed_recv(self,  # type: ignore
-                             expr: DistributedRecv) -> Placeholder:
-        # no children, no need to recurse
-
-        new_name = self.name_generator()
-        self.part_input_name_to_recv_node[new_name] = expr
-        return make_placeholder(new_name, expr.shape,
-                expr.dtype,
-                tags=expr.tags)
-
-    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
-        result = super().map_distributed_send(expr)
-
-        new_name = self.name_generator()
-        self.part_output_name_to_send_node[new_name] = result
-
-        # FIXME: correct? (used to be 'return result')
-        return expr.data  # type: ignore
-
-
-def gather_distributed_comm_info(parts: CodePartitions) -> \
-        Dict[Hashable, DistributedCommInfo]:
-    result = {}
-
-    for pid in parts.toposorted_partitions:
-        comm_replacer = _DistributedCommReplacer()
-        part_results = {var_name: comm_replacer(parts.var_name_to_result[var_name])
-                for var_name in parts.partition_id_to_output_names[pid]}
-
-        part_results.update({
-            name: send_node.data
-            for name, send_node in
-            comm_replacer.part_output_name_to_send_node.items()})
-
-        result[pid] = \
-                DistributedCommInfo(
-                    part_input_name_to_recv_node=(
-                        comm_replacer.part_input_name_to_recv_node),
-                    part_output_name_to_send_node=(
-                        comm_replacer.part_output_name_to_send_node),
-                    results=part_results
-                    )
-
-    return result
-
-
-# }}}
-
-
-# {{{ piecewise execution
-
-def generate_code_for_partitions(parts: CodePartitions) \
-        -> Dict[Hashable, BoundProgram]:
-    """Return a mapping of partition identifiers to their
-       :class:`pytato.target.BoundProgram`."""
-    from pytato import generate_loopy
-
-    comm_replacer = _DistributedCommReplacer()
-
-    prg_per_partition = {pid:
-            generate_loopy(
-                DictOfNamedArrays(
-                    {var_name: comm_replacer(parts.var_name_to_result[var_name])
-                        for var_name in parts.partition_id_to_output_names[pid]
-                     }))
-            for pid in parts.toposorted_partitions}
-
-    return prg_per_partition
-
-
-def execute_partitions(parts: CodePartitions, prg_per_partition:
-                        Dict[Hashable, BoundProgram], queue: Any) -> Dict[str, Any]:
-    """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
-
-    :param parts: An instance of :class:`CodePartitions` representing the
-        partitioned code.
-    :param queue: An instance of :class:`pyopencl.CommandQueue` to execute the
-        code on.
-    :returns: A dictionary of variable names mapped to their values.
-    """
-    context: Dict[str, Any] = {}
-    for pid in parts.toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
-
-        inputs.update({
-            k: context[k] for k in parts.partition_id_to_input_names[pid]
-            if k in context})
-
-        res = prg_per_partition[pid](**inputs)
-
-        context.update(res[1])
-
-    return context
-
-# }}}
-
-
-# {{{ distributed execute
-
-# FIXME: Where to get communicator/actx? Argument to make_distributed_recv?
-def post_receives(dci: DistributedCommInfo) -> \
-        Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
-    print("post recv", dci)
-
-    from mpi4py import MPI
-
-    recv_reqs = {}
-
-    for k, v in dci.part_input_name_to_recv_node.items():
-        src_rank = v.src_rank
-        tag = v.comm_tag
-
-        # FIXME
-        # buf = v.data  # does that need to_numpy()?
-        # allocate numpy array of correct dtype and shape
-        import numpy as np
-        buf = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
-
-        recv_reqs[k] = (MPI.COMM_WORLD.irecv(buf=buf, source=src_rank, tag=tag), buf)
-
-    return (recv_reqs, dci)
-
-
-# FIXME: Where to get communicator? Argument to make_distributed_send?
-# -> pass into execute_partitions_distributed
-def mpi_send(rank: int, tag: Any, data: Any) -> None:
-    from mpi4py import MPI
-    MPI.COMM_WORLD.send(data, dest=rank, tag=tag)
-    print("mpi send", rank, tag, data)
-
-
-def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
-                        Dict[Hashable, BoundProgram], queue: Any,
-                        distributed_comm_infos: Dict[Hashable,
-                        DistributedCommInfo]) \
-                                -> Dict[str, Any]:
-
-    all_receives = [
-            post_receives(part_dci)
-            for part_dci in distributed_comm_infos.values()]
-
-    context: Dict[str, Any] = {}
-    for pid, part_dci, part_receives in zip(
-            parts.toposorted_partitions, distributed_comm_infos.values(),
-            all_receives):
-
-        inputs = {"queue": queue}
-
-        # FIXME: necessary?
-        context.update(part_receives[1].results)
-
-        inputs.update({k: v[1] for k, v in part_receives[0].items()})
-        # {part.name: actx.from_numpy(recv.wait())
-        # {recv.results: None
-        #     for recv in part_receives})
-
-        # inputs.update(context)
-
-        print(f"{context=}")
-        # print(prg_per_partition[pid].program)
-
-        # FIXME: necessary?
-        # inputs.update({
-        #     k: context[k] for k in parts.partition_id_to_input_names[pid]
-        #     if k in context})
-
-        _evt, result_dict = prg_per_partition[pid](**inputs)
-
-        context.update(result_dict)
-
-        for name, send_node in part_dci.part_output_name_to_send_node.items():
-            mpi_send(send_node.dest_rank, send_node.comm_tag, context[name])
-            del context[name]
-
-    return context
+    def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
+        assert expr.name
+        return SizeParam(name=expr.name, tags=expr.tags)
+
+    # }}}
 
 # }}}
 

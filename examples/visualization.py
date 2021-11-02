@@ -22,6 +22,8 @@ def main():
     stack = pt.stack([array, 2*array, array + 6])
     result = stack @ stack.T
 
+    pt.show_ascii_graph(result)
+
     dot_code = pt.get_dot_graph(result)
 
     with open(GRAPH_DOT, "w") as outf:

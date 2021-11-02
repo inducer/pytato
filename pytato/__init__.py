@@ -44,12 +44,9 @@ from pytato.array import (
 
         logical_or, logical_and, logical_not,
 
-        dot, vdot,
+        dot, vdot, squeeze,
 
         broadcast_to,
-
-        make_distributed_send, make_distributed_recv, DistributedRecv,
-        DistributedSend
         )
 from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
@@ -61,7 +58,14 @@ from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
-from pytato.visualization import get_dot_graph, show_dot_graph
+from pytato.visualization import (get_dot_graph, show_dot_graph,
+                                  get_ascii_graph, show_ascii_graph,
+                                  get_dot_graph_from_partitions)
+import pytato.analysis as analysis
+import pytato.tags as tags
+import pytato.transform as transform
+from pytato.distributed import (make_distributed_send, make_distributed_recv,
+                                DistributedRecv, DistributedSend)
 
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
@@ -77,8 +81,8 @@ __all__ = (
 
         "Target", "LoopyPyOpenCLTarget",
 
-        "get_dot_graph", "show_dot_graph",
-
+        "get_dot_graph", "show_dot_graph", "get_ascii_graph",
+        "show_ascii_graph", "get_dot_graph_from_partitions",
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan", "sqrt", "conj", "arctan2",
@@ -95,11 +99,14 @@ __all__ = (
 
         "real", "imag",
 
-        "dot", "vdot",
+        "dot", "vdot", "squeeze",
 
         "broadcast_to",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
-        "DistributedSend"
+        "DistributedSend",
+
+        # sub-modules
+        "analysis", "tags", "transform",
 
 )

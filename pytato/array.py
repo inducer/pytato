@@ -76,6 +76,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: dot
 .. autofunction:: vdot
 .. autofunction:: broadcast_to
+.. autofunction:: squeeze
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
@@ -85,16 +86,6 @@ Concrete Array Data
 -------------------
 
 .. autoclass:: DataInterface
-
-Pre-Defined Tags
-----------------
-
-.. autoclass:: ImplementAs
-.. autoclass:: ImplementationStrategy
-.. autoclass:: CountNamed
-.. autoclass:: ImplStored
-.. autoclass:: ImplInlined
-.. autoclass:: ImplDefault
 
 Built-in Expression Nodes
 -------------------------
@@ -142,15 +133,6 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_data_wrapper
 
 
-Distributed communication
--------------------------
-
-Node types to support distributed communication operations.
-
-.. class:: DistributedSend
-.. class:: DistributedRecv
-
-
 Internal API
 ------------
 
@@ -180,7 +162,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable, UniqueTag, TagsType, tag_dataclass
+from pytools.tag import Taggable, TagsType
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression)
@@ -474,11 +456,9 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
-        return (
-                isinstance(other, type(self))
-                and all(
-                    getattr(self, field) == getattr(other, field)
-                    for field in self._fields))
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -636,52 +616,6 @@ class _SuppliedShapeAndDtypeMixin(object):
 # }}}
 
 
-# {{{ pre-defined tag: ImplementAs
-
-@tag_dataclass
-class ImplementationStrategy(Tag):
-    pass
-
-
-@tag_dataclass
-class ImplStored(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplInlined(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplDefault(ImplementationStrategy):
-    pass
-
-
-@tag_dataclass
-class ImplementAs(UniqueTag):
-    """
-    .. attribute:: strategy
-    """
-
-    strategy: ImplementationStrategy
-
-# }}}
-
-
-# {{{ pre-defined tag: CountNamed
-
-@tag_dataclass
-class CountNamed(UniqueTag):
-    """
-    .. attribute:: name
-    """
-
-    name: str
-
-# }}}
-
-
 # {{{ dict of named arrays
 
 class NamedArray(Array):
@@ -798,8 +732,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         if self is other:
             return True
 
-        return (isinstance(other, DictOfNamedArrays)
-                and self._data == other._data)
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
 # }}}
 
@@ -1578,8 +1512,16 @@ class DataInterface(Protocol):
     .. attribute:: dtype
     """
 
-    shape: ShapeType
-    dtype: np.dtype[Any]
+    # That's how mypy spells "read-only attribute".
+    # https://github.com/python/typing/discussions/903
+
+    @property
+    def shape(self) -> ShapeType:
+        pass
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        pass
 
 
 class DataWrapper(InputArgumentBase):
@@ -1596,6 +1538,18 @@ class DataWrapper(InputArgumentBase):
 
         Starting with the construction of the :class:`DataWrapper`,
         this array may not be updated in-place.
+
+    .. attribute:: shape
+
+        The shape of the array is represented separately from array
+        to allow symbolic shapes to be used, and to ease :mod:`pytato`'s
+        job in recognizing shapes of arrays as equal. For example,
+        if the shape of :attr:`data` is ``(3, 4)``, and :attr:`shape` is
+        ``(nrows, ncolumns)``, then this represents a (global) constraint that
+        that ``nrows == 3`` and ``ncolumns == 4``. Arithmetic and other
+        operations in :mod:`pytato` do not currently resolve these constraints
+        to assess whether shapes match, and thus it is important that a canonical
+        (symbolic) form of the shape tuple is used.
 
     .. note::
 
@@ -1973,8 +1927,7 @@ def zeros(shape: ConvertibleToShape, dtype: Any = float,
     """
     Returns an array of shape *shape* with all entries equal to 0.
     """
-    # https://github.com/python/mypy/issues/3186
-    return full(shape, 0, dtype)  # type: ignore
+    return full(shape, 0, dtype)
 
 
 def ones(shape: ConvertibleToShape, dtype: Any = float,
@@ -1982,8 +1935,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
     """
     Returns an array of shape *shape* with all entries equal to 1.
     """
-    # https://github.com/python/mypy/issues/3186
-    return full(shape, 1, dtype)  # type: ignore
+    return full(shape, 1, dtype)
 
 # }}}
 
@@ -2266,62 +2218,6 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
     return pt.dot(pt.conj(a), b)
 
 
-# {{{ Distributed execution
-
-class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
-    """Class representing a distributed send operation."""
-
-    _mapper_method = "map_distributed_send"
-    _fields = Array._fields + ("data", "dest_rank", "comm_tag")
-
-    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: Any = None,
-                 shape: Tuple[int, ...] = (), dtype: Any = float,
-                 tags: Optional[TagsType] = frozenset()) -> None:
-        super().__init__(shape=shape, dtype=dtype, tags=tags)
-        self.data = data
-        self.dest_rank = dest_rank
-        self.comm_tag = comm_tag
-
-    @property
-    def shape(self) -> ShapeType:
-        return self.data.shape
-
-    @property
-    def dtype(self) -> np.dtype[Any]:
-        return self.data.dtype
-
-
-class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
-    """Class representing a distributed receive operation."""
-
-    _fields = Array._fields + ("data", "src_rank", "comm_tag")
-    _mapper_method = "map_distributed_recv"
-
-    def __init__(self, data: Array, src_rank: int = 0, comm_tag: Any = None,
-                 shape: Tuple[int, ...] = (), dtype: Any = float,
-                 tags: Optional[TagsType] = frozenset()) -> None:
-        super().__init__(shape=shape, dtype=dtype, tags=tags)
-        self.src_rank = src_rank
-        self.comm_tag = comm_tag
-        self.data = data
-
-
-def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...] = (), dtype: Any = float,
-                          tags: Optional[TagsType] = frozenset()) -> \
-         DistributedSend:
-    return DistributedSend(data, dest_rank, comm_tag, shape, dtype, tags)
-
-
-def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...] = (), dtype: Any = float,
-                          tags: Optional[TagsType] = frozenset()) \
-                          -> DistributedRecv:
-    return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
-
-# }}}
-
-
 def broadcast_to(array: Array, shape: ShapeType) -> Array:
     """
     Returns *array* broadcasted to *shape*.
@@ -2344,5 +2240,15 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        shape=shape,
                        dtype=array.dtype,
                        bindings={"in": array})
+
+
+def squeeze(array: Array) -> Array:
+    """Remove single-dimensional entries from the shape of an array."""
+    from pytato.utils import are_shape_components_equal
+
+    return array[tuple(
+            0 if are_shape_components_equal(s_i, 1) else slice(s_i)
+            for i, s_i in enumerate(array.shape))]
+
 
 # vim: foldmethod=marker
