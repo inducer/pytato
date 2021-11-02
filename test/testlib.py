@@ -92,7 +92,7 @@ class RandomDAGContext:
             self.np = pt
 
 
-def make_random_array(rdagc: RandomDAGContext, naxes: int) -> Any:
+def make_random_constant(rdagc: RandomDAGContext, naxes: int) -> Any:
     shape = (rdagc.axis_len,) * naxes
 
     result = rdagc.rng.uniform(1e-3, 1, size=shape)
@@ -109,7 +109,7 @@ def make_random_reshape(
 
     s_list = list(s)
     naxes = rng.integers(len(s), len(s)+2)
-    while len(s) < naxes:
+    while len(s_list) < naxes:
         insert_at = rng.integers(0, len(s)+1)
         s_list.insert(insert_at, 1)
 
@@ -127,13 +127,15 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
         v = rng.integers(0, 1500)
 
         if v < 600:
-            return make_random_array(rdagc, naxes=rng.integers(1, 3))
+            return make_random_constant(rdagc, naxes=rng.integers(1, 3))
 
         elif v < 1000:
             op1 = make_random_dag(rdagc)
             op2 = make_random_dag(rdagc)
-            m = min(len(op1.shape), len(op2.shape))
+            m = min(op1.ndim, op2.ndim)
             naxes = rng.integers(m, m+2)
+
+            # Introduce a few new 1-long axes to test broadcasting.
             op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
             op2 = op2.reshape(*make_random_reshape(rdagc, op2.shape, naxes))
 
@@ -144,7 +146,10 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
             if which_op is operator.pow:
                 op1 = abs(op1)
 
-            if isinstance(which_op, str):
+            # Squeeze because all axes need to be of rdagc.axis_len, and we've
+            # just inserted a few new 1-long axes. Those need to go before we
+            # return.
+            if which_op in ["maximum", "minimum"]:
                 # type ignore because we haven't told mypy what's in rdagc.np.
                 return rdagc.np.squeeze(  # type: ignore[attr-defined]
                         getattr(rdagc.np, which_op)(op1, op2))
@@ -156,7 +161,7 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
         elif v < 1075:
             op1 = make_random_dag(rdagc)
             op2 = make_random_dag(rdagc)
-            if len(op1.shape) <= 1 and len(op2.shape) <= 1:
+            if op1.ndim <= 1 and op2.ndim <= 1:
                 continue
 
             return op1 @ op2
@@ -171,7 +176,7 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
             # type ignore because we haven't told mypy what's in rdagc.np.
             return rdagc.np.transpose(  # type: ignore[attr-defined]  # noqa: E501
                     result,
-                    tuple(rng.permuted(list(range(len(result.shape))))))
+                    tuple(rng.permuted(list(range(result.ndim)))))
 
         else:
             raise AssertionError()
@@ -179,22 +184,29 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     # FIXME: include Stack
     # FIXME: include comparisons/booleans
     # FIXME: include <<, >>
+    # FIXME: include integer computations
+    # FIXME: include DictOfNamedArrays
 
 
 def make_random_dag(rdagc: RandomDAGContext) -> Any:
+    """Return a :class:`pytato.Array` or a :class:`numpy.ndarray`
+    (cf. :attr:`RandomDAGContext.use_numpy`) that is the result of a random
+    (cf. :attr:`RandomDAGContext.rng`) array computation. All axes
+    of the array are of length :attr:`RandomDAGContext.axis_len` (there is
+    at least one axis, but arbitrarily more may be present).
+    """
     rng = rdagc.rng
     result = make_random_dag_inner(rdagc)
 
-    if len(result.shape) > 2:
-
+    if result.ndim > 2:
         # FIXME Enable this to provoke reduction errors
         #v = rng.integers(0, 2)
         v = rng.integers(0, 1)
         if v == 0:
             # index away an axis
-            subscript: List[Union[int, slice]] = [slice(None)] * len(result.shape)
-            subscript[rng.integers(0, len(result.shape))] = \
-                    int(rng.integers(0, rdagc.axis_len))
+            subscript: List[Union[int, slice]] = [slice(None)] * result.ndim
+            subscript[rng.integers(0, result.ndim)] = int(
+                    rng.integers(0, rdagc.axis_len))
 
             return result[tuple(subscript)]
 
@@ -204,7 +216,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
             # FIXME do reductions other than sum?
             # type ignore because we haven't told mypy what's in rdagc.np.
             return rdagc.np.sum(  # type: ignore[attr-defined]
-                    result, axis=int(rng.integers(0, len(result.shape))))
+                    result, axis=int(rng.integers(0, result.ndim)))
 
         else:
             raise AssertionError()

@@ -1250,35 +1250,39 @@ def test_squeeze(ctx_factory, shape):
     np.testing.assert_allclose(pt_result.shape, np_result)
 
 
-def test_random_dag(ctx_factory):
+def test_random_dag_against_numpy(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
     from testlib import RandomDAGContext, make_random_dag
     axis_len = 5
 
-    #from warnings import filterwarnings
-    #filterwarnings("error")
+    # Warn about
+    from warnings import filterwarnings, catch_warnings
+    with catch_warnings():
+        # We'd like to know if Numpy divides by zero.
+        filterwarnings("error")
 
-    for i in range(50):
-        print(i)
-        seed = 120 + i
-        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False)
-        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=True)
+        for i in range(50):
+            print(i)  # progress indicator for somewhat slow test
 
-        ref_result = make_random_dag(rdagc_np)
-        dag = make_random_dag(rdagc_pt)
-        from pytato.transform import materialize_with_mpms
-        dict_named_arys = pt.DictOfNamedArrays({"result": dag})
-        dict_named_arys = materialize_with_mpms(dict_named_arys)
-        if 0:
-            pt.show_dot_graph(dict_named_arys)
+            seed = 120 + i
+            rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=False)
+            rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                    axis_len=axis_len, use_numpy=True)
 
-        _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
+            ref_result = make_random_dag(rdagc_np)
+            dag = make_random_dag(rdagc_pt)
+            from pytato.transform import materialize_with_mpms
+            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = materialize_with_mpms(dict_named_arys)
+            if 0:
+                pt.show_dot_graph(dict_named_arys)
 
-        assert np.allclose(pt_result["result"], ref_result)
+            _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
+
+            assert np.allclose(pt_result["result"], ref_result)
 
 
 if __name__ == "__main__":
