@@ -63,11 +63,8 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
-.. autoclass:: GraphToDictMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: EdgeCachedMapper
-.. autofunction:: reverse_graph
-.. autofunction:: tag_child_nodes
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -1064,7 +1061,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     """
 
     def __init__(self) -> None:
-        """Initialize the GraphToDictMapper."""
+        """Initialize the UsersCollector."""
         super().__init__()
         self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 

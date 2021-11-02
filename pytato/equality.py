@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pytato.distributed import DistributedSend
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -34,6 +36,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall
+    from pytato.distributed import DistributedRecv, DistributedSend
 
 __doc__ = """
 .. autoclass:: EqualityComparer
@@ -206,6 +209,26 @@ class EqualityComparer:
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.args,
                                               expr2.args))
+                and expr1.tags == expr2.tags
+                )
+
+    def map_distributed_send(self, expr1: DistributedSend, expr2) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and self.rec(expr1.data, expr2.data)
+                and expr1.dest_rank == expr2.dest_rank
+                and expr1.comm_tag == expr2.comm_tag
+                and expr1.shape == expr2.shape
+                and expr1.dtype == expr2.dtype
+                and expr1.tags == expr2.tags
+                )
+
+    def map_distributed_recv(self, expr1: DistributedRecv, expr2) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and self.rec(expr1.data, expr2.data)
+                and expr1.src_rank == expr2.src_rank
+                and expr1.comm_tag == expr2.comm_tag
+                and expr1.shape == expr2.shape
+                and expr1.dtype == expr2.dtype
                 and expr1.tags == expr2.tags
                 )
 

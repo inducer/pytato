@@ -43,12 +43,11 @@ __doc__ = """
 Distributed communication
 -------------------------
 
-Node types to support distributed communication operations
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. class:: DistributedSend
 .. class:: DistributedRecv
-
+.. class:: DistributedCommInfo
+..autofunction:: gather_distributed_comm_info
+..autofunction:: execute_partitions_distributed
 
 """
 

@@ -6,17 +6,19 @@ comm = MPI.COMM_WORLD
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.transform import (GraphToDictMapper, TopoSortMapper,
-                              execute_partitions_distributed,
-                              find_partitions, gather_distributed_comm_info,
+from pytato.transform import (UsersCollector, TopoSortMapper,
                               reverse_graph,
                               tag_child_nodes,
-                              generate_code_for_partitions)
+                              )
+
+from pytato.partition import (find_partitions, generate_code_for_partitions)
+from pytato.distributed import (execute_partitions_distributed,
+                                gather_distributed_comm_info)
 
 # from pytato.visualization import show_dot_graph
 
 from dataclasses import dataclass
-from pytato.array import (make_distributed_send, make_distributed_recv,
+from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend)
 
 
@@ -52,7 +54,7 @@ def main():
     #         shape=(), dtype=float)
     # y += bnd2 + halo2
 
-    gdm = GraphToDictMapper()
+    gdm = UsersCollector()
     gdm(y)
 
     graph = gdm.graph_dict
@@ -89,7 +91,8 @@ def main():
     # print(f"{node_to_fed_sends=}")
 
     # Find the partitions
-    parts = find_partitions(y, pfunc)
+    outputs = pt.DictOfNamedArrays({"out": y})
+    parts = find_partitions(outputs, pfunc)
     distributed_comm_infos = gather_distributed_comm_info(parts)
     prg_per_partition = generate_code_for_partitions(parts)
 
