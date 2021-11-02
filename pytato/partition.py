@@ -48,6 +48,7 @@ __doc__ = """
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
+PartitionId = Hashable
 
 
 # {{{ graph partitioning
@@ -61,11 +62,11 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
     # {{{ infrastructure
 
     def __init__(self, get_partition_id:
-                                   Callable[[ArrayOrNames], Hashable]) -> None:
+                                   Callable[[ArrayOrNames], PartitionId]) -> None:
         super().__init__()
 
         # Function to determine the Partition ID
-        self._get_partition_id: Callable[[ArrayOrNames], Hashable] = get_partition_id
+        self._get_partition_id: Callable[[ArrayOrNames], PartitionId] = get_partition_id
 
         # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
@@ -74,7 +75,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         # "edges" of the partitioned graph, maps an edge between two partitions,
         # represented by a tuple of partition identifiers, to a set of placeholder
         # names "conveying" information across the edge.
-        self.partition_pair_to_edges: Dict[Tuple[Hashable, Hashable],
+        self.partition_pair_to_edges: Dict[Tuple[PartitionId, PartitionId],
                 Set[str]] = {}
 
         self.var_name_to_result: Dict[str, Array] = {}
@@ -85,9 +86,9 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         # e.g. if each partition is self-contained, no edges would appear. Instead,
         # we remember each partition ID we see below, to guarantee that we don't
         # miss any of them.
-        self.seen_partition_ids: Set[Hashable] = set()
+        self.seen_partition_ids: Set[PartitionId] = set()
 
-    def get_partition_id(self, expr: ArrayOrNames) -> Hashable:
+    def get_partition_id(self, expr: ArrayOrNames) -> PartitionId:
         part_id = self._get_partition_id(expr)
         self.seen_partition_ids.add(part_id)
         return part_id
@@ -288,14 +289,14 @@ class CodePartitions:
        Mapping of placeholder names to their respective :class:`pytato.array.Array`
        they represent.
     """
-    toposorted_partitions: List[Hashable]
-    partition_id_to_input_names: Dict[Hashable, Set[str]]
-    partition_id_to_output_names: Dict[Hashable, Set[str]]
+    toposorted_partitions: List[PartitionId]
+    partition_id_to_input_names: Dict[PartitionId, Set[str]]
+    partition_id_to_output_names: Dict[PartitionId, Set[str]]
     var_name_to_result: Dict[str, Array]
 
 
 def find_partitions(outputs: DictOfNamedArrays,
-        part_func: Callable[[ArrayOrNames], Hashable]) ->\
+        part_func: Callable[[ArrayOrNames], PartitionId]) ->\
         CodePartitions:
     """Partitions the *expr* according to *part_func* and generates code for
     each partition.
@@ -309,9 +310,9 @@ def find_partitions(outputs: DictOfNamedArrays,
     pf = _GraphPartitioner(part_func)
     rewritten_outputs = {name: pf(expr) for name, expr in outputs._data.items()}
 
-    partition_id_to_output_names: Dict[Hashable, Set[str]] = {
+    partition_id_to_output_names: Dict[PartitionId, Set[str]] = {
         pid: set() for pid in pf.seen_partition_ids}
-    partition_id_to_input_names: Dict[Hashable, Set[str]] = {
+    partition_id_to_input_names: Dict[PartitionId, Set[str]] = {
         pid: set() for pid in pf.seen_partition_ids}
 
     partitions = set()
@@ -324,7 +325,7 @@ def find_partitions(outputs: DictOfNamedArrays,
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
-    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {
+    partition_nodes_to_targets: Dict[PartitionId, List[PartitionId]] = {
             pid: [] for pid in pf.seen_partition_ids}
 
     for (pid_target, pid_dependency), var_names in \
@@ -363,7 +364,7 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
 
 
 def _check_partition_disjointness(parts: CodePartitions) -> None:
-    part_id_to_nodes: Dict[Hashable, Set[ArrayOrNames]] = {}
+    part_id_to_nodes: Dict[PartitionId, Set[ArrayOrNames]] = {}
 
     for part_id, out_names in parts.partition_id_to_output_names.items():
 
@@ -386,7 +387,7 @@ def _check_partition_disjointness(parts: CodePartitions) -> None:
 
 
 def generate_code_for_partitions(parts: CodePartitions) \
-        -> Dict[Hashable, BoundProgram]:
+        -> Dict[PartitionId, BoundProgram]:
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
@@ -403,7 +404,7 @@ def generate_code_for_partitions(parts: CodePartitions) \
 
 
 def execute_partitions(parts: CodePartitions, prg_per_partition:
-                        Dict[Hashable, BoundProgram], queue: Any) -> Dict[str, Any]:
+                        Dict[PartitionId, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`CodePartitions` representing the
