@@ -59,11 +59,8 @@ __doc__ = """
 .. autoclass:: WalkMapper
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
-.. autoclass:: GraphToDictMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: EdgeCachedMapper
-.. autofunction:: reverse_graph
-.. autofunction:: tag_child_nodes
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
