@@ -28,14 +28,10 @@ from typing import Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeV
 from dataclasses import dataclass
 
 
-from pytato.transform import CachedMapper, CachedWalkMapper
+from pytato.transform import EdgeCachedMapper, CachedWalkMapper
 from pytato.array import (
-        Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
-        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
-        AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        Einsum,
-        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        make_placeholder)
+        Array, AbstractResultWithNamedArrays, Placeholder,
+        DictOfNamedArrays, make_placeholder)
 
 from pytato.target import BoundProgram
 
@@ -55,7 +51,7 @@ PartitionId = Hashable
 
 # {{{ graph partitioner
 
-class _GraphPartitioner(CachedMapper[ArrayOrNames]):
+class _GraphPartitioner(EdgeCachedMapper):
     """Given a function *get_partition_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.
@@ -111,7 +107,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         self.partition_pair_to_edges.setdefault(
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
-    def _handle_parent_child(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
+    def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
         if self.does_edge_cross_partition_boundary(expr, child):
             try:
                 ph = self._seen_node_to_placeholder[child]
@@ -144,123 +140,11 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         else:
             return self.rec(child)
 
-    def _handle_shape(self, expr: Array, shape: Any) -> Tuple[Any, ...]:
-        return tuple([
-            self._handle_parent_child(expr, dim) if isinstance(dim, Array) else dim
-            for dim in shape])
-
     def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         # Need to make sure the first node's partition is 'seen'
         self.get_partition_id(expr)
 
         return super().__call__(expr, *args, **kwargs)
-
-    # }}}
-
-    # {{{ map_xxx methods
-
-    def map_named_array(self, expr: NamedArray) -> NamedArray:
-        return NamedArray(
-            container=self._handle_parent_child(expr, expr._container),
-            name=expr.name,
-            tags=expr.tags)
-
-    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
-        return IndexLambda(expr=expr.expr,
-                shape=self._handle_shape(expr, expr.shape),
-                dtype=expr.dtype,
-                bindings={name: self._handle_parent_child(expr, child)
-                          for name, child in expr.bindings.items()},
-                tags=expr.tags)
-
-    def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        return Einsum(
-                     access_descriptors=expr.access_descriptors,
-                     args=tuple(self._handle_parent_child(expr, arg)
-                                for arg in expr.args),
-                     tags=expr.tags)
-
-    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        return MatrixProduct(x1=self._handle_parent_child(expr, expr.x1),
-                             x2=self._handle_parent_child(expr, expr.x2),
-                             tags=expr.tags)
-
-    def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        return Stack(
-                     arrays=tuple(self._handle_parent_child(expr, ary)
-                                  for ary in expr.arrays),
-                     axis=expr.axis,
-                     tags=expr.tags)
-
-    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        return Concatenate(
-                     arrays=tuple(self._handle_parent_child(expr, ary)
-                                  for ary in expr.arrays),
-                     axis=expr.axis,
-                     tags=expr.tags)
-
-    def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        return Roll(array=self._handle_parent_child(expr, expr.array),
-                shift=expr.shift,
-                axis=expr.axis,
-                tags=expr.tags)
-
-    def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
-            -> AxisPermutation:
-        return AxisPermutation(
-                array=self._handle_parent_child(expr, expr.array),
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        return Reshape(
-            array=self._handle_parent_child(expr, expr.array),
-            newshape=self._handle_shape(expr, expr.newshape),
-            order=expr.order,
-            tags=expr.tags)
-
-    def map_basic_index(self, expr: BasicIndex) -> BasicIndex:
-        return BasicIndex(
-                array=self._handle_parent_child(expr, expr.array),
-                indices=tuple(self._handle_parent_child(expr, idx)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
-
-    def map_contiguous_advanced_index(self,
-            expr: AdvancedIndexInContiguousAxes) -> AdvancedIndexInContiguousAxes:
-        return AdvancedIndexInContiguousAxes(
-                array=self._handle_parent_child(expr, expr.array),
-                indices=tuple(self._handle_parent_child(expr, idx)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
-
-    def map_non_contiguous_advanced_index(self,
-            expr: AdvancedIndexInNoncontiguousAxes) \
-            -> AdvancedIndexInNoncontiguousAxes:
-        return AdvancedIndexInNoncontiguousAxes(
-                array=self._handle_parent_child(expr, expr.array),
-                indices=tuple(self._handle_parent_child(expr, idx)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
-
-    def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
-        return DataWrapper(
-                name=expr.name,
-                data=expr.data,
-                shape=self._handle_shape(expr, expr.shape),
-                tags=expr.tags)
-
-    def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        assert expr.name
-
-        return Placeholder(name=expr.name,
-                shape=self._handle_shape(expr, expr.shape),
-                dtype=expr.dtype,
-                tags=expr.tags)
-
-    def map_size_param(self, expr: SizeParam) -> SizeParam:
-        assert expr.name
-        return SizeParam(name=expr.name, tags=expr.tags)
 
     # }}}
 

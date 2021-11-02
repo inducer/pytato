@@ -24,8 +24,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABC, abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Optional)
+                    List, Mapping, Iterable, Optional, Tuple)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -60,6 +61,7 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: GraphToDictMapper
 .. autoclass:: CachedMapAndCopyMapper
+.. autoclass:: EdgeCachedMapper
 .. autofunction:: reverse_graph
 .. autofunction:: tag_child_nodes
 .. autofunction:: copy_dict_of_named_arrays
@@ -1117,5 +1119,133 @@ def tag_child_nodes(graph: Dict[Array, Set[Array]], tag: Any,
 
 # }}}
 
+
+# {{{ EdgeCachedMapper
+
+class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
+    """
+    Mapper class to execute a rewriting method (:meth:`handle_edge`) on each
+    edge in the graph.
+
+    .. automethod:: handle_edge
+    """
+
+    @abstractmethod
+    def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
+        pass
+
+    def _handle_shape(self, expr: Array, shape: Any) -> Tuple[Any, ...]:
+        return tuple([
+            self.handle_edge(expr, dim) if isinstance(dim, Array) else dim
+            for dim in shape])
+
+    # {{{ map_xxx methods
+
+    def map_named_array(self, expr: NamedArray) -> NamedArray:
+        return NamedArray(
+            container=self.handle_edge(expr, expr._container),
+            name=expr.name,
+            tags=expr.tags)
+
+    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
+        return IndexLambda(expr=expr.expr,
+                shape=self._handle_shape(expr, expr.shape),
+                dtype=expr.dtype,
+                bindings={name: self.handle_edge(expr, child)
+                          for name, child in expr.bindings.items()},
+                tags=expr.tags)
+
+    def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
+        return Einsum(
+                     access_descriptors=expr.access_descriptors,
+                     args=tuple(self.handle_edge(expr, arg)
+                                for arg in expr.args),
+                     tags=expr.tags)
+
+    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
+        return MatrixProduct(x1=self.handle_edge(expr, expr.x1),
+                             x2=self.handle_edge(expr, expr.x2),
+                             tags=expr.tags)
+
+    def map_stack(self, expr: Stack, *args: Any) -> Stack:
+        return Stack(
+                     arrays=tuple(self.handle_edge(expr, ary)
+                                  for ary in expr.arrays),
+                     axis=expr.axis,
+                     tags=expr.tags)
+
+    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
+        return Concatenate(
+                     arrays=tuple(self.handle_edge(expr, ary)
+                                  for ary in expr.arrays),
+                     axis=expr.axis,
+                     tags=expr.tags)
+
+    def map_roll(self, expr: Roll, *args: Any) -> Roll:
+        return Roll(array=self.handle_edge(expr, expr.array),
+                shift=expr.shift,
+                axis=expr.axis,
+                tags=expr.tags)
+
+    def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
+            -> AxisPermutation:
+        return AxisPermutation(
+                array=self.handle_edge(expr, expr.array),
+                axes=expr.axes,
+                tags=expr.tags)
+
+    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
+        return Reshape(
+            array=self.handle_edge(expr, expr.array),
+            newshape=self._handle_shape(expr, expr.newshape),
+            order=expr.order,
+            tags=expr.tags)
+
+    def map_basic_index(self, expr: BasicIndex) -> BasicIndex:
+        return BasicIndex(
+                array=self.handle_edge(expr, expr.array),
+                indices=tuple(self.handle_edge(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_contiguous_advanced_index(self,
+            expr: AdvancedIndexInContiguousAxes) -> AdvancedIndexInContiguousAxes:
+        return AdvancedIndexInContiguousAxes(
+                array=self.handle_edge(expr, expr.array),
+                indices=tuple(self.handle_edge(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_non_contiguous_advanced_index(self,
+            expr: AdvancedIndexInNoncontiguousAxes) \
+            -> AdvancedIndexInNoncontiguousAxes:
+        return AdvancedIndexInNoncontiguousAxes(
+                array=self.handle_edge(expr, expr.array),
+                indices=tuple(self.handle_edge(expr, idx)
+                                if isinstance(idx, Array) else idx
+                                for idx in expr.indices))
+
+    def map_data_wrapper(self, expr: DataWrapper) -> DataWrapper:
+        return DataWrapper(
+                name=expr.name,
+                data=expr.data,
+                shape=self._handle_shape(expr, expr.shape),
+                tags=expr.tags)
+
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
+        assert expr.name
+
+        return Placeholder(name=expr.name,
+                shape=self._handle_shape(expr, expr.shape),
+                dtype=expr.dtype,
+                tags=expr.tags)
+
+    def map_size_param(self, expr: SizeParam) -> SizeParam:
+        assert expr.name
+        return SizeParam(name=expr.name, tags=expr.tags)
+
+    # }}}
+
+# }}}
 
 # vim: foldmethod=marker
