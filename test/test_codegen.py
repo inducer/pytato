@@ -1304,7 +1304,8 @@ def test_partitioner(ctx_factory):
                 {"result": make_random_dag(rdagc_pt)}))
 
         from dataclasses import dataclass
-        from pytato.transform import (TopoSortMapper, find_partitions,
+        from pytato.transform import TopoSortMapper
+        from pytato.partition import (find_partitions,
                                     execute_partitions, generate_code_for_partitions)
 
         @dataclass(frozen=True, eq=True)

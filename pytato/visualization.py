@@ -41,7 +41,7 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 import pytato.transform
 
-from pytato.transform import CodePartitions
+from pytato.partition import CodePartitions
 
 
 __doc__ = """
