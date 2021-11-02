@@ -992,68 +992,70 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 
 # {{{ graph-to-dict
 
-class GraphToDictMapper(Mapper):
+class GraphToDictMapper(CachedMapper):
     """
     Maps a graph to a dictionary representation mapping a node to its parents,
     i.e. all the nodes using its value.
+
     .. attribute:: graph_dict
     """
 
     def __init__(self) -> None:
         """Initialize the GraphToDictMapper."""
+        super().__init__()
         self.graph_dict: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, *args: Any) -> None:
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for child in expr._data.values():
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
-    def map_named_array(self, expr: NamedArray, *args: Any) -> None:
+    def map_named_array(self, expr: NamedArray) -> None:
         self.graph_dict.setdefault(expr._container, set()).add(expr)
         self.rec(expr._container)
 
-    def map_loopy_call(self, expr: LoopyCall, *args: Any) -> None:
+    def map_loopy_call(self, expr: LoopyCall) -> None:
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
                 self.graph_dict.setdefault(child, set()).add(expr)
                 self.rec(child)
 
-    def map_einsum(self, expr: Einsum, *args: Any) -> None:
+    def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:
             self.graph_dict.setdefault(arg, set()).add(expr)
             self.rec(arg)
 
-    def map_reshape(self, expr: Reshape, *args: Any) -> None:
+    def map_reshape(self, expr: Reshape) -> None:
         for dim in expr.shape:
             if isinstance(dim, Array):
                 self.graph_dict.setdefault(dim, set()).add(expr)
-                self.rec(dim, *args)
+                self.rec(dim)
 
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
-    def map_placeholder(self, expr: Placeholder, *args: Any) -> None:
+    def map_placeholder(self, expr: Placeholder) -> None:
         for dim in expr.shape:
             if isinstance(dim, Array):
                 self.graph_dict.setdefault(dim, set()).add(expr)
-                self.rec(dim, *args)
+                self.rec(dim)
 
-    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> None:
+    def map_matrix_product(self, expr: MatrixProduct) -> None:
         for child in (expr.x1, expr.x2):
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
 
-    def map_concatenate(self, expr: Concatenate, *args: Any) -> None:
+    def map_concatenate(self, expr: Concatenate) -> None:
         for ary in expr.arrays:
             self.graph_dict.setdefault(ary, set()).add(expr)
             self.rec(ary)
 
-    def map_stack(self, expr: Stack, *args: Any) -> None:
+    def map_stack(self, expr: Stack) -> None:
         for ary in expr.arrays:
             self.graph_dict.setdefault(ary, set()).add(expr)
             self.rec(ary)
 
-    def map_roll(self, expr: Roll, *args: Any) -> None:
+    def map_roll(self, expr: Roll) -> None:
         self.graph_dict.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
@@ -1071,7 +1073,7 @@ class GraphToDictMapper(Mapper):
                 self.graph_dict.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
-    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> None:
+    def map_index_lambda(self, expr: IndexLambda) -> None:
         for child in expr.bindings.values():
             self.graph_dict.setdefault(child, set()).add(expr)
             self.rec(child)
