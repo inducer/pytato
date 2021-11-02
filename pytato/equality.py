@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pytato.distributed import DistributedSend
-
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -212,7 +210,7 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_distributed_send(self, expr1: DistributedSend, expr2) -> bool:
+    def map_distributed_send(self, expr1: DistributedSend, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1.data, expr2.data)
                 and expr1.dest_rank == expr2.dest_rank
@@ -222,7 +220,7 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_distributed_recv(self, expr1: DistributedRecv, expr2) -> bool:
+    def map_distributed_recv(self, expr1: DistributedRecv, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1.data, expr2.data)
                 and expr1.src_rank == expr2.src_rank
