@@ -1062,47 +1062,6 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
-def test_partitionfinder(ctx_factory):
-    for _ in range(5):
-        y = make_random_dag()
-
-        from dataclasses import dataclass
-        from pytato.transform import (TopoSortMapper, find_partitions,
-                                    execute_partitions, generate_code_for_partitions)
-
-        @dataclass(frozen=True, eq=True)
-        class MyPartitionId():
-            num: int
-
-        def get_partition_id(topo_list, expr) -> MyPartitionId:
-            return MyPartitionId(topo_list.index(expr))
-
-        tm = TopoSortMapper()
-        tm(y)
-
-        from functools import partial
-        part_func = partial(get_partition_id, tm.topological_order)
-
-        outputs = pt.DictOfNamedArrays({"out": y})
-        parts = find_partitions(outputs, part_func)
-
-        # Execute the partitioned code
-        ctx = ctx_factory()
-        queue = cl.CommandQueue(ctx)
-
-        prg_per_partition = generate_code_for_partitions(parts)
-
-        context = execute_partitions(parts, prg_per_partition, queue)
-
-        final_res = [context[k] for k in outputs]
-
-        # Execute the non-partitioned code for comparison
-        prg = pt.generate_loopy(y)
-        evt, (out,) = prg(queue)
-
-        np.testing.assert_allclose([out], final_res)
-
-
 def test_broadcast_to(ctx_factory):
     from numpy.random import default_rng
 
@@ -1320,6 +1279,57 @@ def test_random_dag(ctx_factory):
         _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
 
         assert np.allclose(pt_result["result"], ref_result)
+
+
+def test_partitioner(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+
+    axis_len = 5
+
+    for i in range(50):
+        print(i)
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False)
+        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=True)
+
+        ref_result = make_random_dag(rdagc_np)
+
+        from pytato.transform import materialize_with_mpms
+        dict_named_arys = materialize_with_mpms(pt.DictOfNamedArrays(
+                {"result": make_random_dag(rdagc_pt)}))
+
+        from dataclasses import dataclass
+        from pytato.transform import (TopoSortMapper, find_partitions,
+                                    execute_partitions, generate_code_for_partitions)
+
+        @dataclass(frozen=True, eq=True)
+        class MyPartitionId():
+            num: int
+
+        def get_partition_id(topo_list, expr) -> MyPartitionId:
+            return topo_list.index(expr) // 3
+
+        tm = TopoSortMapper()
+        tm(dict_named_arys)
+
+        from functools import partial
+        part_func = partial(get_partition_id, tm.topological_order)
+
+        parts = find_partitions(dict_named_arys, part_func)
+
+        # Execute the partitioned code
+        prg_per_partition = generate_code_for_partitions(parts)
+
+        context = execute_partitions(parts, prg_per_partition, queue)
+
+        pt_part_res, = [context[k] for k in dict_named_arys]
+
+        np.testing.assert_allclose(pt_part_res, ref_result)
 
 
 if __name__ == "__main__":
