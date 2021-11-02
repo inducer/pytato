@@ -1136,7 +1136,7 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         super().__init__()
 
         # Function to determine the Partition ID
-        self.get_partition_id = get_partition_id
+        self._get_partition_id = get_partition_id
 
         # Naming for newly created PlaceHolders at partition edges
         from pytools import UniqueNameGenerator
@@ -1151,6 +1151,17 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         self.var_name_to_result: Dict[str, Array] = {}
 
         self._seen_node_to_placeholder: Dict[Array, Placeholder] = {}
+
+        # Reading the seen partition IDs out of partition_pair_to_edges is incorrect:
+        # e.g. if each partition is self-contained, no edges would appear. Instead,
+        # we remember each partition ID we see below, to guarantee that we don't
+        # miss any of them.
+        self.seen_partition_ids: Set[Hashable] = set()
+
+    def get_partition_id(self, array: Array):
+        part_id = self._get_partition_id(array)
+        self.seen_partition_ids.add(part_id)
+        return part_id
 
     def does_edge_cross_partition_boundary(self, node1: Array, node2: Array) -> bool:
         return self.get_partition_id(node1) != self.get_partition_id(node2)
@@ -1198,6 +1209,12 @@ class _GraphPartitioner(CachedMapper[ArrayOrNames]):
         return tuple([
             self._handle_new_binding(expr, dim) if isinstance(dim, Array) else dim
             for dim in shape])
+
+    def __call__(self, expr: Array):
+        # Need to make sure the first node's partition is 'seen'
+        self.get_partition_id(expr)
+
+        return super().__call__(expr)
 
     # }}}
 
@@ -1357,15 +1374,10 @@ def find_partitions(outputs: DictOfNamedArrays,
     pf = _GraphPartitioner(part_func)
     rewritten_outputs = {name: pf(expr) for name, expr in outputs._data.items()}
 
-    partition_ids = (
-            {pid for pid, _ in pf.partition_pair_to_edges.keys()}
-            |
-            {pid for _, pid in pf.partition_pair_to_edges.keys()})
-
     partition_id_to_output_names: Dict[Hashable, Set[str]] = {
-        pid: set() for pid in partition_ids}
+        pid: set() for pid in pf.seen_partition_ids}
     partition_id_to_input_names: Dict[Hashable, Set[str]] = {
-        pid: set() for pid in partition_ids}
+        pid: set() for pid in pf.seen_partition_ids}
 
     partitions = set()
 
@@ -1377,14 +1389,15 @@ def find_partitions(outputs: DictOfNamedArrays,
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
-    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {}
+    partition_nodes_to_targets: Dict[Hashable, List[Hashable]] = {
+            pid: [] for pid in pf.seen_partition_ids}
 
     for (pid_target, pid_dependency), var_names in \
             pf.partition_pair_to_edges.items():
         partitions.add(pid_target)
         partitions.add(pid_dependency)
 
-        partition_nodes_to_targets.setdefault(pid_dependency, []).append(pid_target)
+        partition_nodes_to_targets[pid_dependency].append(pid_target)
 
         for var_name in var_names:
             partition_id_to_output_names.setdefault(
