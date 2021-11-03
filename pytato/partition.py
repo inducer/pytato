@@ -248,10 +248,8 @@ def find_partitions(outputs: DictOfNamedArrays,
         partition_nodes_to_targets[pid_dependency].append(pid_target)
 
         for var_name in var_names:
-            partition_id_to_output_names.setdefault(
-                pid_dependency, set()).add(var_name)
-            partition_id_to_input_names.setdefault(
-                pid_target, set()).add(var_name)
+            partition_id_to_output_names[pid_dependency].add(var_name)
+            partition_id_to_input_names[pid_target].add(var_name)
 
     from pytools.graph import compute_topological_order, CycleError
     try:
@@ -273,9 +271,10 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
         super().__init__()
         self.seen_nodes: Set[ArrayOrNames] = set()
 
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
-        super().rec(expr)
+    def visit(self, expr: ArrayOrNames) -> bool:
+        super().visit(expr)
         self.seen_nodes.add(expr)
+        return True
 
 
 def _check_partition_disjointness(parts: CodePartitions) -> None:
@@ -287,10 +286,13 @@ def _check_partition_disjointness(parts: CodePartitions) -> None:
         for out_name in out_names:
             mapper(parts.var_name_to_result[out_name])
 
-        # check disjointness
+        # FIXME This check won't do much unless we successfully visit
+        # all the nodes, but we're not currently checking that.
         for my_node in mapper.seen_nodes:
-            for other_part_id, other_node_set in \
-                    part_id_to_nodes.items():
+            for other_part_id, other_node_set in part_id_to_nodes.items():
+                # Placeholders represent values computed in one partition
+                # and used in one or more other ones. As a result, the
+                # same placeholder may occur in more than one partition.
                 assert (
                     isinstance(my_node, Placeholder)
                     or my_node not in other_node_set), (
@@ -338,16 +340,12 @@ def execute_partitions(parts: CodePartitions, prg_per_partition:
     """
     context: Dict[str, Any] = {}
     for pid in parts.toposorted_partitions:
-        # find names that are needed
-        inputs = {"queue": queue}
-
-        inputs.update({
+        inputs = {
             k: context[k] for k in parts.partition_id_to_input_names[pid]
-            if k in context})
+            if k in context}
 
-        res = prg_per_partition[pid](**inputs)
-
-        context.update(res[1])
+        _evt, result_dict = prg_per_partition[pid](queue=queue, **inputs)
+        context.update(result_dict)
 
     return context
 
