@@ -1305,13 +1305,13 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_distributed_send(self, expr: Any, *args: Any) \
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
             -> Any:
         from pytato.distributed import DistributedSend
         # FIXME: Return Placeholder instead?
         return DistributedSend(self.handle_edge(expr, expr.data))
 
-    def map_distributed_recv(self, expr: Any, *args: Any) \
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
         from pytato.distributed import DistributedRecv
         # FIXME: Return Placeholder instead?
