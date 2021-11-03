@@ -132,7 +132,6 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
 
-
 Internal API
 ------------
 
