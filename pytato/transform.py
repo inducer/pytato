@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from abc import ABC, abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Optional, Tuple)
+                    List, Mapping, Iterable, Optional, Tuple, TYPE_CHECKING)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
@@ -40,8 +40,8 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
 
-# Circular import :-(
-# from pytato.distributed import DistributedSend, DistributedRecv
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedSend, DistributedRecv
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -282,12 +282,12 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                        order=expr.order,
                        tags=expr.tags)
 
-    def map_distributed_send(self, expr: Any) -> Any:
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         from pytato.distributed import DistributedSend
         return DistributedSend(self.rec(expr.data),
                                dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
 
-    def map_distributed_recv(self, expr: Any) -> Any:
+    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
         from pytato.distributed import DistributedRecv
         return DistributedRecv(self.rec(expr.data),
                                src_rank=expr.src_rank, comm_tag=expr.comm_tag)
@@ -1144,17 +1144,11 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.node_to_users.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
-    def map_distributed_send(self, expr: Array, *args: Any) -> None:
-        from pytato.distributed import DistributedSend
-        assert isinstance(expr, DistributedSend)
-
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
         self.node_to_users.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
 
-    def map_distributed_recv(self, expr: Array, *args: Any) -> None:
-        from pytato.distributed import DistributedRecv
-        assert isinstance(expr, DistributedRecv)
-
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         self.node_to_users.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
 
@@ -1182,7 +1176,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         # Root node might have no predecessor
-        self.graph_dict[expr] = set()
+        self.node_to_users[expr] = set()
         return self.rec(expr, *args)
 
 # }}}

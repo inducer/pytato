@@ -138,8 +138,9 @@ class _DistributedCommReplacer(CopyMapper):
         self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
 
-    def map_distributed_recv(self,
-                             expr: DistributedRecv) -> Placeholder:
+    # type-ignore-reason: incompatible with superclass
+    def map_distributed_recv(self,  # type: ignore[override]
+            expr: DistributedRecv) -> Placeholder:
         # no children, no need to recurse
 
         new_name = self.name_generator()
@@ -148,7 +149,9 @@ class _DistributedCommReplacer(CopyMapper):
                 expr.dtype,
                 tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend) -> Array:
+    # type-ignore-reason: incompatible with superclass
+    def map_distributed_send(self,  # type: ignore[override]
+                             expr: DistributedSend) -> Array:  #
         result = super().map_distributed_send(expr)
 
         new_name = self.name_generator()
