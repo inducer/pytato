@@ -1287,8 +1287,6 @@ def test_random_dag_against_numpy(ctx_factory):
 
     from testlib import RandomDAGContext, make_random_dag
     axis_len = 5
-
-    # Warn about
     from warnings import filterwarnings, catch_warnings
     with catch_warnings():
         # We'd like to know if Numpy divides by zero.
@@ -1314,6 +1312,70 @@ def test_random_dag_against_numpy(ctx_factory):
             _, pt_result = pt.generate_loopy(dict_named_arys)(cq)
 
             assert np.allclose(pt_result["result"], ref_result)
+
+
+def test_partitioner(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    from testlib import RandomDAGContext, make_random_dag
+
+    axis_len = 5
+
+    ntests = 50
+    ncycles = 0
+    for i in range(ntests):
+        print(i)
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False)
+        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=True)
+
+        ref_result = make_random_dag(rdagc_np)
+
+        from pytato.transform import materialize_with_mpms
+        dict_named_arys = materialize_with_mpms(pt.DictOfNamedArrays(
+                {"result": make_random_dag(rdagc_pt)}))
+
+        from dataclasses import dataclass
+        from pytato.transform import TopoSortMapper
+        from pytato.partition import (find_partitions,
+                execute_partitions, generate_code_for_partitions,
+                PartitionInducedCycleError)
+
+        @dataclass(frozen=True, eq=True)
+        class MyPartitionId():
+            num: int
+
+        def get_partition_id(topo_list, expr) -> MyPartitionId:
+            return topo_list.index(expr) // 3
+
+        tm = TopoSortMapper()
+        tm(dict_named_arys)
+
+        from functools import partial
+        part_func = partial(get_partition_id, tm.topological_order)
+
+        try:
+            parts = find_partitions(dict_named_arys, part_func)
+        except PartitionInducedCycleError:
+            print("CYCLE!")
+            # FIXME *shrug* nothing preventing that currently
+            ncycles += 1
+            continue
+
+        # Execute the partitioned code
+        prg_per_partition = generate_code_for_partitions(parts)
+
+        context = execute_partitions(parts, prg_per_partition, queue)
+
+        pt_part_res, = [context[k] for k in dict_named_arys]
+
+        np.testing.assert_allclose(pt_part_res, ref_result)
+
+    # Assert that at least 2/3 of our tests did not get skipped because of cycles
+    assert ncycles < ntests // 3
 
 
 if __name__ == "__main__":

@@ -28,7 +28,8 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping
+from typing import (Callable, Dict, Union, Iterator, List, Mapping, Hashable,
+                    Set)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -40,11 +41,14 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 import pytato.transform
 
+from pytato.partition import CodePartitions
+
 
 __doc__ = """
 .. currentmodule:: pytato
 
 .. autofunction:: get_dot_graph
+.. autofunction:: get_dot_graph_from_partitions
 .. autofunction:: show_dot_graph
 .. autofunction:: get_ascii_graph
 .. autofunction:: show_ascii_graph
@@ -163,7 +167,8 @@ class DotEmitter(CodeGeneratorBase):
         self("}")
 
 
-def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
+def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
+                color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
@@ -179,7 +184,7 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
                 % (td_attrib, dot_escape(name), td_attrib, dot_escape(field)))
 
     table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s>]" % (id, table))
+    emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
 
 
 def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
@@ -255,6 +260,96 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
         # Emit output/namespace name mappings.
         _emit_name_cluster(emit, outputs._data, array_to_id, id_gen, label="Outputs")
+
+    return emit.get()
+
+
+def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
+    r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
+    graph of the computation of *result*.
+
+    :arg result: Outputs of the computation (cf.
+        :func:`pytato.generate_loopy`).
+    """
+    # Maps each partition to a dict of its arrays with the node info
+    part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
+
+    for part_id, out_names in parts.partition_id_to_output_names.items():
+        part_node_to_info: Dict[Array, DotNodeInfo] = {}
+
+        mapper = ArrayToDotNodeInfoMapper()
+        for out_name in out_names:
+            mapper(parts.var_name_to_result[out_name], part_node_to_info)
+
+        part_id_to_node_to_node_info[part_id] = part_node_to_info
+
+    id_gen = UniqueNameGenerator()
+
+    emit = DotEmitter()
+
+    with emit.block("digraph computation"):
+        emit("node [shape=rectangle]")
+        array_to_id: Dict[Array, str] = {}
+
+        # Fill array_to_id in a first pass. Technically, this isn't
+        # necessary, if parts.toposorted_partitions is *actually* topologically
+        # sorted. But if *cough* hypothetically parts.toposorted_partitions
+        # were not actually topologically sorted, like if you were in the
+        # middle of investigating a bug with the topological sort, ...
+        for part_id in parts.toposorted_partitions:
+            for array, _ in part_id_to_node_to_node_info[part_id].items():
+                array_to_id[array] = id_gen("array")
+
+        # Second pass: emit the graph.
+        for part_id in parts.toposorted_partitions:
+            part_node_to_info = part_id_to_node_to_node_info[part_id]
+            input_arrays: List[Array] = []
+            output_arrays: Set[Array] = set()
+            internal_arrays: List[Array] = []
+
+            for array, _ in part_node_to_info.items():
+                if isinstance(array, InputArgumentBase):
+                    input_arrays.append(array)
+                else:
+                    internal_arrays.append(array)
+
+            for out_name in parts.partition_id_to_output_names[part_id]:
+                ary = parts.var_name_to_result[out_name]
+                output_arrays.add(ary)
+                if ary in internal_arrays:
+                    internal_arrays.remove(ary)
+
+            with emit.block(f'subgraph "cluster_part_{part_id}"'):
+                emit("style=dashed")
+                emit(f'label="{part_id}"')
+
+                # Emit inputs
+                for array in input_arrays:
+                    _emit_array(emit, part_node_to_info[array],
+                                array_to_id[array], "deepskyblue")
+
+                    # Emit cross-partition edges
+                    if array.name:  # type: ignore [attr-defined]
+                        tgt = array_to_id[
+                                parts.var_name_to_result[array.name]]  # type: ignore
+                        emit(f"{tgt} -> {array_to_id[array]}")
+
+                # Emit internal nodes
+                for array in internal_arrays:
+                    _emit_array(emit, part_node_to_info[array], array_to_id[array])
+
+                # Emit outputs
+                for array in output_arrays:
+                    _emit_array(emit, part_node_to_info[array],
+                                array_to_id[array], "gold")
+
+                # Emit intra-partition edges
+                for array, node in part_node_to_info.items():
+                    for label, tail_array in node.edges.items():
+                        tail = array_to_id[tail_array]
+                        head = array_to_id[array]
+                        emit('%s -> %s [label="%s"]' %
+                            (tail, head, dot_escape(label)))
 
     return emit.get()
 
