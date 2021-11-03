@@ -47,6 +47,7 @@ from pytato.array import (
         dot, vdot, squeeze,
 
         broadcast_to,
+
         )
 from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
