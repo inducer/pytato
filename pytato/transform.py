@@ -385,10 +385,10 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
-    def map_distributed_send(self, expr: Any) -> CombineT:
+    def map_distributed_send(self, expr: DistributedSend) -> CombineT:
         return self.combine(self.rec(expr.data))
 
-    def map_distributed_recv(self, expr: Any) -> CombineT:
+    def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
         return self.combine(self.rec(expr.data))
 # }}}
 
@@ -449,10 +449,10 @@ class DependencyMapper(CombineMapper[R]):
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
-    def map_distributed_send(self, expr: Any) -> R:
+    def map_distributed_send(self, expr: DistributedSend) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_send(expr))
 
-    def map_distributed_recv(self, expr: Any) -> R:
+    def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
 # }}}
@@ -676,23 +676,17 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    def map_distributed_send(self, expr: Array, *args: Any) -> None:
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
         if not self.visit(expr):
             return
-
-        from pytato.distributed import DistributedSend
-        assert isinstance(expr, DistributedSend)
 
         self.rec(expr.data)
 
         self.post_visit(expr)
 
-    def map_distributed_recv(self, expr: Array, *args: Any) -> None:
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         if not self.visit(expr):
             return
-
-        from pytato.distributed import DistributedRecv
-        assert isinstance(expr, DistributedRecv)
 
         self.rec(expr.data)
 
@@ -1309,13 +1303,15 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
             -> Any:
         from pytato.distributed import DistributedSend
         # FIXME: Return Placeholder instead?
-        return DistributedSend(self.handle_edge(expr, expr.data))
+        return DistributedSend(self.handle_edge(expr, expr.data),
+            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
         from pytato.distributed import DistributedRecv
         # FIXME: Return Placeholder instead?
-        return DistributedRecv(self.handle_edge(expr, expr.data))
+        return DistributedRecv(self.handle_edge(expr, expr.data),
+            src_rank=expr.src_rank, comm_tag=expr.comm_tag)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(

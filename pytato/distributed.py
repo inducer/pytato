@@ -48,7 +48,6 @@ Distributed communication
 .. class:: DistributedCommInfo
 ..autofunction:: gather_distributed_comm_info
 ..autofunction:: execute_partitions_distributed
-
 """
 
 
