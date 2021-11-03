@@ -313,7 +313,6 @@ def generate_code_for_partitions(parts: CodePartitions) \
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
     prg_per_partition = {}
-
     for pid in parts.toposorted_partitions:
         d = DictOfNamedArrays(
                     {var_name: parts.var_name_to_result[var_name]
