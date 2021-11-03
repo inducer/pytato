@@ -57,7 +57,7 @@ def main():
     gdm = UsersCollector()
     gdm(y)
 
-    graph = gdm.graph_dict
+    graph = gdm.node_to_users
     rev_graph = reverse_graph(graph)
 
     tm = TopoSortMapper()
