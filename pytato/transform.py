@@ -1166,6 +1166,8 @@ def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
             tag_child_nodes(graph, other_node_key, tag,
                                           node_to_tags)
 
+    return node_to_tags
+
 # }}}
 
 
