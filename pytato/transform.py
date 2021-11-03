@@ -75,7 +75,7 @@ Dict representation of DAGs
 
 .. autoclass:: UsersCollector
 .. autofunction:: reverse_graph
-.. autofunction:: tag_child_nodes
+.. autofunction:: tag_user_nodes
 """
 
 
@@ -1197,10 +1197,10 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
     return result
 
 
-def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
+def tag_user_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
         starting_point: ArrayOrNames,
-        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None) \
-        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
+        node_to_tags: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
+        -> None:
     """Tags all nodes reachable from *starting_point* with *tag*.
 
     :param graph: A :class:`dict` representation of a directed graph, mapping each
@@ -1208,19 +1208,14 @@ def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
         use case for this function is the graph in
         :attr:`UsersCollector.node_to_users`.
     :param tag: The value to tag the nodes with.
-    :param starting_point: An optional starting point in *graph*.
+    :param starting_point: A starting point in *graph*.
     :param node_to_tags: The resulting mapping of nodes to tags.
-    :returns: the updated value of *node_to_tags*.
     """
-    if node_to_tags is None:
-        node_to_tags = {}
     node_to_tags.setdefault(starting_point, set()).add(tag)
     if starting_point in graph:
         for other_node_key in graph[starting_point]:
-            tag_child_nodes(graph, other_node_key, tag,
-                                          node_to_tags)
-
-    return node_to_tags
+            tag_user_nodes(graph, tag=tag, starting_point=other_node_key,
+                                          node_to_tags=node_to_tags)
 
 # }}}
 

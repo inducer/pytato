@@ -8,7 +8,7 @@ import pyopencl as cl
 import numpy as np
 from pytato.transform import (UsersCollector, TopoSortMapper,
                               reverse_graph,
-                              tag_child_nodes,
+                              tag_user_nodes,
                               )
 
 from pytato.partition import (find_partitions, generate_code_for_partitions)
@@ -70,7 +70,7 @@ def main():
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-            tag_child_nodes(graph, tag=node, starting_point=node,
+            tag_user_nodes(graph, tag=node, starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
     # FIXME test that node_to_feeding_recvs maps to recvs
 
@@ -78,7 +78,7 @@ def main():
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-            tag_child_nodes(rev_graph, tag=node, starting_point=node,
+            tag_user_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
     # FIXME test that node_to_fed_sends maps to sends
 
