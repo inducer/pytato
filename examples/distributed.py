@@ -72,7 +72,10 @@ def main():
         if isinstance(node, DistributedRecv):
             tag_user_nodes(graph, tag=node, starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
-    # FIXME test that node_to_feeding_recvs maps to recvs
+
+    for node, _ in node_to_feeding_recvs.items():
+        for n in node_to_feeding_recvs[node]:
+            assert(isinstance(n, DistributedRecv))
 
     node_to_fed_sends = {}
     for node in rev_graph:
@@ -80,7 +83,10 @@ def main():
         if isinstance(node, DistributedSend):
             tag_user_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
-    # FIXME test that node_to_fed_sends maps to sends
+
+    for node, _ in node_to_fed_sends.items():
+        for n in node_to_fed_sends[node]:
+            assert(isinstance(n, DistributedSend))
 
     from functools import partial
     pfunc = partial(get_partition_id, node_to_fed_sends,
