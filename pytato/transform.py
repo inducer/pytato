@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from abc import ABC, abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Optional, Tuple, TYPE_CHECKING)
+                    List, Mapping, Iterable, Tuple, TYPE_CHECKING)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
