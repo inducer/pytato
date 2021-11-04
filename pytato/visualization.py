@@ -79,7 +79,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper):
+class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
     def __init__(self) -> None:
         super().__init__()
         self.nodes: Dict[Array, DotNodeInfo] = {}
@@ -93,7 +93,9 @@ class ArrayToDotNodeInfoMapper(CachedMapper):
         edges: Dict[str, Array] = {}
         return DotNodeInfo(title, addr, fields, edges)
 
-    def handle_unsupported_array(self, expr: Array) -> None:
+    # type-ignore-reason: incompatible with supertype
+    def handle_unsupported_array(self,  # type: ignore[override]
+            expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
@@ -130,7 +132,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper):
             self.rec(array)
             info.edges[str(i)] = array
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
     def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
@@ -209,10 +211,11 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
-    nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
     for elem in outputs._data.values():
-        mapper(elem, nodes)
+        mapper(elem)
+
+    nodes = mapper.nodes
 
     input_arrays: List[Array] = []
     internal_arrays: List[Array] = []
@@ -265,13 +268,11 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
     part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
 
     for part_id, out_names in parts.partition_id_to_output_names.items():
-        part_node_to_info: Dict[Array, DotNodeInfo] = {}
-
         mapper = ArrayToDotNodeInfoMapper()
         for out_name in out_names:
-            mapper(parts.var_name_to_result[out_name], part_node_to_info)
+            mapper(parts.var_name_to_result[out_name])
 
-        part_id_to_node_to_node_info[part_id] = part_node_to_info
+        part_id_to_node_to_node_info[part_id] = mapper.nodes
 
     id_gen = UniqueNameGenerator()
 
@@ -377,10 +378,11 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
-    nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
     for elem in outputs._data.values():
-        mapper(elem, nodes)
+        mapper(elem)
+
+    nodes = mapper.nodes
 
     input_arrays: List[Array] = []
     internal_arrays: List[Array] = []
