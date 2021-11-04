@@ -37,7 +37,9 @@ def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
 def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
-    x_in = np.random.randn(4, 4)
+    rng = np.random.default_rng()
+
+    x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
     bnd = make_distributed_send(
         x, dest_rank=(rank-1) % size, comm_tag=42, shape=(4, 4), dtype=float)
