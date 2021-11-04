@@ -59,8 +59,8 @@ class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
-    def __init__(self, data: Array, dest_rank: int = 0, comm_tag: Any = None,
-                 shape: Tuple[int, ...] = (), dtype: Any = float,
+    def __init__(self, data: Array, dest_rank: int, comm_tag: Any,
+                 shape: Tuple[int, ...], dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.data = data
@@ -82,8 +82,8 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     _fields = Array._fields + ("data", "src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
-    def __init__(self, data: Array, src_rank: int = 0, comm_tag: Any = None,
-                 shape: Tuple[int, ...] = (), dtype: Any = float,
+    def __init__(self, data: Array, src_rank: int, comm_tag: Any,
+                 shape: Tuple[int, ...], dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
@@ -92,14 +92,14 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
 
 def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...] = (), dtype: Any = float,
+                          shape: Tuple[int, ...], dtype: Any,
                           tags: Optional[TagsType] = frozenset()) -> \
          DistributedSend:
     return DistributedSend(data, dest_rank, comm_tag, shape, dtype, tags)
 
 
 def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...] = (), dtype: Any = float,
+                          shape: Tuple[int, ...], dtype: Any,
                           tags: Optional[TagsType] = frozenset()) \
                           -> DistributedRecv:
     return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)

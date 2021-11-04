@@ -285,12 +285,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         from pytato.distributed import DistributedSend
         return DistributedSend(self.rec(expr.data),
-                               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
+                               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
+                               shape=expr.shape, dtype=expr.dtype, tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
         from pytato.distributed import DistributedRecv
         return DistributedRecv(self.rec(expr.data),
-                               src_rank=expr.src_rank, comm_tag=expr.comm_tag)
+                               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+                               shape=expr.shape, dtype=expr.dtype, tags=expr.tags)
 
 # }}}
 
@@ -1299,14 +1301,16 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
         from pytato.distributed import DistributedSend
         # FIXME: Return Placeholder instead?
         return DistributedSend(self.handle_edge(expr, expr.data),
-            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag)
+            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag, shape=expr.shape,
+            dtype=expr.dtype, tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
         from pytato.distributed import DistributedRecv
         # FIXME: Return Placeholder instead?
         return DistributedRecv(self.handle_edge(expr, expr.data),
-            src_rank=expr.src_rank, comm_tag=expr.comm_tag)
+            src_rank=expr.src_rank, comm_tag=expr.comm_tag, shape=expr.shape,
+            dtype=expr.dtype, tags=expr.tags)
 
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(
