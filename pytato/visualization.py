@@ -268,13 +268,11 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
     part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
 
     for part_id, out_names in parts.partition_id_to_output_names.items():
-        part_node_to_info: Dict[Array, DotNodeInfo] = {}
-
         mapper = ArrayToDotNodeInfoMapper()
         for out_name in out_names:
-            mapper(parts.var_name_to_result[out_name], part_node_to_info)
+            mapper(parts.var_name_to_result[out_name])
 
-        part_id_to_node_to_node_info[part_id] = part_node_to_info
+        part_id_to_node_to_node_info[part_id] = mapper.nodes
 
     id_gen = UniqueNameGenerator()
 
