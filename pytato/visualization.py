@@ -39,7 +39,7 @@ from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
         Stack, ShapeType, Einsum)
 from pytato.codegen import normalize_outputs
-import pytato.transform
+from pytato.transform import CachedMapper
 
 from pytato.partition import CodePartitions
 
@@ -79,7 +79,11 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
+class ArrayToDotNodeInfoMapper(CachedMapper):
+    def __init__(self) -> None:
+        super().__init__()
+        self.nodes: Dict[Array, DotNodeInfo] = {}
+
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
         addr = hex(id(expr))
@@ -89,11 +93,8 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
         edges: Dict[str, Array] = {}
         return DotNodeInfo(title, addr, fields, edges)
 
-    def handle_unsupported_array(self, expr: Array,  # type: ignore
-            nodes: Dict[Array, DotNodeInfo]) -> None:
+    def handle_unsupported_array(self, expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
-        if expr in nodes:
-            return
         info = self.get_common_dot_info(expr)
 
         for field in expr._fields:
@@ -102,54 +103,43 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
             attr = getattr(expr, field)
 
             if isinstance(attr, Array):
-                self.rec(attr, nodes)
+                self.rec(attr)
                 info.edges[field] = attr
             elif isinstance(attr, tuple):
                 info.fields[field] = stringify_shape(attr)
             else:
                 info.fields[field] = str(attr)
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
-    def map_index_lambda(self, expr: IndexLambda,
-            nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
-
+    def map_index_lambda(self, expr: IndexLambda) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["expr"] = str(expr.expr)
 
         for name, val in expr.bindings.items():
-            self.rec(val, nodes)
+            self.rec(val)
             info.edges[name] = val
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
-    def map_stack(self, expr: Stack, nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
-
+    def map_stack(self, expr: Stack) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["axis"] = str(expr.axis)
 
         for i, array in enumerate(expr.arrays):
-            self.rec(array, nodes)
+            self.rec(array)
             info.edges[str(i)] = array
 
         nodes[expr] = info
 
-    def map_einsum(self, expr: Einsum,
-                   nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
-
+    def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
 
         for access_descr, val in zip(expr.access_descriptors, expr.args):
-            self.rec(val, nodes)
+            self.rec(val)
             info.edges[str(access_descr)] = val
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
 
 def dot_escape(s: str) -> str:
