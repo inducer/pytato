@@ -252,9 +252,9 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         # print(prg_per_partition[pid].program)
 
         # FIXME: necessary?
-        # inputs.update({
-        #     k: context[k] for k in parts.partition_id_to_input_names[pid]
-        #     if k in context})
+        inputs.update({
+            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            if k in context})
 
         _evt, result_dict = prg_per_partition[pid](**inputs)
 
