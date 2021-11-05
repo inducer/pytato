@@ -317,7 +317,8 @@ def generate_code_for_partitions(parts: CodePartitions) \
     from pytato.distributed import _DistributedCommReplacer
     comm_replacer = _DistributedCommReplacer()
 
-    for pid in parts.toposorted_partitions:
+    # FIXME: this does not work if not reversing the list
+    for pid in parts.toposorted_partitions[::-1]:
         d = DictOfNamedArrays(
                     {var_name: comm_replacer(parts.var_name_to_result[var_name])
                         for var_name in parts.partition_id_to_output_names[pid]

@@ -60,7 +60,7 @@ class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
     _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
     def __init__(self, data: Array, dest_rank: int, comm_tag: Any,
-                 shape: Tuple[int, ...], dtype: Any,
+                 shape: ShapeType, dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.data = data
@@ -83,7 +83,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     _mapper_method = "map_distributed_recv"
 
     def __init__(self, data: Array, src_rank: int, comm_tag: Any,
-                 shape: Tuple[int, ...], dtype: Any,
+                 shape: ShapeType, dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
@@ -92,14 +92,14 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
 
 def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...], dtype: Any,
+                          shape: ShapeType, dtype: Any,
                           tags: Optional[TagsType] = frozenset()) -> \
          DistributedSend:
     return DistributedSend(data, dest_rank, comm_tag, shape, dtype, tags)
 
 
 def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
-                          shape: Tuple[int, ...], dtype: Any,
+                          shape: ShapeType, dtype: Any,
                           tags: Optional[TagsType] = frozenset()) \
                           -> DistributedRecv:
     return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
@@ -191,9 +191,9 @@ def gather_distributed_comm_info(parts: CodePartitions) -> \
 # {{{ distributed execute
 
 # FIXME: Where to get communicator/actx? Argument to make_distributed_recv?
+# communicator -> pass into execute_partitions_distributed
 def post_receives(dci: DistributedCommInfo) -> \
         Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
-    print("post recv", dci)
 
     from mpi4py import MPI
 
@@ -203,12 +203,9 @@ def post_receives(dci: DistributedCommInfo) -> \
         src_rank = v.src_rank
         tag = v.comm_tag
 
-        # FIXME
-        # buf = v.data  # does that need to_numpy()?
-        # allocate numpy array of correct dtype and shape
-        buf = np.array(([42.0, 42.0, 42.0, 42.0],)*4)
+        buf = np.zeros(v.shape, dtype=v.dtype)
 
-        recv_reqs[k] = (MPI.COMM_WORLD.irecv(buf=buf, source=src_rank, tag=tag), buf)
+        recv_reqs[k] = (MPI.COMM_WORLD.Irecv(buf=buf, source=src_rank, tag=tag), buf)
 
     return (recv_reqs, dci)
 
@@ -217,8 +214,7 @@ def post_receives(dci: DistributedCommInfo) -> \
 # -> pass into execute_partitions_distributed
 def mpi_send(rank: int, tag: Any, data: Any) -> None:
     from mpi4py import MPI
-    MPI.COMM_WORLD.send(data, dest=rank, tag=tag)
-    print("mpi send", rank, tag, data)
+    MPI.COMM_WORLD.Send(data.data, dest=rank, tag=tag)
 
 
 def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
@@ -241,14 +237,18 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         # FIXME: necessary?
         context.update(part_receives[1].results)
 
-        inputs.update({k: v[1] for k, v in part_receives[0].items()})
+        for k, v in part_receives[0].items():
+            v[0].Wait()
+            inputs.update({k: v[1]})
+
+        # inputs.update({k: v[1] for k, v in part_receives[0].items()})
         # {part.name: actx.from_numpy(recv.wait())
         # {recv.results: None
         #     for recv in part_receives})
 
         # inputs.update(context)
 
-        print(f"{context=}")
+        # print(f"{context=}")
         # print(prg_per_partition[pid].program)
 
         # FIXME: necessary?

@@ -65,8 +65,6 @@ def main():
     tm = TopoSortMapper()
     tm(y)
 
-    print(tm.topological_order)
-
     # FIXME: Inefficient... too many traversals
     node_to_feeding_recvs = {}
     for node in graph:
@@ -111,8 +109,7 @@ def main():
     context = execute_partitions_distributed(parts, prg_per_partition,
                                              queue, distributed_comm_infos)
 
-    final_res = context[parts.partition_id_to_output_names[
-                            parts.toposorted_partitions[-1]][0]]
+    final_res = [context[k] for k in outputs.keys()]
 
     # Execute the unpartitioned code for comparison
     # prg = pt.generate_loopy(y)
@@ -121,6 +118,8 @@ def main():
     # print(out)
     print("------------")
     print(final_res)
+    print("------------")
+    print("Distributed test succeeded")
 
     # assert np.allclose(out, final_res)
 
