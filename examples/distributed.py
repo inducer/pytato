@@ -18,7 +18,7 @@ from pytato.distributed import (execute_partitions_distributed,
 # from pytato.visualization import show_dot_graph
 
 from dataclasses import dataclass
-from pytato.distributed import (make_distributed_send, make_distributed_recv,
+from pytato.distributed import (staple_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend)
 
 
@@ -41,13 +41,12 @@ def main():
 
     x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
-    bnd = make_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42)
 
-    halo = make_distributed_recv(
-        src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+    halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
 
-    # TODO: send returns scalar 0?
-    y = x+bnd+halo
+    y = x+halo
 
     # bnd2 = pt.make_distributed_send(y[0], dest_rank=(rank-1)%size, comm_tag="halo")
 

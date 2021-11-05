@@ -2,6 +2,8 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
+Copyright (C) 2020-21 Kaushik Kulkarni
+Copyright (C) 2020-21 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -41,7 +43,7 @@ from dataclasses import dataclass
 from pytato.tags import ImplStored
 
 if TYPE_CHECKING:
-    from pytato.distributed import DistributedSend, DistributedRecv
+    from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -282,14 +284,17 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                        order=expr.order,
                        tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
-        from pytato.distributed import DistributedSend
-        return DistributedSend(
-               self.rec(expr.data),
-               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
-               tags=expr.tags)
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> Array:
+        from pytato.distributed import DistributedSend, DistributedSendRefHolder
+        return DistributedSendRefHolder(
+                DistributedSend(
+                    data=self.rec(expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag),
+                self.rec(expr.data))
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+    def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         from pytato.distributed import DistributedRecv
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
@@ -389,8 +394,12 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
-    def map_distributed_send(self, expr: DistributedSend) -> CombineT:
-        return self.combine(self.rec(expr.data))
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> CombineT:
+        return self.combine(
+                self.rec(expr.send.data),
+                self.rec(expr.data),
+                )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
         return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
@@ -454,8 +463,10 @@ class DependencyMapper(CombineMapper[R]):
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
-    def map_distributed_send(self, expr: DistributedSend) -> R:
-        return self.combine(frozenset([expr]), super().map_distributed_send(expr))
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> R:
+        return self.combine(
+                frozenset([expr]), super().map_distributed_send_ref_holder(expr))
 
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
@@ -681,10 +692,12 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> None:
         if not self.visit(expr):
             return
 
+        self.rec(expr.send.data)
         self.rec(expr.data)
 
         self.post_visit(expr)
@@ -692,8 +705,7 @@ class WalkMapper(Mapper):
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         if not self.visit(expr):
             return
-
-        self.rec(expr.data)
+        self.rec_idx_or_size_tuple(expr.shape)
 
         self.post_visit(expr)
 
@@ -1169,9 +1181,13 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         # Root node might have no predecessor
         self.node_to_users[expr] = set()
         return self.rec(expr, *args)
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> None:
         self.node_to_users.setdefault(expr.data, set()).add(expr)
         self.rec(expr.data)
+        self.node_to_users.setdefault(expr.send.data, set()).add(expr)
+        self.rec(expr.send.data)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
@@ -1348,19 +1364,23 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
-            -> Any:
-        from pytato.distributed import DistributedSend
-        return DistributedSend(self.handle_edge(expr, expr.data),
-            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
-            tags=expr.tags)
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> Any:
+        from pytato.distributed import DistributedSend, DistributedSendRefHolder
+        return DistributedSendRefHolder(
+                send=DistributedSend(
+                    data=self.handle_edge(expr, expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag),
+                data=self.handle_edge(expr, expr.data),
+                tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
         from pytato.distributed import DistributedRecv
         return DistributedRecv(
             src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-            shape=self.rec_idx_or_size_tupl(expr, expr.shape, *args),
+            shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
             dtype=expr.dtype, tags=expr.tags)
 
     # }}}

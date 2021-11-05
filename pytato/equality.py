@@ -34,7 +34,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall
-    from pytato.distributed import DistributedRecv, DistributedSend
+    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. autoclass:: EqualityComparer
@@ -210,26 +210,6 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_distributed_send(self, expr1: DistributedSend, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.data, expr2.data)
-                and expr1.dest_rank == expr2.dest_rank
-                and expr1.comm_tag == expr2.comm_tag
-                and expr1.shape == expr2.shape
-                and expr1.dtype == expr2.dtype
-                and expr1.tags == expr2.tags
-                )
-
-    def map_distributed_recv(self, expr1: DistributedRecv, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.data, expr2.data)
-                and expr1.src_rank == expr2.src_rank
-                and expr1.comm_tag == expr2.comm_tag
-                and expr1.shape == expr2.shape
-                and expr1.dtype == expr2.dtype
-                and expr1.tags == expr2.tags
-                )
-
     def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:
         return (self.rec(expr1._container, expr2._container)
                 and expr1.tags == expr2.tags)
@@ -251,6 +231,26 @@ class EqualityComparer:
                 and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
                         for name in expr1._data))
+
+    def map_distributed_send_ref_holder(
+            self, expr1: DistributedSendRefHolder, expr2: Any) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and self.rec(expr1.send.data, expr2.send.data)
+                and self.rec(expr1.data, expr2.data)
+                and expr1.send.dest_rank == expr2.send.dest_rank
+                and expr1.send.comm_tag == expr2.send.comm_tag
+                and expr1.send.tags == expr2.send.tags
+                and expr1.tags == expr2.tags
+                )
+
+    def map_distributed_recv(self, expr1: DistributedRecv, expr2: Any) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and expr1.src_rank == expr2.src_rank
+                and expr1.comm_tag == expr2.comm_tag
+                and expr1.shape == expr2.shape
+                and expr1.dtype == expr2.dtype
+                and expr1.tags == expr2.tags
+                )
 
 # }}}
 

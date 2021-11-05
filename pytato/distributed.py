@@ -24,9 +24,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional
+from typing import Any, Dict, Hashable, Tuple, Optional, Hashable, cast
 from dataclasses import dataclass
 
+from pytools.tag import Taggable
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import CopyMapper
@@ -38,33 +39,98 @@ from pytools.tag import TagsType
 import numpy as np
 
 __doc__ = """
-.. currentmodule:: pytato.distributed
-
 Distributed communication
 -------------------------
 
-.. class:: DistributedSend
-.. class:: DistributedRecv
-.. class:: DistributedCommInfo
-..autofunction:: gather_distributed_comm_info
-..autofunction:: execute_partitions_distributed
+.. autoclass:: DistributedSend
+.. autoclass:: DistributedSendRefHolder
+.. autoclass:: DistributedRecv
+.. autoclass:: DistributedCommInfo
+
+.. autofunction:: make_distributed_send
+.. autofunction:: staple_distributed_send
+.. autofunction:: make_distributed_recv
+
+.. autofunction:: gather_distributed_comm_info
+.. autofunction:: execute_partitions_distributed
 """
 
 
 # {{{ Distributed execution
 
-class DistributedSend(Array):
-    """Class representing a distributed send operation."""
+CommTagType = Hashable
 
-    _mapper_method = "map_distributed_send"
-    _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
-    def __init__(self, data: Array, dest_rank: int, comm_tag: Any,
-                 tags: Optional[TagsType] = frozenset()) -> None:
+class DistributedSend(Taggable):
+    """Class representing a distributed send operation.
+
+    .. attribute:: data
+
+        The :class:`~pytato.Array` to be sent.
+
+    .. attribute:: dest_rank
+
+        An :class:`int`. The rank to which :attr:`data` is to be sent.
+
+    .. attribute:: comm_tag
+
+        A hashable, picklable object to serve as a 'tag' for the communication.
+        Only a :class:`DistributedRecv` with the same tag will be able to
+        receive the data being sent here.
+    """
+
+    def __init__(self, data: Array, dest_rank: int, comm_tag: CommTagType,
+                 tags: TagsType = frozenset()) -> None:
         super().__init__(tags=tags)
         self.data = data
         self.dest_rank = dest_rank
         self.comm_tag = comm_tag
+
+    def copy(self, **kwargs: Any) -> DistributedSend:
+        data: Optional[Array] = kwargs["data"]
+        dest_rank: Optional[int] = kwargs["dest_rank"]
+        comm_tag: Optional[CommTagType] = kwargs["comm_tag"]
+        tags: Optional[TagsType] = kwargs["tags"]
+        return type(self)(
+                data=data or self.data,
+                dest_rank=dest_rank if dest_rank is not None else self.dest_rank,
+                comm_tag=comm_tag if comm_tag is not None else self.comm_tag,
+                tags=tags if tags is not None else self.tags)
+
+
+class DistributedSendRefHolder(Array):
+    """A node acting as an identity on :attr:`data` while also holding
+    a reference to a :class:`DistributedSend` in :attr:`send`. Since
+    :mod:`pytato` represents data flow, and since no data flows 'out'
+    of a :class:`DistributedSend`, no node in all of :mod:`pytato` has
+    a good reason to hold a reference to a send node, since there is
+    no useful result of a send (at least of of an :class:`~pytato.Array` type).
+
+    This is where this node type comes in. Its value is the same as that of
+    :attr:`data`, *and* it holds a reference to the send node.
+
+    .. note::
+
+        This all seems a wee bit inelegant, but nobody who has written
+        or reviewed this code so far had a better idea. If you do, please speak up!
+
+    .. attribute:: send
+
+        The :class:`DistributedSend` to which a reference is to be held.
+
+    .. attribute:: data
+
+        A :class:`~pytato.Array`. The value of this node.
+    """
+
+    _mapper_method = "map_distributed_send_ref_holder"
+    _fields = Array._fields + ("data", "send",)
+
+    def __init__(self, send: DistributedSend, data: Array,
+                 tags: TagsType = frozenset()) -> None:
+        super().__init__(tags=tags)
+        self.send = send
+        self.data = data
 
     @property
     def shape(self) -> ShapeType:
@@ -76,12 +142,26 @@ class DistributedSend(Array):
 
 
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
-    """Class representing a distributed receive operation."""
+    """Class representing a distributed receive operation.
+
+    .. attribute:: src_rank
+
+        An :class:`int`. The rank from which an array is to be received.
+
+    .. attribute:: comm_tag
+
+        A hashable, picklable object to serve as a 'tag' for the communication.
+        Only a :class:`DistributedRecv` with the same tag will be able to
+        receive the data being sent here.
+
+    .. attribute:: shape
+    .. attribute:: dtype
+    """
 
     _fields = Array._fields + ("src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
-    def __init__(self, src_rank: int, comm_tag: Any,
+    def __init__(self, src_rank: int, comm_tag: CommTagType,
                  shape: ShapeType, dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
@@ -89,15 +169,25 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
         self.comm_tag = comm_tag
 
 
-def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
-                          tags: Optional[TagsType] = frozenset()) -> \
+def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
+                          send_tags: TagsType = frozenset()) -> \
          DistributedSend:
-    return DistributedSend(data, dest_rank, comm_tag, tags)
+    return DistributedSend(sent_data, dest_rank, comm_tag, send_tags)
 
 
-def make_distributed_recv(src_rank: int, comm_tag: object,
+def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
+                          stapled_to: Array, *,
+                          send_tags: TagsType = frozenset(),
+                          ref_holder_tags: TagsType = frozenset()) -> \
+         DistributedSendRefHolder:
+    return DistributedSendRefHolder(
+            DistributedSend(sent_data, dest_rank, comm_tag, send_tags),
+            stapled_to, tags=ref_holder_tags)
+
+
+def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ShapeType, dtype: Any,
-                          tags: Optional[TagsType] = frozenset()) \
+                          tags: TagsType = frozenset()) \
                           -> DistributedRecv:
     return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 
@@ -123,7 +213,17 @@ class DistributedCommInfo:
 
 
 class _DistributedCommReplacer(CopyMapper):
-    """Support for distributed communication operations."""
+    """Mapper to process a DAG for realization of :class:`DistributedSend`
+    and :class:`DistributedRecv` outside of normal code generation.
+
+    -   Replaces :class:`DistributedRecv` with :class`~pytato.Placeholder`
+        so that received data can be externally supplied, making a note
+        in :attr:`part_input_name_to_recv_node`.
+
+    -   Eliminates :class:`DistributedSendRefHolder` and
+        :class:`DistributedSend` from the DAG, making a note of data
+        to be send in :attr:`part_output_name_to_send_node`.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -134,26 +234,23 @@ class _DistributedCommReplacer(CopyMapper):
         self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
 
-    # type-ignore-reason: incompatible with superclass
-    def map_distributed_recv(self,  # type: ignore[override]
-            expr: DistributedRecv) -> Placeholder:
+    def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
         # no children, no need to recurse
 
         new_name = self.name_generator()
         self.part_input_name_to_recv_node[new_name] = expr
-        return make_placeholder(new_name, expr.shape,
-                expr.dtype,
-                tags=expr.tags)
+        return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
+                expr.dtype, tags=expr.tags)
 
-    # type-ignore-reason: incompatible with superclass
-    def map_distributed_send(self,  # type: ignore[override]
-                             expr: DistributedSend) -> Array:  #
-        result = super().map_distributed_send(expr)
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> Array:
+        result = cast(DistributedSendRefHolder,
+                super().map_distributed_send_ref_holder(expr))
 
         new_name = self.name_generator()
-        self.part_output_name_to_send_node[new_name] = result
+        self.part_output_name_to_send_node[new_name] = result.send
 
-        return expr.data
+        return result.data
 
 
 def gather_distributed_comm_info(parts: CodePartitions) -> \
