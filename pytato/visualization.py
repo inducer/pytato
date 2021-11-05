@@ -37,7 +37,7 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum)
+        Stack, ShapeType, Einsum, Placeholder)
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper
 
@@ -278,6 +278,8 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
     emit = DotEmitter()
 
+    emitted_placeholders = set()
+
     with emit.block("digraph computation"):
         emit("node [shape=rectangle]")
         array_to_id: Dict[Array, str] = {}
@@ -295,7 +297,6 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
         for part_id in parts.toposorted_partitions:
             part_node_to_info = part_id_to_node_to_node_info[part_id]
             input_arrays: List[Array] = []
-            output_arrays: Set[Array] = set()
             internal_arrays: List[Array] = []
 
             for array, _ in part_node_to_info.items():
@@ -304,59 +305,63 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
                 else:
                     internal_arrays.append(array)
 
-            for out_name in parts.partition_id_to_output_names[part_id]:
-                ary = parts.var_name_to_result[out_name]
-                output_arrays.add(ary)
-                if ary in internal_arrays:
-                    internal_arrays.remove(ary)
-                if ary in input_arrays:
-                    input_arrays.remove(ary)
+            # {{{ emit inputs
+
+            # Placeholders are unique, i.e. the same Placeholder object may be
+            # shared among partitions. Therefore, they should not live inside
+            # the (dot) subgraph, otherwise they would be forced into multiple
+            # subgraphs.
+
+            for array in input_arrays:
+                if isinstance(array, Placeholder):
+                    if array not in emitted_placeholders:
+                        _emit_array(emit, part_node_to_info[array],
+                                    array_to_id[array], "deepskyblue")
+                        emitted_placeholders.add(array)
+
+                        # Emit cross-partition edges
+                        tgt = array_to_id[parts.var_name_to_result[array.name]]
+                        emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
+
+                else:
+                    _emit_array(emit, part_node_to_info[array],
+                                array_to_id[array], "deepskyblue")
+
+            # }}}
 
             with emit.block(f'subgraph "cluster_part_{part_id}"'):
                 emit("style=dashed")
                 emit(f'label="{part_id}"')
 
-                # Emit inputs
-                for array in input_arrays:
-                    _emit_array(emit, part_node_to_info[array],
-                                array_to_id[array], "deepskyblue")
-
-                    # Emit cross-partition edges
-                    if array.name:  # type: ignore [attr-defined]
-                        tgt = array_to_id[
-                                parts.var_name_to_result[array.name]]  # type: ignore
-                        emit(f"{tgt} -> {array_to_id[array]}")
-
                 # Emit internal nodes
                 for array in internal_arrays:
                     _emit_array(emit, part_node_to_info[array], array_to_id[array])
 
-                # Emit outputs
-                for array in output_arrays:
-                    _emit_array(emit, part_node_to_info[array],
-                                array_to_id[array], "gold")
-
-                # Emit intra-partition edges
-                for array, node in part_node_to_info.items():
-                    for label, tail_array in node.edges.items():
-                        tail = array_to_id[tail_array]
-                        head = array_to_id[array]
-                        emit('%s -> %s [label="%s"]' %
-                            (tail, head, dot_escape(label)))
+            # Emit intra-partition edges
+            for array, node in part_node_to_info.items():
+                for label, tail_array in node.edges.items():
+                    tail = array_to_id[tail_array]
+                    head = array_to_id[array]
+                    emit('%s -> %s [label="%s"]' %
+                        (tail, head, dot_escape(label)))
 
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, CodePartitions]) \
+        -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
+        or the output of :func:`~pytato.find_partitions`.
     """
     dot_code: str
 
     if isinstance(result, str):
         dot_code = result
+    elif isinstance(result, CodePartitions):
+        dot_code = get_dot_graph_from_partitions(result)
     else:
         dot_code = get_dot_graph(result)
 
