@@ -53,16 +53,15 @@ Distributed communication
 
 # {{{ Distributed execution
 
-class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
+class DistributedSend(Array):
     """Class representing a distributed send operation."""
 
     _mapper_method = "map_distributed_send"
     _fields = Array._fields + ("data", "dest_rank", "comm_tag")
 
     def __init__(self, data: Array, dest_rank: int, comm_tag: Any,
-                 shape: ShapeType, dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
-        super().__init__(shape=shape, dtype=dtype, tags=tags)
+        super().__init__(tags=tags)
         self.data = data
         self.dest_rank = dest_rank
         self.comm_tag = comm_tag
@@ -79,30 +78,28 @@ class DistributedSend(_SuppliedShapeAndDtypeMixin, Array):
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation."""
 
-    _fields = Array._fields + ("data", "src_rank", "comm_tag")
+    _fields = Array._fields + ("src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
-    def __init__(self, data: Array, src_rank: int, comm_tag: Any,
+    def __init__(self, src_rank: int, comm_tag: Any,
                  shape: ShapeType, dtype: Any,
                  tags: Optional[TagsType] = frozenset()) -> None:
         super().__init__(shape=shape, dtype=dtype, tags=tags)
         self.src_rank = src_rank
         self.comm_tag = comm_tag
-        self.data = data
 
 
 def make_distributed_send(data: Array, dest_rank: int, comm_tag: object,
-                          shape: ShapeType, dtype: Any,
                           tags: Optional[TagsType] = frozenset()) -> \
          DistributedSend:
-    return DistributedSend(data, dest_rank, comm_tag, shape, dtype, tags)
+    return DistributedSend(data, dest_rank, comm_tag, tags)
 
 
-def make_distributed_recv(data: Array, src_rank: int, comm_tag: object,
+def make_distributed_recv(src_rank: int, comm_tag: object,
                           shape: ShapeType, dtype: Any,
                           tags: Optional[TagsType] = frozenset()) \
                           -> DistributedRecv:
-    return DistributedRecv(data, src_rank, comm_tag, shape, dtype, tags)
+    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 
 # }}}
 

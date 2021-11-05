@@ -284,15 +284,17 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         from pytato.distributed import DistributedSend
-        return DistributedSend(self.rec(expr.data),
-                               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
-                               shape=expr.shape, dtype=expr.dtype, tags=expr.tags)
+        return DistributedSend(
+               self.rec(expr.data),
+               dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
+               tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
         from pytato.distributed import DistributedRecv
-        return DistributedRecv(self.rec(expr.data),
-                               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-                               shape=expr.shape, dtype=expr.dtype, tags=expr.tags)
+        return DistributedRecv(
+               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+               shape=self.rec_idx_or_size_tuple(expr.shape),
+               dtype=expr.dtype, tags=expr.tags)
 
 # }}}
 
@@ -391,7 +393,8 @@ class CombineMapper(Mapper, Generic[CombineT]):
         return self.combine(self.rec(expr.data))
 
     def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
-        return self.combine(self.rec(expr.data))
+        return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
+
 # }}}
 
 
@@ -1140,14 +1143,6 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.node_to_users.setdefault(dim, set()).add(expr)
                 self.rec(dim)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
-        self.node_to_users.setdefault(expr.data, set()).add(expr)
-        self.rec(expr.data)
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
-        self.node_to_users.setdefault(expr.data, set()).add(expr)
-        self.rec(expr.data)
-
     def _map_index_base(self, expr: IndexBase) -> None:
         self.node_to_users.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
@@ -1174,6 +1169,12 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         # Root node might have no predecessor
         self.node_to_users[expr] = set()
         return self.rec(expr, *args)
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) -> None:
+        self.node_to_users.setdefault(expr.data, set()).add(expr)
+        self.rec(expr.data)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
 # }}}
 
@@ -1296,26 +1297,10 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
-            -> Any:
-        from pytato.distributed import DistributedSend
-        # FIXME: Return Placeholder instead?
-        return DistributedSend(self.handle_edge(expr, expr.data),
-            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag, shape=expr.shape,
-            dtype=expr.dtype, tags=expr.tags)
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
-            -> Any:
-        from pytato.distributed import DistributedRecv
-        # FIXME: Return Placeholder instead?
-        return DistributedRecv(self.handle_edge(expr, expr.data),
-            src_rank=expr.src_rank, comm_tag=expr.comm_tag, shape=expr.shape,
-            dtype=expr.dtype, tags=expr.tags)
-
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(
             array=self.handle_edge(expr, expr.array, *args),
-            newshape=self._handle_shape(expr, expr.newshape),
+            newshape=self.rec_idx_or_size_tuple(expr, expr.newshape),
             order=expr.order,
             tags=expr.tags)
 
@@ -1362,6 +1347,21 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
+
+    def map_distributed_send(self, expr: DistributedSend, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedSend
+        return DistributedSend(self.handle_edge(expr, expr.data),
+            dest_rank=expr.dest_rank, comm_tag=expr.comm_tag,
+            tags=expr.tags)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedRecv
+        return DistributedRecv(
+            src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+            shape=self.rec_idx_or_size_tupl(expr, expr.shape, *args),
+            dtype=expr.dtype, tags=expr.tags)
 
     # }}}
 

@@ -41,11 +41,10 @@ def main():
 
     x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
-    bnd = make_distributed_send(
-        x, dest_rank=(rank-1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+    bnd = make_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42)
 
     halo = make_distributed_recv(
-        x, src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+        src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
 
     # TODO: send returns scalar 0?
     y = x+bnd+halo
