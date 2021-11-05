@@ -42,6 +42,7 @@ from pytato.tags import ImplStored
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
+IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 R = FrozenSet[Array]
 
@@ -173,13 +174,16 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
 
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
+                              ) -> Tuple[IndexOrShapeExpr, ...]:
+        return tuple(self.rec(s) if isinstance(s, Array) else s for s in situp)
+
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings: Dict[str, Array] = {
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())}
         return IndexLambda(expr=expr.expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
+                shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
                 tags=expr.tags)
@@ -187,8 +191,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_placeholder(self, expr: Placeholder) -> Array:
         assert expr.name is not None
         return Placeholder(name=expr.name,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
+                shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
@@ -217,9 +220,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 tags=expr.tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
-        return type(expr)(self.rec(expr.array),
-                          tuple(self.rec(idx) if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
+        return type(expr)(
+                array=self.rec(expr.array),
+                indices=self.rec_idx_or_size_tuple(expr.indices))
 
     def map_basic_index(self, expr: BasicIndex) -> Array:
         return self._map_index_base(expr)
@@ -237,8 +240,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         return DataWrapper(name=expr.name,
                 data=expr.data,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
+                shape=self.rec_idx_or_size_tuple(expr.shape),
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
@@ -269,12 +271,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
-                       # type-ignore reason: mypy can't tell 'rec' is being fed
-                       # only arrays
-                       newshape=tuple(self.rec(s)  # type: ignore
-                                      if isinstance(s, Array)
-                                      else s
-                                      for s in expr.newshape),
+                       newshape=self.rec_idx_or_size_tuple(expr.newshape),
                        order=expr.order,
                        tags=expr.tags)
 
@@ -286,6 +283,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 class CombineMapper(Mapper, Generic[CombineT]):
     def __init__(self) -> None:
         self.cache: Dict[ArrayOrNames, CombineT] = {}
+
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
+                              ) -> Tuple[CombineT, ...]:
+        return tuple(self.rec(s) for s in situp if isinstance(s, Array))
 
     def rec(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
         if expr in self.cache:
@@ -305,16 +306,13 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_index_lambda(self, expr: IndexLambda) -> CombineT:
         return self.combine(*(self.rec(bnd)
                               for _, bnd in sorted(expr.bindings.items())),
-                            *(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+                            *self.rec_idx_or_size_tuple(expr.shape))
 
     def map_placeholder(self, expr: Placeholder) -> CombineT:
-        return self.combine(*(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+        return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
     def map_data_wrapper(self, expr: DataWrapper) -> CombineT:
-        return self.combine(*(self.rec(s)
-                              for s in expr.shape if isinstance(s, Array)))
+        return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
     def map_matrix_product(self, expr: MatrixProduct) -> CombineT:
         return self.combine(self.rec(expr.x1), self.rec(expr.x2))
@@ -331,9 +329,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
 
     def _map_index_base(self, expr: IndexBase) -> CombineT:
         return self.combine(self.rec(expr.array),
-                            *(self.rec(idx)
-                              for idx in expr.indices
-                              if isinstance(idx, Array)))
+                            *self.rec_idx_or_size_tuple(expr.indices))
 
     def map_basic_index(self, expr: BasicIndex) -> CombineT:
         return self._map_index_base(expr)
@@ -349,7 +345,9 @@ class CombineMapper(Mapper, Generic[CombineT]):
         return self._map_index_base(expr)
 
     def map_reshape(self, expr: Reshape) -> CombineT:
-        return self.combine(self.rec(expr.array))
+        return self.combine(
+                self.rec(expr.array),
+                *self.rec_idx_or_size_tuple(expr.newshape))
 
     def map_concatenate(self, expr: Concatenate) -> CombineT:
         return self.combine(*(self.rec(ary)
@@ -522,6 +520,11 @@ class WalkMapper(Mapper):
         """
         pass
 
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]) -> None:
+        for comp in situp:
+            if isinstance(comp, Array):
+                self.rec(comp)
+
     def map_index_lambda(self, expr: IndexLambda) -> None:
         if not self.visit(expr):
             return
@@ -529,9 +532,7 @@ class WalkMapper(Mapper):
         for _, child in sorted(expr.bindings.items()):
             self.rec(child)
 
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr.shape)
 
         self.post_visit(expr)
 
@@ -539,9 +540,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr.shape)
 
         self.post_visit(expr)
 
@@ -574,9 +573,7 @@ class WalkMapper(Mapper):
 
         self.rec(expr.array)
 
-        for idx in expr.indices:
-            if isinstance(idx, Array):
-                self.rec(idx)
+        self.rec_idx_or_size_tuple(expr.indices)
 
         self.post_visit(expr)
 
@@ -617,10 +614,6 @@ class WalkMapper(Mapper):
 
         for child in expr.args:
             self.rec(child)
-
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.rec(dim)
 
         self.post_visit(expr)
 
@@ -1019,6 +1012,19 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         super().__init__()
         self.node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
+    def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+        # Root node has no predecessor
+        self.node_to_users[expr] = set()
+        return self.rec(expr, *args)
+
+    def rec_idx_or_size_tuple(
+            self, expr: Array, situp: Tuple[IndexOrShapeExpr, ...]
+            ) -> None:
+        for dim in situp:
+            if isinstance(dim, Array):
+                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.rec(dim)
+
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for child in expr._data.values():
             self.node_to_users.setdefault(child, set()).add(expr)
@@ -1040,19 +1046,13 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
             self.rec(arg)
 
     def map_reshape(self, expr: Reshape) -> None:
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.node_to_users.setdefault(dim, set()).add(expr)
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
         self.node_to_users.setdefault(expr.array, set()).add(expr)
         self.rec(expr.array)
 
     def map_placeholder(self, expr: Placeholder) -> None:
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.node_to_users.setdefault(dim, set()).add(expr)
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_matrix_product(self, expr: MatrixProduct) -> None:
         for child in (expr.x1, expr.x2):
@@ -1082,20 +1082,14 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.rec(expr.array)
 
     def map_data_wrapper(self, expr: DataWrapper) -> None:
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.node_to_users.setdefault(dim, set()).add(expr)
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
         for child in expr.bindings.values():
             self.node_to_users.setdefault(child, set()).add(expr)
             self.rec(child)
 
-        for dim in expr.shape:
-            if isinstance(dim, Array):
-                self.node_to_users.setdefault(dim, set()).add(expr)
-                self.rec(dim)
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def _map_index_base(self, expr: IndexBase) -> None:
         self.node_to_users.setdefault(expr.array, set()).add(expr)
@@ -1185,10 +1179,13 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
         pass
 
-    def _handle_shape(self, expr: Array, shape: Any, *args: Any) -> Tuple[Any, ...]:
+    def rec_idx_or_size_tuple(self,
+            expr: Array,
+            situp: Tuple[IndexOrShapeExpr, ...],
+            *args: Any) -> Tuple[IndexOrShapeExpr, ...]:
         return tuple([
             self.handle_edge(expr, dim, *args) if isinstance(dim, Array) else dim
-            for dim in shape])
+            for dim in situp])
 
     # {{{ map_xxx methods
 
@@ -1200,7 +1197,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
         return IndexLambda(expr=expr.expr,
-                shape=self._handle_shape(expr, expr.shape),
+                shape=self.rec_idx_or_size_tuple(expr, expr.shape),
                 dtype=expr.dtype,
                 bindings={name: self.handle_edge(expr, child)
                           for name, child in expr.bindings.items()},
@@ -1248,7 +1245,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
         return Reshape(
             array=self.handle_edge(expr, expr.array, *args),
-            newshape=self._handle_shape(expr, expr.newshape),
+            newshape=self.rec_idx_or_size_tuple(expr, expr.newshape, *args),
             order=expr.order,
             tags=expr.tags)
 
@@ -1281,14 +1278,14 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
         return DataWrapper(
                 name=expr.name,
                 data=expr.data,
-                shape=self._handle_shape(expr, expr.shape, *args),
+                shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
         assert expr.name
 
         return Placeholder(name=expr.name,
-                shape=self._handle_shape(expr, expr.shape, *args),
+                shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
                 dtype=expr.dtype,
                 tags=expr.tags)
 
