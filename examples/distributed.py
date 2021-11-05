@@ -107,7 +107,7 @@ def main():
     queue = cl.CommandQueue(ctx)
 
     context = execute_partitions_distributed(parts, prg_per_partition,
-                                             queue, distributed_comm_infos)
+                                             queue, distributed_comm_infos, comm)
 
     final_res = [context[k] for k in outputs.keys()]
 

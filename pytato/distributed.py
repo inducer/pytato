@@ -190,12 +190,9 @@ def gather_distributed_comm_info(parts: CodePartitions) -> \
 
 # {{{ distributed execute
 
-# FIXME: Where to get communicator/actx? Argument to make_distributed_recv?
-# communicator -> pass into execute_partitions_distributed
-def post_receives(dci: DistributedCommInfo) -> \
+# FIXME: Where to get actx? Argument to make_distributed_recv?
+def post_receives(dci: DistributedCommInfo, comm: Any) -> \
         Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
-
-    from mpi4py import MPI
 
     recv_reqs = {}
 
@@ -205,26 +202,24 @@ def post_receives(dci: DistributedCommInfo) -> \
 
         buf = np.zeros(v.shape, dtype=v.dtype)
 
-        recv_reqs[k] = (MPI.COMM_WORLD.Irecv(buf=buf, source=src_rank, tag=tag), buf)
+        # FIXME: Why doesn't this work with the lower case mpi4py function names?
+        recv_reqs[k] = (comm.Irecv(buf=buf, source=src_rank, tag=tag), buf)
 
     return (recv_reqs, dci)
 
 
-# FIXME: Where to get communicator? Argument to make_distributed_send?
-# -> pass into execute_partitions_distributed
-def mpi_send(rank: int, tag: Any, data: Any) -> None:
-    from mpi4py import MPI
-    MPI.COMM_WORLD.Send(data.data, dest=rank, tag=tag)
+def mpi_send(rank: int, tag: Any, data: Any, comm: Any) -> None:
+    comm.Send(data.data, dest=rank, tag=tag)
 
 
 def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
                         Dict[Hashable, BoundProgram], queue: Any,
                         distributed_comm_infos: Dict[Hashable,
-                        DistributedCommInfo]) \
+                        DistributedCommInfo], comm: Any) \
                                 -> Dict[str, Any]:
 
     all_receives = [
-            post_receives(part_dci)
+            post_receives(part_dci, comm)
             for part_dci in distributed_comm_infos.values()]
 
     context: Dict[str, Any] = {}
@@ -261,7 +256,7 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         context.update(result_dict)
 
         for name, send_node in part_dci.part_output_name_to_send_node.items():
-            mpi_send(send_node.dest_rank, send_node.comm_tag, context[name])
+            mpi_send(send_node.dest_rank, send_node.comm_tag, context[name], comm)
             del context[name]
 
     return context
