@@ -174,8 +174,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]) \
-            -> Tuple[IndexOrShapeExpr, ...]:
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
+                              ) -> Tuple[IndexOrShapeExpr, ...]:
         return tuple(self.rec(s) if isinstance(s, Array) else s for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
@@ -284,8 +284,8 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def __init__(self) -> None:
         self.cache: Dict[ArrayOrNames, CombineT] = {}
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]) \
-            -> Tuple[CombineT, ...]:
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
+                              ) -> Tuple[CombineT, ...]:
         return tuple(self.rec(s) for s in situp if isinstance(s, Array))
 
     def rec(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
@@ -1182,8 +1182,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def rec_idx_or_size_tuple(self,
             expr: Array,
             situp: Tuple[IndexOrShapeExpr, ...],
-            *args: Any) \
-            -> Tuple[IndexOrShapeExpr, ...]:
+            *args: Any) -> Tuple[IndexOrShapeExpr, ...]:
         return tuple([
             self.handle_edge(expr, dim, *args) if isinstance(dim, Array) else dim
             for dim in situp])
