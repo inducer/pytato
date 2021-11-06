@@ -137,9 +137,10 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
     def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
 
-        for access_descr, val in zip(expr.access_descriptors, expr.args):
+        for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
+                                                       expr.args)):
             self.rec(val)
-            info.edges[str(access_descr)] = val
+            info.edges[f"{iarg}: {access_descr}"] = val
 
         self.nodes[expr] = info
 
