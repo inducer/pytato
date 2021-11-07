@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, Hashable, cast
+from typing import Any, Dict, Hashable, Tuple, Optional, cast
 from dataclasses import dataclass
 
 from pytools.tag import Taggable

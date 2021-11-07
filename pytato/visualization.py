@@ -29,7 +29,7 @@ import contextlib
 import dataclasses
 import html
 from typing import (Callable, Dict, Union, Iterator, List, Mapping, Hashable,
-                    Set)
+                    )
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -320,6 +320,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
                         emitted_placeholders.add(array)
 
                         # Emit cross-partition edges
+                        assert array.name
                         tgt = array_to_id[parts.var_name_to_result[array.name]]
                         emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
 

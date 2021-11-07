@@ -1171,11 +1171,6 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                                           ) -> None:
         self._map_index_base(expr)
 
-    def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
-        # Root node might have no predecessor
-        self.node_to_users[expr] = set()
-        return self.rec(expr, *args)
-
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> None:
         self.node_to_users.setdefault(expr.data, set()).add(expr)
