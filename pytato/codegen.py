@@ -605,20 +605,18 @@ class NamesValidityChecker(CachedWalkMapper):
         super().__init__()
 
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, InputArgumentBase):
-            if expr.name is None:
-                # Name to be automatically assigned
-                return
-
-            try:
-                ary = self.name_to_input[expr.name]
-            except KeyError:
-                self.name_to_input[expr.name] = expr
-            else:
-                if ary is not expr:
-                    from pytato.diagnostic import NameClashError
-                    raise NameClashError("Received two separate instances of inputs "
-                                         f"named '{expr.name}'.")
+        if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
+            if expr.name is not None:
+                try:
+                    ary = self.name_to_input[expr.name]
+                except KeyError:
+                    self.name_to_input[expr.name] = expr
+                else:
+                    if ary is not expr:
+                        from pytato.diagnostic import NameClashError
+                        raise NameClashError(
+                                "Received two separate instances of inputs "
+                                f"named '{expr.name}'.")
 
 
 def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
