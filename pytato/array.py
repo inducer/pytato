@@ -229,7 +229,8 @@ def normalize_shape(
                 if not isinstance(d, SizeParam):
                     raise NotImplementedError("shape expressions can (for now) only "
                                               "be in terms of SizeParams. Depends on"
-                                              f" '{d.name}', a non-SizeParam array.")
+                                              f"a  '{type(d).__name__}', "
+                                              "a non-SizeParam array.")
             # TODO: Check affine-ness of the array expression.
         else:
             if not isinstance(s, int):
@@ -1472,26 +1473,11 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
 class InputArgumentBase(Array):
     r"""Base class for input arguments.
 
-    .. attribute:: name
-
-        The name by which a value is supplied for the argument once computation
-        begins. If None, a unique name will be assigned during code-generation.
-
     .. note::
 
         Creating multiple instances of any input argument with the
         same name in an expression is not allowed.
     """
-
-    # The name uniquely identifies this object in the namespace. Therefore,
-    # subclasses don't have to update *_fields*.
-    _fields = Array._fields + ("name",)
-
-    def __init__(self,
-            name: Optional[str],
-            tags: TagsType = frozenset()):
-        super().__init__(tags=tags)
-        self.name = name
 
 # }}}
 
@@ -1550,6 +1536,12 @@ class DataWrapper(InputArgumentBase):
         to assess whether shapes match, and thus it is important that a canonical
         (symbolic) form of the shape tuple is used.
 
+    .. attribute:: name
+
+        An (optional, string) name by which this object can be identified.
+        Hypothetically, this could be used to 'swap out' the data captured
+        here, but that functionality is not currently available.
+
     .. note::
 
         Since we cannot compare instances of :class:`DataInterface` being
@@ -1557,7 +1549,7 @@ class DataWrapper(InputArgumentBase):
         (i.e. the very same instance).
     """
 
-    _fields = InputArgumentBase._fields + ("data", "shape")
+    _fields = InputArgumentBase._fields + ("data", "shape", "name")
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
@@ -1565,8 +1557,9 @@ class DataWrapper(InputArgumentBase):
             data: DataInterface,
             shape: ShapeType,
             tags: TagsType = frozenset()):
-        super().__init__(name, tags=tags)
+        super().__init__(tags=tags)
 
+        self.name = name
         self.data = data
         self._shape = shape
 
@@ -1594,10 +1587,14 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     user during evaluation.
 
     .. attribute:: name
+
+        The name by which a value is supplied for the argument once computation
+        begins.
+
     .. automethod:: __init__
     """
 
-    _fields = InputArgumentBase._fields + ("shape", "dtype")
+    _fields = InputArgumentBase._fields + ("shape", "dtype", "name")
     _mapper_method = "map_placeholder"
 
     def __init__(self,
@@ -1608,10 +1605,8 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
-        super().__init__(shape=shape,
-                dtype=dtype,
-                name=name,
-                tags=tags)
+        super().__init__(shape=shape, dtype=dtype, tags=tags)
+        self.name = name
 
 # }}}
 
@@ -1621,14 +1616,22 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
 class SizeParam(InputArgumentBase):
     r"""A named placeholder for a scalar that may be used as a variable in symbolic
     expressions for array sizes.
+
+    .. attribute:: name
+
+        The name by which a value is supplied for the argument once computation
+        begins.
     """
 
     _mapper_method = "map_size_param"
 
+    _fields = InputArgumentBase._fields + ("name",)
+
     def __init__(self,
                  name: str,
                  tags: TagsType = frozenset()):
-        super().__init__(name=name, tags=tags)
+        super().__init__(tags=tags)
+        self.name = name
 
     @property
     def shape(self) -> ShapeType:

@@ -38,7 +38,7 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, Placeholder, NamedArray)
+        SizeParam, Placeholder, NamedArray, DataWrapper)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
@@ -898,6 +898,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     state.var_name_gen.add_names({input_expr.name
             for name in compute_order
             for input_expr in ing(outputs[name].expr)
+            if isinstance(input_expr, (Placeholder, SizeParam, DataWrapper))
             if input_expr.name is not None})
 
     state.var_name_gen.add_names(outputs)

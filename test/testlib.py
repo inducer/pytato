@@ -1,5 +1,5 @@
 import types
-from typing import Any, Dict, Optional, List, Tuple, cast, Union
+from typing import Any, Dict, Optional, List, Tuple, Union
 import operator
 import pyopencl as cl
 import numpy as np
@@ -65,7 +65,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     np_result = NumpyBasedEvaluator(np, parameters)(expr)
     prog = pt.generate_loopy(expr, cl_device=queue.device)
 
-    evt, (pt_result,) = prog(queue, **{cast(str, placeholder.name): data
+    evt, (pt_result,) = prog(queue, **{placeholder.name: data
                                 for placeholder, data in parameters.items()})
 
     assert pt_result.shape == np_result.shape
