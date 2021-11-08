@@ -29,7 +29,8 @@ import contextlib
 import dataclasses
 import html
 
-from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
+from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
+        Mapping, Hashable)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -42,6 +43,9 @@ from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper
 
 from pytato.partition import CodePartitions
+
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedSendRefHolder
 
 
 __doc__ = """
@@ -141,6 +145,19 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                                                        expr.args)):
             self.rec(val)
             info.edges[f"{iarg}: {access_descr}"] = val
+
+        self.nodes[expr] = info
+
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> None:
+
+        info = self.get_common_dot_info(expr)
+
+        self.rec(expr.passthrough_data)
+        info.edges["passthrough"] = expr.passthrough_data
+
+        self.rec(expr.send.data)
+        info.edges["sent"] = expr.send.data
 
         self.nodes[expr] = info
 
