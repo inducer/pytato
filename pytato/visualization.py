@@ -28,8 +28,8 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import (Callable, Dict, Union, Iterator, List, Mapping, Hashable,
-                    )
+
+from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -137,9 +137,10 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
     def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
 
-        for access_descr, val in zip(expr.access_descriptors, expr.args):
+        for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
+                                                       expr.args)):
             self.rec(val)
-            info.edges[str(access_descr)] = val
+            info.edges[f"{iarg}: {access_descr}"] = val
 
         self.nodes[expr] = info
 
@@ -321,6 +322,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
                         # Emit cross-partition edges
                         assert array.name
+  
                         tgt = array_to_id[parts.var_name_to_result[array.name]]
                         emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
 
@@ -355,7 +357,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, CodePartitions])
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
-        or the output of :func:`~pytato.find_partitions`.
+        or the output of :func:`~pytato.partition.find_partitions`.
     """
     dot_code: str
 
