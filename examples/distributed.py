@@ -71,10 +71,6 @@ def main():
             tag_user_nodes(graph, tag=node, starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
 
-    for node, _ in node_to_feeding_recvs.items():
-        for n in node_to_feeding_recvs[node]:
-            assert(isinstance(n, DistributedRecv))
-
     node_to_fed_sends = {}
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
@@ -82,13 +78,24 @@ def main():
             tag_user_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
 
+    from functools import partial
+    pfunc = partial(get_partition_id, node_to_fed_sends,
+                    node_to_feeding_recvs)
+
+    # {{{ Sanity checks
+
+    for node, _ in node_to_feeding_recvs.items():
+        for n in node_to_feeding_recvs[node]:
+            assert(isinstance(n, DistributedRecv))
+
     for node, _ in node_to_fed_sends.items():
         for n in node_to_fed_sends[node]:
             assert(isinstance(n, DistributedSend))
 
-    from functools import partial
-    pfunc = partial(get_partition_id, node_to_fed_sends,
-                    node_to_feeding_recvs)
+    for node in tm.topological_order:
+        pfunc(node)
+
+    # }}}
 
     # print(f"{graph=}")
     # print(f"{node_to_feeding_recvs=}")
