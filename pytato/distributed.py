@@ -99,7 +99,7 @@ class DistributedSend(Taggable):
 
 
 class DistributedSendRefHolder(Array):
-    """A node acting as an identity on :attr:`data` while also holding
+    """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
     :mod:`pytato` represents data flow, and since no data flows 'out'
     of a :class:`DistributedSend`, no node in all of :mod:`pytato` has
@@ -107,7 +107,7 @@ class DistributedSendRefHolder(Array):
     no useful result of a send (at least of of an :class:`~pytato.Array` type).
 
     This is where this node type comes in. Its value is the same as that of
-    :attr:`data`, *and* it holds a reference to the send node.
+    :attr:`passthrough_data`, *and* it holds a reference to the send node.
 
     .. note::
 
@@ -118,27 +118,27 @@ class DistributedSendRefHolder(Array):
 
         The :class:`DistributedSend` to which a reference is to be held.
 
-    .. attribute:: data
+    .. attribute:: passthrough_data
 
         A :class:`~pytato.Array`. The value of this node.
     """
 
     _mapper_method = "map_distributed_send_ref_holder"
-    _fields = Array._fields + ("data", "send",)
+    _fields = Array._fields + ("passthrough_data", "send",)
 
-    def __init__(self, send: DistributedSend, data: Array,
+    def __init__(self, send: DistributedSend, passthrough_data: Array,
                  tags: TagsType = frozenset()) -> None:
         super().__init__(tags=tags)
         self.send = send
-        self.data = data
+        self.passthrough_data = passthrough_data
 
     @property
     def shape(self) -> ShapeType:
-        return self.data.shape
+        return self.passthrough_data.shape
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return self.data.dtype
+        return self.passthrough_data.dtype
 
 
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
@@ -250,7 +250,7 @@ class _DistributedCommReplacer(CopyMapper):
         new_name = self.name_generator()
         self.part_output_name_to_send_node[new_name] = result.send
 
-        return result.data
+        return result.passthrough_data
 
 
 def gather_distributed_comm_info(parts: CodePartitions) -> \

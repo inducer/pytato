@@ -289,7 +289,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                     data=self.rec(expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.data))
+                self.rec(expr.passthrough_data))
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         from pytato.distributed import DistributedRecv
@@ -396,7 +396,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
             self, expr: DistributedSendRefHolder) -> CombineT:
         return self.combine(
                 self.rec(expr.send.data),
-                self.rec(expr.data),
+                self.rec(expr.passthrough_data),
                 )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
@@ -691,7 +691,7 @@ class WalkMapper(Mapper):
             return
 
         self.rec(expr.send.data)
-        self.rec(expr.data)
+        self.rec(expr.passthrough_data)
 
         self.post_visit(expr)
 
@@ -1173,9 +1173,9 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> None:
-        self.node_to_users.setdefault(expr.data, set()).add(expr)
-        self.rec(expr.data)
         self.node_to_users.setdefault(expr.send.data, set()).add(expr)
+        self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
+        self.rec(expr.passthrough_data)
         self.rec(expr.send.data)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
@@ -1367,7 +1367,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                     data=self.handle_edge(expr, expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                data=self.handle_edge(expr, expr.data),
+                passthrough_data=self.handle_edge(expr, expr.passthrough_data),
                 tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \

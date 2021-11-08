@@ -236,7 +236,7 @@ class EqualityComparer:
             self, expr1: DistributedSendRefHolder, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1.send.data, expr2.send.data)
-                and self.rec(expr1.data, expr2.data)
+                and self.rec(expr1.passthrough_data, expr2.passthrough_data)
                 and expr1.send.dest_rank == expr2.send.dest_rank
                 and expr1.send.comm_tag == expr2.send.comm_tag
                 and expr1.send.tags == expr2.send.tags
