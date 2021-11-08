@@ -322,7 +322,7 @@ def get_dot_graph_from_partitions(parts: CodePartitions) -> str:
 
                         # Emit cross-partition edges
                         assert array.name
-  
+
                         tgt = array_to_id[parts.var_name_to_result[array.name]]
                         emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
 
