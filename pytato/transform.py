@@ -1131,6 +1131,10 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
     result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
     for node_key, edges in graph.items():
+        # Make sure every node is in the result even if it has no users
+        if node_key not in result:
+            result[node_key] = set()
+
         for other_node_key in edges:
             result.setdefault(other_node_key, set()).add(node_key)
 
