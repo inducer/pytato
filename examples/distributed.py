@@ -43,12 +43,10 @@ def main():
     x = pt.make_data_wrapper(x_in)
 
     halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
-            stapled_to=x)
+            stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
 
-    bnd = make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
-
-    y = x+halo+bnd
+    y = x+halo
 
     # bnd2 = pt.make_distributed_send(y[0], dest_rank=(rank-1)%size, comm_tag="halo")
 
