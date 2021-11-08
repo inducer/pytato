@@ -1068,7 +1068,9 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+        from pytato.distributed import DistributedSend
+        self.node_to_users: Dict[ArrayOrNames,
+                Set[Union[DistributedSend, ArrayOrNames]]] = {}
 
     def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         # Root node has no predecessor
@@ -1173,9 +1175,9 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> None:
-        self.node_to_users.setdefault(expr.send.data, set()).add(expr)
         self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
         self.rec(expr.passthrough_data)
+        self.node_to_users.setdefault(expr.send.data, set()).add(expr.send)
         self.rec(expr.send.data)
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
