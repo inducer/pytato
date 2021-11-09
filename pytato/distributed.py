@@ -86,7 +86,7 @@ class DistributedSend(Taggable):
         self.dest_rank = dest_rank
         self.comm_tag = comm_tag
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return (
                 hash(self.__class__)
                 ^ hash(self.data)
@@ -95,7 +95,7 @@ class DistributedSend(Taggable):
                 ^ hash(self.tags)
                 )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return (
                 self.__class__ is other.__class__
                 and self.data == other.data
@@ -324,7 +324,8 @@ def gather_distributed_comm_info(parts: GraphPartitions) -> \
 
 # {{{ distributed execute
 
-def post_receive(comm: Any, recv: DistributedRecv) -> Tuple[Any, np.ndarray]:
+def post_receive(comm: Any,
+                 recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
     # FIXME: recv.shape might be parametric, evaluate
     buf = np.empty(recv.shape, dtype=recv.dtype)
 
@@ -332,9 +333,10 @@ def post_receive(comm: Any, recv: DistributedRecv) -> Tuple[Any, np.ndarray]:
     return comm.Irecv(buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
 
 
-def mpi_send(comm: Any, send_node: DistributedSend, data: np.ndarray) -> None:
+def mpi_send(comm: Any, send_node: DistributedSend,
+             data: np.ndarray[Any, Any]) -> None:
     # FIXME: Might be more efficient to use non-blocking send
-    comm.Send(data.data, dest=send_node.rank, tag=send_node.tag)
+    comm.Send(data.data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
 
 def execute_partitions_distributed(

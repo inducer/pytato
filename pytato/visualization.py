@@ -363,8 +363,6 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
                         emitted_placeholders.add(array)
 
                         # Emit cross-partition edges
-                        assert array.name
-
                         if array.name in part_dist_recv_var_name_to_node_id:
                             tgt = part_dist_recv_var_name_to_node_id[array.name]
                             emit(f"{tgt} -> {array_to_id[array]} [style=dotted]")
