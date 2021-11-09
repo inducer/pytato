@@ -12,6 +12,7 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
+.. autoclass:: DimToLoopyInameTag
 """
 
 
@@ -104,3 +105,23 @@ class AssumeNonNegative(Tag):
     :class:`~pytato.target.Target` that all entries of the tagged array are
     non-negative.
     """
+
+
+# {{{ loopy-target specific metadata
+
+@tag_dataclass
+class DimToLoopyInameTag(Tag):
+    """
+    A tag that can be attached to :class:`~pytato.array.Axis`. If the array
+    whose axis is tagged with this tag is allocated, then the iname responsible
+    for indexing the axis in the allocation instruction would be tagged with
+    :attr:`iname_tag`.
+
+    .. attribute:: iname_tag
+
+        The tag that :class:`loopy.kernel.data.Iname` would be tagged with
+        for the iname indexing the axis.
+    """
+    iname_tag: Tag
+
+# }}}

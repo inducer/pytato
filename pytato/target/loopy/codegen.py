@@ -46,7 +46,8 @@ from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
-from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
+from pytato.tags import (ImplStored, _BaseNameTag, Named, PrefixNamed,
+                         DimToLoopyInameTag)
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -813,6 +814,14 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
         kernel = kernel.copy(args=kernel.args + [arg],
                 domains=kernel.domains + [domain],
                 instructions=kernel.instructions + [insn])
+
+    # {{{ attach iname tags
+
+    for axis, iname in zip(expr.axes, inames):
+        for tag in axis.tags_of_type(DimToLoopyInameTag):
+            kernel = lp.tag_inames(kernel, {iname: tag.iname_tag})
+
+    # }}}
 
     state.update_kernel(kernel)
     return insn_id

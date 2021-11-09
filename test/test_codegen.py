@@ -1456,6 +1456,35 @@ def test_assume_non_negative_indirect_address(ctx_factory):
     np.testing.assert_allclose(out, a_np[b_np])
 
 
+def test_axis_to_loopy_iname_tag():
+    from testlib import FooInameTag, BarInameTag
+
+    x = pt.make_placeholder("x", (10, 4), np.float32)
+    y = 2 * x
+    y = (y
+         .with_tagged_axis(0, pt.tags.DimToLoopyInameTag(FooInameTag()))
+         .with_tagged_axis(1, pt.tags.DimToLoopyInameTag(BarInameTag())))
+    t_unit = pt.generate_loopy({"y": y}).program
+
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim0"]
+               .tags_of_type(FooInameTag)) == 1
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim0"]
+               .tags_of_type(BarInameTag)) == 0
+
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim1"]
+               .tags_of_type(FooInameTag)) == 0
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim1"]
+               .tags_of_type(BarInameTag)) == 1
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
