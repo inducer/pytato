@@ -37,7 +37,7 @@ from pytato.target import BoundProgram
 
 
 __doc__ = """
-.. autoclass:: CodePartitions
+.. autoclass:: GraphPartitions
 .. autoexception:: PartitionInducedCycleError
 
 .. autofunction:: find_partitions
@@ -155,7 +155,7 @@ class _GraphPartitioner(EdgeCachedMapper):
 # {{{ code partitions
 
 @dataclass
-class CodePartitions:
+class GraphPartitions:
     """Store information about generated partitions.
 
     .. attribute:: toposorted_partitions
@@ -196,7 +196,7 @@ class PartitionInducedCycleError(Exception):
 
 def find_partitions(outputs: DictOfNamedArrays,
         part_func: Callable[[ArrayOrNames], PartitionId]) ->\
-        CodePartitions:
+        GraphPartitions:
     """Partitions the *expr* according to *part_func* and generates code for
     each partition. Raises :exc:`PartitionInducedCycleError` if the partitioning
     induces a cycle, e.g. for a graph like the following::
@@ -216,7 +216,7 @@ def find_partitions(outputs: DictOfNamedArrays,
     :param expr: The expression to partition.
     :param part_func: A callable that returns an instance of
         :class:`Hashable` for a node.
-    :returns: An instance of :class:`CodePartitions` that contains the partitions.
+    :returns: An instance of :class:`GraphPartitions` that contains the partitions.
     """
 
     pf = _GraphPartitioner(part_func)
@@ -257,7 +257,7 @@ def find_partitions(outputs: DictOfNamedArrays,
     except CycleError:
         raise PartitionInducedCycleError
 
-    result = CodePartitions(toposorted_partitions, partition_id_to_input_names,
+    result = GraphPartitions(toposorted_partitions, partition_id_to_input_names,
                           partition_id_to_output_names, var_name_to_result)
 
     if __debug__:
@@ -277,7 +277,7 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
         return True
 
 
-def _check_partition_disjointness(parts: CodePartitions) -> None:
+def _check_partition_disjointness(parts: GraphPartitions) -> None:
     part_id_to_nodes: Dict[PartitionId, Set[ArrayOrNames]] = {}
 
     for part_id, out_names in parts.partition_id_to_output_names.items():
@@ -307,7 +307,7 @@ def _check_partition_disjointness(parts: CodePartitions) -> None:
 
 # {{{ generate_code_for_partitions
 
-def generate_code_for_partitions(parts: CodePartitions) \
+def generate_code_for_partitions(parts: GraphPartitions) \
         -> Dict[PartitionId, BoundProgram]:
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
@@ -327,11 +327,11 @@ def generate_code_for_partitions(parts: CodePartitions) \
 
 # {{{ execute_partitions
 
-def execute_partitions(parts: CodePartitions, prg_per_partition:
+def execute_partitions(parts: GraphPartitions, prg_per_partition:
         Dict[PartitionId, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
-    :param parts: An instance of :class:`CodePartitions` representing the
+    :param parts: An instance of :class:`GraphPartitions` representing the
         partitioned code.
     :param queue: An instance of :class:`pyopencl.CommandQueue` to execute the
         code on.
