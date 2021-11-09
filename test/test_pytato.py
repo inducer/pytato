@@ -292,8 +292,8 @@ def test_toposortmapper():
     tm = pt.transform.TopoSortMapper()
     tm(y)
 
-    from pytato.array import (AxisPermutation, IndexLambda, MatrixProduct,
-                              Placeholder, SizeParam, Stack)
+    from pytato.array import (AxisPermutation, IndexLambda,
+                              Placeholder, Einsum, SizeParam, Stack)
 
     assert isinstance(tm.topological_order[0], SizeParam)
     assert isinstance(tm.topological_order[1], Placeholder)
@@ -301,7 +301,7 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[3], IndexLambda)
     assert isinstance(tm.topological_order[4], Stack)
     assert isinstance(tm.topological_order[5], AxisPermutation)
-    assert isinstance(tm.topological_order[6], MatrixProduct)
+    assert isinstance(tm.topological_order[6], Einsum)
 
 
 def test_userscollector():
@@ -359,7 +359,7 @@ def test_asciidag():
 |\
 * | AxisPermutation
 |/
-* MatrixProduct
+* Einsum
 * Outputs
 """
 

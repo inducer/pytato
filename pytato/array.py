@@ -92,7 +92,6 @@ Built-in Expression Nodes
 
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
-.. autoclass:: MatrixProduct
 .. autoclass:: Stack
 .. autoclass:: Concatenate
 
@@ -1081,56 +1080,6 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
 # }}}
 
 
-# {{{ matrix product
-
-class MatrixProduct(Array):
-    """A product of two matrices, or a matrix and a vector.
-
-    The semantics of this operation follow PEP 465 [pep465]_, i.e., the Python
-    matmul (@) operator.
-
-    .. attribute:: x1
-    .. attribute:: x2
-
-    .. [pep465] https://www.python.org/dev/peps/pep-0465/
-
-    """
-    _fields = Array._fields + ("x1", "x2")
-
-    _mapper_method = "map_matrix_product"
-
-    def __init__(self,
-            x1: Array,
-            x2: Array,
-            tags: TagsType = frozenset()):
-        super().__init__(tags)
-        self.x1 = x1
-        self.x2 = x2
-
-    @property
-    def shape(self) -> ShapeType:
-        # FIXME: Broadcasting currently unsupported.
-        assert 0 < self.x1.ndim <= 2
-        assert 0 < self.x2.ndim <= 2
-
-        if self.x1.ndim == 1 and self.x2.ndim == 1:
-            return ()
-        elif self.x1.ndim == 1 and self.x2.ndim == 2:
-            return (self.x2.shape[1],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 1:
-            return (self.x1.shape[0],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 2:
-            return (self.x1.shape[0], self.x2.shape[1])
-
-        raise AssertionError()
-
-    @property
-    def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(self.x1.dtype, self.x2.dtype)
-
-# }}}
-
-
 # {{{ stack
 
 class Stack(Array):
@@ -1660,13 +1609,30 @@ def matmul(x1: Array, x2: Array) -> Array:
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
 
+    assert isinstance(x1, Array)
+    assert isinstance(x2, Array)
+
     if len(x1.shape) > 2 or len(x2.shape) > 2:
         raise NotImplementedError("broadcasting not supported")
 
     if not are_shape_components_equal(x1.shape[-1], x2.shape[0]):
         raise ValueError("dimension mismatch")
 
-    return MatrixProduct(x1, x2)
+    import pytato as pt
+
+    if x1.ndim == x2.ndim == 1:
+        return pt.sum(x1 * x2)
+    elif x2.ndim == 1:
+        return pt.sum(x1 * x2, axis=(x1.ndim - 1))
+
+    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
+    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+    x1_indices = "".join(idx_gen() for _ in range(x1.ndim))
+    x2_indices = "".join(idx_gen() for _ in range(x2.ndim))
+    # reduce over second-to-last axis of *b* and last axis of *a*
+    x2_indices = x2_indices[:-2] + x1_indices[-1] + x2_indices[-1]
+    result_indices = x1_indices[:-1] + x2_indices[:-2] + x2_indices[-1]
+    return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
 
 
 def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:

@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
 from pytato.array import (AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, AxisPermutation,
                           BasicIndex, Concatenate, DataWrapper, Einsum,
-                          IndexBase, IndexLambda, MatrixProduct, NamedArray,
+                          IndexBase, IndexLambda, NamedArray,
                           Reshape, Roll, Stack, AbstractResultWithNamedArrays,
                           Array, DictOfNamedArrays, Placeholder, SizeParam)
 
@@ -127,13 +127,6 @@ class EqualityComparer:
                         else dim1 == dim2
                         for dim1, dim2 in zip(expr1.shape, expr2.shape))
                 and expr1.tags == expr2.tags)
-
-    def map_matrix_product(self, expr1: MatrixProduct, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.x1, expr2.x1)
-                and self.rec(expr1.x2, expr2.x2)
-                and expr1.tags == expr2.tags
-                )
 
     def map_stack(self, expr1: Stack, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
