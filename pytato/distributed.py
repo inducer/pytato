@@ -31,7 +31,7 @@ from pytools.tag import Taggable
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import CopyMapper
-from pytato.partition import CodePartitions, PartitionId
+from pytato.partition import GraphPartitions, PartitionId
 from pytato.target import BoundProgram
 
 from pytools.tag import TagsType
@@ -229,7 +229,7 @@ class PerPartitionSendRecvInfo:
 
 
 @dataclass
-class DistributedGraphPartitions(CodePartitions):
+class DistributedGraphPartitions(GraphPartitions):
     partition_id_to_send_recv_info: Dict[PartitionId, PerPartitionSendRecvInfo]
 
 
@@ -274,7 +274,7 @@ class _DistributedCommReplacer(CopyMapper):
         return result.passthrough_data
 
 
-def gather_distributed_comm_info(parts: CodePartitions) -> \
+def gather_distributed_comm_info(parts: GraphPartitions) -> \
         DistributedGraphPartitions:
     partition_id_to_input_names = {}
     partition_id_to_output_names = {}
