@@ -31,7 +31,7 @@ from pytools.tag import Taggable
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import CopyMapper
-from pytato.partition import CodePartitions
+from pytato.partition import CodePartitions, PartitionId
 from pytato.target import BoundProgram
 
 from pytools.tag import TagsType
@@ -45,7 +45,7 @@ Distributed communication
 .. autoclass:: DistributedSend
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
-.. autoclass:: DistributedCommInfo
+.. autoclass:: PerPartitionSendRecvInfo
 
 .. autofunction:: make_distributed_send
 .. autofunction:: staple_distributed_send
@@ -215,19 +215,22 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
 # {{{ distributed info collection
 
 @dataclass
-class DistributedCommInfo:
+class PerPartitionSendRecvInfo:
     """For one graph partition, record send/receive information for input/
     output names as well as the computation in :attr:`results`.
 
     .. attribute:: part_input_name_to_recv_node
     .. attribute:: part_output_name_to_send_node
-    .. attribute:: results
     """
     # TODO Document these
 
     part_input_name_to_recv_node: Dict[str, DistributedRecv]
     part_output_name_to_send_node: Dict[str, DistributedSend]
-    results: Dict[str, Array]
+
+
+@dataclass
+class DistributedGraphPartitions(CodePartitions):
+    partition_id_to_send_recv_info: Dict[PartitionId, PerPartitionSendRecvInfo]
 
 
 class _DistributedCommReplacer(CopyMapper):
@@ -272,8 +275,11 @@ class _DistributedCommReplacer(CopyMapper):
 
 
 def gather_distributed_comm_info(parts: CodePartitions) -> \
-        Dict[Hashable, DistributedCommInfo]:
-    result = {}
+        DistributedGraphPartitions:
+    partition_id_to_input_names = {}
+    partition_id_to_output_names = {}
+    var_name_to_result = {}
+    partition_id_to_send_recv_info = {}
 
     for pid in parts.toposorted_partitions:
         comm_replacer = _DistributedCommReplacer()
@@ -285,16 +291,32 @@ def gather_distributed_comm_info(parts: CodePartitions) -> \
             for name, send_node in
             comm_replacer.part_output_name_to_send_node.items()})
 
-        result[pid] = \
-                DistributedCommInfo(
+        partition_id_to_input_names[pid] = (
+                parts.partition_id_to_input_names[pid]
+                | set(comm_replacer.part_input_name_to_recv_node))
+
+        partition_id_to_output_names[pid] = (
+                parts.partition_id_to_output_names[pid]
+                | set(comm_replacer.part_output_name_to_send_node))
+
+        partition_id_to_send_recv_info[pid] = PerPartitionSendRecvInfo(
                     part_input_name_to_recv_node=(
                         comm_replacer.part_input_name_to_recv_node),
                     part_output_name_to_send_node=(
                         comm_replacer.part_output_name_to_send_node),
-                    results=part_results
                     )
 
-    return result
+        for name, val in part_results.items():
+            assert name not in var_name_to_result
+            var_name_to_result[name] = val
+
+    return DistributedGraphPartitions(
+            toposorted_partitions=parts.toposorted_partitions,
+            partition_id_to_input_names=partition_id_to_input_names,
+            partition_id_to_output_names=partition_id_to_output_names,
+            var_name_to_result=var_name_to_result,
+            partition_id_to_send_recv_info=partition_id_to_send_recv_info,
+            )
 
 
 # }}}
@@ -302,51 +324,41 @@ def gather_distributed_comm_info(parts: CodePartitions) -> \
 
 # {{{ distributed execute
 
-# FIXME: Where to get actx? Argument to make_distributed_recv?
-def post_receives(dci: DistributedCommInfo, comm: Any) -> \
-        Tuple[Dict[str, Tuple[Any, Any]], DistributedCommInfo]:
+def post_receive(comm: Any, recv: DistributedRecv) -> Tuple[Any, np.ndarray]:
+    # FIXME: recv.shape might be parametric, evaluate
+    buf = np.empty(recv.shape, dtype=recv.dtype)
 
-    recv_reqs = {}
-
-    for k, v in dci.part_input_name_to_recv_node.items():
-        src_rank = v.src_rank
-        tag = v.comm_tag
-
-        buf = np.zeros(v.shape, dtype=v.dtype)
-
-        # FIXME: Why doesn't this work with the lower case mpi4py function names?
-        recv_reqs[k] = (comm.Irecv(buf=buf, source=src_rank, tag=tag), buf)
-
-    return (recv_reqs, dci)
+    # FIXME: Why doesn't this work with the lower case mpi4py function names?
+    return comm.Irecv(buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
 
 
-def mpi_send(rank: int, tag: Any, data: Any, comm: Any) -> None:
-    comm.Send(data.data, dest=rank, tag=tag)
+def mpi_send(comm: Any, send_node: DistributedSend, data: np.ndarray) -> None:
+    # FIXME: Might be more efficient to use non-blocking send
+    comm.Send(data.data, dest=send_node.rank, tag=send_node.tag)
 
 
-def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
-                        Dict[Hashable, BoundProgram], queue: Any,
-                        distributed_comm_infos: Dict[Hashable,
-                        DistributedCommInfo], comm: Any) \
-                                -> Dict[str, Any]:
+def execute_partitions_distributed(
+        parts: DistributedGraphPartitions, prg_per_partition:
+        Dict[Hashable, BoundProgram],
+        queue: Any, comm: Any) -> Dict[str, Any]:
 
-    all_receives = [
-            post_receives(part_dci, comm)
-            for part_dci in distributed_comm_infos.values()]
+    recv_to_req_and_buf = {
+            recv: post_receive(comm, recv)
+            for pid in parts.toposorted_partitions
+            for recv in (parts.partition_id_to_send_recv_info[pid]
+                .part_input_name_to_recv_node.values())}
 
     context: Dict[str, Any] = {}
-    for pid, part_dci, part_receives in zip(
-            parts.toposorted_partitions, distributed_comm_infos.values(),
-            all_receives):
-
-        inputs = {"queue": queue}
-
+    for pid in parts.toposorted_partitions:
+        send_recv_info = parts.partition_id_to_send_recv_info[pid]
         # FIXME: necessary?
-        context.update(part_receives[1].results)
+        # context.update(part_receives[1].results)
 
-        for k, v in part_receives[0].items():
-            v[0].Wait()
-            inputs.update({k: v[1]})
+        inputs = {}
+        for name, recv in send_recv_info.part_input_name_to_recv_node.items():
+            req, buf = recv_to_req_and_buf[recv]
+            req.Wait()
+            inputs.update({name: buf})
 
         # inputs.update({k: v[1] for k, v in part_receives[0].items()})
         # {part.name: actx.from_numpy(recv.wait())
@@ -358,18 +370,19 @@ def execute_partitions_distributed(parts: CodePartitions, prg_per_partition:
         # print(f"{context=}")
         # print(prg_per_partition[pid].program)
 
-        # FIXME: necessary?
         inputs.update({
             k: context[k] for k in parts.partition_id_to_input_names[pid]
             if k in context})
 
-        _evt, result_dict = prg_per_partition[pid](**inputs)
+        _evt, result_dict = prg_per_partition[pid](queue, **inputs)
 
         context.update(result_dict)
 
-        for name, send_node in part_dci.part_output_name_to_send_node.items():
-            mpi_send(send_node.dest_rank, send_node.comm_tag, context[name], comm)
-            del context[name]
+        for name, send_node in send_recv_info.part_output_name_to_send_node.items():
+            mpi_send(comm, send_node, context[name])
+
+            # Legal?
+            #del context[name]
 
     return context
 
