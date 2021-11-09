@@ -317,13 +317,9 @@ def generate_code_for_partitions(parts: CodePartitions) \
     from pytato import generate_loopy
     prg_per_partition = {}
 
-    from pytato.distributed import _DistributedCommReplacer
-    comm_replacer = _DistributedCommReplacer()
-
-    # FIXME: this does not work if not reversing the list
-    for pid in parts.toposorted_partitions[::-1]:
+    for pid in parts.toposorted_partitions:
         d = DictOfNamedArrays(
-                    {var_name: comm_replacer(parts.var_name_to_result[var_name])
+                    {var_name: parts.var_name_to_result[var_name]
                         for var_name in parts.partition_id_to_output_names[pid]
                      })
         prg_per_partition[pid] = generate_loopy(d)
