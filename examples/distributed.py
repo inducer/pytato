@@ -104,15 +104,15 @@ def main():
     # Find the partitions
     outputs = pt.DictOfNamedArrays({"out": y})
     parts = find_partitions(outputs, pfunc)
-    distributed_comm_infos = gather_distributed_comm_info(parts)
-    prg_per_partition = generate_code_for_partitions(parts)
+    distributed_parts = gather_distributed_comm_info(parts)
+    prg_per_partition = generate_code_for_partitions(distributed_parts)
 
     # Execute the partitions
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partitions_distributed(parts, prg_per_partition,
-                                             queue, distributed_comm_infos, comm)
+    context = execute_partitions_distributed(distributed_parts, prg_per_partition,
+                                             queue, comm)
 
     final_res = [context[k] for k in outputs.keys()]
 
