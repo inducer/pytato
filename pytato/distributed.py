@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, cast
+from typing import Any, Dict, Hashable, Tuple, Optional, cast, List, Set  # noqa (need List, Set for sphinx)
 from dataclasses import dataclass
 
 from pytools.tag import Taggable
@@ -46,6 +46,7 @@ Distributed communication
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
 .. autoclass:: PerPartitionSendRecvInfo
+.. autoclass:: DistributedGraphPartitions
 
 .. autofunction:: make_distributed_send
 .. autofunction:: staple_distributed_send
@@ -217,7 +218,7 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
 @dataclass
 class PerPartitionSendRecvInfo:
     """For one graph partition, record send/receive information for input/
-    output names as well as the computation in :attr:`results`.
+    output names.
 
     .. attribute:: part_input_name_to_recv_node
     .. attribute:: part_output_name_to_send_node
@@ -230,6 +231,10 @@ class PerPartitionSendRecvInfo:
 
 @dataclass
 class DistributedGraphPartitions(GraphPartitions):
+    """Store information about distributed graph partitions.
+
+    .. attribute:: partition_id_to_send_recv_info
+    """
     partition_id_to_send_recv_info: Dict[PartitionId, PerPartitionSendRecvInfo]
 
 
