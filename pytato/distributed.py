@@ -206,6 +206,7 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ShapeType, dtype: Any,
                           tags: TagsType = frozenset()) \
                           -> DistributedRecv:
+    dtype = np.dtype(dtype)
     return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 
 # }}}
