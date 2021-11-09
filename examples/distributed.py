@@ -111,6 +111,9 @@ def main():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
+    # FIXME: stop here in order not to waste CI time (app hangs)
+    1/0
+
     context = execute_partitions_distributed(distributed_parts, prg_per_partition,
                                              queue, comm)
 

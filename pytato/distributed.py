@@ -383,7 +383,7 @@ def execute_partitions_distributed(
         for name, send_node in send_recv_info.part_output_name_to_send_node.items():
             mpi_send(comm, send_node, context[name])
 
-            # Legal?
+            # FIXME: Legal?
             #del context[name]
 
     return context
