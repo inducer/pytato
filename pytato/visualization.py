@@ -65,7 +65,6 @@ __doc__ = """
 @dataclasses.dataclass
 class DotNodeInfo:
     title: str
-    addr: str
     fields: Dict[str, str]
     edges: Dict[str, Array]
 
@@ -91,12 +90,11 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        addr = hex(id(expr))
-        fields = dict(shape=stringify_shape(expr.shape),
+        fields = dict(addr=hex(id(expr)), shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
         edges: Dict[str, Array] = {}
-        return DotNodeInfo(title, addr, fields, edges)
+        return DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
     def handle_unsupported_array(self,  # type: ignore[override]
