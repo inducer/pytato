@@ -313,26 +313,16 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
 
         # Second pass: emit the graph.
         for part_id in parts.toposorted_partitions:
-            # {{{ emit receives nodes if distributed
+            # {{{ collect info about receive nodes if distributed
+
+            part_dist_recv_var_name_to_node_id = {}
 
             if isinstance(parts, DistributedGraphPartitions):
                 send_recv_info = parts.partition_id_to_send_recv_info[part_id]
-                part_dist_recv_var_name_to_node_id = {}
-                for name, recv in (
+                for name, _recv in (
                         send_recv_info.part_input_name_to_recv_node.items()):
-                    node_id = id_gen("recv")
-                    _emit_array(emit, "Recv", {
-                        "shape": stringify_shape(recv.shape),
-                        "dtype": str(recv.dtype),
-                        "src_rank": str(recv.src_rank),
-                        "comm_tag": str(recv.comm_tag),
-                        }, node_id)
 
-                    part_dist_recv_var_name_to_node_id[name] = node_id
-
-                del send_recv_info
-            else:
-                part_dist_recv_var_name_to_node_id = {}
+                    part_dist_recv_var_name_to_node_id[name] = id_gen("recv")
 
             # }}}
 
@@ -382,6 +372,18 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
                 emit("style=dashed")
                 emit(f'label="{part_id}"')
 
+                if isinstance(parts, DistributedGraphPartitions):
+                    send_recv_info = parts.partition_id_to_send_recv_info[part_id]
+                    for name, recv in (
+                            send_recv_info.part_input_name_to_recv_node.items()):
+                        node_id = part_dist_recv_var_name_to_node_id[name]
+                        _emit_array(emit, "DistributedRecv", {
+                            "shape": stringify_shape(recv.shape),
+                            "dtype": str(recv.dtype),
+                            "src_rank": str(recv.src_rank),
+                            "comm_tag": str(recv.comm_tag),
+                            }, node_id)
+
                 # Emit internal nodes
                 for array in internal_arrays:
                     _emit_array(emit,
@@ -397,7 +399,7 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
                     for name, send in (
                             send_recv_info.part_output_name_to_send_node.items()):
                         node_id = id_gen("send")
-                        _emit_array(emit, "Send", {
+                        _emit_array(emit, "DistributedSend", {
                             "dest_rank": str(send.dest_rank),
                             "comm_tag": str(send.comm_tag),
                             }, node_id)
