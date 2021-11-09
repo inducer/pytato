@@ -155,6 +155,9 @@ class _GraphPartitioner(EdgeCachedMapper):
 # {{{ code partitions
 
 @dataclass
+# FIXME Rename to GraphPartitions
+# https://github.com/inducer/pytato/issues/204
+# FIXME This data structure has a few too many partition_id_to... dictionaries.
 class CodePartitions:
     """Store information about generated partitions.
 
