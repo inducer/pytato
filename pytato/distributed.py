@@ -86,6 +86,23 @@ class DistributedSend(Taggable):
         self.dest_rank = dest_rank
         self.comm_tag = comm_tag
 
+    def __hash__(self):
+        return (
+                hash(self.__class__)
+                ^ hash(self.data)
+                ^ hash(self.dest_rank)
+                ^ hash(self.comm_tag)
+                ^ hash(self.tags)
+                )
+
+    def __eq__(self, other):
+        return (
+                self.__class__ is other.__class__
+                and self.data == other.data
+                and self.dest_rank == other.dest_rank
+                and self.comm_tag == other.comm_tag
+                and self.tags == other.tags)
+
     def copy(self, **kwargs: Any) -> DistributedSend:
         data: Optional[Array] = kwargs["data"]
         dest_rank: Optional[int] = kwargs["dest_rank"]
