@@ -1601,7 +1601,6 @@ def matmul(x1: Array, x2: Array) -> Array:
     :param x1: first argument
     :param x2: second argument
     """
-    from pytato.utils import are_shape_components_equal
     if (
             isinstance(x1, SCALAR_CLASSES)
             or x1.shape == ()
@@ -1612,12 +1611,6 @@ def matmul(x1: Array, x2: Array) -> Array:
     assert isinstance(x1, Array)
     assert isinstance(x2, Array)
 
-    if len(x1.shape) > 2 or len(x2.shape) > 2:
-        raise NotImplementedError("broadcasting not supported")
-
-    if not are_shape_components_equal(x1.shape[-1], x2.shape[0]):
-        raise ValueError("dimension mismatch")
-
     import pytato as pt
 
     if x1.ndim == x2.ndim == 1:
@@ -1626,12 +1619,12 @@ def matmul(x1: Array, x2: Array) -> Array:
         return pt.sum(x1 * x2, axis=(x1.ndim - 1))
 
     idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+    idx_gen: Callable[[], str] = lambda: next(idx_stream)
+
     x1_indices = "".join(idx_gen() for _ in range(x1.ndim))
-    x2_indices = "".join(idx_gen() for _ in range(x2.ndim))
-    # reduce over second-to-last axis of *b* and last axis of *a*
-    x2_indices = x2_indices[:-2] + x1_indices[-1] + x2_indices[-1]
-    result_indices = x1_indices[:-1] + x2_indices[:-2] + x2_indices[-1]
+    x2_indices = x1_indices[:-2] + x1_indices[-1] + idx_gen()
+    result_indices = x1_indices[:-1] + x2_indices[-1]
+
     return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
 
 

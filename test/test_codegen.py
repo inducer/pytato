@@ -106,6 +106,22 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
     assert (out == x1_in @ x2_in).all()
 
 
+def test_matmul2(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    x1_in = np.ones([9, 5, 7, 4])
+    x2_in = np.ones([9, 5, 4, 3])
+
+    x1 = pt.make_data_wrapper(x1_in)
+    x2 = pt.make_data_wrapper(x2_in)
+
+    prog = pt.generate_loopy(x1 @ x2, cl_device=queue.device)
+    _, (out,) = prog(queue)
+
+    assert np.matmul(x1, x2).shape == out.shape
+
+
 def test_data_wrapper(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
