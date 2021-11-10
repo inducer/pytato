@@ -322,7 +322,7 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
 
 # {{{ distributed execute
 
-def post_receive(comm: Any,
+def _post_receive(comm: Any,
                  recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
     # FIXME: recv.shape might be parametric, evaluate
     buf = np.empty(recv.shape, dtype=recv.dtype)
@@ -331,8 +331,8 @@ def post_receive(comm: Any,
     return comm.Irecv(buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
 
 
-def mpi_send(comm: Any, send_node: DistributedSend,
-             data: np.ndarray[Any, Any]) -> None:
+def _mpi_send(comm: Any, send_node: DistributedSend,
+             data: np.ndarray[Any, Any]) -> Any:
     # FIXME: Might be more efficient to use non-blocking send
     comm.Send(data.data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
@@ -342,47 +342,63 @@ def execute_partition_distributed(
         Dict[Hashable, BoundProgram],
         queue: Any, comm: Any) -> Dict[str, Any]:
 
-    recv_to_req_and_buf = {
-            recv: post_receive(comm, recv)
+    from mpi4py.MPI import Request
+
+    recv_names, recv_requests, recv_buffers = zip(*[
+            (name,) + _post_receive(comm, recv)
             for part in partition.parts.values()
-            for recv in (part.input_name_to_recv_node.values())}
+            for name, recv in part.input_name_to_recv_node.items()])
 
     context: Dict[str, Any] = {}
-    for pid in partition.toposorted_partitions:
-        part = partition.parts[pid]
 
-        # FIXME: necessary?
-        # context.update(part_receives[1].results)
+    pids_to_execute = set(partition.parts)
+    pids_executed = set()
+    recv_names_completed = set()
+    send_requests = []
 
-        inputs = {}
-        for name, recv in part.input_name_to_recv_node.items():
-            req, buf = recv_to_req_and_buf[recv]
-            req.Wait()
-            inputs.update({name: buf})
+    def exec_ready_part(part):
+        inputs = {k: context[k] for k in part.input_names}
 
-        # inputs.update({k: v[1] for k, v in part_receives[0].items()})
-        # {part.name: actx.from_numpy(recv.wait())
-        # {recv.results: None
-        #     for recv in part_receives})
-
-        # inputs.update(context)
-
-        # print(f"{context=}")
-        # print(prg_per_partition[pid].program)
-
-        inputs.update({
-            k: context[k] for k in part.input_names
-            if k in context})
-
-        _evt, result_dict = prg_per_partition[pid](queue, **inputs)
+        _evt, result_dict = prg_per_partition[part.pid](queue, **inputs)
 
         context.update(result_dict)
 
         for name, send_node in part.output_name_to_send_node.items():
-            mpi_send(comm, send_node, context[name])
+            send_requests.append(_mpi_send(comm, send_node, context[name]))
 
-            # FIXME: Legal?
-            #del context[name]
+        pids_executed.add(part.pid)
+        pids_to_execute.pop(part.pid)
+
+    def wait_for_some_recvs():
+        complete_recv_indices = Request.Waitsome(recv_requests)
+        for idx in sorted(complete_recv_indices, reverse=True):
+            name = recv_names.pop(idx)
+            recv_requests.pop(idx)
+            buf = recv_buffers.pop(idx)
+
+            context[name] = buf
+            recv_names_completed.add(name)
+
+    # FIXME: This keeps all variables alive that are used to get data into
+    # and out of partitions. Probably not what we want long-term.
+
+    # {{{ main loop
+
+    while pids_to_execute:
+        print(f"{partition.parts=}")
+        ready_pids = {part
+                for part in partition.parts.values()
+                # FIXME: Only O(n**2) altogether. Nobody is going to notice, right?
+                if part.needed_pids <= pids_executed
+                and set(part.input_name_to_recv_node) <= recv_names_completed}
+        print(f"{ready_pids=}")
+        for pid in ready_pids:
+            exec_ready_part(partition.parts[pid])
+
+        if not ready_pids:
+            wait_for_some_recvs()
+
+    # }}}
 
     return context
 
