@@ -11,8 +11,8 @@ from pytato.transform import (UsersCollector, TopoSortMapper,
                               tag_user_nodes,
                               )
 
-from pytato.partition import (find_partitions, generate_code_for_partitions)
-from pytato.distributed import (execute_partitions_distributed,
+from pytato.partition import (find_partition, generate_code_for_partition)
+from pytato.distributed import (execute_partition_distributed,
                                 gather_distributed_comm_info)
 
 # from pytato.visualization import show_dot_graph
@@ -101,20 +101,20 @@ def main():
     # print(f"{node_to_feeding_recvs=}")
     # print(f"{node_to_fed_sends=}")
 
-    # Find the partitions
+    # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partitions(outputs, pfunc)
+    parts = find_partition(outputs, pfunc)
     distributed_parts = gather_distributed_comm_info(parts)
-    prg_per_partition = generate_code_for_partitions(distributed_parts)
+    prg_per_partition = generate_code_for_partition(distributed_parts)
 
-    # Execute the partitions
+    # Execute the partition
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
     # FIXME: stop here in order not to waste CI time (app hangs)
     1/0
 
-    context = execute_partitions_distributed(distributed_parts, prg_per_partition,
+    context = execute_partition_distributed(distributed_parts, prg_per_partition,
                                              queue, comm)
 
     final_res = [context[k] for k in outputs.keys()]

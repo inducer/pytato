@@ -42,8 +42,8 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper
 
-from pytato.distributed import DistributedGraphPartitions
 from pytato.partition import GraphPartition
+from pytato.distributed import DistributedGraphPart
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder
@@ -308,11 +308,10 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
         for part in partition.parts.values():
             # {{{ emit receives nodes if distributed
 
-            if isinstance(parts, DistributedGraphPartitions):
-                send_recv_info = parts.partition_id_to_send_recv_info[part_id]
+            if isinstance(part, DistributedGraphPart):
                 part_dist_recv_var_name_to_node_id = {}
                 for name, recv in (
-                        send_recv_info.part_input_name_to_recv_node.items()):
+                        part.input_name_to_recv_node.items()):
                     node_id = id_gen("recv")
                     _emit_array(emit, "Recv", {
                         "shape": stringify_shape(recv.shape),
@@ -322,8 +321,6 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                         }, node_id)
 
                     part_dist_recv_var_name_to_node_id[name] = node_id
-
-                del send_recv_info
             else:
                 part_dist_recv_var_name_to_node_id = {}
 
@@ -372,9 +369,9 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
             # }}}
 
-            with emit.block(f'subgraph "cluster_part_{part_id}"'):
+            with emit.block(f'subgraph "cluster_part_{part.pid}"'):
                 emit("style=dashed")
-                emit(f'label="{part_id}"')
+                emit(f'label="{part.pid}"')
 
                 # Emit internal nodes
                 for array in internal_arrays:
@@ -386,10 +383,9 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 # {{{ emit send nodes if distributed
 
                 deferred_send_edges = []
-                if isinstance(parts, DistributedGraphPartitions):
-                    send_recv_info = parts.partition_id_to_send_recv_info[part_id]
+                if isinstance(part, DistributedGraphPart):
                     for name, send in (
-                            send_recv_info.part_output_name_to_send_node.items()):
+                            part.output_name_to_send_node.items()):
                         node_id = id_gen("send")
                         _emit_array(emit, "Send", {
                             "dest_rank": str(send.dest_rank),
@@ -399,8 +395,6 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                         deferred_send_edges.append(
                                 f"{array_to_id[send.data]} -> {node_id}"
                                 f'[style=dotted, label="{dot_escape(name)}"]')
-
-                    del send_recv_info
 
                 # }}}
 

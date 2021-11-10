@@ -31,7 +31,7 @@ from pytools.tag import Taggable
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import CopyMapper
-from pytato.partition import GraphPartitions, PartitionId
+from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.target import BoundProgram
 
 from pytools.tag import TagsType
@@ -46,18 +46,19 @@ Distributed communication
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
 .. autoclass:: PerPartitionSendRecvInfo
-.. autoclass:: DistributedGraphPartitions
+.. autoclass:: DistributedGraphPart
+.. autoclass:: DistributedGraphPartition
 
 .. autofunction:: make_distributed_send
 .. autofunction:: staple_distributed_send
 .. autofunction:: make_distributed_recv
 
 .. autofunction:: gather_distributed_comm_info
-.. autofunction:: execute_partitions_distributed
+.. autofunction:: execute_partition_distributed
 """
 
 
-# {{{ Distributed execution
+# {{{ Distributed node types
 
 CommTagType = Hashable
 
@@ -215,27 +216,28 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
 
 # {{{ distributed info collection
 
-@dataclass
-class PerPartitionSendRecvInfo:
+@dataclass(frozen=True)
+class DistributedGraphPart(GraphPart):
     """For one graph partition, record send/receive information for input/
     output names.
 
-    .. attribute:: part_input_name_to_recv_node
-    .. attribute:: part_output_name_to_send_node
+    .. attribute:: input_name_to_recv_node
+    .. attribute:: output_name_to_send_node
     """
     # TODO Document these
 
-    part_input_name_to_recv_node: Dict[str, DistributedRecv]
-    part_output_name_to_send_node: Dict[str, DistributedSend]
+    input_name_to_recv_node: Dict[str, DistributedRecv]
+    output_name_to_send_node: Dict[str, DistributedSend]
 
 
-@dataclass
-class DistributedGraphPartitions(GraphPartitions):
-    """Store information about distributed graph partitions.
-
-    .. attribute:: partition_id_to_send_recv_info
+@dataclass(frozen=True)
+class DistributedGraphPartition(GraphPartition):
+    """Store information about distributed graph partitions. This
+    has the same attributes as :class:`~pytato.partition.GraphPartition`,
+    however :attr:`~pytato.partition.GraphPartition.parts` now maps to
+    instances of :class:`DistributedGraphPart`.
     """
-    partition_id_to_send_recv_info: Dict[PartitionId, PerPartitionSendRecvInfo]
+    parts: Dict[PartId, DistributedGraphPart]
 
 
 class _DistributedCommReplacer(CopyMapper):
@@ -244,11 +246,11 @@ class _DistributedCommReplacer(CopyMapper):
 
     -   Replaces :class:`DistributedRecv` with :class`~pytato.Placeholder`
         so that received data can be externally supplied, making a note
-        in :attr:`part_input_name_to_recv_node`.
+        in :attr:`input_name_to_recv_node`.
 
     -   Eliminates :class:`DistributedSendRefHolder` and
         :class:`DistributedSend` from the DAG, making a note of data
-        to be send in :attr:`part_output_name_to_send_node`.
+        to be send in :attr:`output_name_to_send_node`.
     """
 
     def __init__(self) -> None:
@@ -257,14 +259,14 @@ class _DistributedCommReplacer(CopyMapper):
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
 
-        self.part_input_name_to_recv_node: Dict[str, DistributedRecv] = {}
-        self.part_output_name_to_send_node: Dict[str, DistributedSend] = {}
+        self.input_name_to_recv_node: Dict[str, DistributedRecv] = {}
+        self.output_name_to_send_node: Dict[str, DistributedSend] = {}
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
         # no children, no need to recurse
 
         new_name = self.name_generator()
-        self.part_input_name_to_recv_node[new_name] = expr
+        self.input_name_to_recv_node[new_name] = expr
         return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
                 expr.dtype, tags=expr.tags)
 
@@ -274,55 +276,46 @@ class _DistributedCommReplacer(CopyMapper):
                 super().map_distributed_send_ref_holder(expr))
 
         new_name = self.name_generator()
-        self.part_output_name_to_send_node[new_name] = result.send
+        self.output_name_to_send_node[new_name] = result.send
 
         return result.passthrough_data
 
 
-def gather_distributed_comm_info(parts: GraphPartitions) -> \
-        DistributedGraphPartitions:
-    partition_id_to_input_names = {}
-    partition_id_to_output_names = {}
+def gather_distributed_comm_info(partition: GraphPartition) -> \
+        DistributedGraphPartition:
     var_name_to_result = {}
-    partition_id_to_send_recv_info = {}
+    parts: Dict[PartId, DistributedGraphPart] = {}
 
-    for pid in parts.toposorted_partitions:
+    for part in partition.parts.values():
         comm_replacer = _DistributedCommReplacer()
-        part_results = {var_name: comm_replacer(parts.var_name_to_result[var_name])
-                for var_name in parts.partition_id_to_output_names[pid]}
+        part_results = {
+                var_name: comm_replacer(partition.var_name_to_result[var_name])
+                for var_name in part.output_names}
 
         part_results.update({
             name: send_node.data
             for name, send_node in
-            comm_replacer.part_output_name_to_send_node.items()})
+            comm_replacer.output_name_to_send_node.items()})
 
-        partition_id_to_input_names[pid] = (
-                parts.partition_id_to_input_names[pid]
-                | set(comm_replacer.part_input_name_to_recv_node))
+        parts[part.pid] = DistributedGraphPart(
+                pid=part.pid,
+                needed_pids=part.needed_pids,
+                input_names=(part.input_names
+                    | frozenset(comm_replacer.input_name_to_recv_node)),
+                output_names=(part.output_names
+                    | frozenset(comm_replacer.output_name_to_send_node)),
 
-        partition_id_to_output_names[pid] = (
-                parts.partition_id_to_output_names[pid]
-                | set(comm_replacer.part_output_name_to_send_node))
-
-        partition_id_to_send_recv_info[pid] = PerPartitionSendRecvInfo(
-                    part_input_name_to_recv_node=(
-                        comm_replacer.part_input_name_to_recv_node),
-                    part_output_name_to_send_node=(
-                        comm_replacer.part_output_name_to_send_node),
-                    )
+                input_name_to_recv_node=comm_replacer.input_name_to_recv_node,
+                output_name_to_send_node=comm_replacer.output_name_to_send_node)
 
         for name, val in part_results.items():
             assert name not in var_name_to_result
             var_name_to_result[name] = val
 
-    return DistributedGraphPartitions(
-            toposorted_partitions=parts.toposorted_partitions,
-            partition_id_to_input_names=partition_id_to_input_names,
-            partition_id_to_output_names=partition_id_to_output_names,
+    return DistributedGraphPartition(
+            parts=parts,
             var_name_to_result=var_name_to_result,
-            partition_id_to_send_recv_info=partition_id_to_send_recv_info,
-            )
-
+            toposorted_partitions=partition.toposorted_partitions)
 
 # }}}
 
@@ -344,25 +337,25 @@ def mpi_send(comm: Any, send_node: DistributedSend,
     comm.Send(data.data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
 
-def execute_partitions_distributed(
-        parts: DistributedGraphPartitions, prg_per_partition:
+def execute_partition_distributed(
+        partition: DistributedGraphPartition, prg_per_partition:
         Dict[Hashable, BoundProgram],
         queue: Any, comm: Any) -> Dict[str, Any]:
 
     recv_to_req_and_buf = {
             recv: post_receive(comm, recv)
-            for pid in parts.toposorted_partitions
-            for recv in (parts.partition_id_to_send_recv_info[pid]
-                .part_input_name_to_recv_node.values())}
+            for part in partition.parts.values()
+            for recv in (part.input_name_to_recv_node.values())}
 
     context: Dict[str, Any] = {}
-    for pid in parts.toposorted_partitions:
-        send_recv_info = parts.partition_id_to_send_recv_info[pid]
+    for pid in partition.toposorted_partitions:
+        part = partition.parts[pid]
+
         # FIXME: necessary?
         # context.update(part_receives[1].results)
 
         inputs = {}
-        for name, recv in send_recv_info.part_input_name_to_recv_node.items():
+        for name, recv in part.input_name_to_recv_node.items():
             req, buf = recv_to_req_and_buf[recv]
             req.Wait()
             inputs.update({name: buf})
@@ -378,14 +371,14 @@ def execute_partitions_distributed(
         # print(prg_per_partition[pid].program)
 
         inputs.update({
-            k: context[k] for k in parts.partition_id_to_input_names[pid]
+            k: context[k] for k in part.input_names
             if k in context})
 
         _evt, result_dict = prg_per_partition[pid](queue, **inputs)
 
         context.update(result_dict)
 
-        for name, send_node in send_recv_info.part_output_name_to_send_node.items():
+        for name, send_node in part.output_name_to_send_node.items():
             mpi_send(comm, send_node, context[name])
 
             # FIXME: Legal?
