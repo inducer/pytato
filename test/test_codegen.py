@@ -119,7 +119,10 @@ def test_matmul2(ctx_factory):
     prog = pt.generate_loopy(x1 @ x2, cl_device=queue.device)
     _, (out,) = prog(queue)
 
-    assert np.matmul(x1, x2).shape == out.shape
+    np_out = np.matmul(x1_in, x2_in)
+
+    assert np_out.shape == out.shape
+    assert (np_out == out).all()
 
 
 def test_data_wrapper(ctx_factory):
