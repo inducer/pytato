@@ -1608,9 +1608,6 @@ def matmul(x1: Array, x2: Array) -> Array:
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
 
-    assert isinstance(x1, Array)
-    assert isinstance(x2, Array)
-
     import pytato as pt
 
     if x1.ndim == x2.ndim == 1:
