@@ -1612,15 +1612,18 @@ def matmul(x1: Array, x2: Array) -> Array:
 
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
+    elif x1.ndim == 1:
+        return pt.einsum("i, ij -> j", x1, x2)
     elif x2.ndim == 1:
         return pt.sum(x1 * x2, axis=(x1.ndim - 1))
 
-    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-    idx_gen: Callable[[], str] = lambda: next(idx_stream)
+    idx_stream = (chr(i) for i in range(ord("l"), ord("z")))
 
-    x1_indices = "".join(idx_gen() for _ in range(x1.ndim))
-    x2_indices = x1_indices[:-2] + x1_indices[-1] + idx_gen()
-    result_indices = x1_indices[:-1] + x2_indices[-1]
+    idx_gen: Callable[[], str] = lambda: next(idx_stream)
+    stack_indices = "".join(idx_gen() for _ in range(max(x1.ndim-2, x2.ndim-2)))
+    x1_indices = stack_indices[len(stack_indices) - x1.ndim+2:] + "ij"
+    x2_indices = stack_indices[len(stack_indices) - x2.ndim+2:] + "jk"
+    result_indices = stack_indices + "ik"
 
     return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
 

@@ -106,12 +106,14 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
     assert (out == x1_in @ x2_in).all()
 
 
-def test_matmul2(ctx_factory):
+@pytest.mark.parametrize("x1_dim", ([9, 7, 11, 4], [7, 1, 4]))
+@pytest.mark.parametrize("x2_dim", ([7, 4, 5], [9, 7, 4, 3]))
+def test_matmul_higherdim(ctx_factory, x1_dim, x2_dim):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x1_in = np.ones([9, 5, 7, 4])
-    x2_in = np.ones([9, 5, 4, 3])
+    x1_in = np.ones(x1_dim)
+    x2_in = np.ones(x2_dim)
 
     x1 = pt.make_data_wrapper(x1_in)
     x2 = pt.make_data_wrapper(x2_in)
