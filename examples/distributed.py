@@ -28,10 +28,6 @@ class PartitionId():
     feeding_recvs: object
 
 
-def get_partition_id(node_to_fed_sends, node_to_feeding_recvs, expr) -> \
-                     PartitionId:
-    return PartitionId(frozenset(node_to_fed_sends[expr]),
-                       frozenset(node_to_feeding_recvs[expr]))
 
 
 def main():
@@ -78,9 +74,9 @@ def main():
             tag_user_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
 
-    from functools import partial
-    pfunc = partial(get_partition_id, node_to_fed_sends,
-                    node_to_feeding_recvs)
+    def get_part_id(expr) -> PartitionId:
+        return PartitionId(frozenset(node_to_fed_sends[expr]),
+                           frozenset(node_to_feeding_recvs[expr]))
 
     # {{{ Sanity checks
 
@@ -92,8 +88,9 @@ def main():
         for n in node_to_fed_sends[node]:
             assert(isinstance(n, DistributedSend))
 
-    for node in tm.topological_order:
-        pfunc(node)
+    if 0:
+        for node in tm.topological_order:
+            print(get_part_id(node), node)
 
     # }}}
 
@@ -103,7 +100,7 @@ def main():
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partition(outputs, pfunc)
+    parts = find_partition(outputs, get_part_id)
     distributed_parts = gather_distributed_comm_info(parts)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
