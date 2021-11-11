@@ -345,8 +345,9 @@ def _post_receive(comm: Any,
 
 def _mpi_send(comm: Any, send_node: DistributedSend,
              data: np.ndarray[Any, Any]) -> Any:
-    # FIXME: Might be more efficient to use non-blocking send
-    comm.Send(data.data, dest=send_node.dest_rank, tag=send_node.comm_tag)
+    # Must use-non-blocking send, as blocking send may wait for a corresponding
+    # receive to be posted (but if sending to self, this may only occur later).
+    return comm.Isend(data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
 
 def execute_partition_distributed(
@@ -416,6 +417,9 @@ def execute_partition_distributed(
             wait_for_some_recvs()
 
     # }}}
+
+    for send_req in send_requests:
+        send_req.Wait()
 
     return context
 
