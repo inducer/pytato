@@ -309,6 +309,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
             # subgraphs.
 
             for array in input_arrays:
+                # Non-Placeholders are emitted *inside* their subgraphs below.
                 if isinstance(array, Placeholder):
                     if array not in emitted_placeholders:
                         _emit_array(emit, part_node_to_info[array],
@@ -319,15 +320,16 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                         tgt = array_to_id[partition.var_name_to_result[array.name]]
                         emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
 
-                else:
-                    _emit_array(emit, part_node_to_info[array],
-                                array_to_id[array], "deepskyblue")
-
             # }}}
 
             with emit.block(f'subgraph "cluster_part_{part.pid}"'):
                 emit("style=dashed")
                 emit(f'label="{part.pid}"')
+
+                for array in input_arrays:
+                    if not isinstance(array, Placeholder):
+                        _emit_array(emit, part_node_to_info[array],
+                                    array_to_id[array], "deepskyblue")
 
                 # Emit internal nodes
                 for array in internal_arrays:
