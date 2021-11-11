@@ -241,15 +241,15 @@ def find_partition(outputs: DictOfNamedArrays,
     :returns: An instance of :class:`GraphPartition` that contains the partition.
     """
 
-    pf = _GraphPartitioner(part_func)
-    rewritten_outputs = {name: pf(expr) for name, expr in outputs._data.items()}
+    gp = _GraphPartitioner(part_func)
+    rewritten_outputs = {name: gp(expr) for name, expr in outputs._data.items()}
 
     pid_to_output_names: Dict[PartId, Set[str]] = {
-        pid: set() for pid in pf.seen_part_ids}
+        pid: set() for pid in gp.seen_part_ids}
     pid_to_input_names: Dict[PartId, Set[str]] = {
-        pid: set() for pid in pf.seen_part_ids}
+        pid: set() for pid in gp.seen_part_ids}
 
-    var_name_to_result = pf.var_name_to_result.copy()
+    var_name_to_result = gp.var_name_to_result.copy()
 
     for out_name, rewritten_output in rewritten_outputs.items():
         out_part_id = part_func(outputs._data[out_name])
@@ -258,10 +258,10 @@ def find_partition(outputs: DictOfNamedArrays,
 
     # Mapping of nodes to their successors; used to compute the topological order
     pid_to_needed_partitions: Dict[PartId, List[PartId]] = {
-            pid: [] for pid in pf.seen_part_ids}
+            pid: [] for pid in gp.seen_part_ids}
 
     for (pid_target, pid_dependency), var_names in \
-            pf.part_pair_to_edges.items():
+            gp.part_pair_to_edges.items():
         pid_to_needed_partitions[pid_dependency].append(pid_target)
 
         for var_name in var_names:
