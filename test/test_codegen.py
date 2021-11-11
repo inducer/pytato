@@ -1340,8 +1340,8 @@ def test_partitioner(ctx_factory):
 
         from dataclasses import dataclass
         from pytato.transform import TopoSortMapper
-        from pytato.partition import (find_partitions,
-                execute_partitions, generate_code_for_partitions,
+        from pytato.partition import (find_partition,
+                execute_partition, generate_code_for_partition,
                 PartitionInducedCycleError)
 
         @dataclass(frozen=True, eq=True)
@@ -1358,7 +1358,7 @@ def test_partitioner(ctx_factory):
         part_func = partial(get_partition_id, tm.topological_order)
 
         try:
-            parts = find_partitions(dict_named_arys, part_func)
+            partition = find_partition(dict_named_arys, part_func)
         except PartitionInducedCycleError:
             print("CYCLE!")
             # FIXME *shrug* nothing preventing that currently
@@ -1366,9 +1366,9 @@ def test_partitioner(ctx_factory):
             continue
 
         # Execute the partitioned code
-        prg_per_partition = generate_code_for_partitions(parts)
+        prg_per_part = generate_code_for_partition(partition)
 
-        context = execute_partitions(parts, prg_per_partition, queue)
+        context = execute_partition(partition, prg_per_part, queue)
 
         pt_part_res, = [context[k] for k in dict_named_arys]
 
