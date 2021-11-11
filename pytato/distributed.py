@@ -315,7 +315,7 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
     return DistributedGraphPartition(
             parts=parts,
             var_name_to_result=var_name_to_result,
-            toposorted_partitions=partition.toposorted_partitions)
+            toposorted_part_ids=partition.toposorted_part_ids)
 
 # }}}
 
@@ -356,7 +356,7 @@ def execute_partition_distributed(
     recv_names_completed = set()
     send_requests = []
 
-    def exec_ready_part(part):
+    def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.input_names}
 
         _evt, result_dict = prg_per_partition[part.pid](queue, **inputs)
@@ -367,10 +367,15 @@ def execute_partition_distributed(
             send_requests.append(_mpi_send(comm, send_node, context[name]))
 
         pids_executed.add(part.pid)
-        pids_to_execute.pop(part.pid)
+        pids_to_execute.remove(part.pid)
 
-    def wait_for_some_recvs():
+    def wait_for_some_recvs() -> None:
         complete_recv_indices = Request.Waitsome(recv_requests)
+
+        # Waitsome is allowed to return None
+        if not complete_recv_indices:
+            complete_recv_indices = []
+
         for idx in sorted(complete_recv_indices, reverse=True):
             name = recv_names.pop(idx)
             recv_requests.pop(idx)
