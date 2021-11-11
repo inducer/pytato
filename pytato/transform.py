@@ -1361,16 +1361,10 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
 
+    @abstractmethod
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> Any:
-        from pytato.distributed import DistributedSend, DistributedSendRefHolder
-        return DistributedSendRefHolder(
-                send=DistributedSend(
-                    data=self.handle_edge(expr, expr.send.data),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag),
-                passthrough_data=self.handle_edge(expr, expr.passthrough_data),
-                tags=expr.tags)
+        pass
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
