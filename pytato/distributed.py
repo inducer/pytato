@@ -357,10 +357,13 @@ def execute_partition_distributed(
 
     from mpi4py.MPI import Request
 
-    recv_names, recv_requests, recv_buffers = zip(*[
+    recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
             (name,) + _post_receive(comm, recv)
             for part in partition.parts.values()
             for name, recv in part.input_name_to_recv_node.items()])
+    recv_names = list(recv_names_tup)
+    recv_requests = list(recv_requests_tup)
+    recv_buffers = list(recv_buffers_tup)
 
     context: Dict[str, Any] = {}
 
@@ -403,13 +406,12 @@ def execute_partition_distributed(
     # {{{ main loop
 
     while pids_to_execute:
-        print(f"{partition.parts=}")
-        ready_pids = {part.pid
-                for part in partition.parts.values()
+        ready_pids = {pid
+                for pid in pids_to_execute
                 # FIXME: Only O(n**2) altogether. Nobody is going to notice, right?
-                if part.needed_pids <= pids_executed
-                and set(part.input_name_to_recv_node) <= recv_names_completed}
-        print(f"{ready_pids=}")
+                if partition.parts[pid].needed_pids <= pids_executed
+                and (set(partition.parts[pid].input_name_to_recv_node)
+                    <= recv_names_completed)}
         for pid in ready_pids:
             exec_ready_part(partition.parts[pid])
 
