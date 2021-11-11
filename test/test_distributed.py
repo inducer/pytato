@@ -23,11 +23,10 @@ THE SOFTWARE.
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pytest  # noqa
 import pyopencl as cl
-from pytato import Placeholder
 import numpy as np
 import pytato as pt
+import sys
 
 from mpi4py import MPI  # pylint: disable=import-error
 comm = MPI.COMM_WORLD
@@ -70,3 +69,56 @@ def test_distributed_execution_basic(ctx_factory):
     final_res = [context[k] for k in outputs.keys()]
 
     np.testing.assert_allclose(x_in*2, final_res[0])
+
+
+def test_distributed_execution_random_dag(ctx_factory):
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    from testlib import RandomDAGContext, make_random_dag
+
+    axis_len = 4
+
+    ntests = 1
+    for i in range(ntests):
+        print(i)
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False)
+
+        x = make_random_dag(rdagc_pt)
+
+        halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float))
+
+        y = halo * 42
+
+        res = staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float))
+
+        dict_named_arys = pt.DictOfNamedArrays(
+                    {"result": res})
+
+        parts = find_partition_distributed(dict_named_arys)
+        distributed_parts = gather_distributed_comm_info(parts)
+        prg_per_partition = generate_code_for_partition(distributed_parts)
+
+        ctx = cl.create_some_context()
+        queue = cl.CommandQueue(ctx)
+
+        context = execute_partition_distributed(distributed_parts, prg_per_partition,
+                                                queue, comm)
+
+        final_res = [context[k] for k in dict_named_arys.keys()]
+
+        assert final_res
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        from pytest import main
+        main([__file__])
