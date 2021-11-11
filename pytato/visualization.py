@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -40,14 +41,14 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper
 
-from pytato.partition import GraphPartitions
+from pytato.partition import GraphPartition
 
 
 __doc__ = """
 .. currentmodule:: pytato
 
 .. autofunction:: get_dot_graph
-.. autofunction:: get_dot_graph_from_partitions
+.. autofunction:: get_dot_graph_from_partition
 .. autofunction:: show_dot_graph
 .. autofunction:: get_ascii_graph
 .. autofunction:: show_ascii_graph
@@ -257,22 +258,21 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
+def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
-    graph of the computation of *result*.
+    graph of the partitioned computation of *partition*.
 
-    :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`).
+    :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
     """
     # Maps each partition to a dict of its arrays with the node info
-    part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
+    part_id_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
 
-    for part_id, out_names in parts.partition_id_to_output_names.items():
+    for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper()
-        for out_name in out_names:
-            mapper(parts.var_name_to_result[out_name])
+        for out_name in part.output_names:
+            mapper(partition.var_name_to_result[out_name])
 
-        part_id_to_node_to_node_info[part_id] = mapper.nodes
+        part_id_to_node_info[part.pid] = mapper.nodes
 
     id_gen = UniqueNameGenerator()
 
@@ -284,18 +284,14 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
         emit("node [shape=rectangle]")
         array_to_id: Dict[Array, str] = {}
 
-        # Fill array_to_id in a first pass. Technically, this isn't
-        # necessary, if parts.toposorted_partitions is *actually* topologically
-        # sorted. But if *cough* hypothetically parts.toposorted_partitions
-        # were not actually topologically sorted, like if you were in the
-        # middle of investigating a bug with the topological sort, ...
-        for part_id in parts.toposorted_partitions:
-            for array, _ in part_id_to_node_to_node_info[part_id].items():
+        # First pass: generate names for all nodes
+        for part in partition.parts.values():
+            for array, _ in part_id_to_node_info[part.pid].items():
                 array_to_id[array] = id_gen("array")
 
         # Second pass: emit the graph.
-        for part_id in parts.toposorted_partitions:
-            part_node_to_info = part_id_to_node_to_node_info[part_id]
+        for part in partition.parts.values():
+            part_node_to_info = part_id_to_node_info[part.pid]
             input_arrays: List[Array] = []
             internal_arrays: List[Array] = []
 
@@ -313,6 +309,7 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
             # subgraphs.
 
             for array in input_arrays:
+                # Non-Placeholders are emitted *inside* their subgraphs below.
                 if isinstance(array, Placeholder):
                     if array not in emitted_placeholders:
                         _emit_array(emit, part_node_to_info[array],
@@ -320,18 +317,19 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
                         emitted_placeholders.add(array)
 
                         # Emit cross-partition edges
-                        tgt = array_to_id[parts.var_name_to_result[array.name]]
+                        tgt = array_to_id[partition.var_name_to_result[array.name]]
                         emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
-
-                else:
-                    _emit_array(emit, part_node_to_info[array],
-                                array_to_id[array], "deepskyblue")
 
             # }}}
 
-            with emit.block(f'subgraph "cluster_part_{part_id}"'):
+            with emit.block(f'subgraph "cluster_part_{part.pid}"'):
                 emit("style=dashed")
-                emit(f'label="{part_id}"')
+                emit(f'label="{part.pid}"')
+
+                for array in input_arrays:
+                    if not isinstance(array, Placeholder):
+                        _emit_array(emit, part_node_to_info[array],
+                                    array_to_id[array], "deepskyblue")
 
                 # Emit internal nodes
                 for array in internal_arrays:
@@ -348,20 +346,20 @@ def get_dot_graph_from_partitions(parts: GraphPartitions) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartitions]) \
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition]) \
         -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
-        or the output of :func:`~pytato.partition.find_partitions`.
+        or the output of :func:`~pytato.partition.find_partition`.
     """
     dot_code: str
 
     if isinstance(result, str):
         dot_code = result
-    elif isinstance(result, GraphPartitions):
-        dot_code = get_dot_graph_from_partitions(result)
+    elif isinstance(result, GraphPartition):
+        dot_code = get_dot_graph_from_partition(result)
     else:
         dot_code = get_dot_graph(result)
 
