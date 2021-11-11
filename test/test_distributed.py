@@ -94,9 +94,9 @@ def test_distributed_execution_random_dag(ctx_factory):
 
         y = halo * 42
 
-        res = staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=42,
+        res = staple_distributed_send(halo, dest_rank=(rank-1) % size, comm_tag=43,
             stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float))
+                src_rank=(rank+1) % size, comm_tag=43, shape=(4, 4), dtype=float))
 
         dict_named_arys = pt.DictOfNamedArrays(
                     {"result": res})
