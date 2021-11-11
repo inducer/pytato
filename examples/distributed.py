@@ -42,12 +42,6 @@ def main():
 
     y = x+halo
 
-    # bnd2 = pt.make_distributed_send(y[0], dest_rank=(rank-1)%size, comm_tag="halo")
-
-    # halo2 = pt.make_distributed_recv(y[9], src_rank=(rank+1)%size, comm_tag="halo",
-    #         shape=(), dtype=float)
-    # y += bnd2 + halo2
-
     gdm = UsersCollector()
     gdm(y)
 
@@ -86,15 +80,10 @@ def main():
         for n in node_to_fed_sends[node]:
             assert(isinstance(n, DistributedSend))
 
-    if 0:
-        for node in tm.topological_order:
-            print(get_part_id(node), node)
+    for node in tm.topological_order:
+        get_part_id(node)
 
     # }}}
-
-    # print(f"{graph=}")
-    # print(f"{node_to_feeding_recvs=}")
-    # print(f"{node_to_fed_sends=}")
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
@@ -107,12 +96,11 @@ def main():
         show_dot_graph(distributed_parts)
         1/0
 
-    if 0:
-        from pytato.visualization import get_dot_graph_from_partition
-        print(get_dot_graph_from_partition(distributed_parts))
-        1/0
+    # Sanity check
+    from pytato.visualization import get_dot_graph_from_partition
+    get_dot_graph_from_partition(distributed_parts)
 
-    # Execute the partition
+    # Execute the distributed partition
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
@@ -121,17 +109,12 @@ def main():
 
     final_res = [context[k] for k in outputs.keys()]
 
-    # Execute the unpartitioned code for comparison
-    # prg = pt.generate_loopy(y)
-    # evt, (out, ) = prg(queue)
+    ref_res = comm.bcast(final_res)
 
-    # print(out)
-    print("------------")
-    print(final_res)
-    print("------------")
-    print("Distributed test succeeded")
+    np.testing.assert_allclose(ref_res, final_res)
 
-    # assert np.allclose(out, final_res)
+    if rank == 0:
+        print("Distributed test succeeded.")
 
 
 if __name__ == "__main__":
