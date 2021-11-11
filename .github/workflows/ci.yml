@@ -78,6 +78,9 @@ jobs:
                 . ci-support-v0
                 build_py_project_in_conda_env
                 run_examples
+        -   name: "Run distributed.py with MPI"
+            run: |
+                mpirun -n 2 examples/distributed.py
 
     docs:
         name: Documentation

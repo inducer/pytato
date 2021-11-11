@@ -28,14 +28,12 @@ from typing import (Any, Dict, Hashable, Tuple, Optional,  # noqa (need List, Se
     List, Set, FrozenSet, Mapping)
 from dataclasses import dataclass
 
-from pytools.tag import Taggable
+from pytools.tag import Taggable, TagsType
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import CopyMapper
 from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.target import BoundProgram
-
-from pytools.tag import TagsType
 
 import numpy as np
 
