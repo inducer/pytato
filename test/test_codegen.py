@@ -1365,6 +1365,9 @@ def test_partitioner(ctx_factory):
             ncycles += 1
             continue
 
+        from pytato.visualization import get_dot_graph_from_partition
+        get_dot_graph_from_partition(partition)
+
         # Execute the partitioned code
         prg_per_part = generate_code_for_partition(partition)
 
