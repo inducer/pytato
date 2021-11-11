@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -275,20 +276,19 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
 def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
-    graph of the computation of *result*.
+    graph of the partitioned computation of *partition*.
 
-    :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`).
+    :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
     """
     # Maps each partition to a dict of its arrays with the node info
-    part_id_to_node_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
+    part_id_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
 
     for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper()
         for out_name in part.output_names:
             mapper(partition.var_name_to_result[out_name])
 
-        part_id_to_node_to_node_info[part.pid] = mapper.nodes
+        part_id_to_node_info[part.pid] = mapper.nodes
 
     id_gen = UniqueNameGenerator()
 
@@ -300,8 +300,9 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
         emit("node [shape=rectangle]")
         array_to_id: Dict[Array, str] = {}
 
+        # First pass: generate names for all nodes
         for part in partition.parts.values():
-            for array, _ in part_id_to_node_to_node_info[part.pid].items():
+            for array, _ in part_id_to_node_info[part.pid].items():
                 array_to_id[array] = id_gen("array")
 
         # Second pass: emit the graph.
@@ -326,7 +327,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
             # }}}
 
-            part_node_to_info = part_id_to_node_to_node_info[part.pid]
+            part_node_to_info = part_id_to_node_info[part.pid]
             input_arrays: List[Array] = []
             internal_arrays: List[Array] = []
 
