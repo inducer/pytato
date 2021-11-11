@@ -257,12 +257,15 @@ def find_partition(outputs: DictOfNamedArrays,
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
-    pid_to_needed_partitions: Dict[PartId, List[PartId]] = {
-            pid: [] for pid in gp.seen_part_ids}
+    pid_to_needing_pids: Dict[PartId, List[PartId]] = {
+            pid: set() for pid in gp.seen_part_ids}
+    pid_to_needed_pids: Dict[PartId, List[PartId]] = {
+            pid: set() for pid in gp.seen_part_ids}
 
     for (pid_target, pid_dependency), var_names in \
             gp.part_pair_to_edges.items():
-        pid_to_needed_partitions[pid_dependency].append(pid_target)
+        pid_to_needing_pids[pid_dependency].add(pid_target)
+        pid_to_needed_pids[pid_target].add(pid_dependency)
 
         for var_name in var_names:
             pid_to_output_names[pid_dependency].add(var_name)
@@ -270,7 +273,7 @@ def find_partition(outputs: DictOfNamedArrays,
 
     from pytools.graph import compute_topological_order, CycleError
     try:
-        toposorted_part_ids = compute_topological_order(pid_to_needed_partitions)
+        toposorted_part_ids = compute_topological_order(pid_to_needing_pids)
     except CycleError:
         raise PartitionInducedCycleError
 
@@ -278,7 +281,7 @@ def find_partition(outputs: DictOfNamedArrays,
             parts={
                 pid: GraphPart(
                     pid=pid,
-                    needed_pids=frozenset(pid_to_needed_partitions[pid]),
+                    needed_pids=frozenset(pid_to_needed_pids[pid]),
                     input_names=frozenset(pid_to_input_names[pid]),
                     output_names=frozenset(pid_to_output_names[pid]))
                 for pid in pf.seen_part_ids},
