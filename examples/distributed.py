@@ -104,12 +104,19 @@ def main():
     distributed_parts = gather_distributed_comm_info(parts)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
+    if 0:
+        from pytato.visualization import show_dot_graph
+        show_dot_graph(distributed_parts)
+        1/0
+
+    if 0:
+        from pytato.visualization import get_dot_graph_from_partition
+        print(get_dot_graph_from_partition(distributed_parts))
+        1/0
+
     # Execute the partition
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
-
-    # FIXME: stop here in order not to waste CI time (app hangs)
-    1/0
 
     context = execute_partition_distributed(distributed_parts, prg_per_partition,
                                              queue, comm)
