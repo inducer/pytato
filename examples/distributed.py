@@ -28,8 +28,6 @@ class PartitionId():
     feeding_recvs: object
 
 
-
-
 def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
