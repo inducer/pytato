@@ -24,14 +24,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Dict, Hashable, Tuple, Optional,  # noqa (need List, Set, FrozenSet, Mapping for sphinx)
-    List, Set, FrozenSet, Mapping)
+from typing import (Any, Dict, Hashable, Tuple, Optional, Set, # noqa (need List, FrozenSet, Mapping for sphinx)
+    List, FrozenSet, Mapping)
+
 from dataclasses import dataclass
 
 from pytools.tag import Taggable, TagsType
-from pytato.array import (Array, _SuppliedShapeAndDtypeMixin, ShapeType,
+from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
+                          DictOfNamedArrays, ShapeType,
                           Placeholder, make_placeholder)
-from pytato.transform import CopyMapper
+from pytato.transform import ArrayOrNames, CopyMapper
 from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.target import BoundProgram
 
@@ -51,6 +53,7 @@ Distributed communication
 .. autofunction:: staple_distributed_send
 .. autofunction:: make_distributed_recv
 
+.. autofunction:: find_partition_distributed
 .. autofunction:: gather_distributed_comm_info
 .. autofunction:: execute_partition_distributed
 """
@@ -210,6 +213,75 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
     return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 
 # }}}
+
+
+# {{{ find distributed partition
+
+@dataclass(frozen=True, eq=True)
+class DistributedPartitionId():
+    fed_sends: object
+    feeding_recvs: object
+
+
+def find_partition_distributed(outputs: DictOfNamedArrays) -> GraphPartition:
+    """Finds a partitioning in a distributed context."""
+
+    from pytato.transform import (UsersCollector, TopoSortMapper,
+                                  reverse_graph, tag_user_nodes)
+
+    # FIXME: We should probably iterate over the DictOfNamedArrays instead
+    res = outputs[next(iter(outputs))]
+
+    gdm = UsersCollector()
+    gdm(res)
+
+    graph = gdm.node_to_users
+
+    # type-ignore-reason:
+    # 'graph' also includes DistributedSend nodes, which are not Arrays
+    rev_graph = reverse_graph(graph)  # type: ignore[arg-type]
+
+    # FIXME: Inefficient... too many traversals
+    node_to_feeding_recvs: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in graph:
+        node_to_feeding_recvs.setdefault(node, set())
+        if isinstance(node, DistributedRecv):
+            tag_user_nodes(graph, tag=node,  # type: ignore[arg-type]
+                            starting_point=node,
+                            node_to_tags=node_to_feeding_recvs)
+
+    node_to_fed_sends: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in rev_graph:
+        node_to_fed_sends.setdefault(node, set())
+        if isinstance(node, DistributedSend):
+            tag_user_nodes(rev_graph, tag=node, starting_point=node,
+                            node_to_tags=node_to_fed_sends)
+
+    def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
+        return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
+                                      frozenset(node_to_feeding_recvs[expr]))
+
+    # {{{ Sanity checks
+
+    if __debug__:
+        for node, _ in node_to_feeding_recvs.items():
+            for n in node_to_feeding_recvs[node]:
+                assert(isinstance(n, DistributedRecv))
+
+        for node, _ in node_to_fed_sends.items():
+            for n in node_to_fed_sends[node]:
+                assert(isinstance(n, DistributedSend))
+
+        tm = TopoSortMapper()
+        tm(res)
+
+        for node in tm.topological_order:
+            get_part_id(node)
+
+    # }}}
+
+    from pytato.partition import find_partition
+    return find_partition(outputs, get_part_id)
 
 
 # {{{ distributed info collection
