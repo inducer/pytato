@@ -55,69 +55,68 @@ PartId = Hashable
 # {{{ graph partitioner
 
 class _GraphPartitioner(EdgeCachedMapper):
-    """Given a function *get_partition_id*, produces subgraphs representing
+    """Given a function *get_part_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partitions` instead.
     """
 
-    def __init__(self, get_partition_id:
-                                   Callable[[ArrayOrNames], PartId]) -> None:
+    def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
         super().__init__()
 
-        # Function to determine the Partition ID
-        self._get_partition_id: Callable[[ArrayOrNames], PartId] = \
-                get_partition_id
+        # Function to determine the part ID
+        self._get_part_id: Callable[[ArrayOrNames], PartId] = \
+                get_part_id
 
-        # Naming for newly created PlaceHolders at partition edges
+        # Naming for newly created PlaceHolders at part edges
         from pytools import UniqueNameGenerator
         self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
 
-        # "edges" of the partitioned graph, maps an edge between two partitions,
-        # represented by a tuple of partition identifiers, to a set of placeholder
+        # "edges" of the partitioned graph, maps an edge between two parts,
+        # represented by a tuple of part identifiers, to a set of placeholder
         # names "conveying" information across the edge.
-        self.partition_pair_to_edges: Dict[Tuple[PartId, PartId],
+        self.part_pair_to_edges: Dict[Tuple[PartId, PartId],
                 Set[str]] = {}
 
         self.var_name_to_result: Dict[str, Array] = {}
 
         self._seen_node_to_placeholder: Dict[ArrayOrNames, Placeholder] = {}
 
-        # Reading the seen partition IDs out of partition_pair_to_edges is incorrect:
-        # e.g. if each partition is self-contained, no edges would appear. Instead,
-        # we remember each partition ID we see below, to guarantee that we don't
+        # Reading the seen part IDs out of part_pair_to_edges is incorrect:
+        # e.g. if each part is self-contained, no edges would appear. Instead,
+        # we remember each part ID we see below, to guarantee that we don't
         # miss any of them.
         self.seen_part_ids: Set[PartId] = set()
 
-    def get_partition_id(self, expr: ArrayOrNames) -> PartId:
-        part_id = self._get_partition_id(expr)
+    def get_part_id(self, expr: ArrayOrNames) -> PartId:
+        part_id = self._get_part_id(expr)
         self.seen_part_ids.add(part_id)
         return part_id
 
-    def does_edge_cross_partition_boundary(self,
+    def does_edge_cross_part_boundary(self,
             node1: ArrayOrNames, node2: ArrayOrNames) -> bool:
-        return self.get_partition_id(node1) != self.get_partition_id(node2)
+        return self.get_part_id(node1) != self.get_part_id(node2)
 
     def make_new_placeholder_name(self) -> str:
         return self.name_generator()
 
-    def add_interpartition_edge(self, target: ArrayOrNames, dependency: ArrayOrNames,
+    def add_inter_part_edge(self, target: ArrayOrNames, dependency: ArrayOrNames,
                                 placeholder_name: str) -> None:
-        pid_target = self.get_partition_id(target)
-        pid_dependency = self.get_partition_id(dependency)
+        pid_target = self.get_part_id(target)
+        pid_dependency = self.get_part_id(dependency)
 
-        self.partition_pair_to_edges.setdefault(
+        self.part_pair_to_edges.setdefault(
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
     def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
-        if self.does_edge_cross_partition_boundary(expr, child):
+        if self.does_edge_cross_part_boundary(expr, child):
             try:
                 ph = self._seen_node_to_placeholder[child]
             except KeyError:
                 ph_name = self.make_new_placeholder_name()
-                # If an edge crosses a partition boundary, replace the
-                # depended-upon node (that nominally lives in the other partition)
-                # with a Placeholder that lives in the current partition. For each
-                # partition, collect the placeholder names that it’s supposed to
+                # If an edge crosses a part boundary, replace the
+                # depended-upon node (that nominally lives in the other part)
+                # with a Placeholder that lives in the current part. For each
+                # part, collect the placeholder names that it’s supposed to
                 # compute.
 
                 if not isinstance(child, Array):
@@ -135,22 +134,22 @@ class _GraphPartitioner(EdgeCachedMapper):
                 self._seen_node_to_placeholder[child] = ph
 
             assert ph.name
-            self.add_interpartition_edge(expr, child, ph.name)
+            self.add_inter_part_edge(expr, child, ph.name)
             return ph
 
         else:
             return self.rec(child)
 
     def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
-        # Need to make sure the first node's partition is 'seen'
-        self.get_partition_id(expr)
+        # Need to make sure the first node's part is 'seen'
+        self.get_part_id(expr)
 
         return super().__call__(expr, *args, **kwargs)
 
 # }}}
 
 
-# {{{ code partitions
+# {{{ graph partition
 
 @dataclass(frozen=True)
 class GraphPart:
@@ -161,19 +160,16 @@ class GraphPart:
 
     .. attribute:: needed_pids
 
-        The IDs of partitions that are required to be evaluated before this
-        partition can be evaluated.
+        The IDs of parts that are required to be evaluated before this
+        part can be evaluated.
 
     .. attribute:: input_names
 
-        Mapping of partition identifiers to names of placeholders
-        the partition requires as input.
+        Names of placeholders the part requires as input.
 
     .. attribute:: output_names
 
-        Mapping of partition IDs to the names of placeholders
-        they provide as output.
-
+        Names of placeholders this part provides as output.
     """
     pid: PartId
     needed_pids: FrozenSet[PartId]
@@ -187,16 +183,16 @@ class GraphPartition:
 
     .. attribute:: parts
 
-        Mapping from partition IDs to instances of :class:`GraphPart`.
+        Mapping from part IDs to instances of :class:`GraphPart`.
 
     .. attribute:: var_name_to_result
 
        Mapping of placeholder names to the respective :class:`pytato.array.Array`
        they represent.
 
-    .. attribute:: toposorted_partitions
+    .. attribute:: toposorted_part_ids
 
-       One possible topologically sorted ordering of partition IDs that is
+       One possible topologically sorted ordering of part IDs that is
        admissible under :attr:`GraphPart.needed_pids`.
 
        .. note::
@@ -207,7 +203,7 @@ class GraphPartition:
     """
     parts: Mapping[PartId, GraphPart]
     var_name_to_result: Mapping[str, Array]
-    toposorted_partitions: List[PartId]
+    toposorted_part_ids: List[PartId]
 
 # }}}
 
@@ -265,7 +261,7 @@ def find_partition(outputs: DictOfNamedArrays,
             pid: [] for pid in pf.seen_part_ids}
 
     for (pid_target, pid_dependency), var_names in \
-            pf.partition_pair_to_edges.items():
+            pf.part_pair_to_edges.items():
         pid_to_needed_partitions[pid_dependency].append(pid_target)
 
         for var_name in var_names:
@@ -274,7 +270,7 @@ def find_partition(outputs: DictOfNamedArrays,
 
     from pytools.graph import compute_topological_order, CycleError
     try:
-        toposorted_partitions = compute_topological_order(pid_to_needed_partitions)
+        toposorted_part_ids = compute_topological_order(pid_to_needed_partitions)
     except CycleError:
         raise PartitionInducedCycleError
 
@@ -287,7 +283,7 @@ def find_partition(outputs: DictOfNamedArrays,
                     output_names=frozenset(pid_to_output_names[pid]))
                 for pid in pf.seen_part_ids},
             var_name_to_result=var_name_to_result,
-            toposorted_partitions=toposorted_partitions)
+            toposorted_part_ids=toposorted_part_ids)
 
     if __debug__:
         _check_partition_disjointness(result)
@@ -367,7 +363,7 @@ def execute_partition(partition: GraphPartition, prg_per_partition:
     :returns: A dictionary of variable names mapped to their values.
     """
     context: Dict[str, Any] = {}
-    for pid in partition.toposorted_partitions:
+    for pid in partition.toposorted_part_ids:
         part = partition.parts[pid]
         inputs = {
             k: context[k] for k in part.input_names
