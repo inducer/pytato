@@ -199,7 +199,7 @@ class GraphPart:
     needed_pids: FrozenSet[PartId]
     input_names: FrozenSet[str]
     output_names: FrozenSet[str]
-    distributed_sends: List["DistributedSend"]
+    distributed_sends: List[Any]  # FIXME: should be List[DistributedSend]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
