@@ -3,8 +3,8 @@
 import pytato as pt
 import pyopencl as cl
 import numpy as np
-from pytato.partition import (execute_partitions,
-                              generate_code_for_partitions, find_partitions)
+from pytato.partition import (execute_partition,
+                              generate_code_for_partition, find_partition)
 
 from pytato.transform import TopoSortMapper
 
@@ -36,19 +36,19 @@ def main():
 
     # Find the partitions
     outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partitions(outputs, pfunc)
+    partition = find_partition(outputs, pfunc)
 
     # Show the partitions
-    from pytato.visualization import get_dot_graph_from_partitions
-    get_dot_graph_from_partitions(parts)
+    from pytato.visualization import get_dot_graph_from_partition
+    get_dot_graph_from_partition(partition)
 
     # Execute the partitions
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    prg_per_partition = generate_code_for_partitions(parts)
+    prg_per_partition = generate_code_for_partition(partition)
 
-    context = execute_partitions(parts, prg_per_partition, queue)
+    context = execute_partition(partition, prg_per_partition, queue)
 
     final_res = [context[k] for k in outputs.keys()]
 
