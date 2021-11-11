@@ -9,10 +9,8 @@ import numpy as np
 
 from pytato.partition import (generate_code_for_partition)
 from pytato.distributed import (find_partition_distributed,
-                                execute_partition_distributed,
-                                gather_distributed_comm_info)
-
-from pytato.distributed import (staple_distributed_send, make_distributed_recv)
+    execute_partition_distributed, gather_distributed_comm_info,
+    staple_distributed_send, make_distributed_recv)
 
 
 def main():
@@ -38,7 +36,6 @@ def main():
     if 0:
         from pytato.visualization import show_dot_graph
         show_dot_graph(distributed_parts)
-        1/0
 
     # Sanity check
     from pytato.visualization import get_dot_graph_from_partition
