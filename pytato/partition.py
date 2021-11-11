@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
-        FrozenSet, Mapping)
+        FrozenSet, Mapping, TYPE_CHECKING)
 from dataclasses import dataclass
 
 
@@ -35,6 +35,9 @@ from pytato.array import (
         DictOfNamedArrays, make_placeholder)
 
 from pytato.target import BoundProgram
+
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedSend, DistributedSendRefHolder
 
 
 __doc__ = """
@@ -86,6 +89,8 @@ class _GraphPartitioner(EdgeCachedMapper):
         # we remember each part ID we see below, to guarantee that we don't
         # miss any of them.
         self.seen_part_ids: Set[PartId] = set()
+
+        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
 
     def get_part_id(self, expr: ArrayOrNames) -> PartId:
         part_id = self._get_part_id(expr)
@@ -146,6 +151,20 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         return super().__call__(expr, *args, **kwargs)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> Any:
+        send_part_id = self.get_part_id(expr.send.data)
+
+        from pytato.distributed import DistributedSend
+        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
+                DistributedSend(
+                    data=self.rec(expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag,
+                    tags=expr.send.tags))
+
+        return self.rec(expr.passthrough_data)
+
 # }}}
 
 
@@ -170,11 +189,22 @@ class GraphPart:
     .. attribute:: output_names
 
         Names of placeholders this part provides as output.
+
+    .. attribute:: distributed_sends
+
+        List of :class:`~pytato.distributed.DistributedSend` instances whose
+        :attr:`~pytato.distributed.DistributedSend.data` are in this part.
     """
     pid: PartId
     needed_pids: FrozenSet[PartId]
     input_names: FrozenSet[str]
     output_names: FrozenSet[str]
+    distributed_sends: List[DistributedSend]
+
+    # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
+    # have to know about distributed_sends. It will disappear from the data
+    # structure when find_partition and gather_distributed_comm_info become
+    # a single function aimed at the distributed use case.
 
 
 @dataclass(frozen=True)
@@ -280,8 +310,10 @@ def find_partition(outputs: DictOfNamedArrays,
                     pid=pid,
                     needed_pids=frozenset(pid_to_needed_partitions[pid]),
                     input_names=frozenset(pid_to_input_names[pid]),
-                    output_names=frozenset(pid_to_output_names[pid]))
-                for pid in pf.seen_part_ids},
+                    output_names=frozenset(pid_to_output_names[pid]),
+                    distributed_sends=gp.pid_to_dist_sends.get(pid, []),
+                    )
+                for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,
             toposorted_part_ids=toposorted_part_ids)
 
