@@ -422,7 +422,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition])
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
-        or the output of :func:`~pytato.partition.find_partitions`.
+        or the output of :func:`~pytato.partition.find_partition`.
     """
     dot_code: str
 

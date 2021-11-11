@@ -60,7 +60,7 @@ PartId = Hashable
 class _GraphPartitioner(EdgeCachedMapper):
     """Given a function *get_part_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
-    :meth:`find_partitions` instead.
+    :meth:`find_partition` instead.
     """
 
     def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
@@ -239,7 +239,7 @@ class GraphPartition:
 
 
 class PartitionInducedCycleError(Exception):
-    """Raised by :func:`find_partitions` if the partitioning induced a
+    """Raised by :func:`find_partition` if the partitioning induced a
     cycle in the graph of partitions.
     """
 
@@ -391,7 +391,7 @@ def execute_partition(partition: GraphPartition, prg_per_partition:
         Dict[PartId, BoundProgram], queue: Any) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
-    :param parts: An instance of :class:`GraphPartitions` representing the
+    :param parts: An instance of :class:`GraphPartition` representing the
         partitioned code.
     :param queue: An instance of :class:`pyopencl.CommandQueue` to execute the
         code on.
