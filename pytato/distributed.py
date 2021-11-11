@@ -404,7 +404,7 @@ def execute_partition_distributed(
 
     while pids_to_execute:
         print(f"{partition.parts=}")
-        ready_pids = {part
+        ready_pids = {part.pid
                 for part in partition.parts.values()
                 # FIXME: Only O(n**2) altogether. Nobody is going to notice, right?
                 if part.needed_pids <= pids_executed
