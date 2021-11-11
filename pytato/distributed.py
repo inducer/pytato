@@ -24,7 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, cast, List, Set  # noqa (need List, Set for sphinx)
+from typing import (Any, Dict, Hashable, Tuple, Optional,  # noqa (need List, Set, FrozenSet, Mapping for sphinx)
+    List, Set, FrozenSet, Mapping)
 from dataclasses import dataclass
 
 from pytools.tag import Taggable
@@ -45,7 +46,6 @@ Distributed communication
 .. autoclass:: DistributedSend
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
-.. autoclass:: PerPartitionSendRecvInfo
 .. autoclass:: DistributedGraphPart
 .. autoclass:: DistributedGraphPartition
 
@@ -355,7 +355,7 @@ def execute_partition_distributed(
         Dict[Hashable, BoundProgram],
         queue: Any, comm: Any) -> Dict[str, Any]:
 
-    from mpi4py.MPI import Request
+    from mpi4py import MPI
 
     recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
             (name,) + _post_receive(comm, recv)
@@ -386,7 +386,7 @@ def execute_partition_distributed(
         pids_to_execute.remove(part.pid)
 
     def wait_for_some_recvs() -> None:
-        complete_recv_indices = Request.Waitsome(recv_requests)
+        complete_recv_indices = MPI.Request.Waitsome(recv_requests)
 
         # Waitsome is allowed to return None
         if not complete_recv_indices:
