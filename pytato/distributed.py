@@ -272,13 +272,20 @@ class _DistributedCommReplacer(CopyMapper):
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
-        result = cast(DistributedSendRefHolder,
-                super().map_distributed_send_ref_holder(expr))
+        raise ValueError("DistributedSendRefHolder should not occur in partitioned "
+                "graphs")
+
+    def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        new_send = DistributedSend(
+                data=self.rec(expr.data),
+                dest_rank=expr.dest_rank,
+                comm_tag=expr.comm_tag,
+                tags=expr.tags)
 
         new_name = self.name_generator()
-        self.output_name_to_send_node[new_name] = result.send
+        self.output_name_to_send_node[new_name] = new_send
 
-        return result.passthrough_data
+        return new_send
 
 
 def gather_distributed_comm_info(partition: GraphPartition) -> \
@@ -292,6 +299,10 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
                 var_name: comm_replacer(partition.var_name_to_result[var_name])
                 for var_name in part.output_names}
 
+        dist_sends = [
+                comm_replacer.map_distributed_send(send)
+                for send in part.distributed_sends]
+
         part_results.update({
             name: send_node.data
             for name, send_node in
@@ -304,6 +315,7 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
                     | frozenset(comm_replacer.input_name_to_recv_node)),
                 output_names=(part.output_names
                     | frozenset(comm_replacer.output_name_to_send_node)),
+                distributed_sends=dist_sends,
 
                 input_name_to_recv_node=comm_replacer.input_name_to_recv_node,
                 output_name_to_send_node=comm_replacer.output_name_to_send_node)
