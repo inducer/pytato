@@ -287,9 +287,9 @@ def find_partition(outputs: DictOfNamedArrays,
         var_name_to_result[out_name] = rewritten_output
 
     # Mapping of nodes to their successors; used to compute the topological order
-    pid_to_needing_pids: Dict[PartId, List[PartId]] = {
+    pid_to_needing_pids: Dict[PartId, Set[PartId]] = {
             pid: set() for pid in gp.seen_part_ids}
-    pid_to_needed_pids: Dict[PartId, List[PartId]] = {
+    pid_to_needed_pids: Dict[PartId, Set[PartId]] = {
             pid: set() for pid in gp.seen_part_ids}
 
     for (pid_target, pid_dependency), var_names in \
