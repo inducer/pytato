@@ -285,6 +285,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
         emit("node [shape=rectangle]")
         array_to_id: Dict[Array, str] = {}
 
+        # First pass: generate names for all nodes
         for part in partition.parts.values():
             for array, _ in part_id_to_node_info[part.pid].items():
                 array_to_id[array] = id_gen("array")
