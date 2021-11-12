@@ -32,7 +32,6 @@ from pytato.array import (
         AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         SizeParam,
 
-
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
         einsum,
@@ -71,7 +70,8 @@ import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.transform as transform
 from pytato.distributed import (make_distributed_send, make_distributed_recv,
-                                DistributedRecv, DistributedSend)
+                                DistributedRecv, DistributedSend,
+                                staple_distributed_send)
 
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
@@ -114,7 +114,7 @@ __all__ = (
         "broadcast_to",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
-        "DistributedSend",
+        "DistributedSend", "staple_distributed_send",
 
         # sub-modules
         "analysis", "tags", "transform",
