@@ -7,8 +7,7 @@ import pytato as pt
 import pyopencl as cl
 import numpy as np
 
-from pytato.partition import (generate_code_for_partition)
-from pytato.distributed import (find_partition_distributed,
+from pytato import (find_partition_distributed, generate_code_for_partition,
     execute_partition_distributed, gather_distributed_comm_info,
     staple_distributed_send, make_distributed_recv)
 

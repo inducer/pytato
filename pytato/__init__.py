@@ -71,7 +71,12 @@ import pytato.tags as tags
 import pytato.transform as transform
 from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
-                                staple_distributed_send)
+                                staple_distributed_send,
+                                find_partition_distributed,
+                                gather_distributed_comm_info,
+                                execute_partition_distributed)
+
+from pytato.partition import generate_code_for_partition
 
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
@@ -115,6 +120,10 @@ __all__ = (
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send",
+        "find_partition_distributed", "gather_distributed_comm_info",
+        "execute_partition_distributed",
+
+        "generate_code_for_partition",
 
         # sub-modules
         "analysis", "tags", "transform",
