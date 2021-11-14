@@ -1296,6 +1296,16 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
 
+    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
+        return LoopyCall(
+            translation_unit=expr.translation_unit,
+            entrypoint=expr.entrypoint,
+            bindings={
+                name: self.handle_edge(expr, child)
+                if isinstance(child, Array) else child
+                for name, child in expr.bindings.items()},
+            )
+
     # }}}
 
 # }}}
