@@ -86,6 +86,8 @@ class DistributedSend(Taggable):
         A hashable, picklable object to serve as a 'tag' for the communication.
         Only a :class:`DistributedRecv` with the same tag will be able to
         receive the data being sent here.
+
+        .. note:: Currently, this attribute must be of class `int`.
     """
 
     def __init__(self, data: Array, dest_rank: int, comm_tag: CommTagType,
