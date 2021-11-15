@@ -43,15 +43,21 @@ __doc__ = """
 Distributed communication
 -------------------------
 
+.. currentmodule:: pytato
 .. autoclass:: DistributedSend
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
-.. autoclass:: DistributedGraphPart
-.. autoclass:: DistributedGraphPartition
 
 .. autofunction:: make_distributed_send
 .. autofunction:: staple_distributed_send
 .. autofunction:: make_distributed_recv
+
+.. currentmodule:: pytato.distributed
+
+.. autoclass:: DistributedGraphPart
+.. autoclass:: DistributedGraphPartition
+
+.. currentmodule:: pytato
 
 .. autofunction:: find_partition_distributed
 .. autofunction:: gather_distributed_comm_info
@@ -282,6 +288,8 @@ def find_partition_distributed(outputs: DictOfNamedArrays) -> GraphPartition:
 
     from pytato.partition import find_partition
     return find_partition(outputs, get_part_id)
+
+# }}}
 
 
 # {{{ distributed info collection
