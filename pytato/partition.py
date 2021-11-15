@@ -192,14 +192,14 @@ class GraphPart:
 
     .. attribute:: distributed_sends
 
-        List of `pytato.distributed.DistributedSend` instances whose
-        `DistributedSend.data` are in this part.
+        List of :class:`pytato.distributed.DistributedSend` instances whose
+        :attr:`DistributedSend.data` are in this part.
     """
     pid: PartId
     needed_pids: FrozenSet[PartId]
     input_names: FrozenSet[str]
     output_names: FrozenSet[str]
-    distributed_sends: List[Any]  # FIXME: should be List[DistributedSend]
+    distributed_sends: List[DistributedSend]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
