@@ -118,6 +118,8 @@ class LoopyCallResult(NamedArray):
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
+    _mapper_method = "map_loopy_call_result"
+
     def __init__(self,
             loopy_call: LoopyCall,
             name: str,
