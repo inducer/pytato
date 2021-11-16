@@ -391,16 +391,23 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                                     part_node_to_info[array].title,
                                     part_node_to_info[array].fields,
                                     array_to_id[array], "deepskyblue")
-                        emitted_placeholders.add(array)
 
                         # Emit cross-partition edges
                         if array.name in part_dist_recv_var_name_to_node_id:
                             tgt = part_dist_recv_var_name_to_node_id[array.name]
                             emit(f"{tgt} -> {array_to_id[array]} [style=dotted]")
+                            emitted_placeholders.add(array)
+                        elif array.name in part.user_input_names:
+                            # These are placeholders for external input. They
+                            # are cleanly associated with a single partition
+                            # and thus emitted below.
+                            pass
                         else:
+                            # placeholder for a value from a different partition
                             tgt = array_to_id[
                                     partition.var_name_to_result[array.name]]
                             emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
+                            emitted_placeholders.add(array)
 
             # }}}
 
@@ -409,7 +416,8 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 emit(f'label="{part.pid}"')
 
                 for array in input_arrays:
-                    if not isinstance(array, Placeholder):
+                    if (not isinstance(array, Placeholder)
+                            or array.name in part.user_input_names):
                         _emit_array(emit,
                                     part_node_to_info[array].title,
                                     part_node_to_info[array].fields,
