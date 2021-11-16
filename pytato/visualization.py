@@ -114,6 +114,13 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = info
 
+    def map_data_wrapper(self, expr: Array) -> None:  # type: ignore[override]
+        info = self.get_common_dot_info(expr)
+        # avoid stnringifying data
+        if expr.name is not None:
+            info.fields["name"] = expr.name
+        self.nodes[expr] = info
+
     def map_index_lambda(self, expr: IndexLambda) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["expr"] = str(expr.expr)
