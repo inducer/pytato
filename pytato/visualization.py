@@ -34,6 +34,7 @@ from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
 from pytools.tag import TagsType
+from pytato.loopy import LoopyCall
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
@@ -90,7 +91,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
-        edges: Dict[str, Array] = {}
+        edges: Dict[str, ArrayOrNames] = {}
         return DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
@@ -109,7 +110,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 info.edges[field] = attr
 
             elif isinstance(attr, AbstractResultWithNamedArrays):
-                self.rec(attr)
+                # type-ignore-reason: incompatible with superclass
+                self.rec(attr)  # type: ignore[arg-type]
                 info.edges[field] = attr
 
             elif isinstance(attr, tuple):
@@ -151,7 +153,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
         self.nodes[expr] = info
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        edges = {}
+        edges: Dict[str, ArrayOrNames] = {}
         for name, val in expr._data.items():
             edges[name] = val
             self.rec(val)
@@ -162,7 +164,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 edges=edges)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
-        edges = {}
+        edges: Dict[str, ArrayOrNames] = {}
         for name, arg in expr.bindings.items():
             if isinstance(arg, Array):
                 edges[name] = arg
@@ -206,8 +208,8 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
     emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
 
 
-def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
-        array_to_id: Mapping[Array, str], id_gen: Callable[[str], str],
+def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, ArrayOrNames],
+        array_to_id: Mapping[ArrayOrNames, str], id_gen: Callable[[str], str],
         label: str) -> None:
     edges = []
 
@@ -245,8 +247,8 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     nodes = mapper.nodes
 
     input_arrays: List[Array] = []
-    internal_arrays: List[Array] = []
-    array_to_id: Dict[Array, str] = {}
+    internal_arrays: List[ArrayOrNames] = []
+    array_to_id: Dict[ArrayOrNames, str] = {}
 
     id_gen = UniqueNameGenerator()
     for array in nodes:
@@ -291,7 +293,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
     """
     # Maps each partition to a dict of its arrays with the node info
-    part_id_to_node_info: Dict[Hashable, Dict[Array, DotNodeInfo]] = {}
+    part_id_to_node_info: Dict[Hashable, Dict[ArrayOrNames, DotNodeInfo]] = {}
 
     for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper()
@@ -308,7 +310,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
     with emit.block("digraph computation"):
         emit("node [shape=rectangle]")
-        array_to_id: Dict[Array, str] = {}
+        array_to_id: Dict[ArrayOrNames, str] = {}
 
         # First pass: generate names for all nodes
         for part in partition.parts.values():
@@ -319,7 +321,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
         for part in partition.parts.values():
             part_node_to_info = part_id_to_node_info[part.pid]
             input_arrays: List[Array] = []
-            internal_arrays: List[Array] = []
+            internal_arrays: List[ArrayOrNames] = []
 
             for array, _ in part_node_to_info.items():
                 if isinstance(array, InputArgumentBase):
@@ -414,8 +416,8 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
     nodes = mapper.nodes
 
     input_arrays: List[Array] = []
-    internal_arrays: List[Array] = []
-    array_to_id: Dict[Array, str] = {}
+    internal_arrays: List[ArrayOrNames] = []
+    array_to_id: Dict[ArrayOrNames, str] = {}
 
     id_gen = UniqueNameGenerator()
     for array in nodes:
@@ -429,10 +431,10 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
     # at the bottom), we need to invert our representation of it, that is, the
     # 'parents' constructor argument to Node() actually means 'children'.
     from asciidag.node import Node  # type: ignore[import]
-    asciidag_nodes: Dict[Array, Node] = {}
+    asciidag_nodes: Dict[ArrayOrNames, Node] = {}
 
     from collections import defaultdict
-    asciidag_edges: Dict[Array, List[Array]] = defaultdict(list)
+    asciidag_edges: Dict[ArrayOrNames, List[ArrayOrNames]] = defaultdict(list)
 
     # Reverse edge directions
     for array in internal_arrays:
