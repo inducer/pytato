@@ -37,9 +37,9 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder)
+        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays)
 from pytato.codegen import normalize_outputs
-from pytato.transform import CachedMapper
+from pytato.transform import CachedMapper, ArrayOrNames
 
 from pytato.partition import GraphPartition
 
@@ -60,9 +60,8 @@ __doc__ = """
 @dataclasses.dataclass
 class DotNodeInfo:
     title: str
-    addr: str
     fields: Dict[str, str]
-    edges: Dict[str, Array]
+    edges: Dict[str, ArrayOrNames]
 
 
 def stringify_tags(tags: TagsType) -> str:
@@ -82,16 +81,17 @@ def stringify_shape(shape: ShapeType) -> str:
 class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
     def __init__(self) -> None:
         super().__init__()
-        self.nodes: Dict[Array, DotNodeInfo] = {}
+        self.nodes: Dict[ArrayOrNames, DotNodeInfo] = {}
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        addr = hex(id(expr))
-        fields = dict(shape=stringify_shape(expr.shape),
+
+        fields = dict(addr=hex(id(expr)),
+                shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
         edges: Dict[str, Array] = {}
-        return DotNodeInfo(title, addr, fields, edges)
+        return DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
     def handle_unsupported_array(self,  # type: ignore[override]
@@ -107,8 +107,14 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
             if isinstance(attr, Array):
                 self.rec(attr)
                 info.edges[field] = attr
+
+            elif isinstance(attr, AbstractResultWithNamedArrays):
+                self.rec(attr)
+                info.edges[field] = attr
+
             elif isinstance(attr, tuple):
                 info.fields[field] = stringify_shape(attr)
+
             else:
                 info.fields[field] = str(attr)
 
@@ -144,6 +150,29 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = info
 
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        edges = {}
+        for name, val in expr._data.items():
+            edges[name] = val
+            self.rec(val)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields={},
+                edges=edges)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        edges = {}
+        for name, arg in expr.bindings.items():
+            if isinstance(arg, Array):
+                edges[name] = arg
+                self.rec(arg)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields={},
+                edges=edges)
+
 
 def dot_escape(s: str) -> str:
     # "\" and HTML are significant in graphviz.
@@ -167,9 +196,6 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
 
     rows = ['<tr><td colspan="2" %s>%s</td></tr>'
             % (td_attrib, dot_escape(info.title))]
-
-    rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>"
-                % (td_attrib,  "addr", td_attrib, info.addr))
 
     for name, field in info.fields.items():
         rows.append(
