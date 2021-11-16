@@ -276,6 +276,12 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                          bindings=bindings,
                          entrypoint=expr.entrypoint)
 
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
+        return LoopyCallResult(
+                loopy_call=self.rec(expr._container),
+                name=expr.name,
+                tags=expr.tags)
+
     def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape),
@@ -376,6 +382,9 @@ class CombineMapper(Mapper, Generic[CombineT]):
                               for _, ary in sorted(expr.bindings.items())
                               if isinstance(ary, Array)))
 
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> CombineT:
+        return self.rec(expr._container)
+
 # }}}
 
 
@@ -434,6 +443,9 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
+
+    def map_loopy_call_result(self, expr: NamedArray) -> R:
+        return self.combine(frozenset([expr]), super().map_loopy_call_result(expr))
 
 # }}}
 
@@ -624,16 +636,6 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
-    def map_loopy_call(self, expr: LoopyCall) -> None:
-        if not self.visit(expr):
-            return
-
-        for _, child in sorted(expr.bindings.items()):
-            if isinstance(child, Array):
-                self.rec(child)
-
-        self.post_visit(expr)
-
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         if not self.visit(expr):
             return
@@ -648,6 +650,16 @@ class WalkMapper(Mapper):
             return
 
         self.rec(expr._container)
+
+        self.post_visit(expr)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        if not self.visit(expr):
+            return
+
+        for _, child in sorted(expr.bindings.items()):
+            if isinstance(child, Array):
+                self.rec(child)
 
         self.post_visit(expr)
 
@@ -791,12 +803,8 @@ class MPMSMaterializer(Mapper):
     map_size_param = _map_input_base
 
     def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        if not isinstance(expr, LoopyCallResult):
-            raise NotImplementedError("only LoopyCallResult named array"
-                                      " supported for now.")
-
-        # loopy call result is always materialized
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+        raise NotImplementedError("only LoopyCallResult named array"
+                                  " supported for now.")
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
@@ -894,6 +902,10 @@ class MPMSMaterializer(Mapper):
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
                                  ) -> MPMSMaterializerAccumulator:
         raise NotImplementedError
+
+    def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
+        # loopy call result is always materialized
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
 # }}}
 
@@ -1041,12 +1053,6 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.node_to_users.setdefault(expr._container, set()).add(expr)
         self.rec(expr._container)
 
-    def map_loopy_call(self, expr: LoopyCall) -> None:
-        for _, child in sorted(expr.bindings.items()):
-            if isinstance(child, Array):
-                self.node_to_users.setdefault(child, set()).add(expr)
-                self.rec(child)
-
     def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:
             self.node_to_users.setdefault(arg, set()).add(expr)
@@ -1119,6 +1125,12 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                                           expr: AdvancedIndexInNoncontiguousAxes
                                           ) -> None:
         self._map_index_base(expr)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        for _, child in sorted(expr.bindings.items()):
+            if isinstance(child, Array):
+                self.node_to_users.setdefault(child, set()).add(expr)
+                self.rec(child)
 
 # }}}
 
@@ -1200,8 +1212,8 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     # {{{ map_xxx methods
 
     def map_named_array(self, expr: NamedArray, *args: Any) -> NamedArray:
-        return NamedArray(
-            container=self.handle_edge(expr, expr._container, *args),
+        return type(expr)(
+            self.handle_edge(expr, expr._container, *args),
             name=expr.name,
             tags=expr.tags)
 
