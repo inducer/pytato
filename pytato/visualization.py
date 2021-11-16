@@ -39,15 +39,16 @@ from pytools.tag import TagsType
 
 from pytato.array import (
         Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder)
+        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays)
 from pytato.codegen import normalize_outputs
-from pytato.transform import CachedMapper
+from pytato.transform import CachedMapper, ArrayOrNames
 
 from pytato.partition import GraphPartition
 from pytato.distributed import DistributedGraphPart
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder
+    from pytato.loopy import LoopyCall
 
 
 __doc__ = """
@@ -67,7 +68,7 @@ __doc__ = """
 class DotNodeInfo:
     title: str
     fields: Dict[str, str]
-    edges: Dict[str, Array]
+    edges: Dict[str, ArrayOrNames]
 
 
 def stringify_tags(tags: TagsType) -> str:
@@ -87,11 +88,13 @@ def stringify_shape(shape: ShapeType) -> str:
 class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
     def __init__(self) -> None:
         super().__init__()
-        self.nodes: Dict[Array, DotNodeInfo] = {}
+        self.nodes: Dict[ArrayOrNames, DotNodeInfo] = {}
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        fields = dict(addr=hex(id(expr)), shape=stringify_shape(expr.shape),
+
+        fields = dict(addr=hex(id(expr)),
+                shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
         edges: Dict[str, Array] = {}
@@ -111,8 +114,14 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
             if isinstance(attr, Array):
                 self.rec(attr)
                 info.edges[field] = attr
+
+            elif isinstance(attr, AbstractResultWithNamedArrays):
+                self.rec(attr)
+                info.edges[field] = attr
+
             elif isinstance(attr, tuple):
                 info.fields[field] = stringify_shape(attr)
+
             else:
                 info.fields[field] = str(attr)
 
@@ -154,6 +163,29 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
             info.edges[f"{iarg}: {access_descr}"] = val
 
         self.nodes[expr] = info
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        edges = {}
+        for name, val in expr._data.items():
+            edges[name] = val
+            self.rec(val)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields={},
+                edges=edges)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        edges = {}
+        for name, arg in expr.bindings.items():
+            if isinstance(arg, Array):
+                edges[name] = arg
+                self.rec(arg)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields={},
+                edges=edges)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> None:
