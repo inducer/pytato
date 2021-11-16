@@ -122,7 +122,14 @@ class Mapper:
             method = getattr(self, expr._mapper_method)
         except AttributeError:
             if isinstance(expr, Array):
-                return self.handle_unsupported_array(expr, *args, **kwargs)
+                for cls in type(expr).__mro__[1:]:
+                    method_name = getattr(cls, "_mapper_method", None)
+                    if method_name:
+                        method = getattr(self, method_name, None)
+                        if method:
+                            break
+                else:
+                    return self.handle_unsupported_array(expr, *args, **kwargs)
             else:
                 return self.map_foreign(expr, *args, **kwargs)
 
@@ -1257,6 +1264,16 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
         assert expr.name
         return SizeParam(name=expr.name, tags=expr.tags)
+
+    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
+        return LoopyCall(
+            translation_unit=expr.translation_unit,
+            entrypoint=expr.entrypoint,
+            bindings={
+                name: self.handle_edge(expr, child)
+                if isinstance(child, Array) else child
+                for name, child in expr.bindings.items()},
+            )
 
     # }}}
 
