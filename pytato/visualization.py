@@ -160,6 +160,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
+                addr=hex(id(expr)),
                 fields={},
                 edges=edges)
 
@@ -172,6 +173,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
+                addr=hex(id(expr)),
                 fields={},
                 edges=edges)
 
@@ -201,7 +203,7 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
 
     rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>"
                 % (td_attrib,  "addr", td_attrib, info.addr))
-  
+
     for name, field in info.fields.items():
         rows.append(
                 "<tr><td %s>%s:</td><td %s>%s</td></tr>"
