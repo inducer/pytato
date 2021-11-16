@@ -396,6 +396,7 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
                 output_names=(part.output_names
                     | frozenset(comm_replacer.output_name_to_send_node)),
                 distributed_sends=dist_sends,
+                user_input_names=part.user_input_names,
 
                 input_name_to_recv_node=comm_replacer.input_name_to_recv_node,
                 output_name_to_send_node=comm_replacer.output_name_to_send_node)

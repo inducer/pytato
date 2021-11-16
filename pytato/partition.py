@@ -92,6 +92,8 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
 
+        self.pid_to_user_input_names: Dict[PartId, Set[str]] = {}
+
     def get_part_id(self, expr: ArrayOrNames) -> PartId:
         part_id = self._get_part_id(expr)
         self.seen_part_ids.add(part_id)
@@ -151,6 +153,11 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         return super().__call__(expr, *args, **kwargs)
 
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> Array:
+        pid = self.get_part_id(expr)
+        self.pid_to_user_input_names.setdefault(pid, set()).add(expr.name)
+        return super().map_placeholder(expr)
+
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> Any:
         send_part_id = self.get_part_id(expr.send.data)
@@ -194,12 +201,19 @@ class GraphPart:
 
         List of :class:`pytato.distributed.DistributedSend` instances whose
         :attr:`DistributedSend.data` are in this part.
+
+    .. attribute:: user_input_names
+
+        A :class:`dict` mapping names to :class:`Placeholder` instances that
+        represent input to the computationa graph, i.e. were *not* introduced
+        by partitioning.
     """
     pid: PartId
     needed_pids: FrozenSet[PartId]
     input_names: FrozenSet[str]
     output_names: FrozenSet[str]
     distributed_sends: List[DistributedSend]
+    user_input_names: FrozenSet[str]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
@@ -315,6 +329,7 @@ def find_partition(outputs: DictOfNamedArrays,
                     input_names=frozenset(pid_to_input_names[pid]),
                     output_names=frozenset(pid_to_output_names[pid]),
                     distributed_sends=gp.pid_to_dist_sends.get(pid, []),
+                    user_input_names=gp.pid_to_user_input_names.get(pid, []),
                     )
                 for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,
