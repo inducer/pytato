@@ -122,7 +122,14 @@ class Mapper:
             method = getattr(self, expr._mapper_method)
         except AttributeError:
             if isinstance(expr, Array):
-                return self.handle_unsupported_array(expr, *args, **kwargs)
+                for cls in type(expr).__mro__[1:]:
+                    method_name = getattr(cls, "_mapper_method", None)
+                    if method_name:
+                        method = getattr(self, method_name, None)
+                        if method:
+                            break
+                else:
+                    return self.handle_unsupported_array(expr, *args, **kwargs)
             else:
                 return self.map_foreign(expr, *args, **kwargs)
 
