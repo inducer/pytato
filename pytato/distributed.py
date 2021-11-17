@@ -29,6 +29,7 @@ from typing import (Any, Dict, Hashable, Tuple, Optional, Set, # noqa (need List
 
 from dataclasses import dataclass
 
+from pytools import UniqueNameGenerator
 from pytools.tag import Taggable, TagsType
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           DictOfNamedArrays, ShapeType,
@@ -333,11 +334,10 @@ class _DistributedCommReplacer(CopyMapper):
         to be send in :attr:`output_name_to_send_node`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, dist_name_generator: UniqueNameGenerator) -> None:
         super().__init__()
 
-        from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_dist_ph_")
+        self.name_generator = dist_name_generator
 
         self.input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.output_name_to_send_node: Dict[str, DistributedSend] = {}
@@ -373,8 +373,10 @@ def gather_distributed_comm_info(partition: GraphPartition) -> \
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
 
+    dist_name_generator = UniqueNameGenerator(forced_prefix="_pt_dist")
+
     for part in partition.parts.values():
-        comm_replacer = _DistributedCommReplacer()
+        comm_replacer = _DistributedCommReplacer(dist_name_generator)
         part_results = {
                 var_name: comm_replacer(partition.var_name_to_result[var_name])
                 for var_name in part.output_names}

@@ -136,6 +136,9 @@ Reserved Identifiers
         names of :class:`~pytato.array.DataWrapper` arguments that are
         not supplied by the user.
 
+    -   ``_pt_dist``: Used to automatically generate identifiers for
+        placeholders at distributed communication boundaries.
+
 -   Identifiers used in index lambdas are also reserved. These include:
 
     -   Identifiers matching the regular expression ``_[0-9]+``. They are used
