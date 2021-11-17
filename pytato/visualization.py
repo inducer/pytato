@@ -36,7 +36,7 @@ from pytools.codegen import CodeGenerator as CodeGeneratorBase
 from pytools.tag import TagsType
 
 from pytato.array import (
-        Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
+        Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
         Stack, ShapeType, Einsum, Placeholder)
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper
@@ -60,7 +60,6 @@ __doc__ = """
 @dataclasses.dataclass
 class DotNodeInfo:
     title: str
-    addr: str
     fields: Dict[str, str]
     edges: Dict[str, Array]
 
@@ -86,12 +85,12 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        addr = hex(id(expr))
-        fields = dict(shape=stringify_shape(expr.shape),
+        fields = dict(addr=hex(id(expr)),
+                shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
         edges: Dict[str, Array] = {}
-        return DotNodeInfo(title, addr, fields, edges)
+        return DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
     def handle_unsupported_array(self,  # type: ignore[override]
@@ -111,6 +110,18 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 info.fields[field] = stringify_shape(attr)
             else:
                 info.fields[field] = str(attr)
+
+        self.nodes[expr] = info
+
+    def map_data_wrapper(self, expr: DataWrapper) -> None:
+        info = self.get_common_dot_info(expr)
+        if expr.name is not None:
+            info.fields["name"] = expr.name
+
+        # Only show summarized data
+        import numpy as np
+        with np.printoptions(threshold=4, precision=2):
+            info.fields["data"] = str(expr.data)
 
         self.nodes[expr] = info
 
@@ -168,14 +179,12 @@ def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
     rows = ['<tr><td colspan="2" %s>%s</td></tr>'
             % (td_attrib, dot_escape(info.title))]
 
-    rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>"
-                % (td_attrib,  "addr", td_attrib, info.addr))
-
     for name, field in info.fields.items():
+        field_content = dot_escape(field).replace("\n", "<br/>")
         rows.append(
-                "<tr><td %s>%s:</td><td %s>%s</td></tr>"
-                % (td_attrib, dot_escape(name), td_attrib, dot_escape(field)))
-
+                f"<tr><td {td_attrib}>{dot_escape(name)}:</td><td {td_attrib}>"
+                f"<FONT FACE='monospace'>{field_content}</FONT></td></tr>"
+        )
     table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
     emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
 
