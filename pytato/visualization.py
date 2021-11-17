@@ -173,7 +173,6 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
-                addr=hex(id(expr)),
                 fields={},
                 edges=edges)
 
@@ -186,7 +185,6 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
-                addr=hex(id(expr)),
                 fields={},
                 edges=edges)
 
