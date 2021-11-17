@@ -477,7 +477,7 @@ class DependencyMapper(CombineMapper[R]):
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> R:
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> R:
         return self.combine(frozenset([expr]), super().map_loopy_call_result(expr))
 
     def map_distributed_send_ref_holder(
@@ -686,6 +686,20 @@ class WalkMapper(Mapper):
 
         self.post_visit(expr)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.send.data)
+        self.rec(expr.passthrough_data)
+
+        self.post_visit(expr)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+        self.rec_idx_or_size_tuple(expr.shape)
     def map_named_array(self, expr: NamedArray) -> None:
         if not self.visit(expr):
             return
@@ -701,23 +715,6 @@ class WalkMapper(Mapper):
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
                 self.rec(child)
-
-        self.post_visit(expr)
-
-    def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> None:
-        if not self.visit(expr):
-            return
-
-        self.rec(expr.send.data)
-        self.rec(expr.passthrough_data)
-
-        self.post_visit(expr)
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
-        if not self.visit(expr):
-            return
-        self.rec_idx_or_size_tuple(expr.shape)
 
         self.post_visit(expr)
 
