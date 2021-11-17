@@ -205,7 +205,7 @@ class GraphPart:
     .. attribute:: user_input_names
 
         A :class:`dict` mapping names to :class:`Placeholder` instances that
-        represent input to the computationa graph, i.e. were *not* introduced
+        represent input to the computational graph, i.e. were *not* introduced
         by partitioning.
     """
     pid: PartId
