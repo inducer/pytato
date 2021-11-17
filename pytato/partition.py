@@ -153,7 +153,7 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         return super().__call__(expr, *args, **kwargs)
 
-    def map_placeholder(self, expr: Placeholder, *args: Any) -> Array:
+    def map_placeholder(self, expr: Placeholder, *args: Any) -> Any:
         pid = self.get_part_id(expr)
         self.pid_to_user_input_names.setdefault(pid, set()).add(expr.name)
         return super().map_placeholder(expr)
@@ -329,7 +329,8 @@ def find_partition(outputs: DictOfNamedArrays,
                     input_names=frozenset(pid_to_input_names[pid]),
                     output_names=frozenset(pid_to_output_names[pid]),
                     distributed_sends=gp.pid_to_dist_sends.get(pid, []),
-                    user_input_names=gp.pid_to_user_input_names.get(pid, []),
+                    user_input_names=frozenset(
+                        gp.pid_to_user_input_names.get(pid, set())),
                     )
                 for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,

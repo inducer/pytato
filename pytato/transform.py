@@ -700,6 +700,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
         self.rec_idx_or_size_tuple(expr.shape)
+
     def map_named_array(self, expr: NamedArray) -> None:
         if not self.visit(expr):
             return

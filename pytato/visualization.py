@@ -50,7 +50,6 @@ from pytato.distributed import DistributedGraphPart
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder
-    from pytato.loopy import LoopyCall
 
 
 __doc__ = """
