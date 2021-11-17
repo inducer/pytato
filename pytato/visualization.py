@@ -86,7 +86,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
+class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def __init__(self) -> None:
         super().__init__()
         self.nodes: Dict[ArrayOrNames, DotNodeInfo] = {}
@@ -117,8 +117,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 info.edges[field] = attr
 
             elif isinstance(attr, AbstractResultWithNamedArrays):
-                # type-ignore-reason: incompatible with superclass
-                self.rec(attr)  # type: ignore[arg-type]
+                self.rec(attr)
                 info.edges[field] = attr
 
             elif isinstance(attr, tuple):
