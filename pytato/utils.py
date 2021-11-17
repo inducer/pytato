@@ -265,19 +265,23 @@ def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bo
     Returns *True* iff *dim1* and *dim2* are have equal
     :class:`~pytato.array.SizeParam` coefficients in their expressions.
     """
-    from pytato.scalar_expr import substitute, distribute
+    if isinstance(dim1, INT_CLASSES) and isinstance(dim2, INT_CLASSES):
+        return dim1 == dim2
 
-    def to_expr(dim: ShapeComponent) -> ScalarExpression:
-        expr, bnds = dim_to_index_lambda_components(dim,
-                                                    UniqueNameGenerator())
+    dim1_minus_dim2 = dim1 - dim2
+    assert isinstance(dim1_minus_dim2, Array)
 
-        return substitute(expr, {name: prim.Variable(bnd.name)
-                                 for name, bnd in bnds.items()})
+    from pytato.transform import InputGatherer
 
-    dim1_expr = to_expr(dim1)
-    dim2_expr = to_expr(dim2)
-    # ScalarExpression.__eq__  returns Any
-    return (distribute(dim1_expr-dim2_expr) == 0)  # type: ignore
+    # type-ignore reason: not all InputArgumentBase have a name attr.
+    space = _create_size_param_space({expr.name  # type: ignore[attr-defined]
+                                      for expr in InputGatherer()(dim1_minus_dim2)})
+
+    # pytato requires the shape expressions be affine expressions of the size
+    # params, so converting them to ISL expressions.
+    aff = ShapeToISLExpressionMapper(space)(dim1_minus_dim2)
+    return (aff.is_cst()  # type: ignore[no-any-return]
+            and aff.get_constant_val().is_zero())
 
 
 def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
@@ -317,7 +321,6 @@ class ShapeToISLExpressionMapper(Mapper):
     def map_size_param(self, expr: SizeParam) -> isl.Aff:
         dt, pos = self.space.get_var_dict()[expr.name]
         return isl.Aff.var_on_domain(self.space, dt, pos)
-
 
 # }}}
 
