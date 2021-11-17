@@ -213,7 +213,7 @@ class GraphPart:
     input_names: FrozenSet[str]
     output_names: FrozenSet[str]
     distributed_sends: List[DistributedSend]
-    user_input_names: FrozenSet[str]
+    user_input_names: Set[str]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
@@ -331,6 +331,7 @@ def find_partition(outputs: DictOfNamedArrays,
                     distributed_sends=gp.pid_to_dist_sends.get(pid, []),
                     user_input_names=frozenset(
                         gp.pid_to_user_input_names.get(pid, set())),
+                        gp.pid_to_user_input_names.get(pid, set()),
                     )
                 for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,
