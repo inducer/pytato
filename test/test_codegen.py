@@ -927,7 +927,7 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
     _, (out,) = pt.generate_loopy(0 * x)(cq)
 
     assert out.shape == (3, 3)
-    np.testing.assert_allclose(out.get(), 0)
+    np.testing.assert_allclose(out, 0)
 
 
 def test_call_loopy_shape_inference1(ctx_factory):
