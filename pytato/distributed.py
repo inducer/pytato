@@ -418,26 +418,27 @@ def _gather_distributed_comm_info(partition: GraphPartition) -> \
 
 # {{{ distributed execute
 
-def _post_receive(comm: Any,
+def _post_receive(mpi_communicator: Any,
                  recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
     # FIXME: recv.shape might be parametric, evaluate
     buf = np.empty(recv.shape, dtype=recv.dtype)
 
-    # FIXME: Why doesn't this work with the lower case mpi4py function names?
-    return comm.Irecv(buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
+    return mpi_communicator.Irecv(
+            buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
 
 
-def _mpi_send(comm: Any, send_node: DistributedSend,
+def _mpi_send(mpi_communicator: Any, send_node: DistributedSend,
              data: np.ndarray[Any, Any]) -> Any:
     # Must use-non-blocking send, as blocking send may wait for a corresponding
     # receive to be posted (but if sending to self, this may only occur later).
-    return comm.Isend(data, dest=send_node.dest_rank, tag=send_node.comm_tag)
+    return mpi_communicator.Isend(
+            data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
 
 def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
         Dict[Hashable, BoundProgram],
-        queue: Any, comm: Any,
+        queue: Any, mpi_communicator: Any,
         input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
     if input_args is None:
@@ -446,7 +447,7 @@ def execute_distributed_partition(
     from mpi4py import MPI
 
     recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
-            (name,) + _post_receive(comm, recv)
+            (name,) + _post_receive(mpi_communicator, recv)
             for part in partition.parts.values()
             for name, recv in part.input_name_to_recv_node.items()])
     recv_names = list(recv_names_tup)
@@ -470,7 +471,7 @@ def execute_distributed_partition(
         for name, send_node in part.output_name_to_send_node.items():
             # FIXME: pytato shouldn't depend on pyopencl
             data = context[name].get(queue)
-            send_requests.append(_mpi_send(comm, send_node, data))
+            send_requests.append(_mpi_send(mpi_communicator, send_node, data))
 
         pids_executed.add(part.pid)
         pids_to_execute.remove(part.pid)
