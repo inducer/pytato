@@ -186,7 +186,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     .. attribute:: dtype
     """
 
-    _fields = Array._fields + ("src_rank", "comm_tag")
+    _fields = Array._fields + ("shape", "dtype", "src_rank", "comm_tag")
     _mapper_method = "map_distributed_recv"
 
     def __init__(self, src_rank: int, comm_tag: CommTagType,
