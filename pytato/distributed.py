@@ -115,10 +115,10 @@ class DistributedSend(Taggable):
                 and self.tags == other.tags)
 
     def copy(self, **kwargs: Any) -> DistributedSend:
-        data: Optional[Array] = kwargs["data"]
-        dest_rank: Optional[int] = kwargs["dest_rank"]
-        comm_tag: Optional[CommTagType] = kwargs["comm_tag"]
-        tags: Optional[TagsType] = kwargs["tags"]
+        data: Optional[Array] = kwargs.get("data")
+        dest_rank: Optional[int] = kwargs.get("dest_rank")
+        comm_tag: Optional[CommTagType] = kwargs.get("comm_tag")
+        tags: Optional[TagsType] = kwargs.get("tags")
         return type(self)(
                 data=data or self.data,
                 dest_rank=dest_rank if dest_rank is not None else self.dest_rank,
