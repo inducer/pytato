@@ -489,7 +489,7 @@ def execute_distributed_partition(
 
             # FIXME: pytato shouldn't depend on pyopencl
             import pyopencl as cl
-            context[name] = cl.array.empty(queue, buf.shape, buf.dtype).set(buf)
+            context[name] = cl.array.to_device(queue, buf)
             recv_names_completed.add(name)
 
     # FIXME: This keeps all variables alive that are used to get data into
