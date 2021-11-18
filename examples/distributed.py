@@ -50,7 +50,7 @@ def main():
     context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
-    final_res = [context[k] for k in outputs.keys()]
+    final_res = [context[k] for k in outputs.keys()][0].get(queue)
 
     ref_res = comm.bcast(final_res)
 
