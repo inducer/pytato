@@ -374,7 +374,7 @@ def _gather_distributed_comm_info(partition: GraphPartition) -> \
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
 
-    dist_name_generator = UniqueNameGenerator(forced_prefix="_pt_dist")
+    dist_name_generator = UniqueNameGenerator(forced_prefix="_pt_dist_")
 
     for part in partition.parts.values():
         comm_replacer = _DistributedCommReplacer(dist_name_generator)
