@@ -25,10 +25,11 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
-        FrozenSet, Mapping, TYPE_CHECKING)
+        FrozenSet, Mapping, Optional, TYPE_CHECKING)
 from dataclasses import dataclass
 
 
+from pytools import memoize_method
 from pytato.transform import EdgeCachedMapper, CachedWalkMapper
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, Placeholder,
@@ -189,9 +190,16 @@ class GraphPart:
         The IDs of parts that are required to be evaluated before this
         part can be evaluated.
 
-    .. attribute:: input_names
+    .. attribute:: user_input_names
 
-        Names of placeholders the part requires as input.
+        A :class:`dict` mapping names to :class:`Placeholder` instances that
+        represent input to the computational graph, i.e. were *not* introduced
+        by partitioning.
+
+    .. attribute:: partition_input_names
+
+        Names of placeholders the part requires as input from other parts
+        in the partition.
 
     .. attribute:: output_names
 
@@ -202,23 +210,23 @@ class GraphPart:
         List of :class:`pytato.distributed.DistributedSend` instances whose
         :attr:`DistributedSend.data` are in this part.
 
-    .. attribute:: user_input_names
-
-        A :class:`dict` mapping names to :class:`Placeholder` instances that
-        represent input to the computational graph, i.e. were *not* introduced
-        by partitioning.
+    .. automethod:: all_input_names
     """
     pid: PartId
     needed_pids: FrozenSet[PartId]
-    input_names: FrozenSet[str]
+    user_input_names: FrozenSet[str]
+    partition_input_names: FrozenSet[str]
     output_names: FrozenSet[str]
     distributed_sends: List[DistributedSend]
-    user_input_names: FrozenSet[str]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
     # structure when find_partition and gather_distributed_comm_info become
     # a single function aimed at the distributed use case.
+
+    @memoize_method
+    def all_input_names(self) -> FrozenSet[str]:
+        return self.user_input_names | self. partition_input_names
 
 
 @dataclass(frozen=True)
@@ -326,11 +334,11 @@ def find_partition(outputs: DictOfNamedArrays,
                 pid: GraphPart(
                     pid=pid,
                     needed_pids=frozenset(pid_to_needed_pids[pid]),
-                    input_names=frozenset(pid_to_input_names[pid]),
-                    output_names=frozenset(pid_to_output_names[pid]),
-                    distributed_sends=gp.pid_to_dist_sends.get(pid, []),
                     user_input_names=frozenset(
                         gp.pid_to_user_input_names.get(pid, set())),
+                    partition_input_names=frozenset(pid_to_input_names[pid]),
+                    output_names=frozenset(pid_to_output_names[pid]),
+                    distributed_sends=gp.pid_to_dist_sends.get(pid, []),
                     )
                 for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,
@@ -404,7 +412,8 @@ def generate_code_for_partition(partition: GraphPartition) \
 # {{{ execute_partitions
 
 def execute_partition(partition: GraphPartition, prg_per_partition:
-        Dict[PartId, BoundProgram], queue: Any) -> Dict[str, Any]:
+        Dict[PartId, BoundProgram], queue: Any,
+        input_args: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`GraphPartition` representing the
@@ -413,11 +422,15 @@ def execute_partition(partition: GraphPartition, prg_per_partition:
         code on.
     :returns: A dictionary of variable names mapped to their values.
     """
-    context: Dict[str, Any] = {}
+    if input_args is None:
+        input_args = {}
+
+    context: Dict[str, Any] = input_args.copy()
+
     for pid in partition.toposorted_part_ids:
         part = partition.parts[pid]
         inputs = {
-            k: context[k] for k in part.input_names
+            k: context[k] for k in part.all_input_names()
             if k in context}
 
         _evt, result_dict = prg_per_partition[pid](queue=queue, **inputs)

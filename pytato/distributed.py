@@ -394,12 +394,12 @@ def _gather_distributed_comm_info(partition: GraphPartition) -> \
         parts[part.pid] = DistributedGraphPart(
                 pid=part.pid,
                 needed_pids=part.needed_pids,
-                input_names=(part.input_names
+                user_input_names=part.user_input_names,
+                partition_input_names=(part.partition_input_names
                     | frozenset(comm_replacer.input_name_to_recv_node)),
                 output_names=(part.output_names
                     | frozenset(comm_replacer.output_name_to_send_node)),
                 distributed_sends=dist_sends,
-                user_input_names=part.user_input_names,
 
                 input_name_to_recv_node=comm_replacer.input_name_to_recv_node,
                 output_name_to_send_node=comm_replacer.output_name_to_send_node)
@@ -437,7 +437,11 @@ def _mpi_send(comm: Any, send_node: DistributedSend,
 def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
         Dict[Hashable, BoundProgram],
-        queue: Any, comm: Any) -> Dict[str, Any]:
+        queue: Any, comm: Any,
+        input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
+    if input_args is None:
+        input_args = {}
 
     from mpi4py import MPI
 
@@ -449,7 +453,7 @@ def execute_distributed_partition(
     recv_requests = list(recv_requests_tup)
     recv_buffers = list(recv_buffers_tup)
 
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = input_args.copy()
 
     pids_to_execute = set(partition.parts)
     pids_executed = set()
@@ -457,7 +461,7 @@ def execute_distributed_partition(
     send_requests = []
 
     def exec_ready_part(part: DistributedGraphPart) -> None:
-        inputs = {k: context[k] for k in part.input_names}
+        inputs = {k: context[k] for k in part.all_input_names()}
 
         _evt, result_dict = prg_per_partition[part.pid](queue, **inputs)
 
