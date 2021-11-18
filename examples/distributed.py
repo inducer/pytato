@@ -7,8 +7,8 @@ import pytato as pt
 import pyopencl as cl
 import numpy as np
 
-from pytato import (find_partition_distributed, generate_code_for_partition,
-    execute_partition_distributed, gather_distributed_comm_info,
+from pytato import (find_distributed_partition, generate_code_for_partition,
+    execute_distributed_partition,
     staple_distributed_send, make_distributed_recv)
 
 
@@ -28,8 +28,7 @@ def main():
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partition_distributed(outputs)
-    distributed_parts = gather_distributed_comm_info(parts)
+    distributed_parts = find_distributed_partition(outputs)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
     if 0:
@@ -44,7 +43,7 @@ def main():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partition_distributed(distributed_parts, prg_per_partition,
+    context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
     final_res = [context[k] for k in outputs.keys()]

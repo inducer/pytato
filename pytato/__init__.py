@@ -72,9 +72,8 @@ import pytato.transform as transform
 from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
                                 staple_distributed_send,
-                                find_partition_distributed,
-                                gather_distributed_comm_info,
-                                execute_partition_distributed)
+                                find_distributed_partition,
+                                execute_distributed_partition)
 
 from pytato.partition import generate_code_for_partition
 
@@ -120,8 +119,8 @@ __all__ = (
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send",
-        "find_partition_distributed", "gather_distributed_comm_info",
-        "execute_partition_distributed",
+        "find_distributed_partition",
+        "execute_distributed_partition",
 
         "generate_code_for_partition",
 

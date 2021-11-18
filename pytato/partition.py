@@ -387,16 +387,16 @@ def generate_code_for_partition(partition: GraphPartition) \
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy
-    prg_per_partition = {}
+    part_id_to_prg = {}
 
     for part in partition.parts.values():
         d = DictOfNamedArrays(
                     {var_name: partition.var_name_to_result[var_name]
                         for var_name in part.output_names
                      })
-        prg_per_partition[part.pid] = generate_loopy(d)
+        part_id_to_prg[part.pid] = generate_loopy(d)
 
-    return prg_per_partition
+    return part_id_to_prg
 
 # }}}
 

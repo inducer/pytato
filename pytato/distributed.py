@@ -60,9 +60,8 @@ Distributed communication
 
 .. currentmodule:: pytato
 
-.. autofunction:: find_partition_distributed
-.. autofunction:: gather_distributed_comm_info
-.. autofunction:: execute_partition_distributed
+.. autofunction:: find_distributed_partition
+.. autofunction:: execute_distributed_partition
 """
 
 
@@ -232,7 +231,8 @@ class DistributedPartitionId():
     feeding_recvs: object
 
 
-def find_partition_distributed(outputs: DictOfNamedArrays) -> GraphPartition:
+def find_distributed_partition(
+        outputs: DictOfNamedArrays) -> DistributedGraphPartition:
     """Finds a partitioning in a distributed context."""
 
     from pytato.transform import (UsersCollector, TopoSortMapper,
@@ -290,7 +290,8 @@ def find_partition_distributed(outputs: DictOfNamedArrays) -> GraphPartition:
     # }}}
 
     from pytato.partition import find_partition
-    return find_partition(outputs, get_part_id)
+    return _gather_distributed_comm_info(
+            find_partition(outputs, get_part_id))
 
 # }}}
 
@@ -368,7 +369,7 @@ class _DistributedCommReplacer(CopyMapper):
         return new_send
 
 
-def gather_distributed_comm_info(partition: GraphPartition) -> \
+def _gather_distributed_comm_info(partition: GraphPartition) -> \
         DistributedGraphPartition:
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
@@ -433,7 +434,7 @@ def _mpi_send(comm: Any, send_node: DistributedSend,
     return comm.Isend(data, dest=send_node.dest_rank, tag=send_node.comm_tag)
 
 
-def execute_partition_distributed(
+def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
         Dict[Hashable, BoundProgram],
         queue: Any, comm: Any) -> Dict[str, Any]:

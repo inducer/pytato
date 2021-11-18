@@ -32,8 +32,8 @@ from mpi4py import MPI  # pylint: disable=import-error
 comm = MPI.COMM_WORLD
 
 from pytato.distributed import (staple_distributed_send, make_distributed_recv,
-    find_partition_distributed, gather_distributed_comm_info,
-    execute_partition_distributed)
+    find_distributed_partition,
+    execute_distributed_partition)
 
 from pytato.partition import generate_code_for_partition
 
@@ -55,15 +55,14 @@ def test_distributed_execution_basic(ctx_factory):
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
-    parts = find_partition_distributed(outputs)
-    distributed_parts = gather_distributed_comm_info(parts)
+    distributed_parts = find_distributed_partition(outputs)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
     # Execute the distributed partition
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    context = execute_partition_distributed(distributed_parts, prg_per_partition,
+    context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
     final_res = [context[k] for k in outputs.keys()]
@@ -101,14 +100,13 @@ def test_distributed_execution_random_dag(ctx_factory):
         dict_named_arys = pt.DictOfNamedArrays(
                     {"result": res})
 
-        parts = find_partition_distributed(dict_named_arys)
-        distributed_parts = gather_distributed_comm_info(parts)
+        distributed_parts = find_distributed_partition(dict_named_arys)
         prg_per_partition = generate_code_for_partition(distributed_parts)
 
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
 
-        context = execute_partition_distributed(distributed_parts, prg_per_partition,
+        context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                                 queue, comm)
 
         final_res = [context[k] for k in dict_named_arys.keys()]
