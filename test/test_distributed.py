@@ -65,9 +65,9 @@ def test_distributed_execution_basic(ctx_factory):
     context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
-    final_res = [context[k] for k in outputs.keys()]
+    final_res = [context[k] for k in outputs.keys()][0].get(queue)
 
-    np.testing.assert_allclose(x_in*2, final_res[0])
+    np.testing.assert_allclose(x_in*2, final_res)
 
 
 def test_distributed_execution_random_dag(ctx_factory):

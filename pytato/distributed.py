@@ -421,12 +421,14 @@ def number_distributed_tags(
         mpi_communicator: Any,
         partition: DistributedGraphPartition,
         base_tag: int) -> Tuple[DistributedGraphPartition, int]:
-    """Return a new :class:`DistributedGraphPartition` in which symbolic tags
-    are replaced by unique integer tags, created by counting upward from *base_tag*.
+    """Return a new :class:`~pytato.distributed.DistributedGraphPartition`
+    in which symbolic tags are replaced by unique integer tags, created by
+    counting upward from *base_tag*.
 
     :returns: a tuple ``(partition, next_tag)``, where *partition* is the new
-        :class:`DistributedGraphPartition` with numerical tags, and *next_tag*
-        is the lowest integer tag above *base_tag* that was not used.
+        :class:`~pytato.distributed.DistributedGraphPartition` with numerical
+        tags, and *next_tag* is the lowest integer tag above *base_tag* that
+        was not used.
 
     .. note::
 

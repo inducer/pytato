@@ -38,6 +38,7 @@ from pytato.array import (
 from pytato.target import BoundProgram
 
 if TYPE_CHECKING:
+    import pytato
     from pytato.distributed import DistributedSend, DistributedSendRefHolder
 
 
@@ -192,9 +193,9 @@ class GraphPart:
 
     .. attribute:: user_input_names
 
-        A :class:`dict` mapping names to :class:`Placeholder` instances that
-        represent input to the computational graph, i.e. were *not* introduced
-        by partitioning.
+        A :class:`dict` mapping names to :class:`~pytato.array.Placeholder`
+        instances that represent input to the computational graph, i.e. were
+        *not* introduced by partitioning.
 
     .. attribute:: partition_input_names
 
@@ -207,8 +208,8 @@ class GraphPart:
 
     .. attribute:: distributed_sends
 
-        List of :class:`pytato.distributed.DistributedSend` instances whose
-        :attr:`DistributedSend.data` are in this part.
+        List of :class:`~pytato.distributed.DistributedSend` instances whose
+        data are in this part.
 
     .. automethod:: all_input_names
     """
@@ -217,7 +218,7 @@ class GraphPart:
     user_input_names: FrozenSet[str]
     partition_input_names: FrozenSet[str]
     output_names: FrozenSet[str]
-    distributed_sends: List[DistributedSend]
+    distributed_sends: List["pytato.DistributedSend"]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
@@ -413,7 +414,7 @@ def generate_code_for_partition(partition: GraphPartition) \
 
 def execute_partition(partition: GraphPartition, prg_per_partition:
         Dict[PartId, BoundProgram], queue: Any,
-        input_args: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Executes a set of partitions on a :class:`pyopencl.CommandQueue`.
 
     :param parts: An instance of :class:`GraphPartition` representing the

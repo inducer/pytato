@@ -71,6 +71,7 @@ import pytato.tags as tags
 import pytato.transform as transform
 from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
+                                DistributedSendRefHolder,
                                 staple_distributed_send,
                                 find_distributed_partition,
                                 number_distributed_tags,
@@ -119,7 +120,8 @@ __all__ = (
         "broadcast_to",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
-        "DistributedSend", "staple_distributed_send",
+        "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
+
         "find_distributed_partition",
         "number_distributed_tags",
         "execute_distributed_partition",
