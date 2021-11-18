@@ -468,7 +468,8 @@ def execute_distributed_partition(
         context.update(result_dict)
 
         for name, send_node in part.output_name_to_send_node.items():
-            send_requests.append(_mpi_send(comm, send_node, context[name]))
+            data = context[name].get(queue)
+            send_requests.append(_mpi_send(comm, send_node, data))
 
         pids_executed.add(part.pid)
         pids_to_execute.remove(part.pid)
