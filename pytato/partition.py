@@ -38,7 +38,6 @@ from pytato.array import (
 from pytato.target import BoundProgram
 
 if TYPE_CHECKING:
-    import pytato
     from pytato.distributed import DistributedSend, DistributedSendRefHolder
 
 
@@ -218,7 +217,7 @@ class GraphPart:
     user_input_names: FrozenSet[str]
     partition_input_names: FrozenSet[str]
     output_names: FrozenSet[str]
-    distributed_sends: List["pytato.DistributedSend"]
+    distributed_sends: List[Any]  # FIXME: should be List[DistributedSend]
 
     # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
     # have to know about distributed_sends. It will disappear from the data
