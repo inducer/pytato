@@ -486,7 +486,8 @@ def execute_distributed_partition(
             recv_requests.pop(idx)
             buf = recv_buffers.pop(idx)
 
-            context[name] = buf
+            import pyopencl as cl
+            context[name] = cl.array.empty(queue, buf.shape, buf.dtype).set(buf)
             recv_names_completed.add(name)
 
     # FIXME: This keeps all variables alive that are used to get data into
