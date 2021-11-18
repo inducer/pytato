@@ -8,8 +8,9 @@ import pyopencl as cl
 import numpy as np
 
 from pytato import (find_distributed_partition, generate_code_for_partition,
-    execute_distributed_partition,
-    staple_distributed_send, make_distributed_recv)
+        number_distributed_tags,
+        execute_distributed_partition,
+        staple_distributed_send, make_distributed_recv)
 
 
 def main():
@@ -20,15 +21,18 @@ def main():
     x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
 
-    halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
+    mytag = (main, "x")
+    halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=mytag,
             stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
+                src_rank=(rank+1) % size, comm_tag=mytag, shape=(4, 4), dtype=int))
 
     y = x+halo
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
     distributed_parts = find_distributed_partition(outputs)
+    distributed_parts, _ = number_distributed_tags(
+            comm, distributed_parts, base_tag=42)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
     if 0:

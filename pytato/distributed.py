@@ -61,6 +61,7 @@ Distributed communication
 .. currentmodule:: pytato
 
 .. autofunction:: find_distributed_partition
+.. autofunction:: number_distributed_tags
 .. autofunction:: execute_distributed_partition
 """
 
@@ -86,8 +87,6 @@ class DistributedSend(Taggable):
         A hashable, picklable object to serve as a 'tag' for the communication.
         Only a :class:`DistributedRecv` with the same tag will be able to
         receive the data being sent here.
-
-        .. note:: Currently, this attribute must be of class `int`.
     """
 
     def __init__(self, data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -412,6 +411,86 @@ def _gather_distributed_comm_info(partition: GraphPartition) -> \
             parts=parts,
             var_name_to_result=var_name_to_result,
             toposorted_part_ids=partition.toposorted_part_ids)
+
+# }}}
+
+
+# {{{ construct tag numbering
+
+def number_distributed_tags(
+        mpi_communicator: Any,
+        partition: DistributedGraphPartition,
+        base_tag: int) -> Tuple[DistributedGraphPartition, int]:
+    """Return a new :class:`DistributedGraphPartition` in which symbolic tags
+    are replaced by unique integer tags, created by counting upward from *base_tag*.
+
+    :returns: a tuple ``(partition, next_tag)``, where *partition* is the new
+        :class:`DistributedGraphPartition` with numerical tags, and *next_tag*
+        is the lowest integer tag above *base_tag* that was not used.
+
+    .. note::
+
+        This is a potentially heavyweight MPI-collective operation on
+        *mpi_communicator*.
+    """
+    tags = {
+            recv.comm_tag
+            for part in partition.parts.values()
+            for name, recv in part.input_name_to_recv_node.items()
+            } | {
+            send.comm_tag
+            for part in partition.parts.values()
+            for name, send in part.output_name_to_send_node.items()}
+
+    from mpi4py import MPI
+
+    def set_union(
+            set_a: Any, set_b: Any, mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
+        assert mpi_data_type is None
+        assert isinstance(set_a, frozenset)
+        assert isinstance(set_b, frozenset)
+
+        return set_a | set_b
+
+    root_rank = 0
+
+    set_union_mpi_op = MPI.Op.Create(
+            # type ignore reason: mpi4py misdeclares op functions as returning
+            # None.
+            set_union,  # type: ignore[arg-type]
+            commute=True)
+    try:
+        all_tags = mpi_communicator.reduce(
+                tags, set_union_mpi_op, root=root_rank)
+    finally:
+        set_union_mpi_op.Free()
+
+    if mpi_communicator.rank == root_rank:
+        sym_tag_to_int_tag = {}
+        next_tag = base_tag
+        for sym_tag in all_tags:
+            sym_tag_to_int_tag[sym_tag] = next_tag
+            next_tag += 1
+
+        mpi_communicator.bcast((sym_tag_to_int_tag, next_tag), root=root_rank)
+    else:
+        sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
+
+    from dataclasses import replace
+    return DistributedGraphPartition(
+            parts={
+                pid: replace(part,
+                    input_name_to_recv_node={
+                        name: recv.copy(comm_tag=sym_tag_to_int_tag[recv.comm_tag])
+                        for name, recv in part.input_name_to_recv_node.items()},
+                    output_name_to_send_node={
+                        name: send.copy(comm_tag=sym_tag_to_int_tag[send.comm_tag])
+                        for name, send in part.output_name_to_send_node.items()},
+                    )
+                for pid, part in partition.parts.items()
+                },
+            var_name_to_result=partition.var_name_to_result,
+            toposorted_part_ids=partition.toposorted_part_ids), next_tag
 
 # }}}
 
