@@ -468,6 +468,7 @@ def execute_distributed_partition(
         context.update(result_dict)
 
         for name, send_node in part.output_name_to_send_node.items():
+            # FIXME: pytato shouldn't depend on pyopencl
             data = context[name].get(queue)
             send_requests.append(_mpi_send(comm, send_node, data))
 
@@ -486,6 +487,7 @@ def execute_distributed_partition(
             recv_requests.pop(idx)
             buf = recv_buffers.pop(idx)
 
+            # FIXME: pytato shouldn't depend on pyopencl
             import pyopencl as cl
             context[name] = cl.array.empty(queue, buf.shape, buf.dtype).set(buf)
             recv_names_completed.add(name)
