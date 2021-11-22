@@ -33,7 +33,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
                           Array, DictOfNamedArrays, Placeholder, SizeParam)
 
 if TYPE_CHECKING:
-    from pytato.loopy import LoopyCall
+    from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """
 .. autoclass:: EqualityComparer
@@ -217,6 +217,10 @@ class EqualityComparer:
                         else bnd == expr2.bindings[name]
                         for name, bnd in expr1.bindings.items())
                 )
+
+    def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
+        return (self.rec(expr1._container, expr2._container)
+                and expr1.tags == expr2.tags)
 
     def map_dict_of_named_arrays(self, expr1: DictOfNamedArrays, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
