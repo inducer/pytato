@@ -159,7 +159,7 @@ class CodeGenPreprocessor(CopyMapper):
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name
         if name is None:
-            name = self.var_name_gen("_pt_in")
+            name = self.var_name_gen("_pt_data")
 
         self.bound_arguments[name] = expr.data
         return Placeholder(name=name,

@@ -73,7 +73,7 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         # Naming for newly created PlaceHolders at part edges
         from pytools import UniqueNameGenerator
-        self.name_generator = UniqueNameGenerator(forced_prefix="_part_ph_")
+        self.name_generator = UniqueNameGenerator(forced_prefix="_pt_part_ph_")
 
         # "edges" of the partitioned graph, maps an edge between two parts,
         # represented by a tuple of part identifiers, to a set of placeholder
