@@ -138,8 +138,8 @@ Reserved Identifiers
 
     -   ``_pt_part_ph``: Used to automatically generate identifiers for
         names of :class:`~pytato.array.Placeholder` that represent data
-        transport across parts of a partitioned DAG.
-        (cf. :func:`find_partitions`)
+        transport across parts of a partitioned DAG
+        (cf. :func:`~pytato.partition.find_partition`).
 
 -   Identifiers used in index lambdas are also reserved. These include:
 
