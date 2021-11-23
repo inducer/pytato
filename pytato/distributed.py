@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set, # noqa (need List, FrozenSet, Mapping for sphinx)
-    List, FrozenSet, Mapping)
+    List, FrozenSet, Mapping, Callable)
 
 from dataclasses import dataclass
 
@@ -35,7 +35,7 @@ from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           DictOfNamedArrays, ShapeType,
                           Placeholder, make_placeholder)
 from pytato.transform import ArrayOrNames, CopyMapper
-from pytato.partition import GraphPart, GraphPartition, PartId
+from pytato.partition import GraphPart, GraphPartition, PartId, _GraphPartitioner
 from pytato.target import BoundProgram
 
 import numpy as np
@@ -230,6 +230,27 @@ class DistributedPartitionId():
     feeding_recvs: object
 
 
+class _DistributedGraphPartitioner(_GraphPartitioner):
+
+    def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
+        super().__init__(get_part_id)
+        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
+
+    def map_distributed_send_ref_holder(
+                self, expr: DistributedSendRefHolder, *args: Any) -> Any:
+        send_part_id = self.get_part_id(expr.send.data)
+
+        from pytato.distributed import DistributedSend
+        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
+                DistributedSend(
+                    data=self.rec(expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag,
+                    tags=expr.send.tags))
+
+        return self.rec(expr.passthrough_data)
+
+
 def find_distributed_partition(
         outputs: DictOfNamedArrays) -> DistributedGraphPartition:
     """Finds a partitioning in a distributed context."""
@@ -289,8 +310,11 @@ def find_distributed_partition(
     # }}}
 
     from pytato.partition import find_partition
-    return _gather_distributed_comm_info(
-            find_partition(outputs, get_part_id))
+    dgp = _DistributedGraphPartitioner(get_part_id)
+
+    partition = find_partition(outputs, get_part_id, dgp)
+
+    return _gather_distributed_comm_info(partition, dgp.pid_to_dist_sends)
 
 # }}}
 
@@ -309,6 +333,7 @@ class DistributedGraphPart(GraphPart):
 
     input_name_to_recv_node: Dict[str, DistributedRecv]
     output_name_to_send_node: Dict[str, DistributedSend]
+    distributed_sends: List[DistributedSend]
 
 
 @dataclass(frozen=True)
@@ -368,8 +393,9 @@ class _DistributedCommReplacer(CopyMapper):
         return new_send
 
 
-def _gather_distributed_comm_info(partition: GraphPartition) -> \
-        DistributedGraphPartition:
+def _gather_distributed_comm_info(partition: GraphPartition,
+        sends: Dict[PartId, List[DistributedSend]]) -> \
+            DistributedGraphPartition:
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
 
@@ -383,7 +409,7 @@ def _gather_distributed_comm_info(partition: GraphPartition) -> \
 
         dist_sends = [
                 comm_replacer.map_distributed_send(send)
-                for send in part.distributed_sends]
+                for send in sends.get(part.pid, [])]
 
         part_results.update({
             name: send_node.data

@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, TYPE_CHECKING)
 
@@ -1252,7 +1252,7 @@ def tag_user_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
 
 # {{{ EdgeCachedMapper
 
-class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
+class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
     """
     Mapper class to execute a rewriting method (:meth:`handle_edge`) on each
     edge in the graph.
@@ -1388,10 +1388,15 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                 for name, child in expr.bindings.items()},
             )
 
-    @abstractmethod
     def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> Any:
-        pass
+            self, expr: DistributedSendRefHolder, *args: Any) -> \
+                DistributedSendRefHolder:
+        from pytato.distributed import DistributedSendRefHolder
+        return DistributedSendRefHolder(
+            send=self.handle_edge(expr, expr.send.data),
+            passthrough_data=self.handle_edge(expr, expr.passthrough_data),
+            tags=expr.tags
+        )
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:

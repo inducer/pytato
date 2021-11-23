@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
-        FrozenSet, Mapping, Optional, TYPE_CHECKING)
+        FrozenSet, Mapping, Optional)
 from dataclasses import dataclass
 
 
@@ -36,9 +36,6 @@ from pytato.array import (
         DictOfNamedArrays, make_placeholder)
 
 from pytato.target import BoundProgram
-
-if TYPE_CHECKING:
-    from pytato.distributed import DistributedSend, DistributedSendRefHolder
 
 
 __doc__ = """
@@ -90,8 +87,6 @@ class _GraphPartitioner(EdgeCachedMapper):
         # we remember each part ID we see below, to guarantee that we don't
         # miss any of them.
         self.seen_part_ids: Set[PartId] = set()
-
-        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
 
         self.pid_to_user_input_names: Dict[PartId, Set[str]] = {}
 
@@ -159,20 +154,6 @@ class _GraphPartitioner(EdgeCachedMapper):
         self.pid_to_user_input_names.setdefault(pid, set()).add(expr.name)
         return super().map_placeholder(expr)
 
-    def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> Any:
-        send_part_id = self.get_part_id(expr.send.data)
-
-        from pytato.distributed import DistributedSend
-        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
-                DistributedSend(
-                    data=self.rec(expr.send.data),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag,
-                    tags=expr.send.tags))
-
-        return self.rec(expr.passthrough_data)
-
 # }}}
 
 
@@ -217,12 +198,6 @@ class GraphPart:
     user_input_names: FrozenSet[str]
     partition_input_names: FrozenSet[str]
     output_names: FrozenSet[str]
-    distributed_sends: List[Any]  # FIXME: should be List[DistributedSend]
-
-    # FIXME: Refactor _GraphPartitioner/find_partition so that this does not
-    # have to know about distributed_sends. It will disappear from the data
-    # structure when find_partition and gather_distributed_comm_info become
-    # a single function aimed at the distributed use case.
 
     @memoize_method
     def all_input_names(self) -> FrozenSet[str]:
@@ -269,7 +244,8 @@ class PartitionInducedCycleError(Exception):
 # {{{ find_partitions
 
 def find_partition(outputs: DictOfNamedArrays,
-        part_func: Callable[[ArrayOrNames], PartId]) ->\
+        part_func: Callable[[ArrayOrNames], PartId],
+        gp: Optional[_GraphPartitioner] = None) ->\
         GraphPartition:
     """Partitions the *expr* according to *part_func* and generates code for
     each partition. Raises :exc:`PartitionInducedCycleError` if the partitioning
@@ -287,13 +263,14 @@ def find_partition(outputs: DictOfNamedArrays,
 
     where ``A`` and ``C`` are in partition 1, and ``B`` is in partition 2.
 
-    :param expr: The expression to partition.
+    :param outputs: The outputs to partition.
     :param part_func: A callable that returns an instance of
         :class:`Hashable` for a node.
     :returns: An instance of :class:`GraphPartition` that contains the partition.
     """
 
-    gp = _GraphPartitioner(part_func)
+    if gp is None:
+        gp = _GraphPartitioner(part_func)
     rewritten_outputs = {name: gp(expr) for name, expr in outputs._data.items()}
 
     pid_to_output_names: Dict[PartId, Set[str]] = {
@@ -338,7 +315,6 @@ def find_partition(outputs: DictOfNamedArrays,
                         gp.pid_to_user_input_names.get(pid, set())),
                     partition_input_names=frozenset(pid_to_input_names[pid]),
                     output_names=frozenset(pid_to_output_names[pid]),
-                    distributed_sends=gp.pid_to_dist_sends.get(pid, []),
                     )
                 for pid in gp.seen_part_ids},
             var_name_to_result=var_name_to_result,
