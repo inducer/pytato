@@ -435,19 +435,20 @@ def number_distributed_tags(
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
     """
-    tags = {
+    tags = frozenset({
             recv.comm_tag
             for part in partition.parts.values()
             for name, recv in part.input_name_to_recv_node.items()
             } | {
             send.comm_tag
             for part in partition.parts.values()
-            for name, send in part.output_name_to_send_node.items()}
+            for name, send in part.output_name_to_send_node.items()})
 
     from mpi4py import MPI
 
     def set_union(
-            set_a: Any, set_b: Any, mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
+            set_a: FrozenSet[Any], set_b: FrozenSet[Any],
+            mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
         assert mpi_data_type is None
         assert isinstance(set_a, frozenset)
         assert isinstance(set_b, frozenset)
