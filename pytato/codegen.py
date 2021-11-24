@@ -42,6 +42,7 @@ from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
+from pytato.tags import AssumeNonNegative
 from pytools import UniqueNameGenerator
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
@@ -499,12 +500,16 @@ class CodeGenPreprocessor(CopyMapper):
                 if isinstance(axis_len, int):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indices.append(prim.Subscript(
-                                        prim.Variable(bnd_name),
-                                        get_indexing_expression(
-                                                idx.shape,
-                                                (1,)*i_adv_indices[0]+adv_idx_shape))
-                                   % axis_len)
+                    indirect_idx_expr = prim.Subscript(
+                        prim.Variable(bnd_name),
+                        get_indexing_expression(
+                            idx.shape,
+                            (1,)*i_adv_indices[0]+adv_idx_shape))
+
+                    if not idx.tags_of_type(AssumeNonNegative):
+                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                    indices.append(indirect_idx_expr)
                 else:
                     raise NotImplementedError("Advanced indexing over"
                                               " parametric axis lengths.")
@@ -555,11 +560,16 @@ class CodeGenPreprocessor(CopyMapper):
                 if isinstance(axis_len, int):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indices.append(prim.Subscript(
-                                        prim.Variable(bnd_name),
-                                        get_indexing_expression(idx.shape,
-                                                                adv_idx_shape))
-                                   % axis_len)
+
+                    indirect_idx_expr = prim.Subscript(prim.Variable(bnd_name),
+                                                       get_indexing_expression(
+                                                           idx.shape,
+                                                           adv_idx_shape))
+
+                    if not idx.tags_of_type(AssumeNonNegative):
+                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                    indices.append(indirect_idx_expr)
                 else:
                     raise NotImplementedError("Advanced indexing over"
                                               " parametric axis lengths.")
