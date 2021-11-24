@@ -11,10 +11,11 @@ Pre-Defined Tags
 .. autoclass:: CountNamed
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
+.. autoclass:: AssumeNonNegative
 """
 
 
-from pytools.tag import UniqueTag, tag_dataclass
+from pytools.tag import Tag, UniqueTag, tag_dataclass
 
 
 # {{{ pre-defined tag: ImplementationStrategy
@@ -94,3 +95,12 @@ class PrefixNamed(_BaseNameTag):
     prefix: str
 
 # }}}
+
+
+@tag_dataclass
+class AssumeNonNegative(Tag):
+    """
+    A tag attached to a :class:`~pytato.Array` to indicate the
+    :class:`~pytato.target.Target` that all entries of the tagged array are
+    non-negative.
+    """
