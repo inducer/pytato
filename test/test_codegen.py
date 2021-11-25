@@ -1380,6 +1380,35 @@ def test_partitioner(ctx_factory):
     assert ncycles < ntests // 3
 
 
+def test_assume_non_negative_indirect_address(ctx_factory):
+    from numpy.random import default_rng
+    from pytato.scalar_expr import WalkMapper
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    class OnRemainderRaiser(WalkMapper):
+        def map_remainder(self, expr):
+            raise RuntimeError
+
+    rng = default_rng()
+
+    a_np = rng.random((10,))
+    b_np = rng.permutation(np.arange(10))
+
+    a = pt.make_data_wrapper(a_np)
+    b = pt.make_data_wrapper(b_np).tagged(pt.tags.AssumeNonNegative())
+
+    pt_prg = pt.generate_loopy(a[b])
+
+    for insn in pt_prg.program.default_entrypoint.instructions:
+        OnRemainderRaiser()(insn.expression)
+
+    evt, (out,) = pt_prg(cq)
+
+    np.testing.assert_allclose(out, a_np[b_np])
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
