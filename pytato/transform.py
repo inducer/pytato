@@ -199,6 +199,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
@@ -206,36 +207,42 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return Placeholder(name=expr.name,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct) -> Array:
         return MatrixProduct(x1=self.rec(expr.x1),
                 x2=self.rec(expr.x2),
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
-        return Stack(arrays=arrays, axis=expr.axis, tags=expr.tags)
+        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
-        return Concatenate(arrays=arrays, axis=expr.axis, tags=expr.tags)
+        return Concatenate(arrays=arrays, axis=expr.axis,
+                           axes=expr.axes, tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
         return Roll(array=self.rec(expr.array),
                 shift=expr.shift,
                 axis=expr.axis,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
         return AxisPermutation(array=self.rec(expr.array),
+                axis_permutation=expr.axis_permutation,
                 axes=expr.axes,
                 tags=expr.tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
-        return type(expr)(
-                array=self.rec(expr.array),
-                indices=self.rec_idx_or_size_tuple(expr.indices))
+        return type(expr)(self.rec(expr.array),
+                          indices=self.rec_idx_or_size_tuple(expr.indices),
+                          axes=expr.axes,
+                          tags=expr.tags)
 
     def map_basic_index(self, expr: BasicIndex) -> Array:
         return self._map_index_base(expr)
@@ -254,19 +261,24 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return DataWrapper(name=expr.name,
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
-        return SizeParam(name=expr.name, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg) for arg in expr.args),
+                      axes=expr.axes,
                       tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
-        return type(expr)(self.rec(expr._container), expr.name, tags=expr.tags)
+        return type(expr)(self.rec(expr._container),
+                          expr.name,
+                          axes=expr.axes,
+                          tags=expr.tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -286,12 +298,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return LoopyCallResult(
                 loopy_call=self.rec(expr._container),
                 name=expr.name,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape),
                        order=expr.order,
+                       axes=expr.axes,
                        tags=expr.tags)
 
     def map_distributed_send_ref_holder(
@@ -871,13 +885,14 @@ class MPMSMaterializer(Mapper):
                                expr.dtype,
                                {bnd_name: bnd.expr
                                 for bnd_name, bnd in children_rec.items()},
+                               axes=expr.axes,
                                tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
 
     def map_matrix_product(self, expr: MatrixProduct) -> MPMSMaterializerAccumulator:
         x1_rec, x2_rec = self.rec(expr.x1), self.rec(expr.x2)
-        new_expr = MatrixProduct(x1_rec.expr, x2_rec.expr, expr.tags)
+        new_expr = MatrixProduct(x1_rec.expr, x2_rec.expr, expr.axes, expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -885,7 +900,8 @@ class MPMSMaterializer(Mapper):
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
-        new_expr = Stack(tuple(ary.expr for ary in rec_arrays), expr.axis, expr.tags)
+        new_expr = Stack(tuple(ary.expr for ary in rec_arrays),
+                         expr.axis, expr.axes, expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -895,6 +911,7 @@ class MPMSMaterializer(Mapper):
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
                                expr.axis,
+                               expr.axes,
                                expr.tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -902,14 +919,15 @@ class MPMSMaterializer(Mapper):
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, expr.tags)
+        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, expr.axes, expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     (rec_array,))
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = AxisPermutation(rec_array.expr, expr.axes, expr.tags)
+        new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,
+                                   expr.axes, expr.tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     (rec_array,))
@@ -926,6 +944,7 @@ class MPMSMaterializer(Mapper):
                                     else expr.indices[i]
                                     for i in range(
                                         len(expr.indices))),
+                              expr.axes,
                               expr.tags)
 
         return _materialize_if_mpms(new_expr,
@@ -939,7 +958,8 @@ class MPMSMaterializer(Mapper):
 
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = Reshape(rec_array.expr, expr.newshape, expr.order, expr.tags)
+        new_expr = Reshape(rec_array.expr, expr.newshape,
+                           expr.order, expr.axes, expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -949,6 +969,7 @@ class MPMSMaterializer(Mapper):
         rec_arrays = [self.rec(ary) for ary in expr.args]
         new_expr = Einsum(expr.access_descriptors,
                           tuple(ary.expr for ary in rec_arrays),
+                          expr.axes,
                           expr.tags)
 
         return _materialize_if_mpms(new_expr,
@@ -1278,6 +1299,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
         return type(expr)(
             self.handle_edge(expr, expr._container, *args),
             name=expr.name,
+            axes=expr.axes,
             tags=expr.tags)
 
     def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
@@ -1286,6 +1308,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 dtype=expr.dtype,
                 bindings={name: self.handle_edge(expr, child)
                           for name, child in expr.bindings.items()},
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
@@ -1293,11 +1316,13 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                      access_descriptors=expr.access_descriptors,
                      args=tuple(self.handle_edge(expr, arg, *args)
                                 for arg in expr.args),
+                     axes=expr.axes,
                      tags=expr.tags)
 
     def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
         return MatrixProduct(x1=self.handle_edge(expr, expr.x1, *args),
                              x2=self.handle_edge(expr, expr.x2, *args),
+                             axes=expr.axes,
                              tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
@@ -1305,6 +1330,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                      arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
+                     axes=expr.axes,
                      tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
@@ -1312,18 +1338,21 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                      arrays=tuple(self.handle_edge(expr, ary, *args)
                                   for ary in expr.arrays),
                      axis=expr.axis,
+                     axes=expr.axes,
                      tags=expr.tags)
 
     def map_roll(self, expr: Roll, *args: Any) -> Roll:
         return Roll(array=self.handle_edge(expr, expr.array, *args),
                 shift=expr.shift,
                 axis=expr.axis,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
             -> AxisPermutation:
         return AxisPermutation(
                 array=self.handle_edge(expr, expr.array, *args),
+                axis_permutation=expr.axis_permutation,
                 axes=expr.axes,
                 tags=expr.tags)
 
@@ -1332,6 +1361,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
             array=self.handle_edge(expr, expr.array, *args),
             newshape=self.rec_idx_or_size_tuple(expr, expr.newshape, *args),
             order=expr.order,
+            axes=expr.axes,
             tags=expr.tags)
 
     def map_basic_index(self, expr: BasicIndex, *args: Any) -> BasicIndex:
@@ -1339,7 +1369,9 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 array=self.handle_edge(expr, expr.array, *args),
                 indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
+                                for idx in expr.indices),
+                axes=expr.axes,
+                tags=expr.tags)
 
     def map_contiguous_advanced_index(self,
             expr: AdvancedIndexInContiguousAxes, *args: Any) \
@@ -1348,7 +1380,9 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 array=self.handle_edge(expr, expr.array, *args),
                 indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
+                                for idx in expr.indices),
+                axes=expr.axes,
+                tags=expr.tags)
 
     def map_non_contiguous_advanced_index(self,
             expr: AdvancedIndexInNoncontiguousAxes, *args: Any) \
@@ -1357,13 +1391,16 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 array=self.handle_edge(expr, expr.array, *args),
                 indices=tuple(self.handle_edge(expr, idx, *args)
                                 if isinstance(idx, Array) else idx
-                                for idx in expr.indices))
+                                for idx in expr.indices),
+                axes=expr.axes,
+                tags=expr.tags)
 
     def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
         return DataWrapper(
                 name=expr.name,
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
@@ -1372,11 +1409,12 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
         return Placeholder(name=expr.name,
                 shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
         assert expr.name
-        return SizeParam(name=expr.name, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         return LoopyCall(

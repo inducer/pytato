@@ -180,6 +180,31 @@ Guidelines for tag use:
   - **Good:** This array is the result of differentiation.
   - **Bad:** Unroll the loops in the code computing this result.
 
+Metadata Propagation
+^^^^^^^^^^^^^^^^^^^^
+
+Metadata (i.e. tags) is expected to be varied across application domains, not
+just in its information content, but also in the rules which might govern the
+way in which it propagates across the DAG. As an example, consider a Finite
+Element Method solver that uses :mod:`pytato`-arrays to store the DOFs.
+
+- A viable use of the tagging system in the solver could be to tag an array
+  ``u`` to describe the first axis of an array denotes the mesh's element
+  indices. In this case, after performing an operation ``u_squared = u * u`` is
+  semantically valid to tag ``u_squared`` also with the tag describing that it's
+  first denotes the mesh's element indices.
+- Another viable use of the tagging system by the solver could be to encode the
+  physical quantity that the array is storing. If ``u`` is an array tagged with
+  metadata to describe that it represents the fluid's velocity. Then, the
+  operation ``u_squared = u * u`` should not propagate that ``u_squared`` is
+  also an array storing the fluid's velocity.
+
+
+As a result, we choose to not propagate metadata (either upon construction, or
+via a dedicated, universally applied pass) and instead supply tools (such as
+:class:`~pytato.transform.Mapper`) to permit users to implement their own
+tag/metadata propagation rules.
+
 Memory layout
 -------------
 
