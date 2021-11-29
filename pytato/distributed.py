@@ -400,7 +400,7 @@ class _DistributedCommReplacer(CopyMapper):
 
 
 def _gather_distributed_comm_info(partition: GraphPartition,
-        sends: Dict[PartId, List[DistributedSend]]) -> \
+        pid_to_distributed_sends: Dict[PartId, List[DistributedSend]]) -> \
             DistributedGraphPartition:
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
@@ -415,7 +415,7 @@ def _gather_distributed_comm_info(partition: GraphPartition,
 
         dist_sends = [
                 comm_replacer.map_distributed_send(send)
-                for send in sends.get(part.pid, [])]
+                for send in pid_to_distributed_sends.get(part.pid, [])]
 
         part_results.update({
             name: send_node.data
