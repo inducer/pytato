@@ -562,9 +562,10 @@ def execute_distributed_partition(
 
     if len(partition.parts) == 1:
         # Only a single partition, no recv requests exist
-        recv_names_tup = tuple()
-        recv_requests_tup = tuple()
-        recv_buffers_tup = tuple()
+        # type-ignore-reason: empty tuples conflict with type annotation
+        recv_names_tup = tuple()  # type: ignore[var-annotated]
+        recv_requests_tup = tuple()  # type: ignore[var-annotated]
+        recv_buffers_tup = tuple()  # type: ignore[var-annotated]
     else:
         recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
             (name,) + _post_receive(mpi_communicator, recv)
