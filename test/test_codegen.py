@@ -44,7 +44,6 @@ import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
 import pytato as pt
-from pytato.array import Placeholder
 from testlib import assert_allclose_to_numpy
 import pymbolic.primitives as p
 
@@ -53,7 +52,7 @@ def test_basic_codegen(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int64)
+    x = pt.make_placeholder("x", (5,), np.int64)
     prog = pt.generate_loopy(x * x, cl_device=queue.device)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
@@ -64,7 +63,7 @@ def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (), np.int64)
+    x = pt.make_placeholder("x", (), np.int64)
     prog = pt.generate_loopy(x, cl_device=queue.device)
     x_in = np.array(1)
     _, (x_out,) = prog(queue, x=x_in)
@@ -172,8 +171,8 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
-    x = Placeholder("x", (5,), np.int64)
-    y = Placeholder("y", (5,), np.int64)
+    x = pt.make_placeholder("x", (5,), np.int64)
+    y = pt.make_placeholder("y", (5,), np.int64)
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
@@ -1421,6 +1420,35 @@ def test_partitioner(ctx_factory):
 
     # Assert that at least 2/3 of our tests did not get skipped because of cycles
     assert ncycles < ntests // 3
+
+
+def test_assume_non_negative_indirect_address(ctx_factory):
+    from numpy.random import default_rng
+    from pytato.scalar_expr import WalkMapper
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    class OnRemainderRaiser(WalkMapper):
+        def map_remainder(self, expr):
+            raise RuntimeError
+
+    rng = default_rng()
+
+    a_np = rng.random((10,))
+    b_np = rng.permutation(np.arange(10))
+
+    a = pt.make_data_wrapper(a_np)
+    b = pt.make_data_wrapper(b_np).tagged(pt.tags.AssumeNonNegative())
+
+    pt_prg = pt.generate_loopy(a[b])
+
+    for insn in pt_prg.program.default_entrypoint.instructions:
+        OnRemainderRaiser()(insn.expression)
+
+    evt, (out,) = pt_prg(cq)
+
+    np.testing.assert_allclose(out, a_np[b_np])
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ class NumpyBasedEvaluator(Mapper):
         return self.np.roll(self.rec(expr.array), expr.shift, expr.axis)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Any:
-        return self.np.transpose(self.rec(expr.array), expr.axes)
+        return self.np.transpose(self.rec(expr.array), expr.axis_permutation)
 
     def map_reshape(self, expr: Reshape) -> Any:
         return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)

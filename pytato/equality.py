@@ -103,12 +103,14 @@ class EqualityComparer:
                 and expr1.shape == expr2.shape
                 and expr1.dtype == expr2.dtype
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_size_param(self, expr1: SizeParam, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.name == expr2.name
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_data_wrapper(self, expr1: DataWrapper, expr2: Any) -> bool:
@@ -126,7 +128,8 @@ class EqualityComparer:
                         if isinstance(dim1, Array)
                         else dim1 == dim2
                         for dim1, dim2 in zip(expr1.shape, expr2.shape))
-                and expr1.tags == expr2.tags)
+                and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes)
 
     def map_stack(self, expr1: Stack, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -135,6 +138,7 @@ class EqualityComparer:
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_concatenate(self, expr1: Concatenate, expr2: Any) -> bool:
@@ -144,6 +148,7 @@ class EqualityComparer:
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_roll(self, expr1: Roll, expr2: Any) -> bool:
@@ -151,13 +156,15 @@ class EqualityComparer:
                 and expr1.axis == expr2.axis
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_axis_permutation(self, expr1: AxisPermutation, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
-                and expr1.axes == expr2.axes
+                and expr1.axis_permutation == expr2.axis_permutation
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def _map_index_base(self, expr1: IndexBase, expr2: Any) -> bool:
@@ -169,6 +176,7 @@ class EqualityComparer:
                         else idx1 == idx2
                         for idx1, idx2 in zip(expr1.indices, expr2.indices))
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_basic_index(self, expr1: BasicIndex, expr2: Any) -> bool:
@@ -191,6 +199,7 @@ class EqualityComparer:
                 and expr1.newshape == expr2.newshape
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_einsum(self, expr1: Einsum, expr2: Any) -> bool:
@@ -200,11 +209,13 @@ class EqualityComparer:
                         for ary1, ary2 in zip(expr1.args,
                                               expr2.args))
                 and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
                 )
 
     def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:
         return (self.rec(expr1._container, expr2._container)
-                and expr1.tags == expr2.tags)
+                and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes)
 
     def map_loopy_call(self, expr1: LoopyCall, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
