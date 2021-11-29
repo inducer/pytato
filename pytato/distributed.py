@@ -33,7 +33,8 @@ from pytools import UniqueNameGenerator
 from pytools.tag import Taggable, TagsType
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           DictOfNamedArrays, ShapeType,
-                          Placeholder, make_placeholder)
+                          Placeholder, make_placeholder,
+                          _get_default_axes, AxesT)
 from pytato.transform import ArrayOrNames, CopyMapper
 from pytato.partition import GraphPart, GraphPartition, PartId, _GraphPartitioner
 from pytato.target import BoundProgram
@@ -155,7 +156,7 @@ class DistributedSendRefHolder(Array):
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
                  tags: TagsType = frozenset()) -> None:
-        super().__init__(tags=tags)
+        super().__init__(axes=passthrough_data.axes, tags=tags)
         self.send = send
         self.passthrough_data = passthrough_data
 
@@ -190,8 +191,13 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
     def __init__(self, src_rank: int, comm_tag: CommTagType,
                  shape: ShapeType, dtype: Any,
-                 tags: Optional[TagsType] = frozenset()) -> None:
-        super().__init__(shape=shape, dtype=dtype, tags=tags)
+                 tags: Optional[TagsType] = frozenset(),
+                 axes: Optional[AxesT] = None) -> None:
+
+        if not axes:
+            axes = _get_default_axes(len(shape))
+        super().__init__(shape=shape, dtype=dtype, tags=tags,
+                         axes=axes)
         self.src_rank = src_rank
         self.comm_tag = comm_tag
 
