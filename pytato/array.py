@@ -1680,7 +1680,7 @@ def matmul(x1: Array, x2: Array) -> Array:
 
     import pytato as pt
 
-    index_names = str([chr(i) for i in range(ord("l"), ord("z")+1)])
+    index_names = "".join([chr(i) for i in range(ord("l"), ord("z")+1)])
 
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
