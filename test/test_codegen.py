@@ -106,8 +106,11 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
 
 
 def _do_matmul(x1_shape, x2_shape, queue):
-    x1_in = np.ones(x1_shape)
-    x2_in = np.ones(x2_shape)
+    from numpy.random import default_rng
+    rng = default_rng(seed=0)
+
+    x1_in = rng.standard_normal(x1_shape)
+    x2_in = rng.standard_normal(x2_shape)
 
     x1 = pt.make_data_wrapper(x1_in)
     x2 = pt.make_data_wrapper(x2_in)

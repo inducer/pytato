@@ -1685,10 +1685,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
     elif x1.ndim == 1:
-        x1_index = index_names[0]
-        x2_indices = index_names[:x2.ndim]
-        result_indices = x2_indices[1:]
-        return pt.einsum(f"{x1_index}, {x2_indices} -> {result_indices}", x1, x2)
+        return pt.dot(x1, x2)
     elif x2.ndim == 1:
         return pt.sum(x1 * x2, axis=(x1.ndim - 1))
 
