@@ -560,16 +560,16 @@ def execute_distributed_partition(
 
     from mpi4py import MPI
 
-    try:
-        recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
-                (name,) + _post_receive(mpi_communicator, recv)
-                for part in partition.parts.values()
-                for name, recv in part.input_name_to_recv_node.items()])
-    except ValueError:
-        # When running with a single rank only, no recv requests exist
+    if len(partition.parts) == 1:
+        # Only a single partition, no recv requests exist
         recv_names_tup = tuple()
         recv_requests_tup = tuple()
         recv_buffers_tup = tuple()
+    else:
+        recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
+            (name,) + _post_receive(mpi_communicator, recv)
+            for part in partition.parts.values()
+            for name, recv in part.input_name_to_recv_node.items()])
 
     recv_names = list(recv_names_tup)
     recv_requests = list(recv_requests_tup)
