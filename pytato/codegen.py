@@ -280,7 +280,6 @@ class CodeGenPreprocessor(CopyMapper):
                            axes=expr.axes,
                            tags=expr.tags)
 
-
     def map_einsum(self, expr: Einsum) -> Array:
         import operator
         from functools import reduce
