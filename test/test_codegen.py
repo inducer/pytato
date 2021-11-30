@@ -86,7 +86,7 @@ def test_size_param(ctx_factory):
 
 @pytest.mark.parametrize("x1_ndim", (1, 2))
 @pytest.mark.parametrize("x2_ndim", (1, 2))
-def test_matmul(ctx_factory, x1_ndim, x2_ndim):
+def test_matmul_basic(ctx_factory, x1_ndim, x2_ndim):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -121,7 +121,7 @@ def _do_matmul(x1_shape, x2_shape, queue):
     np_out = np.matmul(x1_in, x2_in)
 
     assert np_out.shape == out.shape
-    assert (np_out == out).all()
+    np.testing.assert_allclose(np_out, out)
 
 
 @pytest.mark.parametrize("x1_shape", ((7,),))
