@@ -29,7 +29,7 @@ from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
                     List, Mapping, Iterable, Optional, Tuple)
 
 from pytato.array import (
-        Array, IndexLambda, Placeholder, MatrixProduct, Stack, Roll,
+        Array, IndexLambda, Placeholder, Stack, Roll,
         AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase,
@@ -204,12 +204,6 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_matrix_product(self, expr: MatrixProduct) -> Array:
-        return MatrixProduct(x1=self.rec(expr.x1),
-                x2=self.rec(expr.x2),
-                axes=expr.axes,
-                tags=expr.tags)
-
     def map_stack(self, expr: Stack) -> Array:
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags)
@@ -341,9 +335,6 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_data_wrapper(self, expr: DataWrapper) -> CombineT:
         return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
-    def map_matrix_product(self, expr: MatrixProduct) -> CombineT:
-        return self.combine(self.rec(expr.x1), self.rec(expr.x2))
-
     def map_stack(self, expr: Stack) -> CombineT:
         return self.combine(*(self.rec(ary)
                               for ary in expr.arrays))
@@ -430,9 +421,6 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_size_param(self, expr: SizeParam) -> R:
         return frozenset([expr])
-
-    def map_matrix_product(self, expr: MatrixProduct) -> R:
-        return self.combine(frozenset([expr]), super().map_matrix_product(expr))
 
     def map_stack(self, expr: Stack) -> R:
         return self.combine(frozenset([expr]), super().map_stack(expr))
@@ -579,15 +567,6 @@ class WalkMapper(Mapper):
 
     map_data_wrapper = map_placeholder
     map_size_param = map_placeholder
-
-    def map_matrix_product(self, expr: MatrixProduct) -> None:
-        if not self.visit(expr):
-            return
-
-        self.rec(expr.x1)
-        self.rec(expr.x2)
-
-        self.post_visit(expr)
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase) -> None:
         if not self.visit(expr):
@@ -833,14 +812,6 @@ class MPMSMaterializer(Mapper):
                                tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
-
-    def map_matrix_product(self, expr: MatrixProduct) -> MPMSMaterializerAccumulator:
-        x1_rec, x2_rec = self.rec(expr.x1), self.rec(expr.x2)
-        new_expr = MatrixProduct(x1_rec.expr, x2_rec.expr, expr.axes, expr.tags)
-
-        return _materialize_if_mpms(new_expr,
-                                    self.nsuccessors[expr],
-                                    (x1_rec, x2_rec))
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
@@ -1088,11 +1059,6 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_placeholder(self, expr: Placeholder) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
-    def map_matrix_product(self, expr: MatrixProduct) -> None:
-        for child in (expr.x1, expr.x2):
-            self.node_to_users.setdefault(child, set()).add(expr)
-            self.rec(child)
-
     def map_concatenate(self, expr: Concatenate) -> None:
         for ary in expr.arrays:
             self.node_to_users.setdefault(ary, set()).add(expr)
@@ -1255,12 +1221,6 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                                 for arg in expr.args),
                      axes=expr.axes,
                      tags=expr.tags)
-
-    def map_matrix_product(self, expr: MatrixProduct, *args: Any) -> MatrixProduct:
-        return MatrixProduct(x1=self.handle_edge(expr, expr.x1, *args),
-                             x2=self.handle_edge(expr, expr.x2, *args),
-                             axes=expr.axes,
-                             tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
         return Stack(
