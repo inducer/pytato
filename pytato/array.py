@@ -1685,7 +1685,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
     elif x1.ndim == 1:
-        return pt.dot(x1, x2)
+        return cast(Array, pt.dot(x1, x2))
     elif x2.ndim == 1:
         return pt.sum(x1 * x2, axis=(x1.ndim - 1))
 
