@@ -909,7 +909,7 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
     pt_expr = pt.einsum("ij, j ->  i", A, x)
 
-    _, (pt_out,) = pt.generate_loopy(pt_expr)(cq,m=m_in, n=n_in)
+    _, (pt_out,) = pt.generate_loopy(pt_expr)(cq, m=m_in, n=n_in)
 
     assert np_out.shape == pt_out.shape
     np.testing.assert_allclose(np_out, pt_out)
