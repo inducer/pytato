@@ -60,7 +60,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
         parameters = {}
 
     np_result = NumpyBasedEvaluator(np, parameters)(expr)
-    prog = pt.generate_loopy(expr, cl_device=queue.device)
+    prog = pt.generate_loopy(expr)
 
     evt, (pt_result,) = prog(queue, **{placeholder.name: data
                                 for placeholder, data in parameters.items()})
