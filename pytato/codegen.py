@@ -287,7 +287,7 @@ class CodeGenPreprocessor(CopyMapper):
         from pytato.scalar_expr import Reduce
         from pytato.utils import (dim_to_index_lambda_components,
                                   are_shape_components_equal)
-        from pytato.array import ElementwiseAxis, ReductionAxis
+        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
 
         bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
         redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
@@ -308,10 +308,10 @@ class CodeGenPreprocessor(CopyMapper):
                     subscript_indices.append(0)
                     continue
 
-                if isinstance(axis, ElementwiseAxis):
+                if isinstance(axis, EinsumElementwiseAxis):
                     subscript_indices.append(prim.Variable(f"_{axis.dim}"))
                 else:
-                    assert isinstance(axis, ReductionAxis)
+                    assert isinstance(axis, EinsumReductionAxis)
                     redn_idx_name = f"_r{axis.dim}"
                     if redn_idx_name not in redn_bounds:
                         # convert the ShapeComponent to a ScalarExpression

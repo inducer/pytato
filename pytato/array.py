@@ -137,8 +137,8 @@ Internal API
 ------------
 
 .. autoclass:: EinsumAxisDescriptor
-.. autoclass:: ElementwiseAxis
-.. autoclass:: ReductionAxis
+.. autoclass:: EinsumElementwiseAxis
+.. autoclass:: EinsumReductionAxis
 .. autoclass:: NormalizedSlice
 
 Internal stuff that is only here because the documentation tool wants it
@@ -858,20 +858,20 @@ class EinsumAxisDescriptor:
 
 
 @dataclass(eq=True, frozen=True)
-class ElementwiseAxis(EinsumAxisDescriptor):
+class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
-    nomenclature used by :class:`IndexLambda`, ``ElementwiseAxis(dim=1)`` would
+    nomenclature used by :class:`IndexLambda`, ``EinsumElementwiseAxis(dim=1)`` would
     correspond to indexing the array's axis as ``_1`` in the expression.
     """
     dim: int
 
 
 @dataclass(eq=True, frozen=True)
-class ReductionAxis(EinsumAxisDescriptor):
+class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
-    nomenclature used by :class:`IndexLambda`, ``ReductionAxis(dim=0)`` would
+    nomenclature used by :class:`IndexLambda`, ``EinsumReductionAxis(dim=0)`` would
     correspond to indexing the array's axis as ``_r0`` in the expression.
     """
     dim: int
@@ -945,9 +945,9 @@ class Einsum(Array):
         iaxis_to_len: Dict[int, ShapeComponent] = {}
 
         for descr, axis_len in self._access_descr_to_axis_len().items():
-            if isinstance(descr, ElementwiseAxis):
+            if isinstance(descr, EinsumElementwiseAxis):
                 iaxis_to_len[descr.dim] = axis_len
-            elif isinstance(descr, ReductionAxis):
+            elif isinstance(descr, EinsumReductionAxis):
                 # reduction axes do not count towards einsum's shape
                 pass
             else:
@@ -972,7 +972,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
     """
     Normalizes the output subscript of an einsum (provided in the explicit
     mode). Returns a mapping from index name to an instance of
-    :class:`ElementwiseAxis`.
+    :class:`EinsumElementwiseAxis`.
 
     .. testsetup::
 
@@ -984,8 +984,8 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
         >>> sorted(result.keys())
         ['i', 'j', 'k']
         >>> result["i"], result["j"], result["k"]
-        (ElementwiseAxis(dim=1), ElementwiseAxis(dim=2), ElementwiseAxis(dim=0))
-    """
+        (EinsumElementwiseAxis(dim=1), EinsumElementwiseAxis(dim=2), EinsumElementwiseAxis(dim=0))
+    """  # noqa: E501
 
     normalized_indices: List[str] = []
     acc = subscript.strip()
@@ -1007,7 +1007,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
-    return pmap({idx: ElementwiseAxis(i)
+    return pmap({idx: EinsumElementwiseAxis(i)
                  for i, idx in enumerate(normalized_indices)})
 
 
@@ -1086,8 +1086,8 @@ def _normalize_einsum_in_subscript(subscript: str,
                                                                 in_axis_len)
         else:
             redn_sr_no = len([descr for descr in index_to_descr.values()
-                              if isinstance(descr, ReductionAxis)])
-            redn_axis_descr = ReductionAxis(redn_sr_no)
+                              if isinstance(descr, EinsumReductionAxis)])
+            redn_axis_descr = EinsumReductionAxis(redn_sr_no)
             index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
             index_to_axis_length = index_to_axis_length.set(index_char,
                                                              in_axis_len)
@@ -1139,7 +1139,7 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
                                               if isinstance(descr,
-                                                            ElementwiseAxis)})
+                                                            EinsumElementwiseAxis)})
                                          ))
 
 # }}}
