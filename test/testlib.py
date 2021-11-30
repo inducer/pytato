@@ -5,7 +5,7 @@ import pyopencl as cl
 import numpy as np
 import pytato as pt
 from pytato.transform import Mapper
-from pytato.array import (Array, Placeholder, MatrixProduct, Stack, Roll,
+from pytato.array import (Array, Placeholder, Stack, Roll,
                           AxisPermutation, DataWrapper, Reshape,
                           Concatenate)
 
@@ -27,9 +27,6 @@ class NumpyBasedEvaluator(Mapper):
 
     def map_data_wrapper(self, expr: DataWrapper) -> Any:
         return expr.data
-
-    def map_matrix_product(self, expr: MatrixProduct) -> Any:
-        return self.np.dot(self.rec(expr.x1), self.rec(expr.x2))
 
     def map_stack(self, expr: Stack) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
@@ -63,7 +60,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
         parameters = {}
 
     np_result = NumpyBasedEvaluator(np, parameters)(expr)
-    prog = pt.generate_loopy(expr, cl_device=queue.device)
+    prog = pt.generate_loopy(expr)
 
     evt, (pt_result,) = prog(queue, **{placeholder.name: data
                                 for placeholder, data in parameters.items()})

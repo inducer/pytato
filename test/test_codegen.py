@@ -53,7 +53,7 @@ def test_basic_codegen(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     x = pt.make_placeholder("x", (5,), np.int64)
-    prog = pt.generate_loopy(x * x, cl_device=queue.device)
+    prog = pt.generate_loopy(x * x)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
     assert (out == x_in * x_in).all()
@@ -64,7 +64,7 @@ def test_scalar_placeholder(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     x = pt.make_placeholder("x", (), np.int64)
-    prog = pt.generate_loopy(x, cl_device=queue.device)
+    prog = pt.generate_loopy(x)
     x_in = np.array(1)
     _, (x_out,) = prog(queue, x=x_in)
     assert np.array_equal(x_out, x_in)
@@ -78,7 +78,7 @@ def test_size_param(ctx_factory):
 
     n = pt.make_size_param(name="n")
     pt.make_placeholder(name="x", shape=n, dtype=np.int64)
-    prog = pt.generate_loopy(n, cl_device=queue.device)
+    prog = pt.generate_loopy(n)
     x_in = np.array([1, 2, 3, 4, 5])
     _, (n_out,) = prog(queue, x=x_in)
     assert n_out == 5
@@ -86,7 +86,7 @@ def test_size_param(ctx_factory):
 
 @pytest.mark.parametrize("x1_ndim", (1, 2))
 @pytest.mark.parametrize("x2_ndim", (1, 2))
-def test_matmul(ctx_factory, x1_ndim, x2_ndim):
+def test_matmul_basic(ctx_factory, x1_ndim, x2_ndim):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -99,10 +99,47 @@ def test_matmul(ctx_factory, x1_ndim, x2_ndim):
 
     x1 = pt.make_data_wrapper(x1_in)
     x2 = pt.make_data_wrapper(x2_in)
-    prog = pt.generate_loopy(x1 @ x2, cl_device=queue.device)
+    prog = pt.generate_loopy(x1 @ x2)
     _, (out,) = prog(queue)
 
     assert (out == x1_in @ x2_in).all()
+
+
+def _do_matmul(x1_shape, x2_shape, queue):
+    from numpy.random import default_rng
+    rng = default_rng(seed=0)
+
+    x1_in = rng.standard_normal(x1_shape)
+    x2_in = rng.standard_normal(x2_shape)
+
+    x1 = pt.make_data_wrapper(x1_in)
+    x2 = pt.make_data_wrapper(x2_in)
+
+    prog = pt.generate_loopy(x1 @ x2)
+    _, (out,) = prog(queue)
+
+    np_out = np.matmul(x1_in, x2_in)
+
+    assert np_out.shape == out.shape
+    np.testing.assert_allclose(np_out, out)
+
+
+@pytest.mark.parametrize("x1_shape", ((7,),))
+@pytest.mark.parametrize("x2_shape", ((7,), (7, 3), (7, 7, 4), (7, 7, 7, 9)))
+def test_matmul_dimone(ctx_factory, x1_shape, x2_shape):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    _do_matmul(x1_shape, x2_shape, queue)
+
+
+@pytest.mark.parametrize("x1_shape", ((9, 7, 11, 4), (9, 7, 1, 4), (7, 4)))
+@pytest.mark.parametrize("x2_shape", ((7, 4, 5), (7, 4, 3)))
+def test_matmul_higherdim(ctx_factory, x1_shape, x2_shape):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    _do_matmul(x1_shape, x2_shape, queue)
 
 
 def test_data_wrapper(ctx_factory):
@@ -112,7 +149,7 @@ def test_data_wrapper(ctx_factory):
     # Without name/shape
     x_in = np.array([1, 2, 3, 4, 5])
     x = pt.make_data_wrapper(x_in)
-    prog = pt.generate_loopy(x, cl_device=queue.device)
+    prog = pt.generate_loopy(x)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
 
@@ -120,7 +157,7 @@ def test_data_wrapper(ctx_factory):
     x_in = np.array([[1, 2], [3, 4], [5, 6]])
     n = pt.make_size_param("n")
     x = pt.make_data_wrapper(x_in, name="x", shape=(n, 2))
-    prog = pt.generate_loopy(x, cl_device=queue.device)
+    prog = pt.generate_loopy(x)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
 
@@ -137,7 +174,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
 
     # With return_dict.
-    prog = pt.generate_loopy(result, cl_device=queue.device)
+    prog = pt.generate_loopy(result)
 
     _, outputs = prog(queue, x=x_in, y=y_in)
     assert (outputs["x_out"] == x_in).all()
@@ -243,7 +280,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = pt_op(x_in, y)
 
-        prog = pt.generate_loopy(exprs, cl_device=queue.device)
+        prog = pt.generate_loopy(exprs)
 
         _, outputs = prog(queue)
 
@@ -300,7 +337,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
                     y_orig.astype(dtype), name=f"y{dtype}")
             exprs[dtype] = pt_op(x, y)
 
-        prog = pt.generate_loopy(exprs, cl_device=queue.device)
+        prog = pt.generate_loopy(exprs)
 
         _, outputs = prog(queue)
 
@@ -329,7 +366,7 @@ def test_binary_logic(ctx_factory, which):
     x = pt.make_data_wrapper(x_orig)
     y = pt.make_data_wrapper(y_orig)
 
-    prog = pt.generate_loopy(pt_op(x, y), cl_device=queue.device)
+    prog = pt.generate_loopy(pt_op(x, y))
 
     _, out = prog(queue)
 
@@ -353,7 +390,7 @@ def test_unary_arith(ctx_factory, which):
         exprs[dtype] = op(
                 pt.make_data_wrapper(x_orig.astype(dtype)))
 
-    prog = pt.generate_loopy(exprs, cl_device=queue.device)
+    prog = pt.generate_loopy(exprs)
 
     _, outputs = prog(queue)
 
@@ -399,7 +436,7 @@ def test_slice(ctx_factory, shape):
         ref_outputs[f"out_{i}"] = x_in[slice_]
         i += 1
 
-    prog = pt.generate_loopy(outputs, cl_device=queue.device)
+    prog = pt.generate_loopy(outputs)
 
     _, outputs = prog(queue)
 
@@ -494,7 +531,7 @@ def test_dict_to_loopy_kernel(ctx_factory):
     y = 2*x
     z = 3*x
 
-    _, result_dict = pt.generate_loopy({"y": y, "z": z}, cl_device=queue.device)(
+    _, result_dict = pt.generate_loopy({"y": y, "z": z})(
             queue)
     np.testing.assert_allclose(result_dict["y"], 2*x_in)
     np.testing.assert_allclose(result_dict["z"], 3*x_in)
@@ -536,8 +573,7 @@ def test_math_functions(ctx_factory, dtype, function_name):
         pt_func = getattr(operator, function_name)
         np_func = getattr(operator, function_name)
 
-    _, (y,) = pt.generate_loopy(pt_func(x),
-            cl_device=queue.device)(queue)
+    _, (y,) = pt.generate_loopy(pt_func(x))(queue)
 
     y_np = np_func(x_in)
 
@@ -568,8 +604,7 @@ def test_binary_math_functions(ctx_factory, dtype, function_name):
     pt_func = getattr(pt, function_name)
     np_func = getattr(np, function_name)
 
-    _, (out,) = pt.generate_loopy(pt_func(x, y),
-            cl_device=queue.device)(queue)
+    _, (out,) = pt.generate_loopy(pt_func(x, y))(queue)
 
     out_np = np_func(x_in, y_in)
     np.testing.assert_allclose(out, out_np, rtol=1e-6)
@@ -581,12 +616,9 @@ def test_full_zeros_ones(ctx_factory, dtype):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    _, (z,) = pt.generate_loopy(pt.zeros(10, dtype),
-            cl_device=queue.device)(queue)
-    _, (o,) = pt.generate_loopy(pt.ones(10, dtype),
-            cl_device=queue.device)(queue)
-    _, (t,) = pt.generate_loopy(pt.full(10, 2, dtype),
-            cl_device=queue.device)(queue)
+    _, (z,) = pt.generate_loopy(pt.zeros(10, dtype))(queue)
+    _, (o,) = pt.generate_loopy(pt.ones(10, dtype))(queue)
+    _, (t,) = pt.generate_loopy(pt.full(10, 2, dtype))(queue)
 
     for ary in (z, o, t):
         assert ary.dtype == dtype
@@ -600,7 +632,7 @@ def test_passsing_bound_arguments_raises(ctx_factory):
     queue = cl.CommandQueue(ctx_factory())
 
     x = pt.make_data_wrapper(np.ones(10), name="x")
-    prg = pt.generate_loopy(42*x, cl_device=queue.device)
+    prg = pt.generate_loopy(42*x)
 
     with pytest.raises(ValueError):
         evt, (out2,) = prg(queue, x=np.random.rand(10))
@@ -630,7 +662,7 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     x = pt.make_data_wrapper(x_in, shape=evaluate(shape1, {"n": pt_n}))
     y = pt.make_data_wrapper(y_in, shape=evaluate(shape2, {"n": pt_n}))
 
-    prg = pt.generate_loopy(x+y, cl_device=queue.device)
+    prg = pt.generate_loopy(x+y)
 
     if "n" in prg.kernel.arg_dict:
         evt, (out,) = prg(queue, n=n)
@@ -662,8 +694,7 @@ def test_maximum_minimum(ctx_factory, which):
     pt_func = getattr(pt, which)
     np_func = getattr(np, which)
 
-    _, (y,) = pt.generate_loopy(pt_func(x1, x2),
-                                cl_device=queue.device)(queue)
+    _, (y,) = pt.generate_loopy(pt_func(x1, x2))(queue)
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
@@ -684,7 +715,7 @@ def test_call_loopy(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
+    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
 
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
@@ -713,7 +744,7 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
 
     out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
-    evt, out_dict = pt.generate_loopy(out, cl_device=queue.device,
+    evt, out_dict = pt.generate_loopy(out,
                                       options=lp.Options(return_dict=True))(queue)
     np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
@@ -725,7 +756,7 @@ def test_exprs_with_named_arrays(ctx_factory):
     x = pt.make_data_wrapper(x_in)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
     res = 21*y1y2["y1"]
-    evt, (out,) = pt.generate_loopy(res, cl_device=queue.device)(queue)
+    evt, (out,) = pt.generate_loopy(res)(queue)
 
     np.testing.assert_allclose(out, 42*x_in)
 
@@ -752,7 +783,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y, "m": m, "n": n})
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z, cl_device=queue.device)(queue, x=x_in)
+    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
@@ -775,7 +806,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     x = pt.make_placeholder(name="x", shape=(), dtype=float)
     y = call_loopy(knl, {"x": 3*x})["y"]
 
-    evt, (out,) = pt.generate_loopy(y, cl_device=queue.device)(queue, x=x_in)
+    evt, (out,) = pt.generate_loopy(y)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
 
 
@@ -792,7 +823,7 @@ def test_reductions(ctx_factory, axis, redn, shape):
     x = pt.make_data_wrapper(x_in)
     np_func = getattr(np, redn)
     pt_func = getattr(pt, redn)
-    prg = pt.generate_loopy(pt_func(x, axis=axis), cl_device=queue.device)
+    prg = pt.generate_loopy(pt_func(x, axis=axis))
 
     evt, (out,) = prg(queue)
 
@@ -849,7 +880,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     np_out = np.einsum(spec, *np_operands)
     pt_expr = pt.einsum(spec, *pt_operands)
 
-    _, (pt_out,) = pt.generate_loopy(pt_expr, cl_device=queue.device)(queue)
+    _, (pt_out,) = pt.generate_loopy(pt_expr)(queue)
     assert np_out.shape == pt_out.shape
     np.testing.assert_allclose(np_out, pt_out)
 
@@ -878,8 +909,8 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
     pt_expr = pt.einsum("ij, j ->  i", A, x)
 
-    _, (pt_out,) = pt.generate_loopy(pt_expr, cl_device=cq.device)(cq,
-                                                                   m=m_in, n=n_in)
+    _, (pt_out,) = pt.generate_loopy(pt_expr)(cq, m=m_in, n=n_in)
+
     assert np_out.shape == pt_out.shape
     np.testing.assert_allclose(np_out, pt_out)
 
@@ -1006,8 +1037,16 @@ def test_dot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    a_in = (rng.random(a_shape) + 1j * rng.random(a_shape)).astype(a_dtype)
-    b_in = (rng.random(b_shape) + 1j * rng.random(b_shape)).astype(b_dtype)
+    if np.issubdtype(a_dtype, np.complexfloating):
+        a_in = (rng.random(a_shape) + 1j * rng.random(a_shape)).astype(a_dtype)
+    else:
+        a_in = (rng.random(a_shape)).astype(a_dtype)
+
+    if np.issubdtype(b_dtype, np.complexfloating):
+        b_in = (rng.random(b_shape) + 1j * rng.random(b_shape)).astype(b_dtype)
+    else:
+        b_in = (rng.random(b_shape)).astype(b_dtype)
+
     a = pt.make_data_wrapper(a_in)
     b = pt.make_data_wrapper(b_in)
 
@@ -1029,8 +1068,16 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    a_in = (rng.random(a_shape) + 1j * rng.random(a_shape)).astype(a_dtype)
-    b_in = (rng.random(b_shape) + 1j * rng.random(b_shape)).astype(b_dtype)
+    if np.issubdtype(a_dtype, np.complexfloating):
+        a_in = (rng.random(a_shape) + 1j * rng.random(a_shape)).astype(a_dtype)
+    else:
+        a_in = (rng.random(a_shape)).astype(a_dtype)
+
+    if np.issubdtype(b_dtype, np.complexfloating):
+        b_in = (rng.random(b_shape) + 1j * rng.random(b_shape)).astype(b_dtype)
+    else:
+        b_in = (rng.random(b_shape)).astype(b_dtype)
+
     a = pt.make_data_wrapper(a_in)
     b = pt.make_data_wrapper(b_in)
 

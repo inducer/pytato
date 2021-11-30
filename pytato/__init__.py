@@ -27,7 +27,7 @@ THE SOFTWARE.
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
         IndexLambda, NamedArray, DataWrapper, InputArgumentBase, Reshape,
-        Einsum, MatrixProduct, Stack, Concatenate, AxisPermutation,
+        Einsum, Stack, Concatenate, AxisPermutation,
         IndexBase, Roll, IndexRemappingBase, BasicIndex,
         AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         SizeParam, Axis,
@@ -83,7 +83,7 @@ __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
         "DataWrapper", "InputArgumentBase", "Reshape", "Einsum",
-        "MatrixProduct", "Stack", "Concatenate", "AxisPermutation",
+        "Stack", "Concatenate", "AxisPermutation",
         "IndexBase", "Roll", "IndexRemappingBase",
         "AdvancedIndexInContiguousAxes", "AdvancedIndexInNoncontiguousAxes",
         "BasicIndex", "SizeParam", "Axis",
