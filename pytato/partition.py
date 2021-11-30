@@ -356,7 +356,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                     isinstance(my_node, Placeholder)
                     or my_node not in other_node_set), (
                         "partitions not disjoint: "
-                        f"{my_node.__class__.__name__} (id={id(my_node)}) "
+                        f"{my_node.__class__.__name__} (id={hex(id(my_node))}) "
                         f"in both '{part.pid}' and '{other_part_id}'")
 
         part_id_to_nodes[part.pid] = mapper.seen_nodes
