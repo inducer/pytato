@@ -392,6 +392,64 @@ def test_linear_complexity_inequality():
     assert not EqualityComparer()(graph2, graph3)
 
 
+def test_idx_lambda_to_hlo():
+    from pytato.normalization import index_lambda_to_high_level_op
+    from pytato.normalization import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
+                                      C99CallOp, BroadcastOp)
+
+    a = pt.make_placeholder("a", (10, 4), dtype=np.float64)
+    b = pt.make_placeholder("b", (10, 4), dtype=np.float64)
+
+    assert index_lambda_to_high_level_op(a + b) == BinaryOp(BinaryOpType.ADD,
+                                                            a, b)
+    assert index_lambda_to_high_level_op(a / 42) == BinaryOp(BinaryOpType.TRUEDIV,
+                                                             a, 42)
+    assert index_lambda_to_high_level_op(42 * a) == BinaryOp(BinaryOpType.MULT,
+                                                             42, a)
+    assert index_lambda_to_high_level_op(a ** b) == BinaryOp(BinaryOpType.POWER,
+                                                             a, b)
+    assert index_lambda_to_high_level_op(a - b) == BinaryOp(BinaryOpType.SUB,
+                                                            a, b)
+    assert index_lambda_to_high_level_op(pt.zeros(6)) == FullOp(0)
+    assert index_lambda_to_high_level_op(pt.sum(b, axis=1)) == ReduceOp("sum",
+                                                                        b,
+                                                                        (1,))
+    assert index_lambda_to_high_level_op(pt.prod(a)) == ReduceOp("product",
+                                                                 a,
+                                                                 (0, 1))
+    assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
+    assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
+                                                                        (b, a))
+    assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
+            == BroadcastOp(a))
+
+
+def test_stringify():
+    x = pt.make_placeholder("x", (10, 4), np.int64)
+    y = pt.make_placeholder("y", (10, 4), np.int64)
+
+    assert(str(3*x+4*y)
+           == "3*x + 4*y")
+    assert(str(pt.roll(x.reshape(2, 20).reshape(-1), 3))
+           == "roll(reshape(reshape(x, (2, 20)), 40), 3)")
+    assert(str(pt.roll(x.reshape(2, 20).reshape(-1), 3))
+           == "roll(reshape(reshape(x, (2, 20)), 40), 3)")
+    assert(str(y * pt.not_equal(x, 3))
+           == "y*(x != 3)")
+    assert(str(3 * y @ pt.sum(x, axis=0))
+           == "3*y @ sum(x, axis=0)")
+    assert(str(x[y[:, 2:3], x[2, :]])
+           == "x[y[::, 2:3:], x[2]]")
+    assert(str(pt.stack([x[y[:, 2:3], x[2, :]].T, y[x[:, 2:3], y[2, :]].T]))
+           == ("stack([transpose(x[y[::, 2:3:], x[2]]),"
+                     " transpose(y[x[::, 2:3:], y[2]])])"))
+    assert(str(pt.concatenate([x[y[:, 2:3], x[2, :]],
+                                        y[x[:, 2:3], y[2, :]]]))
+           == "concatenate([x[y[::, 2:3:], x[2]], y[x[::, 2:3:], y[2]]])")
+    assert(str(pt.einsum("ij,i->i", 2*x, pt.sum(y, axis=1)))
+           == 'einsum("ij, i -> i", 2*x, sum(y, axis=1))')
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

@@ -624,6 +624,10 @@ class Array(Taggable):
                     + self.axes[iaxis+1:])
         return self.copy(axes=new_axes)
 
+    def __str__(self) -> str:
+        from pytato.stringifier import stringify
+        return stringify(self)
+
 # }}}
 
 
