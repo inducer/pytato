@@ -692,7 +692,10 @@ class WalkMapper(Mapper):
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         if not self.visit(expr):
             return
+
         self.rec_idx_or_size_tuple(expr.shape)
+
+        self.post_visit(expr)
 
     def map_named_array(self, expr: NamedArray) -> None:
         if not self.visit(expr):
