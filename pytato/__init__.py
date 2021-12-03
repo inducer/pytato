@@ -54,7 +54,7 @@ from pytato.array import (
         Einsum, Stack, Concatenate, AxisPermutation,
         IndexBase, Roll, IndexRemappingBase, BasicIndex,
         AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        SizeParam, Axis,
+        SizeParam, Axis, ReductionDescriptor,
 
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
@@ -113,7 +113,7 @@ __all__ = (
         "Stack", "Concatenate", "AxisPermutation",
         "IndexBase", "Roll", "IndexRemappingBase",
         "AdvancedIndexInContiguousAxes", "AdvancedIndexInNoncontiguousAxes",
-        "BasicIndex", "SizeParam", "Axis",
+        "BasicIndex", "SizeParam", "Axis", "ReductionDescriptor",
 
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper", "einsum",

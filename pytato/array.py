@@ -42,6 +42,7 @@ Array Interface
 
 .. autoclass:: Array
 .. autoclass:: Axis
+.. autoclass:: ReductionDescriptor
 .. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
 .. autoclass:: AbstractResultWithNamedArrays
@@ -318,6 +319,19 @@ class Axis(Taggable):
     tags: FrozenSet[Tag]
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> Taggable:
+        from dataclasses import replace
+        return replace(self, tags=tags)
+
+
+@dataclass(eq=True, frozen=True)
+class ReductionDescriptor(Taggable):
+    """
+    Records information about a reduction dimension in an
+    :class:`~pytato.Array`'.
+    """
+    tags: FrozenSet[Tag]
+
+    def _with_new_tags(self, tags: FrozenSet[Tag]) -> ReductionDescriptor:
         from dataclasses import replace
         return replace(self, tags=tags)
 
