@@ -223,6 +223,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 dtype=expr.dtype,
                 bindings=bindings,
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
@@ -399,6 +400,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
+                           var_to_reduction_descr=expr.var_to_reduction_descr,
                            tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
@@ -1084,6 +1086,7 @@ class MPMSMaterializer(Mapper):
                                {bnd_name: bnd.expr
                                 for bnd_name, bnd in children_rec.items()},
                                axes=expr.axes,
+                               var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
@@ -1572,6 +1575,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 bindings={name: self.handle_edge(expr, child)
                           for name, child in sorted(expr.bindings.items())},
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:

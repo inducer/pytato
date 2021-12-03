@@ -169,9 +169,10 @@ from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
-                                INT_CLASSES)
+                                INT_CLASSES, get_reduction_induction_variables)
 import re
-from pyrsistent import pmap, PMap
+from pyrsistent import pmap
+from pyrsistent.typing import PMap
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -555,7 +556,8 @@ class Array(Taggable):
                 dtype=self.dtype,
                 bindings=bindings,
                 tags=_get_default_tags(),
-                axes=_get_default_axes(self.ndim))
+                axes=_get_default_axes(self.ndim),
+                var_to_reduction_descr=pmap())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
@@ -840,9 +842,16 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
         expressions available for use in
         :attr:`expr`.
 
+    .. attribute:: var_to_reduction_descr
+
+        A mapping from reduction variables in :attr:`expr` to their
+        :class:`ReductionDescriptor`.
+
+    .. automethod:: with_tagged_reduction
     """
 
-    _fields = Array._fields + ("expr", "shape", "dtype", "bindings")
+    _fields = Array._fields + ("expr", "shape", "dtype",
+                               "bindings", "var_to_reduction_descr")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -851,12 +860,50 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             dtype: np.dtype[Any],
             bindings: Dict[str, Array],
             axes: AxesT,
+            var_to_reduction_descr: PMap[str, ReductionDescriptor],
             tags: FrozenSet[Tag] = frozenset()):
 
         super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
 
         self.expr = expr
         self.bindings = bindings
+        self.var_to_reduction_descr = var_to_reduction_descr
+
+    def with_tagged_reduction(self,
+                              reduction_variable: str,
+                              tag: Tag) -> IndexLambda:
+        """
+        Returns a copy of *self* with the :class:`ReductionDescriptor`
+        associated with *reduction_variable* tagged with *tag*.
+
+        :arg reduction_variable: Name of reduction variable in *self* that
+            is to be tagged.
+        """
+        from pytato.diagnostic import NotAReductionAxis
+        if not isinstance(reduction_variable, str):
+            raise TypeError("Argument 'reduction_variable' expected to be str, "
+                            f"got {type(reduction_variable)}.")
+
+        assert (frozenset(self.var_to_reduction_descr)
+                == get_reduction_induction_variables(self.expr))
+
+        if reduction_variable not in self.var_to_reduction_descr:
+            raise NotAReductionAxis(
+                "reduction_variable can be one of"
+                f" '{self.var_to_reduction_descr.keys()}',"
+                f" got '{reduction_variable}'.")
+
+        new_var_to_redn_descr = self.var_to_reduction_descr.set(
+            reduction_variable,
+            self.var_to_reduction_descr[reduction_variable].tagged(tag))
+
+        return type(self)(expr=self.expr,
+                          shape=self.shape,
+                          dtype=self.dtype,
+                          bindings=self.bindings,
+                          axes=self.axes,
+                          var_to_reduction_descr=new_var_to_redn_descr,
+                          tags=self.tags)
 
 # }}}
 
@@ -2022,7 +2069,8 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
 
     return IndexLambda(fill_value, shape, dtype, {},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=pmap())
 
 
 def zeros(shape: ConvertibleToShape, dtype: Any = float,
@@ -2067,7 +2115,8 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
                        shape=(N, M), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(2))
+                       axes=_get_default_axes(2),
+                       var_to_reduction_descr=pmap())
 
 # }}}
 
@@ -2161,7 +2210,8 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     return IndexLambda(start + Variable("_0") * step,
                        shape=(size,), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(1))
+                       axes=_get_default_axes(1),
+                       var_to_reduction_descr=pmap())
 
 # }}}
 
@@ -2262,7 +2312,8 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        dtype=np.dtype(np.bool8),
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(x.shape)))
+                       axes=_get_default_axes(len(x.shape)),
+                       var_to_reduction_descr=pmap())
 
 # }}}
 
@@ -2315,7 +2366,8 @@ def where(condition: ArrayOrScalar,
             dtype=dtype,
             bindings=bindings,
             tags=_get_default_tags(),
-            axes=_get_default_axes(len(result_shape)))
+            axes=_get_default_axes(len(result_shape)),
+            var_to_reduction_descr=pmap())
 
 # }}}
 
@@ -2368,9 +2420,14 @@ def make_index_lambda(
         expression: Union[str, ScalarExpression],
         bindings: Dict[str, Array],
         shape: ShapeType,
-        dtype: Any) -> IndexLambda:
+        dtype: Any,
+        var_to_reduction_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+) -> IndexLambda:
     if isinstance(expression, str):
         raise NotImplementedError
+
+    if var_to_reduction_descr is None:
+        var_to_reduction_descr = {}
 
     # {{{ sanity checks
 
@@ -2383,12 +2440,32 @@ def make_index_lambda(
 
     # }}}
 
+    # {{{ process var_to_reduction_descr
+
+    processed_var_to_reduction_descr = {}
+    redn_vars = get_reduction_induction_variables(expression)
+
+    if not (frozenset(var_to_reduction_descr) <= redn_vars):
+        raise ValueError(f"'{frozenset(var_to_reduction_descr) - redn_vars}': not"
+                         " reduction induction variables.")
+
+    for redn_var in redn_vars:
+        redn_descr = var_to_reduction_descr.get(redn_var,
+                                           ReductionDescriptor(frozenset()))
+        if not isinstance(redn_descr, ReductionDescriptor):
+            raise TypeError(f"reduction_dim for {redn_var} expected to be"
+                            f" of type ReductionDescriptor, got {type(redn_descr)}.")
+        processed_var_to_reduction_descr[redn_var] = redn_descr
+
+    # }}}
+
     return IndexLambda(expr=expression,
                        bindings=bindings,
                        shape=shape,
                        dtype=dtype,
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=pmap(processed_var_to_reduction_descr))
 
 # }}}
 
@@ -2466,7 +2543,8 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        dtype=array.dtype,
                        bindings={"in": array},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=pmap())
 
 
 def squeeze(array: Array) -> Array:
