@@ -108,7 +108,7 @@ jobs:
             env:
                 DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}
             run: |
-                curl -L -o ci-support-v0 https://github.com/kaushikcfd/ci-support/blob/rm_sysroot_dir/ci-support.sh
+                curl -L -o ci-support-v0 https://raw.githubusercontent.com/kaushikcfd/ci-support/rm_sysroot_dir/ci-support.sh
                 . ./ci-support-v0
 
                 if test "$DOWNSTREAM_PROJECT" = "mirgecom"; then
