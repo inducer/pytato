@@ -297,6 +297,7 @@ class CodeGenPreprocessor(CopyMapper):
         redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
         args_as_pym_expr: List[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
+        var_to_redn_descr = {}
 
         # {{{ add bindings coming from the shape expressions
 
@@ -326,6 +327,8 @@ class CodeGenPreprocessor(CopyMapper):
 
                         bindings.update({k: self.rec(v)
                                          for k, v in redn_bound_bindings.items()})
+                        var_to_redn_descr[redn_idx_name] = (
+                            expr.redn_axis_to_redn_descr[axis])
 
                     subscript_indices.append(prim.Variable(redn_idx_name))
 
@@ -349,6 +352,7 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
+                           var_to_reduction_descr=pmap(var_to_redn_descr),
                            tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)

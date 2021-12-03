@@ -960,18 +960,35 @@ class Einsum(Array):
 
        A :class:`tuple` of array over which the Einstein summation is being
        performed.
+
+    .. attribute:: access_descr_to_index
+
+       Mapping from the access descriptors to the index used by the user during
+       the instantiation of the :class:`Einsum` node. This is a strictly
+       non-semantic attribute and only present to support a friendlier
+       :meth:`with_tagged_reduction`.
+
+    .. automethod:: with_tagged_reduction
     """
-    _fields = Array._fields + ("access_descriptors", "args")
+    _fields = Array._fields + ("access_descriptors",
+                               "args",
+                               "redn_axis_to_redn_descr",
+                               "index_to_access_descr")
     _mapper_method = "map_einsum"
 
     def __init__(self,
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
                  axes: AxesT,
+                 redn_axis_to_redn_descr: PMap[EinsumReductionAxis,
+                                              ReductionDescriptor],
+                 index_to_access_descr: PMap[str, EinsumAxisDescriptor],
                  tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
         self.args = args
+        self.redn_axis_to_redn_descr = redn_axis_to_redn_descr
+        self.index_to_access_descr = index_to_access_descr
 
     @memoize_method
     def _access_descr_to_axis_len(self
@@ -1023,6 +1040,52 @@ class Einsum(Array):
     def dtype(self) -> np.dtype[Any]:
         return np.find_common_type(array_types=[arg.dtype for arg in self.args],
                                     scalar_types=[])
+
+    def with_tagged_reduction(self,
+                              redn_axis: Union[EinsumReductionAxis, str],
+                              tag: Tag) -> Einsum:
+        """
+        Returns a copy of *self* with the :class:`ReductionDescriptor`
+        associated with *redn_axis* tagged with *tag*.
+        """
+        from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+        # {{{ sanity checks
+
+        if isinstance(redn_axis, str):
+            try:
+                redn_axis_ = self.index_to_access_descr[redn_axis]
+            except KeyError:
+                raise InvalidEinsumIndex(f"'{redn_axis}': not a valid axis index.")
+            if isinstance(redn_axis_, EinsumReductionAxis):
+                redn_axis = redn_axis_
+            else:
+                raise NotAReductionAxis(f"'{redn_axis}' is not"
+                                        " a reduction axis.")
+        elif isinstance(redn_axis, EinsumReductionAxis):
+            pass
+        else:
+            raise TypeError("Argument 'redn_axis' expected to be"
+                            f" EinsumReductionAxis, got {type(redn_axis)}")
+
+        if redn_axis in self.redn_axis_to_redn_descr:
+            assert any(redn_axis in access_descrs
+                       for access_descrs in self.access_descriptors)
+        else:
+            raise ValueError(f"{redn_axis}: does not appear as a"
+                             " reduction access descriptor.")
+
+        # }}}
+
+        new_redn_axis_to_redn_descr = self.redn_axis_to_redn_descr.set(
+            redn_axis, self.redn_axis_to_redn_descr[redn_axis].tagged(tag))
+
+        return type(self)(access_descriptors=self.access_descriptors,
+                          args=self.args,
+                          axes=self.axes,
+                          redn_axis_to_redn_descr=new_redn_axis_to_redn_descr,
+                          tags=self.tags,
+                          index_to_access_descr=self.index_to_access_descr,
+                          )
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
@@ -1159,12 +1222,17 @@ def _normalize_einsum_in_subscript(subscript: str,
             index_to_descr, index_to_axis_length)
 
 
-def einsum(subscripts: str, *operands: Array) -> Einsum:
+def einsum(subscripts: str, *operands: Array,
+           index_to_redn_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+           ) -> Einsum:
     """
     Einstein summation *subscripts* on *operands*.
     """
     if len(operands) == 0:
         raise ValueError("must specify at least one operand")
+
+    if index_to_redn_descr is None:
+        index_to_redn_descr = {}
 
     if "->" not in subscripts:
         # implicit-mode: output spec matched by alphabetical ordering of
@@ -1195,13 +1263,33 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
                                            index_to_axis_length))
         access_descriptors.append(access_descriptor)
 
+    # {{{ process index_to_redn_descr
+
+    redn_axis_to_redn_descr = {}
+    for idx, redn_descr in index_to_redn_descr.items():
+        descr = index_to_descr[idx]
+        if isinstance(descr, EinsumReductionAxis):
+            redn_axis_to_redn_descr[descr] = redn_descr
+        else:
+            raise ValueError(f"'{idx}' is not a reduction dim.")
+
+    for descr in index_to_descr.values():
+        if isinstance(descr, EinsumReductionAxis):
+            if descr not in redn_axis_to_redn_descr:
+                redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+
+    # }}}
+
     return Einsum(tuple(access_descriptors), operands,
                   tags=_get_default_tags(),
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
                                               if isinstance(descr,
                                                             EinsumElementwiseAxis)})
-                                         ))
+                                         ),
+                  redn_axis_to_redn_descr=pmap(redn_axis_to_redn_descr),
+                  index_to_access_descr=index_to_descr,
+                  )
 
 # }}}
 
