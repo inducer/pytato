@@ -190,7 +190,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
-                fields={},
+                fields=dict(addr=hex(id(expr)),
+                            entrypoint=expr.entrypoint),
                 edges=edges)
 
     def map_distributed_send_ref_holder(
