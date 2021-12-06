@@ -340,6 +340,9 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
 def _check_partition_disjointness(partition: GraphPartition) -> None:
     part_id_to_nodes: Dict[PartId, Set[ArrayOrNames]] = {}
 
+    from pytato.visualization import show_dot_graph
+    # show_dot_graph(partition)
+
     for part in partition.parts.values():
         mapper = _SeenNodesWalkMapper()
         for out_name in part.output_names:
@@ -352,15 +355,21 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                 # Placeholders represent values computed in one partition
                 # and used in one or more other ones. As a result, the
                 # same placeholder may occur in more than one partition.
-                assert (
+                if not(
                     isinstance(my_node, Placeholder)
-                    or my_node not in other_node_set), (
-                        "partitions not disjoint: "
+                    or my_node not in other_node_set):
+                    show_dot_graph(partition)
+                    print(
+                        "Partitions not disjoint: "
                         f"{my_node.__class__.__name__} (id={hex(id(my_node))}) "
-                        f"in both '{part.pid}' and '{other_part_id}'")
+                        f"in both '{part.pid}' and '{other_part_id}'"
+                        f"{part.output_names=} "
+                        f"{partition.parts[other_part_id].output_names=} ")
+
 
         part_id_to_nodes[part.pid] = mapper.seen_nodes
 
+    1/0
 # }}}
 
 
