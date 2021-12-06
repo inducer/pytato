@@ -1405,7 +1405,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
         return DistributedRecv(
             src_rank=expr.src_rank, comm_tag=expr.comm_tag,
             shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
-            dtype=expr.dtype, tags=expr.tags)
+            dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
 
     # }}}
 
