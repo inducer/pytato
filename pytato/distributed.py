@@ -266,6 +266,7 @@ def find_distributed_partition(
 
     # FIXME: We should probably iterate over the DictOfNamedArrays instead
     res = outputs[next(iter(outputs))]
+    assert len(outputs._data) == 1
 
     gdm = UsersCollector()
     gdm(res)
