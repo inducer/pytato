@@ -38,7 +38,8 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, Placeholder, NamedArray, DataWrapper)
+                          SizeParam, Placeholder, NamedArray, DataWrapper,
+                          ReductionDescriptor)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
@@ -155,6 +156,7 @@ class LocalExpressionContext:
     num_indices: int
     local_namespace: Mapping[str, Array]
     reduction_bounds: ReductionBounds
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
     def lookup(self, name: str) -> Array:
         return self.local_namespace[name]
@@ -163,6 +165,8 @@ class LocalExpressionContext:
              reduction_bounds: Optional[ReductionBounds] = None,
              num_indices: Optional[int] = None,
              local_namespace: Optional[Mapping[str, Array]] = None,
+             var_to_reduction_descr: Optional[
+                 Mapping[str, ReductionDescriptor]] = None,
              ) -> LocalExpressionContext:
         if reduction_bounds is None:
             reduction_bounds = self.reduction_bounds
@@ -170,9 +174,12 @@ class LocalExpressionContext:
             num_indices = self.num_indices
         if local_namespace is None:
             local_namespace = self.local_namespace
+        if var_to_reduction_descr is None:
+            var_to_reduction_descr = self.var_to_reduction_descr
         return LocalExpressionContext(reduction_bounds=reduction_bounds,
                                       num_indices=num_indices,
-                                      local_namespace=local_namespace)
+                                      local_namespace=local_namespace,
+                                      var_to_reduction_descr=var_to_reduction_descr)
 
 # }}}
 
@@ -374,9 +381,11 @@ class CodeGenMapper(Mapper):
             return state.results[expr]
 
         prstnt_ctx = PersistentExpressionContext(state)
-        local_ctx = LocalExpressionContext(local_namespace=expr.bindings,
-                                              num_indices=expr.ndim,
-                                              reduction_bounds={})
+        local_ctx = LocalExpressionContext(
+            local_namespace=expr.bindings,
+            num_indices=expr.ndim,
+            reduction_bounds={},
+            var_to_reduction_descr=expr.var_to_reduction_descr)
         loopy_expr = self.exprgen_mapper(expr.expr, prstnt_ctx, local_ctx)
 
         result: ImplementedResult = InlinedResult(loopy_expr,
@@ -507,8 +516,9 @@ class CodeGenMapper(Mapper):
                     depends_on.update(pt_arg_rec.depends_on)
                 else:
                     local_ctx = LocalExpressionContext(reduction_bounds={},
-                                                          num_indices=0,
-                                                          local_namespace={})
+                                                       num_indices=0,
+                                                       local_namespace={},
+                                                       var_to_reduction_descr={})
                     params.append(self.exprgen_mapper(pt_arg,
                                                       prstnt_ctx,
                                                       local_ctx))
@@ -649,6 +659,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             for redn_iname, bounds in new_bounds.items()})
         kernel = state.kernel
         state.update_kernel(kernel.copy(domains=kernel.domains+[domain]))
+
+        # {{{ pytato tags -> loopy tags
+
+        for name_in_expr, name_in_kernel in sorted(unique_names_mapping.items()):
+            for tag in local_ctx.var_to_reduction_descr[name_in_expr].tags:
+                if all(not isinstance(tag, tag_t)
+                       for tag_t in self.codegen_mapper.axis_tag_t_to_not_propagate):
+                    state.update_kernel(lp.tag_inames(state.kernel,
+                                                      {name_in_kernel: tag}))
+
+        # }}}
 
         return inner_expr
 
