@@ -196,9 +196,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
     result = make_random_dag_inner(rdagc)
 
     if result.ndim > 2:
-        # FIXME Enable this to provoke reduction errors
-        #v = rng.integers(0, 2)
-        v = rng.integers(0, 1)
+        v = rng.integers(0, 2)
         if v == 0:
             # index away an axis
             subscript: List[Union[int, slice]] = [slice(None)] * result.ndim
