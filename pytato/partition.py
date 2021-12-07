@@ -358,6 +358,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                 if not(
                     isinstance(my_node, Placeholder)
                     or my_node not in other_node_set):
+                    assert False
                     show_dot_graph(partition)
                     print(
                         "Partitions not disjoint: "
@@ -369,7 +370,6 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
 
         part_id_to_nodes[part.pid] = mapper.seen_nodes
 
-    1/0
 # }}}
 
 
