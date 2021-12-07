@@ -1123,61 +1123,8 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         access_descriptors.append(access_descriptor)
 
     return Einsum(tuple(access_descriptors), operands,
-<<<<<<< HEAD
-                  tags=frozenset([EinsumInfo(subscripts)]))
-
-# }}}
-
-
-# {{{ matrix product
-
-class MatrixProduct(Array):
-    """A product of two matrices, or a matrix and a vector.
-
-    The semantics of this operation follow PEP 465 [pep465]_, i.e., the Python
-    matmul (@) operator.
-
-    .. attribute:: x1
-    .. attribute:: x2
-
-    .. [pep465] https://www.python.org/dev/peps/pep-0465/
-
-    """
-    _fields = Array._fields + ("x1", "x2")
-
-    _mapper_method = "map_matrix_product"
-
-    def __init__(self,
-            x1: Array,
-            x2: Array,
-            tags: TagsType = frozenset()):
-        super().__init__(tags)
-        self.x1 = x1
-        self.x2 = x2
-
-    @property
-    def shape(self) -> ShapeType:
-        # FIXME: Broadcasting currently unsupported.
-        assert 0 < self.x1.ndim <= 2
-        assert 0 < self.x2.ndim <= 2
-
-        if self.x1.ndim == 1 and self.x2.ndim == 1:
-            return ()
-        elif self.x1.ndim == 1 and self.x2.ndim == 2:
-            return (self.x2.shape[1],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 1:
-            return (self.x1.shape[0],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 2:
-            return (self.x1.shape[0], self.x2.shape[1])
-
-        raise AssertionError()
-
-    @property
-    def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(self.x1.dtype, self.x2.dtype)
-=======
+                  tags=frozenset([EinsumInfo(subscripts)]),
                   axes=_get_default_axes(len(out_spec)))
->>>>>>> main
 
 # }}}
 
