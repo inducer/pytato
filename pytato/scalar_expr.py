@@ -64,7 +64,7 @@ __doc__ = """
 # {{{ scalar expressions
 
 IntegralScalarExpression = Union[int, prim.Expression]
-ScalarType = Union[Number, np.bool_, bool]
+ScalarType = Union[Number, int, np.bool_, bool]
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 

@@ -121,7 +121,7 @@ jobs:
                 echo "*** $DOWNSTREAM_PROJECT version: $(git rev-parse --short HEAD)"
 
                 transfer_requirements_git_urls ../requirements.txt ./requirements.txt
-                sed -i "/egg=pytato/ c git+file://$(readlink -f ..)#egg=pytato" requirements.txt
+                edit_requirements_txt_for_downstream_in_subdir
 
                 # Avoid slow or complicated tests in downstream projects
                 export PYTEST_ADDOPTS="-k 'not (slowtest or octave or mpi)'"

@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from typing import Mapping, Dict, Union, Set
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
-                          MatrixProduct, DictOfNamedArrays, NamedArray,
+                          DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase)
 from pytato.transform import Mapper, ArrayOrNames
 from pytato.loopy import LoopyCall
@@ -97,13 +97,6 @@ class NUserCollector(Mapper):
             if isinstance(dim, Array):
                 self.nusers[dim] += 1
                 self.rec(dim)
-
-    def map_matrix_product(self, expr: MatrixProduct) -> None:
-        self.nusers[expr.x1] += 1
-        self.nusers[expr.x2] += 1
-
-        self.rec(expr.x1)
-        self.rec(expr.x2)
 
     def map_named_array(self, expr: NamedArray) -> None:
         self.rec(expr._container)
