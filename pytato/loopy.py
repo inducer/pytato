@@ -33,7 +33,8 @@ from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
                           NamedArray, ArrayOrScalar, SizeParam, AxesT)
-from pytato.scalar_expr import SubstitutionMapper, ScalarExpression, EvaluationMapper
+from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
+                                EvaluationMapper, IntegralT)
 from pytools import memoize_method
 from pytools.tag import TagsType
 from pyrsistent import PMap, pmap
@@ -368,7 +369,7 @@ def _pt_var_to_global_namespace(name: Optional[str]) -> str:
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: Union[int, Array]) -> ScalarExpression:
+def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
     from pytato.utils import dim_to_index_lambda_components
     from pymbolic.mapper.substitutor import substitute
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
