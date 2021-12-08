@@ -41,6 +41,7 @@ Array Interface
 ---------------
 
 .. autoclass:: Array
+.. autoclass:: Axis
 .. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
 .. autoclass:: AbstractResultWithNamedArrays
@@ -92,7 +93,6 @@ Built-in Expression Nodes
 
 .. autoclass:: IndexLambda
 .. autoclass:: Einsum
-.. autoclass:: MatrixProduct
 .. autoclass:: Stack
 .. autoclass:: Concatenate
 
@@ -155,16 +155,18 @@ import operator
 from dataclasses import dataclass
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar)
+        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
+        FrozenSet)
 
 import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Taggable, TagsType
+from pytools.tag import Tag, Taggable, TagsType
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression)
+                                ScalarExpression, IntegralT,
+                                INT_CLASSES)
 import re
 from pyrsistent import pmap, PMap
 
@@ -189,12 +191,13 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
+AxesT = Tuple["Axis", ...]
 ArrayT = TypeVar("ArrayT", bound="Array")
 
 
 # {{{ shape
 
-ShapeComponent = Union[int, "Array"]
+ShapeComponent = Union[IntegralT, "Array"]
 ShapeType = Tuple[ShapeComponent, ...]
 ConvertibleToShape = Union[
     ShapeComponent,
@@ -229,13 +232,14 @@ def normalize_shape(
                 if not isinstance(d, SizeParam):
                     raise NotImplementedError("shape expressions can (for now) only "
                                               "be in terms of SizeParams. Depends on"
-                                              f" '{d.name}', a non-SizeParam array.")
+                                              f"a  '{type(d).__name__}', "
+                                              "a non-SizeParam array.")
             # TODO: Check affine-ness of the array expression.
         else:
-            if not isinstance(s, int):
+            if not isinstance(s, INT_CLASSES):
                 raise TypeError("array dimension can be an int or pytato.Array. "
                                 f"Got {type(s)}.")
-            assert isinstance(s, int)
+            assert isinstance(s, INT_CLASSES)
             if s < 0:
                 raise ValueError(f"size parameter must be nonnegative (got '{s}')")
 
@@ -254,7 +258,7 @@ def normalize_shape(
 # {{{ array inteface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
-IndexExpr = Union[int, "NormalizedSlice", "Array", None, EllipsisType]
+IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
 DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
@@ -300,7 +304,20 @@ class NormalizedSlice:
     """
     start: ShapeComponent
     stop: ShapeComponent
-    step: int
+    step: IntegralT
+
+
+@dataclass(eq=True, frozen=True)
+class Axis(Taggable):
+    """
+    A type for recording the information about an :class:`~pytato.Array`'s
+    axis.
+    """
+    tags: FrozenSet[Tag]
+
+    def copy(self, **kwargs: Any) -> Axis:
+        from dataclasses import replace
+        return replace(self, **kwargs)
 
 
 class Array(Taggable):
@@ -338,9 +355,14 @@ class Array(Taggable):
 
         An instance of :class:`numpy.dtype`.
 
+    .. attribute:: axes
+
+        A :class:`tuple` of :class:`~pytato.Axis` instances. One
+        corresponding to each dimension of the array.
+
     .. attribute:: tags
 
-        A :class:`tuple` of :class:`pytools.tag.Tag` instances.
+        A :class:`frozenset` of :class:`pytools.tag.Tag` instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -377,6 +399,7 @@ class Array(Taggable):
     .. method:: conj
     .. automethod:: all
     .. automethod:: any
+    .. automethod:: with_tagged_axis
 
     .. autoattribute:: real
     .. autoattribute:: imag
@@ -389,9 +412,13 @@ class Array(Taggable):
     _mapper_method: ClassVar[str]
     # A tuple of field names. Fields must be equality comparable and
     # hashable. Dicts of hashable keys and values are also permitted.
-    _fields: ClassVar[Tuple[str, ...]] = ("tags",)
+    _fields: ClassVar[Tuple[str, ...]] = ("axes", "tags",)
 
     __array_priority__ = 1  # disallow numpy arithmetic to take precedence
+
+    def __init__(self, axes: AxesT, tags: FrozenSet[Tag]) -> None:
+        self.axes = axes
+        self.tags = tags
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         for field in self._fields:
@@ -440,7 +467,9 @@ class Array(Taggable):
 
     @property
     def T(self) -> Array:
-        return AxisPermutation(self, tuple(range(self.ndim)[::-1]))
+        return AxisPermutation(self,
+                               tuple(range(self.ndim)[::-1]),
+                               axes=_get_default_axes(self.ndim))
 
     @memoize_method
     def __hash__(self) -> int:
@@ -504,7 +533,8 @@ class Array(Taggable):
                 expr,
                 shape=self.shape,
                 dtype=self.dtype,
-                bindings=bindings)
+                bindings=bindings,
+                axes=_get_default_axes(self.ndim))
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
@@ -585,6 +615,16 @@ class Array(Taggable):
         import pytato as pt
         return pt.any(self, axis)
 
+    def with_tagged_axis(self, iaxis: int,
+                         tags: Union[Sequence[Tag], Tag]) -> Array:
+        """
+        Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
+        """
+        new_axes = (self.axes[:iaxis]
+                    + (self.axes[iaxis].tagged(tags),)
+                    + self.axes[iaxis+1:])
+        return self.copy(axes=new_axes)
+
 # }}}
 
 
@@ -630,8 +670,9 @@ class NamedArray(Array):
     def __init__(self,
             container: AbstractResultWithNamedArrays,
             name: str,
+            axes: AxesT,
             tags: TagsType = frozenset()) -> None:
-        super().__init__(tags=tags)
+        super().__init__(axes=axes, tags=tags)
         self._container = container
         self.name = name
 
@@ -639,13 +680,17 @@ class NamedArray(Array):
     def copy(self, *,  # type: ignore[override]
              container: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
+             axes: Optional[AxesT] = None,
              tags: Optional[TagsType] = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
+        axes = self.axes if axes is None else axes
+
         return type(self)(container=container,
                           name=name,
-                          tags=tags)
+                          tags=tags,
+                          axes=axes)
 
     @property
     def expr(self) -> Array:
@@ -719,7 +764,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __getitem__(self, name: str) -> NamedArray:
         if name not in self._data:
             raise KeyError(name)
-        return NamedArray(self, name)
+        return NamedArray(self, name,
+                          axes=_get_default_axes(self._data[name].ndim))
 
     def __len__(self) -> int:
         return len(self._data)
@@ -781,13 +827,11 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             expr: prim.Expression,
             shape: ShapeType,
             dtype: np.dtype[Any],
-            bindings: Optional[Dict[str, Array]] = None,
+            bindings: Dict[str, Array],
+            axes: AxesT,
             tags: TagsType = frozenset()):
 
-        if bindings is None:
-            bindings = {}
-
-        super().__init__(shape=shape, dtype=dtype, tags=tags)
+        super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
 
         self.expr = expr
         self.bindings = bindings
@@ -854,8 +898,9 @@ class Einsum(Array):
     def __init__(self,
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
+                 axes: AxesT,
                  tags: TagsType = frozenset()):
-        super().__init__(tags)
+        super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
         self.args = args
 
@@ -1081,57 +1126,8 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
                                            index_to_axis_length))
         access_descriptors.append(access_descriptor)
 
-    return Einsum(tuple(access_descriptors), operands)
-
-# }}}
-
-
-# {{{ matrix product
-
-class MatrixProduct(Array):
-    """A product of two matrices, or a matrix and a vector.
-
-    The semantics of this operation follow PEP 465 [pep465]_, i.e., the Python
-    matmul (@) operator.
-
-    .. attribute:: x1
-    .. attribute:: x2
-
-    .. [pep465] https://www.python.org/dev/peps/pep-0465/
-
-    """
-    _fields = Array._fields + ("x1", "x2")
-
-    _mapper_method = "map_matrix_product"
-
-    def __init__(self,
-            x1: Array,
-            x2: Array,
-            tags: TagsType = frozenset()):
-        super().__init__(tags)
-        self.x1 = x1
-        self.x2 = x2
-
-    @property
-    def shape(self) -> ShapeType:
-        # FIXME: Broadcasting currently unsupported.
-        assert 0 < self.x1.ndim <= 2
-        assert 0 < self.x2.ndim <= 2
-
-        if self.x1.ndim == 1 and self.x2.ndim == 1:
-            return ()
-        elif self.x1.ndim == 1 and self.x2.ndim == 2:
-            return (self.x2.shape[1],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 1:
-            return (self.x1.shape[0],)
-        elif self.x1.ndim == 2 and self.x2.ndim == 2:
-            return (self.x1.shape[0], self.x2.shape[1])
-
-        raise AssertionError()
-
-    @property
-    def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(self.x1.dtype, self.x2.dtype)
+    return Einsum(tuple(access_descriptors), operands,
+                  axes=_get_default_axes(len(out_spec)))
 
 # }}}
 
@@ -1157,8 +1153,9 @@ class Stack(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(tags)
+        super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
 
@@ -1196,8 +1193,9 @@ class Concatenate(Array):
     def __init__(self,
             arrays: Tuple[Array, ...],
             axis: int,
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(tags)
+        super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
 
@@ -1233,8 +1231,9 @@ class IndexRemappingBase(Array):
 
     def __init__(self,
             array: Array,
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(tags)
+        super().__init__(axes=axes, tags=tags)
         self.array = array
 
     @property
@@ -1264,8 +1263,9 @@ class Roll(IndexRemappingBase):
             array: Array,
             shift: int,
             axis: int,
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(array, tags)
+        super().__init__(array, axes, tags)
         self.shift = shift
         self.axis = axis
 
@@ -1283,26 +1283,27 @@ class AxisPermutation(IndexRemappingBase):
 
     .. attribute:: array
 
-    .. attribute:: axes
+    .. attribute:: axis_permutation
 
         A permutation of the input axes.
     """
-    _fields = IndexRemappingBase._fields + ("axes",)
+    _fields = IndexRemappingBase._fields + ("axis_permutation",)
     _mapper_method = "map_axis_permutation"
 
     def __init__(self,
             array: Array,
-            axes: Tuple[int, ...],
+            axis_permutation: Tuple[int, ...],
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(array, tags)
+        super().__init__(array, axes, tags)
         self.array = array
-        self.axes = axes
+        self.axis_permutation = axis_permutation
 
     @property
     def shape(self) -> ShapeType:
         result = []
         base_shape = self.array.shape
-        for index in self.axes:
+        for index in self.axis_permutation:
             result.append(base_shape[index])
         return tuple(result)
 
@@ -1335,11 +1336,12 @@ class Reshape(IndexRemappingBase):
             array: Array,
             newshape: Tuple[int, ...],
             order: str,
+            axes: AxesT,
             tags: TagsType = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
-        super().__init__(array, tags)
+        super().__init__(array, axes, tags)
         self.newshape = newshape
         self.order = order
 
@@ -1363,8 +1365,9 @@ class IndexBase(IndexRemappingBase, ABC):
     def __init__(self,
                  array: Array,
                  indices: Tuple[IndexExpr, ...],
+                 axes: AxesT,
                  tags: TagsType = frozenset()):
-        super().__init__(array, tags)
+        super().__init__(array, axes, tags)
         self.indices = indices
 
     @abstractproperty
@@ -1382,7 +1385,8 @@ class BasicIndex(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        assert all(isinstance(idx, (NormalizedSlice, int)) for idx in self.indices)
+        assert all(isinstance(idx, (NormalizedSlice, INT_CLASSES))
+                   for idx in self.indices)
 
         from pytato.utils import _normalized_slice_len
         return tuple(_normalized_slice_len(idx)
@@ -1478,26 +1482,11 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
 class InputArgumentBase(Array):
     r"""Base class for input arguments.
 
-    .. attribute:: name
-
-        The name by which a value is supplied for the argument once computation
-        begins. If None, a unique name will be assigned during code-generation.
-
     .. note::
 
         Creating multiple instances of any input argument with the
         same name in an expression is not allowed.
     """
-
-    # The name uniquely identifies this object in the namespace. Therefore,
-    # subclasses don't have to update *_fields*.
-    _fields = Array._fields + ("name",)
-
-    def __init__(self,
-            name: Optional[str],
-            tags: TagsType = frozenset()):
-        super().__init__(tags=tags)
-        self.name = name
 
 # }}}
 
@@ -1517,8 +1506,16 @@ class DataInterface(Protocol):
     .. attribute:: dtype
     """
 
-    shape: ShapeType
-    dtype: np.dtype[Any]
+    # That's how mypy spells "read-only attribute".
+    # https://github.com/python/typing/discussions/903
+
+    @property
+    def shape(self) -> ShapeType:
+        pass
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        pass
 
 
 class DataWrapper(InputArgumentBase):
@@ -1548,6 +1545,12 @@ class DataWrapper(InputArgumentBase):
         to assess whether shapes match, and thus it is important that a canonical
         (symbolic) form of the shape tuple is used.
 
+    .. attribute:: name
+
+        An (optional, string) name by which this object can be identified.
+        Hypothetically, this could be used to 'swap out' the data captured
+        here, but that functionality is not currently available.
+
     .. note::
 
         Since we cannot compare instances of :class:`DataInterface` being
@@ -1555,16 +1558,18 @@ class DataWrapper(InputArgumentBase):
         (i.e. the very same instance).
     """
 
-    _fields = InputArgumentBase._fields + ("data", "shape")
+    _fields = InputArgumentBase._fields + ("data", "shape", "name")
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
             name: Optional[str],
             data: DataInterface,
             shape: ShapeType,
+            axes: AxesT,
             tags: TagsType = frozenset()):
-        super().__init__(name, tags=tags)
+        super().__init__(axes=axes, tags=tags)
 
+        self.name = name
         self.data = data
         self._shape = shape
 
@@ -1592,24 +1597,27 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
     user during evaluation.
 
     .. attribute:: name
+
+        The name by which a value is supplied for the argument once computation
+        begins.
+
     .. automethod:: __init__
     """
 
-    _fields = InputArgumentBase._fields + ("shape", "dtype")
+    _fields = InputArgumentBase._fields + ("shape", "dtype", "name")
     _mapper_method = "map_placeholder"
 
     def __init__(self,
             name: str,
             shape: ShapeType,
             dtype: np.dtype[Any],
+            axes: AxesT,
             tags: TagsType = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
-        super().__init__(shape=shape,
-                dtype=dtype,
-                name=name,
-                tags=tags)
+        super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
+        self.name = name
 
 # }}}
 
@@ -1619,14 +1627,23 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
 class SizeParam(InputArgumentBase):
     r"""A named placeholder for a scalar that may be used as a variable in symbolic
     expressions for array sizes.
+
+    .. attribute:: name
+
+        The name by which a value is supplied for the argument once computation
+        begins.
     """
 
     _mapper_method = "map_size_param"
 
+    _fields = InputArgumentBase._fields + ("name",)
+
     def __init__(self,
                  name: str,
+                 axes: AxesT = (),
                  tags: TagsType = frozenset()):
-        super().__init__(name=name, tags=tags)
+        super().__init__(axes=axes, tags=tags)
+        self.name = name
 
     @property
     def shape(self) -> ShapeType:
@@ -1641,13 +1658,27 @@ class SizeParam(InputArgumentBase):
 
 # {{{ end-user facing
 
+def _get_default_axes(ndim: int) -> AxesT:
+    return tuple(Axis(frozenset()) for _ in range(ndim))
+
+
+def _get_matmul_ndim(ndim1: int, ndim2: int) -> int:
+    if ndim1 == 1 and ndim2 == 1:
+        return 0
+    elif {ndim1, ndim2} == {1, 2}:
+        return 1
+    elif ndim1 == 2 and ndim2 == 2:
+        return 2
+
+    raise AssertionError()
+
+
 def matmul(x1: Array, x2: Array) -> Array:
     """Matrix multiplication.
 
     :param x1: first argument
     :param x2: second argument
     """
-    from pytato.utils import are_shape_components_equal
     if (
             isinstance(x1, SCALAR_CLASSES)
             or x1.shape == ()
@@ -1655,13 +1686,23 @@ def matmul(x1: Array, x2: Array) -> Array:
             or x2.shape == ()):
         raise ValueError("scalars not allowed as arguments to matmul")
 
-    if len(x1.shape) > 2 or len(x2.shape) > 2:
-        raise NotImplementedError("broadcasting not supported")
+    import pytato as pt
 
-    if not are_shape_components_equal(x1.shape[-1], x2.shape[0]):
-        raise ValueError("dimension mismatch")
+    index_names = "".join([chr(i) for i in range(ord("l"), ord("z")+1)])
 
-    return MatrixProduct(x1, x2)
+    if x1.ndim == x2.ndim == 1:
+        return pt.sum(x1 * x2)
+    elif x1.ndim == 1:
+        return cast(Array, pt.dot(x1, x2))
+    elif x2.ndim == 1:
+        return pt.sum(x1 * x2, axis=(x1.ndim - 1))
+
+    stack_indices = index_names[:max(x1.ndim-2, x2.ndim-2)]
+    x1_indices = stack_indices[len(stack_indices) - x1.ndim+2:] + "ij"
+    x2_indices = stack_indices[len(stack_indices) - x2.ndim+2:] + "jk"
+    result_indices = stack_indices + "ik"
+
+    return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
 
 
 def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
@@ -1687,7 +1728,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     if shift == 0:
         return a
 
-    return Roll(a, shift, axis)
+    return Roll(a, shift, axis, axes=_get_default_axes(a.ndim))
 
 
 def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
@@ -1707,7 +1748,7 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
     if set(axes) != set(range(a.ndim)):
         raise ValueError("repeated or out-of-bounds axes detected")
 
-    return AxisPermutation(a, tuple(axes))
+    return AxisPermutation(a, tuple(axes), axes=_get_default_axes(a.ndim))
 
 
 def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -1739,7 +1780,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Stack(tuple(arrays), axis)
+    return Stack(tuple(arrays), axis, axes=_get_default_axes(arrays[0].ndim+1))
 
 
 def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -1772,7 +1813,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Concatenate(tuple(arrays), axis)
+    return Concatenate(tuple(arrays), axis, axes=_get_default_axes(arrays[0].ndim))
 
 
 def reshape(array: Array, newshape: Union[int, Sequence[int]],
@@ -1789,7 +1830,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     """
     from pytools import product
 
-    if isinstance(newshape, int):
+    if isinstance(newshape, INT_CLASSES):
         newshape = newshape,
 
     if newshape.count(-1) > 1:
@@ -1798,7 +1839,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     if newshape.count(-1) == 1 and newshape.count(0) > 0:
         raise ValueError(f"cannot reshape {array.shape} into {newshape}")
 
-    if not all(isinstance(axis_len, int) for axis_len in array.shape):
+    if not all(isinstance(axis_len, INT_CLASSES) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
     if order != "C":
@@ -1807,7 +1848,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     newshape_explicit = []
 
     for new_axislen in newshape:
-        if not isinstance(new_axislen, int):
+        if not isinstance(new_axislen, INT_CLASSES):
             raise ValueError("Symbolic reshapes not allowed.")
 
         if new_axislen < -1:
@@ -1833,7 +1874,8 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
         raise ValueError(f"cannot reshape array of size {array.size}"
                 f" into {newshape}")
 
-    return Reshape(array, tuple(newshape_explicit), order)
+    return Reshape(array, tuple(newshape_explicit), order,
+                   axes=_get_default_axes(len(newshape_explicit)))
 
 
 # {{{ make_dict_of_named_arrays
@@ -1851,7 +1893,8 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any,
-                     tags: TagsType = frozenset()) -> Placeholder:
+                     tags: TagsType = frozenset(),
+                     axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param name:       name of the placeholder array, generated automatically
@@ -1865,7 +1908,14 @@ def make_placeholder(name: str,
     shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
 
-    return Placeholder(name, shape, dtype, tags)
+    if axes is None:
+        axes = _get_default_axes(len(shape))
+
+    if len(axes) != len(shape):
+        raise ValueError("'axes' dimensionality mismatch:"
+                         f" expected {len(shape)}, got {len(axes)}.")
+
+    return Placeholder(name, shape, dtype, axes=axes, tags=tags)
 
 
 def make_size_param(name: str,
@@ -1885,7 +1935,8 @@ def make_size_param(name: str,
 def make_data_wrapper(data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: TagsType = frozenset()) -> DataWrapper:
+        tags: TagsType = frozenset(),
+        axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
     :param data:       an instance obeying the :class:`DataInterface`
@@ -1899,7 +1950,14 @@ def make_data_wrapper(data: DataInterface,
 
     shape = normalize_shape(shape)
 
-    return DataWrapper(name, data, shape, tags)
+    if axes is None:
+        axes = _get_default_axes(len(shape))
+
+    if len(axes) != len(shape):
+        raise ValueError("'axes' dimensionality mismatch:"
+                         f" expected {len(shape)}, got {len(axes)}.")
+
+    return DataWrapper(name, data, shape, axes=axes, tags=tags)
 
 # }}}
 
@@ -1916,7 +1974,8 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
 
     shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
-    return IndexLambda(dtype.type(fill_value), shape, dtype, {})
+    return IndexLambda(dtype.type(fill_value), shape, dtype, {},
+                       axes=_get_default_axes(len(shape)))
 
 
 def zeros(shape: ConvertibleToShape, dtype: Any = float,
@@ -1953,11 +2012,12 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     if M < 0 or N < 0:
         raise ValueError("Negative dimension lengths not allowed.")
 
-    if not isinstance(k, int):
+    if not isinstance(k, INT_CLASSES):
         raise ValueError(f"k must be int, got {type(k)}.")
 
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
-                       shape=(N, M), dtype=dtype, bindings={})
+                       shape=(N, M), dtype=dtype, bindings={},
+                       axes=_get_default_axes(2))
 
 
 # {{{ comparison operator
@@ -2054,7 +2114,8 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape),
                        shape=x.shape,
                        dtype=np.dtype(np.bool8),
-                       bindings={"_in0": x})
+                       bindings={"_in0": x},
+                       axes=_get_default_axes(len(x.shape)))
 
 # }}}
 
@@ -2105,7 +2166,8 @@ def where(condition: ArrayOrScalar,
     return IndexLambda(prim.If(expr1, expr2, expr3),
             shape=result_shape,
             dtype=dtype,
-            bindings=bindings)
+            bindings=bindings,
+            axes=_get_default_axes(len(result_shape)))
 
 # }}}
 
@@ -2160,7 +2222,8 @@ def make_index_lambda(
     return IndexLambda(expr=expression,
                        bindings=bindings,
                        shape=shape,
-                       dtype=dtype)
+                       dtype=dtype,
+                       axes=_get_default_axes(len(shape)))
 
 # }}}
 
@@ -2236,7 +2299,8 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                                                                    shape)),
                        shape=shape,
                        dtype=array.dtype,
-                       bindings={"in": array})
+                       bindings={"in": array},
+                       axes=_get_default_axes(len(shape)))
 
 
 def squeeze(array: Array) -> Array:

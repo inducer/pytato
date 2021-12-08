@@ -33,15 +33,17 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           DataWrapper, Roll, AxisPermutation,
                           IndexRemappingBase, Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, MatrixProduct, Einsum,
+                          InputArgumentBase, Einsum,
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, BasicIndex,
                           NormalizedSlice)
 
-from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
+from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
+                                INT_CLASSES, IntegralT)
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
+from pytato.tags import AssumeNonNegative
 from pytools import UniqueNameGenerator
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
@@ -74,14 +76,12 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.IndexBase`        :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
-    :class:`~pytato.array.MatrixProduct`    :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
     # TODO:
     # Stack -> IndexLambda
-    # MatrixProduct -> Einsum
 
     def __init__(self, target: Target) -> None:
         super().__init__()
@@ -103,6 +103,7 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
@@ -159,13 +160,14 @@ class CodeGenPreprocessor(CopyMapper):
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = expr.name
         if name is None:
-            name = self.var_name_gen("_pt_in")
+            name = self.var_name_gen("_pt_data")
 
         self.bound_arguments[name] = expr.data
         return Placeholder(name=name,
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
@@ -202,6 +204,7 @@ class CodeGenPreprocessor(CopyMapper):
                 shape=tuple(self.rec(s) if isinstance(s, Array) else s
                             for s in expr.shape),
                 dtype=expr.dtype,
+                axes=expr.axes,
                 bindings=bindings,
                 tags=expr.tags)
 
@@ -249,6 +252,7 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=bindings,
+                axes=expr.axes,
                 tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
@@ -274,41 +278,8 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings={name: self.rec(bnd)
                                      for name, bnd in bindings.items()},
+                           axes=expr.axes,
                            tags=expr.tags)
-
-    def map_matrix_product(self, expr: MatrixProduct) -> Array:
-        from pytato.utils import dim_to_index_lambda_components
-        from pytato.scalar_expr import Reduce
-
-        x1 = prim.Subscript(prim.Variable("in0"),
-                (tuple(prim.Variable(f"_{i}")
-                      for i in range(len(expr.x1.shape)-1))
-                 + (prim.Variable("_r0"),))
-                )
-        x2_i_start = len(expr.x1.shape) - 1
-
-        x2 = prim.Subscript(prim.Variable("in1"),
-                (prim.Variable("_r0"),)
-                + tuple(prim.Variable(f"_{i+x2_i_start}")
-                        for i in range(len(expr.x2.shape)-1)))
-        namegen = UniqueNameGenerator({"in0", "in1"})
-        redn_bound, redn_bound_bindings = dim_to_index_lambda_components(
-                expr.x1.shape[-1], namegen)
-        bindings = {k: self.rec(v) for k, v in redn_bound_bindings.items()}
-        bindings["in0"] = self.rec(expr.x1)
-        bindings["in1"] = self.rec(expr.x2)
-
-        inner_expr = Reduce(
-                x1*x2,
-                "sum",
-                {"_r0": (0, redn_bound)})
-        return IndexLambda(
-                expr=inner_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=bindings,
-                tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         import operator
@@ -372,6 +343,7 @@ class CodeGenPreprocessor(CopyMapper):
                                        for s in expr.shape),
                            dtype=expr.dtype,
                            bindings=bindings,
+                           axes=expr.axes,
                            tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)
@@ -392,11 +364,12 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 bindings=dict(_in0=array),
+                axes=expr.axes,
                 tags=expr.tags)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
         indices = [None] * expr.ndim
-        for from_index, to_index in enumerate(expr.axes):
+        for from_index, to_index in enumerate(expr.axis_permutation):
             indices[to_index] = var(f"_{from_index}")
         return tuple(indices)
 
@@ -408,21 +381,21 @@ class CodeGenPreprocessor(CopyMapper):
 
         newstrides = [1]  # reshaped array strides
         for new_axis_len in reversed(expr.shape[1:]):
-            assert isinstance(new_axis_len, int)
+            assert isinstance(new_axis_len, INT_CLASSES)
             newstrides.insert(0, newstrides[0]*new_axis_len)
 
         flattened_idx = sum(prim.Variable(f"_{i}")*stride
                             for i, stride in enumerate(newstrides))
 
-        oldstrides = [1]  # input array strides
+        oldstrides: List[IntegralT] = [1]  # input array strides
         for axis_len in reversed(expr.array.shape[1:]):
-            assert isinstance(axis_len, int)
+            assert isinstance(axis_len, INT_CLASSES)
             oldstrides.insert(0, oldstrides[0]*axis_len)
 
-        assert isinstance(expr.array.shape[-1], int)
+        assert isinstance(expr.array.shape[-1], INT_CLASSES)
         oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
         for old_axis_len in reversed(expr.array.shape[:-1]):
-            assert isinstance(old_axis_len, int)
+            assert isinstance(old_axis_len, INT_CLASSES)
             oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
 
         return tuple(((flattened_idx % sizetill) // stride)
@@ -444,8 +417,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = 0
 
         for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -462,7 +435,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
@@ -472,7 +448,7 @@ class CodeGenPreprocessor(CopyMapper):
 
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, int)))
+                              if isinstance(idx_expr, (Array, INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
                                                       for i_idx in i_adv_indices])
 
@@ -484,8 +460,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = 0
 
         for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -496,15 +472,19 @@ class CodeGenPreprocessor(CopyMapper):
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
-                if isinstance(axis_len, int):
+                if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indices.append(prim.Subscript(
-                                        prim.Variable(bnd_name),
-                                        get_indexing_expression(
-                                                idx.shape,
-                                                (1,)*i_adv_indices[0]+adv_idx_shape))
-                                   % axis_len)
+                    indirect_idx_expr = prim.Subscript(
+                        prim.Variable(bnd_name),
+                        get_indexing_expression(
+                            idx.shape,
+                            (1,)*i_adv_indices[0]+adv_idx_shape))
+
+                    if not idx.tags_of_type(AssumeNonNegative):
+                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                    indices.append(indirect_idx_expr)
                 else:
                     raise NotImplementedError("Advanced indexing over"
                                               " parametric axis lengths.")
@@ -518,7 +498,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 
     def map_non_contiguous_advanced_index(self,
                                           expr: AdvancedIndexInNoncontiguousAxes
@@ -527,7 +510,7 @@ class CodeGenPreprocessor(CopyMapper):
                                   get_indexing_expression)
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, int)))
+                              if isinstance(idx_expr, (Array, INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
                                                       for i_idx in i_adv_indices])
 
@@ -540,8 +523,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = len(adv_idx_shape)
 
         for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -552,14 +535,19 @@ class CodeGenPreprocessor(CopyMapper):
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
-                if isinstance(axis_len, int):
+                if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indices.append(prim.Subscript(
-                                        prim.Variable(bnd_name),
-                                        get_indexing_expression(idx.shape,
-                                                                adv_idx_shape))
-                                   % axis_len)
+
+                    indirect_idx_expr = prim.Subscript(prim.Variable(bnd_name),
+                                                       get_indexing_expression(
+                                                           idx.shape,
+                                                           adv_idx_shape))
+
+                    if not idx.tags_of_type(AssumeNonNegative):
+                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                    indices.append(indirect_idx_expr)
                 else:
                     raise NotImplementedError("Advanced indexing over"
                                               " parametric axis lengths.")
@@ -570,7 +558,10 @@ class CodeGenPreprocessor(CopyMapper):
                                                tuple(indices)),
                            bindings=bindings,
                            shape=expr.shape,
-                           dtype=expr.dtype)
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           )
 # }}}
 
 
@@ -605,20 +596,18 @@ class NamesValidityChecker(CachedWalkMapper):
         super().__init__()
 
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, InputArgumentBase):
-            if expr.name is None:
-                # Name to be automatically assigned
-                return
-
-            try:
-                ary = self.name_to_input[expr.name]
-            except KeyError:
-                self.name_to_input[expr.name] = expr
-            else:
-                if ary is not expr:
-                    from pytato.diagnostic import NameClashError
-                    raise NameClashError("Received two separate instances of inputs "
-                                         f"named '{expr.name}'.")
+        if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
+            if expr.name is not None:
+                try:
+                    ary = self.name_to_input[expr.name]
+                except KeyError:
+                    self.name_to_input[expr.name] = expr
+                else:
+                    if ary is not expr:
+                        from pytato.diagnostic import NameClashError
+                        raise NameClashError(
+                                "Received two separate instances of inputs "
+                                f"named '{expr.name}'.")
 
 
 def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:

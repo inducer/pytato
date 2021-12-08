@@ -58,17 +58,22 @@ __doc__ = """
 import numpy as np
 import pymbolic.primitives as prim
 from typing import Tuple, Optional
-from pytato.array import Array, ArrayOrScalar, IndexLambda, _dtype_any
+from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
+                          _get_default_axes)
 from pytato.scalar_expr import SCALAR_CLASSES
 from pymbolic import var
 
 
-def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
+def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
                           func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None
+                          ret_dtype: Optional[_dtype_any] = None,
+                          np_func_name: Optional[str] = None
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
-        np_func = getattr(np, func_name)
+        if np_func_name is None:
+            np_func_name = func_name
+
+        np_func = getattr(np, np_func_name)
         return np_func(*inputs)  # type: ignore
 
     if not inputs:
@@ -106,7 +111,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar],
 
     return IndexLambda(
             prim.Call(var(f"pytato.c99.{func_name}"), tuple(sym_args)),
-            shape, ret_dtype, bindings)
+            shape, ret_dtype, bindings, axes=_get_default_axes(len(shape)))
 
 
 def abs(x: Array) -> ArrayOrScalar:
@@ -135,15 +140,15 @@ def tan(x: Array) -> ArrayOrScalar:
 
 
 def arcsin(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func((x,), "asin")
+    return _apply_elem_wise_func((x,), "asin", np_func_name="arcsin")
 
 
 def arccos(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func((x,), "acos")
+    return _apply_elem_wise_func((x,), "acos", np_func_name="arccos")
 
 
 def arctan(x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func((x,), "atan")
+    return _apply_elem_wise_func((x,), "atan", np_func_name="arctan")
 
 
 def conj(x: Array) -> ArrayOrScalar:
@@ -153,7 +158,7 @@ def conj(x: Array) -> ArrayOrScalar:
 
 
 def arctan2(y: Array, x: Array) -> ArrayOrScalar:
-    return _apply_elem_wise_func((y, x), "atan2")  # type:ignore
+    return _apply_elem_wise_func((y, x), "atan2", np_func_name="arctan2")
 
 
 def sinh(x: Array) -> ArrayOrScalar:

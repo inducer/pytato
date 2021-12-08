@@ -292,8 +292,8 @@ def test_toposortmapper():
     tm = pt.transform.TopoSortMapper()
     tm(y)
 
-    from pytato.array import (AxisPermutation, IndexLambda, MatrixProduct,
-                              Placeholder, SizeParam, Stack)
+    from pytato.array import (AxisPermutation, IndexLambda,
+                              Placeholder, Einsum, SizeParam, Stack)
 
     assert isinstance(tm.topological_order[0], SizeParam)
     assert isinstance(tm.topological_order[1], Placeholder)
@@ -301,7 +301,40 @@ def test_toposortmapper():
     assert isinstance(tm.topological_order[3], IndexLambda)
     assert isinstance(tm.topological_order[4], Stack)
     assert isinstance(tm.topological_order[5], AxisPermutation)
-    assert isinstance(tm.topological_order[6], MatrixProduct)
+    assert isinstance(tm.topological_order[6], Einsum)
+
+
+def test_userscollector():
+    from testlib import RandomDAGContext, make_random_dag
+    from pytato.transform import UsersCollector, reverse_graph
+
+    # Check that nodes without users are correctly reversed
+    array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
+    y = array+1
+
+    uc = UsersCollector()
+    uc(y)
+    rev_graph = reverse_graph(uc.node_to_users)
+    rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+    assert reverse_graph(rev_graph2) == uc.node_to_users
+
+    # Test random DAGs
+    axis_len = 5
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+
+        dag = make_random_dag(rdagc)
+
+        uc = UsersCollector()
+        uc(dag)
+
+        rev_graph = reverse_graph(uc.node_to_users)
+        rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+        assert rev_graph2 == rev_graph
 
 
 def test_asciidag():
@@ -326,7 +359,7 @@ def test_asciidag():
 |\
 * | AxisPermutation
 |/
-* MatrixProduct
+* Einsum
 * Outputs
 """
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -28,23 +29,28 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping
+from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
 from pytools.tag import TagsType
+from pytato.loopy import LoopyCall
 
 from pytato.array import (
-        Array, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum)
+        Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
+        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays)
+
 from pytato.codegen import normalize_outputs
-import pytato.transform
+from pytato.transform import CachedMapper, ArrayOrNames
+
+from pytato.partition import GraphPartition
 
 
 __doc__ = """
 .. currentmodule:: pytato
 
 .. autofunction:: get_dot_graph
+.. autofunction:: get_dot_graph_from_partition
 .. autofunction:: show_dot_graph
 .. autofunction:: get_ascii_graph
 .. autofunction:: show_ascii_graph
@@ -56,9 +62,8 @@ __doc__ = """
 @dataclasses.dataclass
 class DotNodeInfo:
     title: str
-    addr: str
     fields: Dict[str, str]
-    edges: Dict[str, Array]
+    edges: Dict[str, ArrayOrNames]
 
 
 def stringify_tags(tags: TagsType) -> str:
@@ -75,21 +80,25 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
+class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.nodes: Dict[ArrayOrNames, DotNodeInfo] = {}
+
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        addr = hex(id(expr))
-        fields = dict(shape=stringify_shape(expr.shape),
+        fields = dict(addr=hex(id(expr)),
+                shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
-        edges: Dict[str, Array] = {}
-        return DotNodeInfo(title, addr, fields, edges)
 
-    def handle_unsupported_array(self, expr: Array,  # type: ignore
-            nodes: Dict[Array, DotNodeInfo]) -> None:
+        edges: Dict[str, ArrayOrNames] = {}
+        return DotNodeInfo(title, fields, edges)
+
+    # type-ignore-reason: incompatible with supertype
+    def handle_unsupported_array(self,  # type: ignore[override]
+            expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
-        if expr in nodes:
-            return
         info = self.get_common_dot_info(expr)
 
         for field in expr._fields:
@@ -98,54 +107,87 @@ class ArrayToDotNodeInfoMapper(pytato.transform.Mapper):
             attr = getattr(expr, field)
 
             if isinstance(attr, Array):
-                self.rec(attr, nodes)
+                self.rec(attr)
                 info.edges[field] = attr
+
+            elif isinstance(attr, AbstractResultWithNamedArrays):
+                # type-ignore-reason: incompatible with superclass
+                self.rec(attr)  # type: ignore[arg-type]
+                info.edges[field] = attr
+
             elif isinstance(attr, tuple):
                 info.fields[field] = stringify_shape(attr)
+
             else:
                 info.fields[field] = str(attr)
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
-    def map_index_lambda(self, expr: IndexLambda,
-            nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
+    def map_data_wrapper(self, expr: DataWrapper) -> None:
+        info = self.get_common_dot_info(expr)
+        if expr.name is not None:
+            info.fields["name"] = expr.name
 
+        # Only show summarized data
+        import numpy as np
+        with np.printoptions(threshold=4, precision=2):
+            info.fields["data"] = str(expr.data)
+
+        self.nodes[expr] = info
+
+    def map_index_lambda(self, expr: IndexLambda) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["expr"] = str(expr.expr)
 
         for name, val in expr.bindings.items():
-            self.rec(val, nodes)
+            self.rec(val)
             info.edges[name] = val
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
-    def map_stack(self, expr: Stack, nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
-
+    def map_stack(self, expr: Stack) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["axis"] = str(expr.axis)
 
         for i, array in enumerate(expr.arrays):
-            self.rec(array, nodes)
+            self.rec(array)
             info.edges[str(i)] = array
 
-        nodes[expr] = info
+        self.nodes[expr] = info
 
-    def map_einsum(self, expr: Einsum,
-                   nodes: Dict[Array, DotNodeInfo]) -> None:
-        if expr in nodes:
-            return
-
+    def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
 
-        for access_descr, val in zip(expr.access_descriptors, expr.args):
-            self.rec(val, nodes)
-            info.edges[str(access_descr)] = val
+        for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
+                                                       expr.args)):
+            self.rec(val)
+            info.edges[f"{iarg}: {access_descr}"] = val
 
-        nodes[expr] = info
+        self.nodes[expr] = info
+
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        edges: Dict[str, ArrayOrNames] = {}
+        for name, val in expr._data.items():
+            edges[name] = val
+            self.rec(val)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields={},
+                edges=edges)
+
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        edges: Dict[str, ArrayOrNames] = {}
+        for name, arg in expr.bindings.items():
+            if isinstance(arg, Array):
+                edges[name] = arg
+                self.rec(arg)
+
+        self.nodes[expr] = DotNodeInfo(
+                title=type(expr).__name__,
+                fields=dict(addr=hex(id(expr)),
+                            entrypoint=expr.entrypoint),
+                edges=edges)
 
 
 def dot_escape(s: str) -> str:
@@ -163,27 +205,26 @@ class DotEmitter(CodeGeneratorBase):
         self("}")
 
 
-def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str) -> None:
+def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
+                color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
     rows = ['<tr><td colspan="2" %s>%s</td></tr>'
             % (td_attrib, dot_escape(info.title))]
 
-    rows.append("<tr><td %s>%s:</td><td %s>%s</td></tr>"
-                % (td_attrib,  "addr", td_attrib, info.addr))
-
     for name, field in info.fields.items():
+        field_content = dot_escape(field).replace("\n", "<br/>")
         rows.append(
-                "<tr><td %s>%s:</td><td %s>%s</td></tr>"
-                % (td_attrib, dot_escape(name), td_attrib, dot_escape(field)))
-
+                f"<tr><td {td_attrib}>{dot_escape(name)}:</td><td {td_attrib}>"
+                f"<FONT FACE='monospace'>{field_content}</FONT></td></tr>"
+        )
     table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s>]" % (id, table))
+    emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
 
 
-def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, Array],
-        array_to_id: Mapping[Array, str], id_gen: Callable[[str], str],
+def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, ArrayOrNames],
+        array_to_id: Mapping[ArrayOrNames, str], id_gen: Callable[[str], str],
         label: str) -> None:
     edges = []
 
@@ -214,14 +255,15 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
-    nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
     for elem in outputs._data.values():
-        mapper(elem, nodes)
+        mapper(elem)
+
+    nodes = mapper.nodes
 
     input_arrays: List[Array] = []
-    internal_arrays: List[Array] = []
-    array_to_id: Dict[Array, str] = {}
+    internal_arrays: List[ArrayOrNames] = []
+    array_to_id: Dict[ArrayOrNames, str] = {}
 
     id_gen = UniqueNameGenerator()
     for array in nodes:
@@ -259,16 +301,108 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays]) -> None:
+def get_dot_graph_from_partition(partition: GraphPartition) -> str:
+    r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
+    graph of the partitioned computation of *partition*.
+
+    :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
+    """
+    # Maps each partition to a dict of its arrays with the node info
+    part_id_to_node_info: Dict[Hashable, Dict[ArrayOrNames, DotNodeInfo]] = {}
+
+    for part in partition.parts.values():
+        mapper = ArrayToDotNodeInfoMapper()
+        for out_name in part.output_names:
+            mapper(partition.var_name_to_result[out_name])
+
+        part_id_to_node_info[part.pid] = mapper.nodes
+
+    id_gen = UniqueNameGenerator()
+
+    emit = DotEmitter()
+
+    emitted_placeholders = set()
+
+    with emit.block("digraph computation"):
+        emit("node [shape=rectangle]")
+        array_to_id: Dict[ArrayOrNames, str] = {}
+
+        # First pass: generate names for all nodes
+        for part in partition.parts.values():
+            for array, _ in part_id_to_node_info[part.pid].items():
+                array_to_id[array] = id_gen("array")
+
+        # Second pass: emit the graph.
+        for part in partition.parts.values():
+            part_node_to_info = part_id_to_node_info[part.pid]
+            input_arrays: List[Array] = []
+            internal_arrays: List[ArrayOrNames] = []
+
+            for array, _ in part_node_to_info.items():
+                if isinstance(array, InputArgumentBase):
+                    input_arrays.append(array)
+                else:
+                    internal_arrays.append(array)
+
+            # {{{ emit inputs
+
+            # Placeholders are unique, i.e. the same Placeholder object may be
+            # shared among partitions. Therefore, they should not live inside
+            # the (dot) subgraph, otherwise they would be forced into multiple
+            # subgraphs.
+
+            for array in input_arrays:
+                # Non-Placeholders are emitted *inside* their subgraphs below.
+                if isinstance(array, Placeholder):
+                    if array not in emitted_placeholders:
+                        _emit_array(emit, part_node_to_info[array],
+                                    array_to_id[array], "deepskyblue")
+                        emitted_placeholders.add(array)
+
+                        # Emit cross-partition edges
+                        tgt = array_to_id[partition.var_name_to_result[array.name]]
+                        emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
+
+            # }}}
+
+            with emit.block(f'subgraph "cluster_part_{part.pid}"'):
+                emit("style=dashed")
+                emit(f'label="{part.pid}"')
+
+                for array in input_arrays:
+                    if not isinstance(array, Placeholder):
+                        _emit_array(emit, part_node_to_info[array],
+                                    array_to_id[array], "deepskyblue")
+
+                # Emit internal nodes
+                for array in internal_arrays:
+                    _emit_array(emit, part_node_to_info[array], array_to_id[array])
+
+            # Emit intra-partition edges
+            for array, node in part_node_to_info.items():
+                for label, tail_array in node.edges.items():
+                    tail = array_to_id[tail_array]
+                    head = array_to_id[array]
+                    emit('%s -> %s [label="%s"]' %
+                        (tail, head, dot_escape(label)))
+
+    return emit.get()
+
+
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition]) \
+        -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
-        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
+        :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
+        or the output of :func:`~pytato.partition.find_partition`.
     """
     dot_code: str
 
     if isinstance(result, str):
         dot_code = result
+    elif isinstance(result, GraphPartition):
+        dot_code = get_dot_graph_from_partition(result)
     else:
         dot_code = get_dot_graph(result)
 
@@ -290,14 +424,15 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
     outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
-    nodes: Dict[Array, DotNodeInfo] = {}
     mapper = ArrayToDotNodeInfoMapper()
     for elem in outputs._data.values():
-        mapper(elem, nodes)
+        mapper(elem)
+
+    nodes = mapper.nodes
 
     input_arrays: List[Array] = []
-    internal_arrays: List[Array] = []
-    array_to_id: Dict[Array, str] = {}
+    internal_arrays: List[ArrayOrNames] = []
+    array_to_id: Dict[ArrayOrNames, str] = {}
 
     id_gen = UniqueNameGenerator()
     for array in nodes:
@@ -311,10 +446,10 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
     # at the bottom), we need to invert our representation of it, that is, the
     # 'parents' constructor argument to Node() actually means 'children'.
     from asciidag.node import Node  # type: ignore[import]
-    asciidag_nodes: Dict[Array, Node] = {}
+    asciidag_nodes: Dict[ArrayOrNames, Node] = {}
 
     from collections import defaultdict
-    asciidag_edges: Dict[Array, List[Array]] = defaultdict(list)
+    asciidag_edges: Dict[ArrayOrNames, List[ArrayOrNames]] = defaultdict(list)
 
     # Reverse edge directions
     for array in internal_arrays:

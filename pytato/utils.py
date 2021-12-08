@@ -34,7 +34,7 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           AdvancedIndexInNoncontiguousAxes,
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                SCALAR_CLASSES)
+                                SCALAR_CLASSES, INT_CLASSES, BoolT)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
 
@@ -169,6 +169,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         ) -> ArrayOrScalar:
+    from pytato.array import _get_default_axes
+
     if np.isscalar(a1) and np.isscalar(a2):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
@@ -187,7 +189,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     return IndexLambda(op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=bindings)
+                       bindings=bindings,
+                       axes=_get_default_axes(len(result_shape)))
 
 
 # {{{ dim_to_index_lambda_components
@@ -242,7 +245,7 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
         >>> bnds  # doctest: +ELLIPSIS
         {'_in': <pytato.array.SizeParam ...>}
     """
-    if isinstance(expr, int):
+    if isinstance(expr, INT_CLASSES):
         return expr, {}
 
     if vng is None:
@@ -333,11 +336,11 @@ def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:
     return bset
 
 
-def _is_non_negative(expr: ShapeComponent) -> bool:
+def _is_non_negative(expr: ShapeComponent) -> BoolT:
     """
     Returns *True* iff it can be proven that ``expr >= 0``.
     """
-    if isinstance(expr, int):
+    if isinstance(expr, INT_CLASSES):
         return expr >= 0
 
     assert isinstance(expr, Array) and expr.shape == ()
@@ -351,7 +354,7 @@ def _is_non_negative(expr: ShapeComponent) -> bool:
             <= _get_size_params_assumptions_bset(space))
 
 
-def _is_non_positive(expr: ShapeComponent) -> bool:
+def _is_non_positive(expr: ShapeComponent) -> BoolT:
     """
     Returns *True* iff it can be proven that ``expr <= 0``.
     """
@@ -367,7 +370,7 @@ def _normalize_slice(slice_: slice,
     start, stop, step = slice_.start, slice_.stop, slice_.step
     if step is None:
         step = 1
-    if not isinstance(step, int):
+    if not isinstance(step, INT_CLASSES):
         raise ValueError(f"slice step must be an int or 'None' (got a {type(step)})")
     if step == 0:
         raise ValueError("slice step cannot be zero")
@@ -382,7 +385,7 @@ def _normalize_slice(slice_: slice,
     if start is None:
         start = default_start
     else:
-        if isinstance(axis_len, int):
+        if isinstance(axis_len, INT_CLASSES):
             if -axis_len <= start < axis_len:
                 start = start % axis_len
             elif start >= axis_len:
@@ -401,7 +404,7 @@ def _normalize_slice(slice_: slice,
     if stop is None:
         stop = default_stop
     else:
-        if isinstance(axis_len, int):
+        if isinstance(axis_len, INT_CLASSES):
             if -axis_len <= stop < axis_len:
                 stop = stop % axis_len
             elif stop >= axis_len:
@@ -449,6 +452,7 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
     from pytato.diagnostic import CannotBroadcastError
+    from pytato.array import _get_default_axes
 
     # {{{ handle ellipsis
 
@@ -480,9 +484,8 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
     # {{{ validate broadcastability of the array indices
 
     try:
-        get_shape_after_broadcasting([idx
-                                      for idx in indices
-                                      if isinstance(idx, Array)])
+        array_idx_shape = get_shape_after_broadcasting(
+                [idx for idx in indices if isinstance(idx, Array)])
     except CannotBroadcastError as e:
         raise IndexError(str(e))
 
@@ -493,7 +496,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
     for i, idx in enumerate(indices):
         if isinstance(idx, slice):
             pass
-        elif isinstance(idx, int):
+        elif isinstance(idx, INT_CLASSES):
             if not (_is_non_negative(idx + ary.shape[i])
                     and _is_non_negative(ary.shape[i] - 1 - idx)):
                 raise IndexError(f"{idx} is out of bounds for axis {i}")
@@ -528,11 +531,24 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
         if any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
                for i_basic_idx in i_basic_indices):
             # non contiguous advanced indices
-            return AdvancedIndexInNoncontiguousAxes(ary, tuple(normalized_indices))
+            return AdvancedIndexInNoncontiguousAxes(
+                ary,
+                tuple(normalized_indices),
+                axes=_get_default_axes(len(array_idx_shape)
+                                       + len(i_basic_indices)))
         else:
-            return AdvancedIndexInContiguousAxes(ary, tuple(normalized_indices))
+            return AdvancedIndexInContiguousAxes(
+                ary,
+                tuple(normalized_indices),
+                axes=_get_default_axes(len(array_idx_shape)
+                                       + len(i_basic_indices)))
     else:
         # basic indexing expression
-        return BasicIndex(ary, tuple(normalized_indices))
+        return BasicIndex(ary,
+                          tuple(normalized_indices),
+                          axes=_get_default_axes(
+                              len([idx
+                                   for idx in normalized_indices
+                                   if isinstance(idx, NormalizedSlice)])))
 
 # }}}
