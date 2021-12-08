@@ -29,7 +29,7 @@ THE SOFTWARE.
 
 from typing import Optional, Tuple, Union, Sequence, Dict, List
 from pytato.array import ShapeType, Array, make_index_lambda
-from pytato.scalar_expr import ScalarExpression, Reduce
+from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
 import pymbolic.primitives as prim
 
 # {{{ docs
@@ -69,7 +69,7 @@ def _normalize_reduction_axes(
     if reduction_axes is None:
         return (), tuple(range(len(shape)))
 
-    if isinstance(reduction_axes, int):
+    if isinstance(reduction_axes, INT_CLASSES):
         reduction_axes = reduction_axes,
 
     if not isinstance(reduction_axes, tuple):
@@ -105,7 +105,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     n_redn_dims = 0
     for idim, axis_len in enumerate(shape):
         if idim in axes:
-            if not isinstance(axis_len, int):
+            if not isinstance(axis_len, INT_CLASSES):
                 # TODO: add bindings for shape array expressions
                 raise NotImplementedError("Parametric shapes for reduction axes"
                                           " not yet supported.")
