@@ -440,10 +440,17 @@ def _gather_distributed_comm_info(partition: GraphPartition,
             assert name not in var_name_to_result
             var_name_to_result[name] = val
 
-    return DistributedGraphPartition(
+    result = DistributedGraphPartition(
             parts=parts,
             var_name_to_result=var_name_to_result,
             toposorted_part_ids=partition.toposorted_part_ids)
+
+    if __debug__:
+        # Check disjointness again since we replaced a few nodes.
+        from pytato.partition import _check_partition_disjointness
+        _check_partition_disjointness(result)
+
+    return result
 
 # }}}
 
