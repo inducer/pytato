@@ -27,6 +27,7 @@ intersphinx_mapping = {
     "https://documen.tician.de/sumpy/": None,
     "https://documen.tician.de/islpy/": None,
     "https://pyrsistent.readthedocs.io/en/latest/": None,
+    "https://jax.readthedocs.io/en/latest/": None,
 }
 
 import sys
