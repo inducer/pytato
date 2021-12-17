@@ -3,3 +3,5 @@
   - matplotlib
   - ipykernel
   - ply
+  - pygments.lexers
+  - pygments.formatters
