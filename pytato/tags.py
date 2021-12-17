@@ -103,6 +103,11 @@ class UserOpInfo(UniqueTag):
     pass
 
 
+# FIXME: Why is this necessary?
+# pytato/array.py:1126: error: Too many arguments for "EinsumInfo"  [call-arg]
+from dataclasses import dataclass
+
+@dataclass
 @tag_dataclass
 class EinsumInfo(UserOpInfo):
     spec: str
