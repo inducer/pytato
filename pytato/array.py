@@ -639,8 +639,7 @@ class _SuppliedShapeAndDtypeMixin(object):
             shape: ShapeType,
             dtype: np.dtype[Any],
             **kwargs: Any):
-        # https://github.com/python/mypy/issues/5887
-        super().__init__(**kwargs)  # type: ignore
+        super().__init__(**kwargs)
         self._shape = shape
         self._dtype = dtype
 
