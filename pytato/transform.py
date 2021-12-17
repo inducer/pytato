@@ -116,7 +116,7 @@ class Mapper:
 
     def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
         """Call the mapper method of *expr* and return the result."""
-        method: Callable[..., Array]
+        method: Optional[Callable[..., Array]]
 
         try:
             method = getattr(self, expr._mapper_method)
@@ -133,6 +133,7 @@ class Mapper:
             else:
                 return self.map_foreign(expr, *args, **kwargs)
 
+        assert method is not None
         return method(expr, *args, **kwargs)
 
     def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
