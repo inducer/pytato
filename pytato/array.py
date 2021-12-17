@@ -639,7 +639,7 @@ class _SuppliedShapeAndDtypeMixin(object):
             shape: ShapeType,
             dtype: np.dtype[Any],
             **kwargs: Any):
-        super().__init__(**kwargs)  # type: ignore[call-arg]
+        super().__init__(**kwargs)
         self._shape = shape
         self._dtype = dtype
 
