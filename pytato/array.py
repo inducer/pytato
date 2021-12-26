@@ -165,7 +165,8 @@ from pytools import memoize_method
 from pytools.tag import Tag, Taggable, TagsType
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression)
+                                ScalarExpression, IntegralT,
+                                INT_CLASSES)
 import re
 from pyrsistent import pmap, PMap
 
@@ -196,7 +197,7 @@ ArrayT = TypeVar("ArrayT", bound="Array")
 
 # {{{ shape
 
-ShapeComponent = Union[int, "Array"]
+ShapeComponent = Union[IntegralT, "Array"]
 ShapeType = Tuple[ShapeComponent, ...]
 ConvertibleToShape = Union[
     ShapeComponent,
@@ -235,10 +236,10 @@ def normalize_shape(
                                               "a non-SizeParam array.")
             # TODO: Check affine-ness of the array expression.
         else:
-            if not isinstance(s, int):
+            if not isinstance(s, INT_CLASSES):
                 raise TypeError("array dimension can be an int or pytato.Array. "
                                 f"Got {type(s)}.")
-            assert isinstance(s, int)
+            assert isinstance(s, INT_CLASSES)
             if s < 0:
                 raise ValueError(f"size parameter must be nonnegative (got '{s}')")
 
@@ -257,7 +258,7 @@ def normalize_shape(
 # {{{ array inteface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
-IndexExpr = Union[int, "NormalizedSlice", "Array", None, EllipsisType]
+IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
 DtypeOrScalar = Union[_dtype_any, ScalarType]
 ArrayOrScalar = Union["Array", ScalarType]
 
@@ -303,7 +304,7 @@ class NormalizedSlice:
     """
     start: ShapeComponent
     stop: ShapeComponent
-    step: int
+    step: IntegralT
 
 
 @dataclass(eq=True, frozen=True)
@@ -638,8 +639,7 @@ class _SuppliedShapeAndDtypeMixin(object):
             shape: ShapeType,
             dtype: np.dtype[Any],
             **kwargs: Any):
-        # https://github.com/python/mypy/issues/5887
-        super().__init__(**kwargs)  # type: ignore
+        super().__init__(**kwargs)
         self._shape = shape
         self._dtype = dtype
 
@@ -1382,7 +1382,8 @@ class BasicIndex(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        assert all(isinstance(idx, (NormalizedSlice, int)) for idx in self.indices)
+        assert all(isinstance(idx, (NormalizedSlice, INT_CLASSES))
+                   for idx in self.indices)
 
         from pytato.utils import _normalized_slice_len
         return tuple(_normalized_slice_len(idx)
@@ -1826,7 +1827,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     """
     from pytools import product
 
-    if isinstance(newshape, int):
+    if isinstance(newshape, INT_CLASSES):
         newshape = newshape,
 
     if newshape.count(-1) > 1:
@@ -1835,7 +1836,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     if newshape.count(-1) == 1 and newshape.count(0) > 0:
         raise ValueError(f"cannot reshape {array.shape} into {newshape}")
 
-    if not all(isinstance(axis_len, int) for axis_len in array.shape):
+    if not all(isinstance(axis_len, INT_CLASSES) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
 
     if order != "C":
@@ -1844,7 +1845,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     newshape_explicit = []
 
     for new_axislen in newshape:
-        if not isinstance(new_axislen, int):
+        if not isinstance(new_axislen, INT_CLASSES):
             raise ValueError("Symbolic reshapes not allowed.")
 
         if new_axislen < -1:
@@ -2008,7 +2009,7 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     if M < 0 or N < 0:
         raise ValueError("Negative dimension lengths not allowed.")
 
-    if not isinstance(k, int):
+    if not isinstance(k, INT_CLASSES):
         raise ValueError(f"k must be int, got {type(k)}.")
 
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
