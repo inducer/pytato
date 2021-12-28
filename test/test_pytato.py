@@ -441,6 +441,145 @@ def test_einsum_is_similar_to_subscript(spec, argshapes):
     assert pt.analysis.is_einsum_similar_to_subscript(expr, spec)
 
 
+def test_array_dot_repr():
+    x = pt.make_placeholder("x", (10, 4), np.int64)
+    y = pt.make_placeholder("y", (10, 4), np.int64)
+
+    def _assert_stripped_repr(ary: pt.Array, expected_repr: str):
+        expected_str = "".join([c for c in repr(ary) if c not in [" ", "\n"]])
+        result_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
+        assert expected_str == result_str
+
+    _assert_stripped_repr(
+        3*x + 4*y,
+        """
+IndexLambda(
+    expr=Sum((Subscript(Variable('_in0'),
+                        (Variable('_0'), Variable('_1'))),
+              Subscript(Variable('_in1'),
+                        (Variable('_0'), Variable('_1'))))),
+    shape=(10, 4),
+    dtype='int64',
+    bindings={'_in0': IndexLambda(expr=Product((3, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
+                                  shape=(10, 4),
+                                  dtype='int64',
+                                  bindings={'_in1': Placeholder(shape=(10, 4),
+                                                                dtype='int64',
+                                                                name='x')}),
+              '_in1': IndexLambda(expr=Product((4, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
+                                  shape=(10, 4),
+                                  dtype='int64',
+                                  bindings={'_in1': Placeholder(shape=(10, 4),
+                                                                dtype='int64',
+                                                                name='y')})})""")
+
+    _assert_stripped_repr(
+        pt.roll(x.reshape(2, 20).reshape(-1), 3),
+        """
+Roll(
+    array=Reshape(array=Reshape(array=Placeholder(shape=(10, 4),
+                                                  dtype='int64',
+                                                  name='x'),
+                                newshape=(2, 20),
+                                order='C'),
+                  newshape=(40),
+                  order='C'),
+    shift=3, axis=0)""")
+    _assert_stripped_repr(y * pt.not_equal(x, 3),
+                          """
+IndexLambda(
+    expr=Product((Subscript(Variable('_in0'),
+                            (Variable('_0'), Variable('_1'))),
+                  Subscript(Variable('_in1'),
+                            (Variable('_0'), Variable('_1'))))),
+    shape=(10, 4),
+    dtype='int64',
+    bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
+              '_in1': IndexLambda(
+                  expr=Comparison(Subscript(Variable('_in0'),
+                                            (Variable('_0'), Variable('_1'))),
+                                  '!=',
+                                  3),
+                  shape=(10, 4),
+                  dtype=<class 'numpy.bool_'>,
+                  bindings={'_in0': Placeholder(shape=(10, 4),
+                                                dtype='int64',
+                                                name='x')})})""")
+    _assert_stripped_repr(
+        x[y[:, 2:3], x[2, :]],
+        """
+AdvancedIndexInContiguousAxes(
+    array=Placeholder(shape=(10, 4), dtype='int64', name='x'),
+    indices=(BasicIndex(array=Placeholder(shape=(10, 4),
+                                          dtype='int64',
+                                          name='y'),
+                        indices=(NormalizedSlice(start=0, stop=10, step=1),
+                                 NormalizedSlice(start=2, stop=3, step=1))),
+             BasicIndex(array=Placeholder(shape=(10, 4),
+                                          dtype='int64',
+                                          name='x'),
+                        indices=(2, NormalizedSlice(start=0, stop=4, step=1)))))""")
+
+    _assert_stripped_repr(
+        pt.stack([x[y[:, 2:3], x[2, :]].T, y[x[:, 2:3], y[2, :]].T]),
+        """
+Stack(
+    arrays=(
+        AxisPermutation(
+            array=AdvancedIndexInContiguousAxes(
+                array=Placeholder(shape=(10, 4),
+                                  dtype='int64',
+                                  name='x'),
+                indices=(BasicIndex(array=(...),
+                                    indices=(NormalizedSlice(start=0,
+                                                             stop=10,
+                                                             step=1),
+                                             NormalizedSlice(start=2,
+                                                             stop=3,
+                                                             step=1))),
+                         BasicIndex(array=(...),
+                                    indices=(2,
+                                             NormalizedSlice(start=0,
+                                                             stop=4,
+                                                             step=1))))),
+            axis_permutation=(1, 0)),
+        AxisPermutation(array=AdvancedIndexInContiguousAxes(
+            array=Placeholder(shape=(10,
+                                     4),
+                              dtype='int64',
+                              name='y'),
+            indices=(BasicIndex(array=(...),
+                                indices=(NormalizedSlice(start=0,
+                                                         stop=10,
+                                                         step=1),
+                                         NormalizedSlice(start=2,
+                                                         stop=3,
+                                                         step=1))),
+                     BasicIndex(array=(...),
+                                indices=(2,
+                                         NormalizedSlice(start=0,
+                                                         stop=4,
+                                                         step=1))))),
+                        axis_permutation=(1, 0))), axis=0)
+    """)
+
+
+def test_repr_array_is_deterministic():
+
+    from testlib import RandomDAGContext, make_random_dag
+
+    axis_len = 5
+    for i in range(50):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                                 axis_len=axis_len, use_numpy=False)
+        dag = make_random_dag(rdagc)
+        assert repr(dag) == repr(dag)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
