@@ -334,8 +334,9 @@ class CodeGenPreprocessor(CopyMapper):
                             args_as_pym_expr[0])
 
         if redn_bounds:
+            from pytato.reductions import SumReductionOperation
             inner_expr = Reduce(inner_expr,
-                                "sum",
+                                SumReductionOperation(),
                                 redn_bounds)
 
         return IndexLambda(expr=inner_expr,

@@ -48,6 +48,7 @@ from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
 from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
 from pytools.tag import Tag
+import pytato.reductions as red
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -537,13 +538,13 @@ ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
 REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
-PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
-    "sum": "sum",
-    "product": "product",
-    "max": "max",
-    "min": "min",
-    "all": "all",
-    "any": "any",
+PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[Type[red.ReductionOperation], str] = {
+    red.SumReductionOperation: "sum",
+    red.ProductReductionOperation: "product",
+    red.MaxReductionOperation: "max",
+    red.MinReductionOperation: "min",
+    red.AllReductionOperation: "all",
+    red.AnyReductionOperation: "any",
 }
 
 
@@ -620,8 +621,13 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         from loopy.symbolic import Reduction as LoopyReduction
         state = prstnt_ctx.state
 
+        try:
+            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
+        except KeyError:
+            raise NotImplementedError(expr.op)
+
         unique_names_mapping = {
-                old_name: state.var_name_gen(f"_pt_{expr.op}" + old_name)
+                old_name: state.var_name_gen(f"_pt_{loopy_redn}" + old_name)
                 for old_name in expr.bounds}
 
         inner_expr = loopy_substitute(expr.inner_expr,
@@ -632,11 +638,6 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
         inner_expr = self.rec(inner_expr, prstnt_ctx,
                               local_ctx.copy(reduction_bounds=new_bounds))
-
-        try:
-            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
-        except KeyError:
-            raise NotImplementedError(expr.op)
 
         inner_expr = LoopyReduction(loopy_redn,
                                     tuple(unique_names_mapping.values()),
