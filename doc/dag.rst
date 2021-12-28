@@ -18,6 +18,11 @@ Comparing two expression Graphs
 
 .. automodule:: pytato.equality
 
+Stringifying Expression Graphs
+==============================
+
+.. automodule:: pytato.stringifier
+
 Partitioning Array Expression Graphs
 ====================================
 
