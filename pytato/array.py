@@ -625,6 +625,11 @@ class Array(Taggable):
                     + self.axes[iaxis+1:])
         return self.copy(axes=new_axes)
 
+    @memoize_method
+    def __repr__(self) -> str:
+        from pytato.stringifier import Reprifier
+        return Reprifier()(self)
+
 # }}}
 
 
@@ -639,8 +644,7 @@ class _SuppliedShapeAndDtypeMixin(object):
             shape: ShapeType,
             dtype: np.dtype[Any],
             **kwargs: Any):
-        # https://github.com/python/mypy/issues/5887
-        super().__init__(**kwargs)  # type: ignore
+        super().__init__(**kwargs)
         self._shape = shape
         self._dtype = dtype
 

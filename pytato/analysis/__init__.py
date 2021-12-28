@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Mapping, Dict, Union, Set
+from typing import Mapping, Dict, Union, Set, Tuple
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase)
@@ -35,6 +35,8 @@ __doc__ = """
 .. currentmodule:: pytato.analysis
 
 .. autofunction:: get_nusers
+
+.. autofunction:: is_einsum_similar_to_subscript
 """
 
 
@@ -147,3 +149,95 @@ def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
     nuser_collector = NUserCollector()
     nuser_collector(outputs)
     return nuser_collector.nusers
+
+
+def _get_indices_from_input_subscript(subscript: str,
+                                      is_output: bool,
+                                      ) -> Tuple[str, ...]:
+    from pytato.array import EINSUM_FIRST_INDEX
+
+    acc = subscript.strip()
+    normalized_indices = []
+
+    while acc:
+        # {{{ consume indices of in_subscript.
+
+        match = EINSUM_FIRST_INDEX.match(acc)
+        if match:
+            if "alpha" in match.groupdict():
+                normalized_indices.append(match.groupdict()["alpha"])
+            else:
+                assert "ellipsis" in match.groupdict()
+                raise NotImplementedError("Checking against einsum specs"
+                                            " with ellipses: not yet supported.")
+            assert match.span()[0] == 0
+            acc = acc[match.span()[-1]:]
+        else:
+            raise ValueError(f"Cannot parse '{acc}' in provided einsum"
+                             f" '{subscript}'.")
+
+        # }}}
+
+    # {{{
+
+    if is_output:
+        if len(normalized_indices) != len(set(normalized_indices)):
+            repeated_idx = next(idx
+                                for idx in normalized_indices
+                                if normalized_indices.count(idx) > 1)
+            raise ValueError(f"Output subscript '{subscript}' contains "
+                             f"'{repeated_idx}' multiple times.")
+
+    return tuple(normalized_indices)
+
+
+def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
+    """
+    Returns *True* if and only if an einsum with the subscript descriptor
+    string *subscripts* operated on *expr*'s :attr:`pytato.array.Einsum.args`
+    would compute the same result as *expr*.
+    """
+
+    from pytato.array import ElementwiseAxis, ReductionAxis, EinsumAxisDescriptor
+
+    if not isinstance(expr, Einsum):
+        raise TypeError(f"{expr} expected to be Einsum, got {type(expr)}.")
+
+    if "->" not in subscripts:
+        raise NotImplementedError("Comparing against implicit mode einsums:"
+                                  " not supported.")
+
+    in_spec, out_spec = subscripts.split("->")
+
+    # build up a mapping from index names to axis descriptors
+    index_to_descrs: Dict[str, EinsumAxisDescriptor] = {}
+
+    for idim, idx in enumerate(_get_indices_from_input_subscript(out_spec,
+                                                                 is_output=True)):
+        index_to_descrs[idx] = ElementwiseAxis(idim)
+
+    if len(in_spec.split(",")) != len(expr.args):
+        return False
+
+    for in_subscript, access_descrs in zip(in_spec.split(","),
+                                           expr.access_descriptors):
+        indices = _get_indices_from_input_subscript(in_subscript,
+                                                    is_output=False)
+        if len(indices) != len(access_descrs):
+            return False
+
+        # {{{ add reduction dims to 'index_to_descr', check for any inconsistencies
+
+        for idx, access_descr in zip(indices, access_descrs):
+
+            try:
+                if index_to_descrs[idx] != access_descr:
+                    return False
+            except KeyError:
+                if not isinstance(access_descr, ReductionAxis):
+                    return False
+                index_to_descrs[idx] = access_descr
+
+        # }}}
+
+    return True
