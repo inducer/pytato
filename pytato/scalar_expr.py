@@ -25,7 +25,8 @@ THE SOFTWARE.
 """
 
 from numbers import Number
-from typing import Any, Union, Mapping, FrozenSet, Set, Tuple, Optional
+from typing import (
+        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING)
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -43,6 +44,10 @@ from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
 import re
+
+if TYPE_CHECKING:
+    from pytato.reductions import ReductionOperation
+
 
 __doc__ = """
 .. currentmodule:: pytato.scalar_expr
@@ -232,7 +237,7 @@ class Reduce(ExpressionBase):
 
     .. attribute:: op
 
-        One of ``"sum"``, ``"product"``, ``"max"``, ``"min"``,``"all"``, ``"any"``.
+        A :class:`pytato.reductions.ReductionOperation`.
 
     .. attribute:: bounds
 
@@ -240,13 +245,12 @@ class Reduce(ExpressionBase):
         identifying half-open bounds intervals.  Must be hashable.
     """
     inner_expr: ScalarExpression
-    op: str
+    op: ReductionOperation
     bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
-    def __init__(self, inner_expr: ScalarExpression, op: str, bounds: Any) -> None:
+    def __init__(self, inner_expr: ScalarExpression,
+            op: ReductionOperation, bounds: Any) -> None:
         self.inner_expr = inner_expr
-        if op not in {"sum", "product", "max", "min", "all", "any"}:
-            raise ValueError(f"unsupported op: {op}")
         self.op = op
         self.bounds = bounds
 
@@ -256,7 +260,7 @@ class Reduce(ExpressionBase):
                 tuple(self.bounds.keys()),
                 tuple(self.bounds.values())))
 
-    def __getinitargs__(self) -> Tuple[ScalarExpression, str, Any]:
+    def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
     mapper_method = "map_reduce"
