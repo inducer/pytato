@@ -34,7 +34,7 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           AdvancedIndexInNoncontiguousAxes,
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                SCALAR_CLASSES)
+                                SCALAR_CLASSES, INT_CLASSES, BoolT)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
 
@@ -242,10 +242,10 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
         >>> expr, bnds = dim_to_index_lambda_components(3*n+8, UniqueNameGenerator())
         >>> print(expr)
         3*_in + 8
-        >>> bnds  # doctest: +ELLIPSIS
-        {'_in': <pytato.array.SizeParam ...>}
+        >>> bnds
+        {'_in': SizeParam(name='n')}
     """
-    if isinstance(expr, int):
+    if isinstance(expr, INT_CLASSES):
         return expr, {}
 
     if vng is None:
@@ -336,11 +336,11 @@ def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:
     return bset
 
 
-def _is_non_negative(expr: ShapeComponent) -> bool:
+def _is_non_negative(expr: ShapeComponent) -> BoolT:
     """
     Returns *True* iff it can be proven that ``expr >= 0``.
     """
-    if isinstance(expr, int):
+    if isinstance(expr, INT_CLASSES):
         return expr >= 0
 
     assert isinstance(expr, Array) and expr.shape == ()
@@ -354,7 +354,7 @@ def _is_non_negative(expr: ShapeComponent) -> bool:
             <= _get_size_params_assumptions_bset(space))
 
 
-def _is_non_positive(expr: ShapeComponent) -> bool:
+def _is_non_positive(expr: ShapeComponent) -> BoolT:
     """
     Returns *True* iff it can be proven that ``expr <= 0``.
     """
@@ -370,7 +370,7 @@ def _normalize_slice(slice_: slice,
     start, stop, step = slice_.start, slice_.stop, slice_.step
     if step is None:
         step = 1
-    if not isinstance(step, int):
+    if not isinstance(step, INT_CLASSES):
         raise ValueError(f"slice step must be an int or 'None' (got a {type(step)})")
     if step == 0:
         raise ValueError("slice step cannot be zero")
@@ -385,7 +385,7 @@ def _normalize_slice(slice_: slice,
     if start is None:
         start = default_start
     else:
-        if isinstance(axis_len, int):
+        if isinstance(axis_len, INT_CLASSES):
             if -axis_len <= start < axis_len:
                 start = start % axis_len
             elif start >= axis_len:
@@ -404,7 +404,7 @@ def _normalize_slice(slice_: slice,
     if stop is None:
         stop = default_stop
     else:
-        if isinstance(axis_len, int):
+        if isinstance(axis_len, INT_CLASSES):
             if -axis_len <= stop < axis_len:
                 stop = stop % axis_len
             elif stop >= axis_len:
@@ -496,7 +496,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
     for i, idx in enumerate(indices):
         if isinstance(idx, slice):
             pass
-        elif isinstance(idx, int):
+        elif isinstance(idx, INT_CLASSES):
             if not (_is_non_negative(idx + ary.shape[i])
                     and _is_non_negative(ary.shape[i] - 1 - idx)):
                 raise IndexError(f"{idx} is out of bounds for axis {i}")

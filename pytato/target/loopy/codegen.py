@@ -43,7 +43,7 @@ from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
-from pytato.scalar_expr import ScalarExpression
+from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
 from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
@@ -662,7 +662,7 @@ def shape_to_scalar_expression(shape: ShapeType,
     shape_context = PersistentExpressionContext(state)
     result: List[ScalarExpression] = []
     for component in shape:
-        if isinstance(component, int):
+        if isinstance(component, INT_CLASSES):
             result.append(component)
         else:
             assert isinstance(component, Array)

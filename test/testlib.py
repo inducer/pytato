@@ -148,13 +148,9 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
             # just inserted a few new 1-long axes. Those need to go before we
             # return.
             if which_op in ["maximum", "minimum"]:
-                # type ignore because we haven't told mypy what's in rdagc.np.
-                return rdagc.np.squeeze(  # type: ignore[attr-defined]
-                        getattr(rdagc.np, which_op)(op1, op2))
+                return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))
             else:
-                # type ignore because we haven't told mypy what's in rdagc.np.
-                return rdagc.np.squeeze(  # type: ignore[attr-defined]
-                        which_op(op1, op2))
+                return rdagc.np.squeeze(which_op(op1, op2))
 
         elif v < 1075:
             op1 = make_random_dag(rdagc)
@@ -171,8 +167,7 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
 
         elif v < 1500:
             result = make_random_dag(rdagc)
-            # type ignore because we haven't told mypy what's in rdagc.np.
-            return rdagc.np.transpose(  # type: ignore[attr-defined]  # noqa: E501
+            return rdagc.np.transpose(
                     result,
                     tuple(rng.permuted(list(range(result.ndim)))))
 
@@ -210,8 +205,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
             # reduce away an axis
 
             # FIXME do reductions other than sum?
-            # type ignore because we haven't told mypy what's in rdagc.np.
-            return rdagc.np.sum(  # type: ignore[attr-defined]
+            return rdagc.np.sum(
                     result, axis=int(rng.integers(0, result.ndim)))
 
         else:

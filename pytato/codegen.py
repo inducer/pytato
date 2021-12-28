@@ -38,7 +38,8 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           AdvancedIndexInNoncontiguousAxes, BasicIndex,
                           NormalizedSlice)
 
-from pytato.scalar_expr import ScalarExpression, IntegralScalarExpression
+from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
+                                INT_CLASSES, IntegralT)
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
@@ -380,21 +381,21 @@ class CodeGenPreprocessor(CopyMapper):
 
         newstrides = [1]  # reshaped array strides
         for new_axis_len in reversed(expr.shape[1:]):
-            assert isinstance(new_axis_len, int)
+            assert isinstance(new_axis_len, INT_CLASSES)
             newstrides.insert(0, newstrides[0]*new_axis_len)
 
         flattened_idx = sum(prim.Variable(f"_{i}")*stride
                             for i, stride in enumerate(newstrides))
 
-        oldstrides = [1]  # input array strides
+        oldstrides: List[IntegralT] = [1]  # input array strides
         for axis_len in reversed(expr.array.shape[1:]):
-            assert isinstance(axis_len, int)
+            assert isinstance(axis_len, INT_CLASSES)
             oldstrides.insert(0, oldstrides[0]*axis_len)
 
-        assert isinstance(expr.array.shape[-1], int)
+        assert isinstance(expr.array.shape[-1], INT_CLASSES)
         oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
         for old_axis_len in reversed(expr.array.shape[:-1]):
-            assert isinstance(old_axis_len, int)
+            assert isinstance(old_axis_len, INT_CLASSES)
             oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
 
         return tuple(((flattened_idx % sizetill) // stride)
@@ -416,8 +417,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = 0
 
         for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -447,7 +448,7 @@ class CodeGenPreprocessor(CopyMapper):
 
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, int)))
+                              if isinstance(idx_expr, (Array, INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
                                                       for i_idx in i_adv_indices])
 
@@ -459,8 +460,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = 0
 
         for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -471,7 +472,7 @@ class CodeGenPreprocessor(CopyMapper):
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
-                if isinstance(axis_len, int):
+                if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
                     indirect_idx_expr = prim.Subscript(
@@ -509,7 +510,7 @@ class CodeGenPreprocessor(CopyMapper):
                                   get_indexing_expression)
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, int)))
+                              if isinstance(idx_expr, (Array, INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
                                                       for i_idx in i_adv_indices])
 
@@ -522,8 +523,8 @@ class CodeGenPreprocessor(CopyMapper):
         islice_idx = len(adv_idx_shape)
 
         for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, int):
-                if isinstance(axis_len, int):
+            if isinstance(idx, INT_CLASSES):
+                if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
@@ -534,7 +535,7 @@ class CodeGenPreprocessor(CopyMapper):
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
-                if isinstance(axis_len, int):
+                if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
 
