@@ -787,9 +787,6 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __repr__(self) -> str:
         return "DictOfNamedArrays(" + str(self._data) + ")"
 
-    def __str__(self) -> str:
-        return self.__repr__()
-
 # }}}
 
 
