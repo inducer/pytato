@@ -126,6 +126,7 @@ class Reprifier(Mapper):
     map_non_contiguous_advanced_index = _map_generic_array
     map_reshape = _map_generic_array
     map_einsum = _map_generic_array
+    map_distributed_recv = _map_generic_array
 
     def map_data_wrapper(self, expr: DataWrapper, depth: int) -> str:
         if depth > self.truncation_depth:
