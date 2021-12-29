@@ -784,6 +784,9 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
+    def __repr__(self) -> str:
+        return "DictOfNamedArrays(" + str(self._data) + ")"
+
 # }}}
 
 

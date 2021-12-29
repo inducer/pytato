@@ -8,6 +8,7 @@ from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, Stack, Roll,
                           AxisPermutation, DataWrapper, Reshape,
                           Concatenate)
+from pytools.tag import Tag
 
 
 # {{{ tools for comparison to numpy
@@ -213,6 +214,28 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
     rdagc.past_results.append(result)
 
     return result
+
+# }}}
+
+
+# {{{ tags used only by the regression tests
+
+class FooInameTag(Tag):
+    """
+    foo
+    """
+
+
+class BarInameTag(Tag):
+    """
+    bar
+    """
+
+
+class BazInameTag(Tag):
+    """
+    baz
+    """
 
 # }}}
 

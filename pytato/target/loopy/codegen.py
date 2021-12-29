@@ -34,7 +34,7 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
-                    Any, List)
+                    Any, List, Type)
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
@@ -47,6 +47,8 @@ from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
 from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
+from pytools.tag import Tag
+import pytato.reductions as red
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -327,8 +329,9 @@ class CodeGenMapper(Mapper):
     """
     exprgen_mapper: InlinedExpressionGenMapper
 
-    def __init__(self) -> None:
+    def __init__(self, axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
         self.exprgen_mapper = InlinedExpressionGenMapper(self)
+        self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
 
     def map_size_param(self, expr: SizeParam,
             state: CodeGenState) -> ImplementedResult:
@@ -535,13 +538,13 @@ ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
 REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
-PYTATO_REDUCTION_TO_LOOPY_REDUCTION = {
-    "sum": "sum",
-    "product": "product",
-    "max": "max",
-    "min": "min",
-    "all": "all",
-    "any": "any",
+PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[Type[red.ReductionOperation], str] = {
+    red.SumReductionOperation: "sum",
+    red.ProductReductionOperation: "product",
+    red.MaxReductionOperation: "max",
+    red.MinReductionOperation: "min",
+    red.AllReductionOperation: "all",
+    red.AnyReductionOperation: "any",
 }
 
 
@@ -618,8 +621,13 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         from loopy.symbolic import Reduction as LoopyReduction
         state = prstnt_ctx.state
 
+        try:
+            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
+        except KeyError:
+            raise NotImplementedError(expr.op)
+
         unique_names_mapping = {
-                old_name: state.var_name_gen(f"_pt_{expr.op}" + old_name)
+                old_name: state.var_name_gen(f"_pt_{loopy_redn}" + old_name)
                 for old_name in expr.bounds}
 
         inner_expr = loopy_substitute(expr.inner_expr,
@@ -630,11 +638,6 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
         inner_expr = self.rec(inner_expr, prstnt_ctx,
                               local_ctx.copy(reduction_bounds=new_bounds))
-
-        try:
-            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[expr.op]
-        except KeyError:
-            raise NotImplementedError(expr.op)
 
         inner_expr = LoopyReduction(loopy_redn,
                                     tuple(unique_names_mapping.values()),
@@ -814,6 +817,16 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 domains=kernel.domains + [domain],
                 instructions=kernel.instructions + [insn])
 
+    # {{{ axes tags -> iname tags
+
+    for axis, iname in zip(expr.axes, inames):
+        for tag in axis.tags:
+            if all(not isinstance(tag, tag_t)
+                   for tag_t in cgen_mapper.axis_tag_t_to_not_propagate):
+                kernel = lp.tag_inames(kernel, {iname: tag})
+
+    # }}}
+
     state.update_kernel(kernel)
     return insn_id
 
@@ -845,10 +858,12 @@ def get_initial_codegen_state(target: LoopyTarget,
 # {{{ generate_loopy
 
 def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
-        target: Optional[LoopyTarget] = None,
-        options: Optional[lp.Options] = None,
-        *,
-        cl_device: Optional["pyopencl.Device"] = None) -> BoundProgram:
+                   target: Optional[LoopyTarget] = None,
+                   options: Optional[lp.Options] = None,
+                   *,
+                   cl_device: Optional["pyopencl.Device"] = None,
+                   axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset(),
+                   ) -> BoundProgram:
     r"""Code generation entry point.
 
     :param result: Outputs of the computation.
@@ -861,6 +876,15 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     *options* is not supplied, then the Loopy option
     :attr:`~loopy.Options.return_dict` will be set to *True*. If it is supplied,
     :attr:`~loopy.Options.return_dict` must already be set to *True*.
+
+    .. note::
+
+        :mod:`pytato` metadata :math:`\mapsto` :mod:`loopy` metadata semantics:
+
+        - Inames that index over an :class:`~pytato.array.Array`'s axis in the
+          allocation instruction are tagged with the corresponding
+          :class:`~pytato.array.Axis`'s tags. The caller may choose to not
+          propagate axis tags of type *axis_tag_t_to_not_propagate*.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
@@ -903,7 +927,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     state.var_name_gen.add_names(outputs)
 
-    cg_mapper = CodeGenMapper()
+    cg_mapper = CodeGenMapper(axis_tag_t_to_not_propagate)
 
     # Generate code for outputs.
     for name in compute_order:

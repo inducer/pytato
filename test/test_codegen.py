@@ -1456,6 +1456,42 @@ def test_assume_non_negative_indirect_address(ctx_factory):
     np.testing.assert_allclose(out, a_np[b_np])
 
 
+def test_axis_tag_to_loopy_iname_tag_propagate():
+    from testlib import FooInameTag, BarInameTag, BazInameTag
+
+    x = pt.make_placeholder("x", (10, 4), np.float32)
+    y = 2 * x
+    y = (y
+         .with_tagged_axis(0, (FooInameTag(), BazInameTag()))
+         .with_tagged_axis(1, (BarInameTag(), BazInameTag())))
+    t_unit = pt.generate_loopy({"y": y},
+                               axis_tag_t_to_not_propagate=frozenset([BazInameTag])
+                               ).program
+
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim0"]
+               .tags_of_type(FooInameTag)) == 1
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim0"]
+               .tags_of_type(BarInameTag)) == 0
+
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim1"]
+               .tags_of_type(FooInameTag)) == 0
+    assert len(t_unit
+               .default_entrypoint
+               .inames["y_dim1"]
+               .tags_of_type(BarInameTag)) == 1
+
+    # there shouldn't be any inames tagged with BazInameTag
+    assert len([iname
+                for iname in t_unit.default_entrypoint.inames.values()
+                if iname.tags_of_type(BazInameTag)]) == 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
