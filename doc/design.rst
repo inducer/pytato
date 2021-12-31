@@ -54,6 +54,11 @@ Computation and Results
     with an integral :attr:`Array.dtype` (i.e. having ``dtype.kind == "i"``).
     Such an expression marks the boundary between eager and lazy evaluation.
 
+-   :attr:`Array.shape` is required to be an affine expression in terms of the
+    instances of :class:`~pytato.array.SizeParam` in the computation graph. This
+    permits shape inference to use Presburger arithmetic, meaning that shape
+    inference is always decidable.
+
 -   There is (deliberate) overlap in what various expression nodes can
     express, e.g.
 
