@@ -69,7 +69,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)  # type: ignore[no-untyped-call]  # noqa: E501
+    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)  # noqa: E501
 
 # }}}
 
