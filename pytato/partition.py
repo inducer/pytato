@@ -370,7 +370,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                         f"in both '{part.pid}' and '{other_part_id}'"
                         f"{part.output_names=} "
                         f"{partition.parts[other_part_id].output_names=} ")
-                    raise RuntimeError
+                    # raise RuntimeError
 
         part_id_to_nodes[part.pid] = mapper.seen_nodes
 

@@ -264,12 +264,8 @@ def find_distributed_partition(
     from pytato.transform import (UsersCollector, TopoSortMapper,
                                   reverse_graph, tag_user_nodes)
 
-    # FIXME: We should probably iterate over the DictOfNamedArrays instead
-    res = outputs[next(iter(outputs))]
-    # assert len(outputs._data) == 1
-
     gdm = UsersCollector()
-    gdm(res)
+    gdm(outputs)
 
     graph = gdm.node_to_users
 
@@ -311,8 +307,9 @@ def find_distributed_partition(
         tm = TopoSortMapper()
         tm(res)
 
-        for node in tm.topological_order:
-            get_part_id(node)
+        if 0:
+            for node in tm.topological_order:
+                get_part_id(node)
 
     # }}}
 
