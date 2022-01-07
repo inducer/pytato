@@ -29,7 +29,7 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
+from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable, Optional
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -389,13 +389,27 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition]) \
-        -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
+                                 GraphPartition],
+                   output_to: Optional[str] = None,
+                   ) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
         or the output of :func:`~pytato.partition.find_partition`.
+
+    .. arg:: output_to
+
+        An instance of :class:`str` that can be one of:
+
+        - ``"xwindow"`` to visualize the graph as an
+          `X window <https://en.wikipedia.org/wiki/X_Window_System>`_.
+        - ``"browser"`` to visualize the graph as an SVG file in the
+          system's default web-browser.
+
+        Defaults to ``"xwindow"`` if X11 support is present, otherwise defaults
+        to ``"browser"``.
     """
     dot_code: str
 
@@ -407,7 +421,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition])
         dot_code = get_dot_graph(result)
 
     from pymbolic.imperative.utils import show_dot
-    show_dot(dot_code)
+    show_dot(dot_code, output_to)
 
 
 # {{{ Show ASCII representation of DAG
