@@ -1492,6 +1492,27 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
                 if iname.tags_of_type(BazInameTag)]) == 0
 
 
+def test_array_tags_propagated_to_loopy():
+    from testlib import FooTag, BarTag, BazTag
+
+    x1 = pt.make_placeholder("x1", (10, 4), dtype=np.float64)
+    x2 = pt.make_placeholder("x2", (10, 4), dtype=np.float64)
+    y = 2 * x1 + ((3 * x2)
+                  .tagged((BarTag(), BazTag(),
+                           pt.tags.ImplStored(),
+                           pt.tags.Named("tmp")))
+                  )
+
+    pt_prg = pt.generate_loopy({"y": y.tagged((FooTag(), BazTag()))},
+                               array_tag_t_to_not_propagate=frozenset([BazTag]))
+    assert pt_prg.program.default_entrypoint.arg_dict["y"].tags_of_type(FooTag)
+    assert not pt_prg.program.default_entrypoint.arg_dict["y"].tags_of_type(BazTag)
+    assert (pt_prg.program.default_entrypoint.temporary_variables["tmp"]
+            .tags_of_type(BarTag))
+    assert not (pt_prg.program.default_entrypoint.temporary_variables["tmp"]
+                .tags_of_type(BazTag))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

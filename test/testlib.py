@@ -263,6 +263,24 @@ class BazInameTag(Tag):
     baz
     """
 
+
+class FooTag(Tag):
+    """
+    foo
+    """
+
+
+class BarTag(Tag):
+    """
+    bar
+    """
+
+
+class BazTag(Tag):
+    """
+    baz
+    """
+
 # }}}
 
 # vim: foldmethod=marker
