@@ -361,7 +361,6 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                 # DistributedRecv's will be replaced in a subsequent step and
                 # are therefore also ignored here.
                 if not(isinstance(my_node, Placeholder)
-                       or isinstance(my_node, DistributedRecv)
                        or my_node not in other_node_set):
                     # show_dot_graph(partition)
                     print(
@@ -370,7 +369,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                         f"in both '{part.pid}' and '{other_part_id}'"
                         f"{part.output_names=} "
                         f"{partition.parts[other_part_id].output_names=} ")
-                    # raise RuntimeError
+                    raise RuntimeError
 
         part_id_to_nodes[part.pid] = mapper.seen_nodes
 
