@@ -127,6 +127,7 @@ class Reprifier(Mapper):
     map_reshape = _map_generic_array
     map_einsum = _map_generic_array
     map_distributed_recv = _map_generic_array
+    map_distributed_send_ref_holder = _map_generic_array
 
     def map_data_wrapper(self, expr: DataWrapper, depth: int) -> str:
         if depth > self.truncation_depth:
