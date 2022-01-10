@@ -340,8 +340,6 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
 def _check_partition_disjointness(partition: GraphPartition) -> None:
     part_id_to_nodes: Dict[PartId, Set[ArrayOrNames]] = {}
 
-    from pytato.distributed import DistributedRecv
-
     # from pytato.visualization import show_dot_graph
     # show_dot_graph(partition)
 
@@ -357,9 +355,6 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                 # Placeholders represent values computed in one partition
                 # and used in one or more other ones. As a result, the
                 # same placeholder may occur in more than one partition.
-
-                # DistributedRecv's will be replaced in a subsequent step and
-                # are therefore also ignored here.
                 if not(isinstance(my_node, Placeholder)
                        or my_node not in other_node_set):
                     # show_dot_graph(partition)
