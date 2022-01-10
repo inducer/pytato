@@ -109,9 +109,9 @@ def test_distributed_execution_random_dag(ctx_factory):
         context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                                 queue, comm)
 
-        final_res = [context[k] for k in dict_named_arys.keys()]
+        final_res = context["result"].get(queue)
 
-        assert final_res
+        np.testing.assert_allclose(x.data*42, final_res)
 
 
 if __name__ == "__main__":
