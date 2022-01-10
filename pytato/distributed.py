@@ -305,11 +305,10 @@ def find_distributed_partition(
                 assert(isinstance(n, DistributedSend))
 
         tm = TopoSortMapper()
-        tm(res)
+        tm(outputs)
 
-        if 0:
-            for node in tm.topological_order:
-                get_part_id(node)
+        for node in tm.topological_order:
+            get_part_id(node)
 
     # }}}
 
