@@ -564,17 +564,16 @@ def execute_distributed_partition(
 
     from mpi4py import MPI
 
-    if len(partition.parts) == 1:
-        # Only a single partition, no recv requests exist
-        # type-ignore-reason: empty tuples conflict with type annotation
-        recv_names_tup = tuple()  # type: ignore[var-annotated]
-        recv_requests_tup = tuple()  # type: ignore[var-annotated]
-        recv_buffers_tup = tuple()  # type: ignore[var-annotated]
-    else:
+    if len(partition.parts) != 1:
         recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
             (name,) + _post_receive(mpi_communicator, recv)
             for part in partition.parts.values()
             for name, recv in part.input_name_to_recv_node.items()])
+    else:
+        # Only a single partition, no recv requests exist
+        recv_names_tup = ()
+        recv_requests_tup = ()
+        recv_buffers_tup = ()
 
     recv_names = list(recv_names_tup)
     recv_requests = list(recv_requests_tup)
