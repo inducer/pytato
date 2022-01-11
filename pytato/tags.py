@@ -97,24 +97,6 @@ class PrefixNamed(_BaseNameTag):
 # }}}
 
 
-# {{{ User operation name
-
-class UserOpInfo(UniqueTag):
-    pass
-
-
-# FIXME: Why is this necessary?
-# pytato/array.py:1126: error: Too many arguments for "EinsumInfo"  [call-arg]
-from dataclasses import dataclass
-
-
-@dataclass(init=True, eq=True, frozen=True, repr=True)
-class EinsumInfo(UserOpInfo):
-    spec: str
-
-# }}}
-
-
 @tag_dataclass
 class AssumeNonNegative(Tag):
     """

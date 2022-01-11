@@ -1095,9 +1095,6 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
     """
     Einstein summation *subscripts* on *operands*.
     """
-
-    from pytato.tags import EinsumInfo
-
     if len(operands) == 0:
         raise ValueError("must specify at least one operand")
 
@@ -1131,7 +1128,6 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         access_descriptors.append(access_descriptor)
 
     return Einsum(tuple(access_descriptors), operands,
-                  tags=frozenset([EinsumInfo(subscripts)]),
                   axes=_get_default_axes(len(out_spec)))
 
 # }}}
