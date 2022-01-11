@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
-        FrozenSet, Mapping, Optional)
+        FrozenSet, Mapping, Optional, Type)
 from dataclasses import dataclass
 
 
@@ -149,6 +149,57 @@ class _GraphPartitioner(EdgeCachedMapper):
 
         return super().__call__(expr, *args, **kwargs)
 
+    def make_partition(self, outputs: DictOfNamedArrays) -> GraphPartition:
+        rewritten_outputs = {
+                name: self(expr) for name, expr in outputs._data.items()}
+
+        pid_to_output_names: Dict[PartId, Set[str]] = {
+            pid: set() for pid in self.seen_part_ids}
+        pid_to_input_names: Dict[PartId, Set[str]] = {
+            pid: set() for pid in self.seen_part_ids}
+
+        var_name_to_result = self.var_name_to_result.copy()
+
+        for out_name, rewritten_output in rewritten_outputs.items():
+            out_part_id = self._get_part_id(outputs._data[out_name])
+            pid_to_output_names.setdefault(out_part_id, set()).add(out_name)
+            var_name_to_result[out_name] = rewritten_output
+
+        # Mapping of nodes to their successors; used to compute the topological order
+        pid_to_needing_pids: Dict[PartId, Set[PartId]] = {
+                pid: set() for pid in self.seen_part_ids}
+        pid_to_needed_pids: Dict[PartId, Set[PartId]] = {
+                pid: set() for pid in self.seen_part_ids}
+
+        for (pid_target, pid_dependency), var_names in \
+                self.part_pair_to_edges.items():
+            pid_to_needing_pids[pid_dependency].add(pid_target)
+            pid_to_needed_pids[pid_target].add(pid_dependency)
+
+            for var_name in var_names:
+                pid_to_output_names[pid_dependency].add(var_name)
+                pid_to_input_names[pid_target].add(var_name)
+
+        from pytools.graph import compute_topological_order, CycleError
+        try:
+            toposorted_part_ids = compute_topological_order(pid_to_needing_pids)
+        except CycleError:
+            raise PartitionInducedCycleError
+
+        return GraphPartition(
+                    parts={
+                        pid: GraphPart(
+                            pid=pid,
+                            needed_pids=frozenset(pid_to_needed_pids[pid]),
+                            user_input_names=frozenset(
+                                self.pid_to_user_input_names.get(pid, set())),
+                            partition_input_names=frozenset(pid_to_input_names[pid]),
+                            output_names=frozenset(pid_to_output_names[pid]),
+                            )
+                        for pid in self.seen_part_ids},
+                    var_name_to_result=var_name_to_result,
+                    toposorted_part_ids=toposorted_part_ids)
+
     def map_placeholder(self, expr: Placeholder, *args: Any) -> Any:
         pid = self.get_part_id(expr)
         self.pid_to_user_input_names.setdefault(pid, set()).add(expr.name)
@@ -241,11 +292,11 @@ class PartitionInducedCycleError(Exception):
     """
 
 
-# {{{ find_partitions
+# {{{ find_partition
 
 def find_partition(outputs: DictOfNamedArrays,
         part_func: Callable[[ArrayOrNames], PartId],
-        gp: Optional[_GraphPartitioner] = None) ->\
+        partitioner_class: Type[_GraphPartitioner] = _GraphPartitioner) ->\
         GraphPartition:
     """Partitions the *expr* according to *part_func* and generates code for
     each partition. Raises :exc:`PartitionInducedCycleError` if the partitioning
@@ -269,56 +320,7 @@ def find_partition(outputs: DictOfNamedArrays,
     :returns: An instance of :class:`GraphPartition` that contains the partition.
     """
 
-    if gp is None:
-        gp = _GraphPartitioner(part_func)
-    rewritten_outputs = {name: gp(expr) for name, expr in outputs._data.items()}
-
-    pid_to_output_names: Dict[PartId, Set[str]] = {
-        pid: set() for pid in gp.seen_part_ids}
-    pid_to_input_names: Dict[PartId, Set[str]] = {
-        pid: set() for pid in gp.seen_part_ids}
-
-    var_name_to_result = gp.var_name_to_result.copy()
-
-    for out_name, rewritten_output in rewritten_outputs.items():
-        out_part_id = part_func(outputs._data[out_name])
-        pid_to_output_names.setdefault(out_part_id, set()).add(out_name)
-        var_name_to_result[out_name] = rewritten_output
-
-    # Mapping of nodes to their successors; used to compute the topological order
-    pid_to_needing_pids: Dict[PartId, Set[PartId]] = {
-            pid: set() for pid in gp.seen_part_ids}
-    pid_to_needed_pids: Dict[PartId, Set[PartId]] = {
-            pid: set() for pid in gp.seen_part_ids}
-
-    for (pid_target, pid_dependency), var_names in \
-            gp.part_pair_to_edges.items():
-        pid_to_needing_pids[pid_dependency].add(pid_target)
-        pid_to_needed_pids[pid_target].add(pid_dependency)
-
-        for var_name in var_names:
-            pid_to_output_names[pid_dependency].add(var_name)
-            pid_to_input_names[pid_target].add(var_name)
-
-    from pytools.graph import compute_topological_order, CycleError
-    try:
-        toposorted_part_ids = compute_topological_order(pid_to_needing_pids)
-    except CycleError:
-        raise PartitionInducedCycleError
-
-    result = GraphPartition(
-            parts={
-                pid: GraphPart(
-                    pid=pid,
-                    needed_pids=frozenset(pid_to_needed_pids[pid]),
-                    user_input_names=frozenset(
-                        gp.pid_to_user_input_names.get(pid, set())),
-                    partition_input_names=frozenset(pid_to_input_names[pid]),
-                    output_names=frozenset(pid_to_output_names[pid]),
-                    )
-                for pid in gp.seen_part_ids},
-            var_name_to_result=var_name_to_result,
-            toposorted_part_ids=toposorted_part_ids)
+    result = partitioner_class(part_func).make_partition(outputs)
 
     if __debug__:
         _check_partition_disjointness(result)

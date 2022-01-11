@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set, # noqa (need List, FrozenSet, Mapping for sphinx)
-    List, FrozenSet, Mapping, Callable)
+    List, FrozenSet, Mapping, Callable, cast)
 
 from dataclasses import dataclass
 
@@ -228,100 +228,6 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
 # }}}
 
 
-# {{{ find distributed partition
-
-@dataclass(frozen=True, eq=True)
-class DistributedPartitionId():
-    fed_sends: object
-    feeding_recvs: object
-
-
-class _DistributedGraphPartitioner(_GraphPartitioner):
-
-    def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
-        super().__init__(get_part_id)
-        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
-
-    def map_distributed_send_ref_holder(
-                self, expr: DistributedSendRefHolder, *args: Any) -> Any:
-        send_part_id = self.get_part_id(expr.send.data)
-
-        from pytato.distributed import DistributedSend
-        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
-                DistributedSend(
-                    data=self.rec(expr.send.data),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag,
-                    tags=expr.send.tags))
-
-        return self.rec(expr.passthrough_data)
-
-
-def find_distributed_partition(
-        outputs: DictOfNamedArrays) -> DistributedGraphPartition:
-    """Finds a partitioning in a distributed context."""
-
-    from pytato.transform import (UsersCollector, TopoSortMapper,
-                                  reverse_graph, tag_user_nodes)
-
-    gdm = UsersCollector()
-    gdm(outputs)
-
-    graph = gdm.node_to_users
-
-    # type-ignore-reason:
-    # 'graph' also includes DistributedSend nodes, which are not Arrays
-    rev_graph = reverse_graph(graph)  # type: ignore[arg-type]
-
-    # FIXME: Inefficient... too many traversals
-    node_to_feeding_recvs: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
-    for node in graph:
-        node_to_feeding_recvs.setdefault(node, set())
-        if isinstance(node, DistributedRecv):
-            tag_user_nodes(graph, tag=node,  # type: ignore[arg-type]
-                            starting_point=node,
-                            node_to_tags=node_to_feeding_recvs)
-
-    node_to_fed_sends: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
-    for node in rev_graph:
-        node_to_fed_sends.setdefault(node, set())
-        if isinstance(node, DistributedSend):
-            tag_user_nodes(rev_graph, tag=node, starting_point=node,
-                            node_to_tags=node_to_fed_sends)
-
-    def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
-        return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
-                                      frozenset(node_to_feeding_recvs[expr]))
-
-    # {{{ Sanity checks
-
-    if __debug__:
-        for node, _ in node_to_feeding_recvs.items():
-            for n in node_to_feeding_recvs[node]:
-                assert(isinstance(n, DistributedRecv))
-
-        for node, _ in node_to_fed_sends.items():
-            for n in node_to_fed_sends[node]:
-                assert(isinstance(n, DistributedSend))
-
-        tm = TopoSortMapper()
-        tm(outputs)
-
-        for node in tm.topological_order:
-            get_part_id(node)
-
-    # }}}
-
-    from pytato.partition import find_partition
-    dgp = _DistributedGraphPartitioner(get_part_id)
-
-    partition = find_partition(outputs, get_part_id, dgp)
-
-    return _gather_distributed_comm_info(partition, dgp.pid_to_dist_sends)
-
-# }}}
-
-
 # {{{ distributed info collection
 
 @dataclass(frozen=True)
@@ -447,6 +353,103 @@ def _gather_distributed_comm_info(partition: GraphPartition,
         _check_partition_disjointness(result)
 
     return result
+
+# }}}
+
+
+# {{{ find distributed partition
+
+@dataclass(frozen=True, eq=True)
+class DistributedPartitionId():
+    fed_sends: object
+    feeding_recvs: object
+
+
+class _DistributedGraphPartitioner(_GraphPartitioner):
+
+    def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
+        super().__init__(get_part_id)
+        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
+
+    def map_distributed_send_ref_holder(
+                self, expr: DistributedSendRefHolder, *args: Any) -> Any:
+        send_part_id = self.get_part_id(expr.send.data)
+
+        from pytato.distributed import DistributedSend
+        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
+                DistributedSend(
+                    data=self.rec(expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag,
+                    tags=expr.send.tags))
+
+        return self.rec(expr.passthrough_data)
+
+    def make_partition(self, outputs: DictOfNamedArrays) \
+            -> DistributedGraphPartition:
+
+        partition = super().make_partition(outputs)
+        return _gather_distributed_comm_info(partition, self.pid_to_dist_sends)
+
+
+def find_distributed_partition(
+        outputs: DictOfNamedArrays) -> DistributedGraphPartition:
+    """Finds a partitioning in a distributed context."""
+
+    from pytato.transform import (UsersCollector, TopoSortMapper,
+                                  reverse_graph, tag_user_nodes)
+
+    gdm = UsersCollector()
+    gdm(outputs)
+
+    graph = gdm.node_to_users
+
+    # type-ignore-reason:
+    # 'graph' also includes DistributedSend nodes, which are not Arrays
+    rev_graph = reverse_graph(graph)  # type: ignore[arg-type]
+
+    # FIXME: Inefficient... too many traversals
+    node_to_feeding_recvs: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in graph:
+        node_to_feeding_recvs.setdefault(node, set())
+        if isinstance(node, DistributedRecv):
+            tag_user_nodes(graph, tag=node,  # type: ignore[arg-type]
+                            starting_point=node,
+                            node_to_tags=node_to_feeding_recvs)
+
+    node_to_fed_sends: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in rev_graph:
+        node_to_fed_sends.setdefault(node, set())
+        if isinstance(node, DistributedSend):
+            tag_user_nodes(rev_graph, tag=node, starting_point=node,
+                            node_to_tags=node_to_fed_sends)
+
+    def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
+        return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
+                                      frozenset(node_to_feeding_recvs[expr]))
+
+    # {{{ Sanity checks
+
+    if __debug__:
+        for node, _ in node_to_feeding_recvs.items():
+            for n in node_to_feeding_recvs[node]:
+                assert(isinstance(n, DistributedRecv))
+
+        for node, _ in node_to_fed_sends.items():
+            for n in node_to_fed_sends[node]:
+                assert(isinstance(n, DistributedSend))
+
+        tm = TopoSortMapper()
+        tm(outputs)
+
+        for node in tm.topological_order:
+            get_part_id(node)
+
+    # }}}
+
+    from pytato.partition import find_partition
+    return cast(DistributedGraphPartition,
+            find_partition(outputs, get_part_id, _DistributedGraphPartitioner))
 
 # }}}
 
