@@ -41,7 +41,7 @@ from pytato.target import BoundProgram
 
 import numpy as np
 
-__doc__ = """
+__doc__ = r"""
 Distributed communication
 -------------------------
 
