@@ -27,9 +27,7 @@ import pyopencl as cl
 import numpy as np
 import pytato as pt
 import sys
-
-from mpi4py import MPI  # pylint: disable=import-error
-comm = MPI.COMM_WORLD
+import os
 
 from pytato.distributed import (staple_distributed_send, make_distributed_recv,
     find_distributed_partition,
@@ -38,11 +36,50 @@ from pytato.distributed import (staple_distributed_send, make_distributed_recv,
 from pytato.partition import generate_code_for_partition
 
 
-def test_distributed_execution_basic(ctx_factory):
+# {{{ mpi test infrastructure
+
+def run_test_with_mpi(num_ranks, f, *args):
+    import pytest
+    pytest.importorskip("mpi4py")
+
+    from pickle import dumps
+    from base64 import b64encode
+
+    invocation_info = b64encode(dumps((f, args))).decode()
+    from subprocess import check_call
+
+    # NOTE: CI uses OpenMPI; -x to pass env vars. MPICH uses -env
+    check_call([
+        "mpiexec", "-np", str(num_ranks),
+        "-x", "RUN_WITHIN_MPI=1",
+        "-x", f"INVOCATION_INFO={invocation_info}",
+        sys.executable, __file__])
+
+
+def run_test_with_mpi_inner():
+    from pickle import loads
+    from base64 import b64decode
+    f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
+
+    f(cl.create_some_context, *args)
+
+# }}}
+
+
+# {{{ "basic" test (similar to distributed example)
+
+def test_distributed_execution_basic():
+    run_test_with_mpi(2, _do_test_distributed_execution_basic)
+
+
+def _do_test_distributed_execution_basic(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed=27)
 
     x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
@@ -65,42 +102,62 @@ def test_distributed_execution_basic(ctx_factory):
     context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
-    final_res = [context[k] for k in outputs.keys()][0].get(queue)
+    final_res = context["out"].get(queue)
 
+    # All ranks generate the same random numbers (same seed).
     np.testing.assert_allclose(x_in*2, final_res)
 
+# }}}
 
-def test_distributed_execution_random_dag(ctx_factory):
+
+# {{{ test based on random dag
+
+def test_distributed_execution_random_dag():
+    run_test_with_mpi(2, _do_test_distributed_execution_random_dag)
+
+
+def _do_test_distributed_execution_random_dag(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     from testlib import RandomDAGContext, make_random_dag
 
     axis_len = 4
+    comm_fake_prob = 500
 
-    ntests = 1
+    gen_comm_called = False
+
+    ntests = 20
     for i in range(ntests):
         print(i)
         seed = 120 + i
-        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False)
 
-        x = make_random_dag(rdagc_pt)
+        comm_tag = 17
 
-        halo = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float))
+        def gen_comm(rdagc):
+            nonlocal gen_comm_called
+            gen_comm_called = True
 
-        y = halo * 42
+            nonlocal comm_tag
+            comm_tag += 1
 
-        res = staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=43,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=43, shape=(4, 4), dtype=float))
+            inner = make_random_dag(rdagc)
+            return staple_distributed_send(
+                    inner, dest_rank=(rank-1) % size, comm_tag=comm_tag,
+                    stapled_to=make_distributed_recv(
+                        src_rank=(rank+1) % size, comm_tag=comm_tag,
+                        shape=inner.shape, dtype=inner.dtype))
 
-        dict_named_arys = pt.DictOfNamedArrays(
-                    {"result": res})
+        rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False,
+                additional_generators=[(comm_fake_prob, gen_comm)])
+        x_comm = make_random_dag(rdagc_comm)
 
-        distributed_parts = find_distributed_partition(dict_named_arys)
+        distributed_parts = find_distributed_partition(
+                pt.DictOfNamedArrays({"result": x_comm}))
         prg_per_partition = generate_code_for_partition(distributed_parts)
 
         ctx = cl.create_some_context()
@@ -109,14 +166,39 @@ def test_distributed_execution_random_dag(ctx_factory):
         context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                                 queue, comm)
 
-        final_res = context["result"].get(queue)
+        res_comm = context["result"]
 
-        np.testing.assert_allclose(x.data*42, final_res)
+        # {{{ compute ref value without communication
+
+        rdagc_no_comm = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False,
+                additional_generators=[
+                    (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
+                    ])
+        x_no_comm = make_random_dag(rdagc_no_comm)
+
+        prg = pt.generate_loopy(x_no_comm, cl_device=queue.device)
+        _, (res_no_comm,) = prg(queue)
+
+        # }}}
+
+        if not isinstance(res_comm, np.ndarray):
+            res_comm = res_comm.get(queue=queue)
+
+        np.testing.assert_allclose(res_comm, res_no_comm)
+
+    assert gen_comm_called
+
+# }}}
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if "RUN_WITHIN_MPI" in os.environ:
+        run_test_with_mpi_inner()
+    elif len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
         from pytest import main
         main([__file__])
+
+# vim: foldmethod=marker
