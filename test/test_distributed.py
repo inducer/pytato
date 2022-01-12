@@ -31,7 +31,7 @@ import os
 
 from pytato.distributed import (staple_distributed_send, make_distributed_recv,
     find_distributed_partition,
-    execute_distributed_partition)
+    execute_distributed_partition, number_distributed_tags)
 
 from pytato.partition import generate_code_for_partition
 
@@ -116,6 +116,10 @@ def test_distributed_execution_random_dag():
     run_test_with_mpi(2, _do_test_distributed_execution_random_dag)
 
 
+class _RandomDAGTag:
+    pass
+
+
 def _do_test_distributed_execution_random_dag(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
@@ -130,10 +134,12 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
     gen_comm_called = False
 
-    ntests = 20
+    ntests = 10
     for i in range(ntests):
-        print(i)
+        print("Step", i)
         seed = 120 + i
+
+        # {{{ Compute value with communication
 
         comm_tag = 17
 
@@ -143,30 +149,39 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
             nonlocal comm_tag
             comm_tag += 1
+            tag = (comm_tag, _RandomDAGTag)
 
             inner = make_random_dag(rdagc)
             return staple_distributed_send(
-                    inner, dest_rank=(rank-1) % size, comm_tag=comm_tag,
+                    inner, dest_rank=(rank-1) % size, comm_tag=tag,
                     stapled_to=make_distributed_recv(
-                        src_rank=(rank+1) % size, comm_tag=comm_tag,
+                        src_rank=(rank+1) % size, comm_tag=tag,
                         shape=inner.shape, dtype=inner.dtype))
 
         rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
                 axis_len=axis_len, use_numpy=False,
-                additional_generators=[(comm_fake_prob, gen_comm)])
+                additional_generators=[
+                    (comm_fake_prob, gen_comm)
+                    ])
         x_comm = make_random_dag(rdagc_comm)
 
-        distributed_parts = find_distributed_partition(
+        distributed_partition = find_distributed_partition(
                 pt.DictOfNamedArrays({"result": x_comm}))
-        prg_per_partition = generate_code_for_partition(distributed_parts)
+        distributed_partition, _new_mpi_base_tag = number_distributed_tags(
+                comm,
+                distributed_partition,
+                base_tag=comm_tag)
+        prg_per_partition = generate_code_for_partition(distributed_partition)
 
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
 
-        context = execute_distributed_partition(distributed_parts, prg_per_partition,
-                                                queue, comm)
+        context = execute_distributed_partition(
+                    distributed_partition, prg_per_partition, queue, comm)
 
         res_comm = context["result"]
+
+        # }}}
 
         # {{{ compute ref value without communication
 
@@ -178,7 +193,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
         x_no_comm = make_random_dag(rdagc_no_comm)
 
         prg = pt.generate_loopy(x_no_comm, cl_device=queue.device)
-        _, (res_no_comm,) = prg(queue)
+        _, (res_no_comm, ) = prg(queue)
 
         # }}}
 
