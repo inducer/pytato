@@ -64,6 +64,25 @@ Distributed communication
 .. autofunction:: find_distributed_partition
 .. autofunction:: number_distributed_tags
 .. autofunction:: execute_distributed_partition
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: CommTagType
+
+    A type representing a communication tag.
+
+.. class:: TagsType
+
+    A :class:`frozenset` of :class:`pytools.tag.Tag`\ s.
+
+.. class:: ShapeType
+
+    A type representing a shape.
+
+.. class:: AxesT
+
+    A :class:`tuple` of :class:`Axis` objects.
 """
 
 
