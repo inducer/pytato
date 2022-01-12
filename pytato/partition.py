@@ -41,6 +41,7 @@ from pytato.target import BoundProgram
 __doc__ = """
 .. autoclass:: GraphPart
 .. autoclass:: GraphPartition
+.. autoclass:: _GraphPartitioner
 .. autoexception:: PartitionInducedCycleError
 
 .. autofunction:: find_partition
@@ -317,6 +318,8 @@ def find_partition(outputs: DictOfNamedArrays,
     :param outputs: The outputs to partition.
     :param part_func: A callable that returns an instance of
         :class:`Hashable` for a node.
+    :param partitioner_class: A :class:`_GraphPartitioner` to
+        guide the partitioning.
     :returns: An instance of :class:`GraphPartition` that contains the partition.
     """
 
