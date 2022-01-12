@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import types
-from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
+from typing import Any, Dict, Optional, List, Tuple, Union
 import operator
 import pyopencl as cl
 import numpy as np
@@ -80,8 +80,7 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
 
 class RandomDAGContext:
     def __init__(self, rng: np.random.Generator, axis_len: int, use_numpy: bool,
-            additional_generators: Optional[Sequence[
-                Tuple[int, Callable[[RandomDAGContext], Array]]]] = None) -> None:
+                 use_comm: bool = False) -> None:
         """
         :param additional_generators: A sequence of tuples
             ``(fake_probability, gen_func)``, where *fake_probability* is
@@ -92,11 +91,7 @@ class RandomDAGContext:
         self.axis_len = axis_len
         self.past_results: List[Array] = []
         self.use_numpy = use_numpy
-
-        if additional_generators is None:
-            additional_generators = []
-
-        self.additional_generators = additional_generators
+        self.use_comm = use_comm
 
         if self.use_numpy:
             self.np: types.ModuleType = np
@@ -132,15 +127,16 @@ _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
         operator.pow, "maximum", "minimum"]
 
 
+next_comm_tag = 13000
+
+
 def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     rng = rdagc.rng
 
-    max_prob_hardcoded = 1500
-    additional_prob = sum(
-            fake_prob
-            for fake_prob, _func in rdagc.additional_generators)
+    max_prob = 1500
+
     while True:
-        v = rng.integers(0, max_prob_hardcoded + additional_prob)
+        v = rng.integers(0, max_prob)
 
         if v < 600:
             return make_random_constant(rdagc, naxes=rng.integers(1, 3))
@@ -183,22 +179,32 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
                 continue
             return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
 
-        elif v < max_prob_hardcoded:
+        elif v < 1350:
             result = make_random_dag(rdagc)
             return rdagc.np.transpose(
                     result,
                     tuple(rng.permuted(list(range(result.ndim)))))
 
         else:
-            base_prob = max_prob_hardcoded
-            for fake_prob, gen_func in rdagc.additional_generators:
-                if base_prob <= v < base_prob + fake_prob:
-                    return gen_func(rdagc)
+            if not rdagc.use_comm:
+                return make_random_dag(rdagc)
 
-                base_prob += fake_prob
+            # comm case
+            global next_comm_tag
+            inner = make_random_dag(rdagc)
+            from pytato.distributed import (staple_distributed_send,
+                                            make_distributed_recv)
+            from mpi4py import MPI
+            rank = MPI.COMM_WORLD.Get_rank()
+            size = MPI.COMM_WORLD.Get_size()
 
-            # should never get here
-            raise AssertionError()
+            tag = (next_comm_tag, inner.shape)
+            next_comm_tag += 1
+            return staple_distributed_send(
+                    inner, dest_rank=(rank-1) % size, comm_tag=tag,
+                    stapled_to=make_distributed_recv(
+                        src_rank=(rank+1) % size, comm_tag=tag,
+                        shape=inner.shape, dtype=inner.dtype))
 
     # FIXME: include Stack
     # FIXME: include comparisons/booleans
