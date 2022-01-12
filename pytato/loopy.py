@@ -40,7 +40,7 @@ from pytools.tag import TagsType
 from pyrsistent import PMap, pmap
 import islpy as isl
 
-__doc__ = """
+__doc__ = r"""
 .. currentmodule:: pytato.loopy
 
 .. autoclass:: LoopyCall
@@ -48,6 +48,17 @@ __doc__ = """
 .. autoclass:: LoopyCallResult
 
 .. autofunction:: call_loopy
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: TagsType
+
+    A :class:`frozenset` of :class:`pytools.tag.Tag`\ s.
+
+.. class:: AxesT
+
+    See :class:`pytato.array.AxesT`.
 """
 
 
