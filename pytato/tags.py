@@ -1,7 +1,4 @@
 __doc__ = """
-.. currentmodule:: pytato.tags
-
-
 Pre-Defined Tags
 ----------------
 

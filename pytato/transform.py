@@ -79,6 +79,13 @@ Dict representation of DAGs
 .. autoclass:: UsersCollector
 .. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: T
+
+    A type variable representing the input type of a :class:`Mapper`.
 """
 
 
