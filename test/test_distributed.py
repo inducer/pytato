@@ -167,10 +167,13 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
         distributed_partition = find_distributed_partition(
                 pt.DictOfNamedArrays({"result": x_comm}))
+
+        # Transform symbolic tags into numeric ones for MPI
         distributed_partition, _new_mpi_base_tag = number_distributed_tags(
                 comm,
                 distributed_partition,
                 base_tag=comm_tag)
+
         prg_per_partition = generate_code_for_partition(distributed_partition)
 
         ctx = cl.create_some_context()
