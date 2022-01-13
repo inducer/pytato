@@ -329,8 +329,11 @@ class CodeGenMapper(Mapper):
     """
     exprgen_mapper: InlinedExpressionGenMapper
 
-    def __init__(self, axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
+    def __init__(self,
+                 array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
+                 axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
         self.exprgen_mapper = InlinedExpressionGenMapper(self)
+        self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
 
     def map_size_param(self, expr: SizeParam,
@@ -338,7 +341,12 @@ class CodeGenMapper(Mapper):
         if expr in state.results:
             return state.results[expr]
 
-        arg = lp.ValueArg(expr.name, dtype=expr.dtype)
+        arg = lp.ValueArg(expr.name,
+                          dtype=expr.dtype,
+                          tags=_filter_tags_not_of_type(expr,
+                                                        self
+                                                        .array_tag_t_to_not_propagate
+                                                        ))
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
         assert expr.name is not None
@@ -359,7 +367,10 @@ class CodeGenMapper(Mapper):
                 order="C",
                 offset=lp.auto,
                 is_input=True,
-                is_output=False)
+                is_output=False,
+                tags=_filter_tags_not_of_type(expr,
+                                              self
+                                              .array_tag_t_to_not_propagate))
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
         assert expr.name is not None
@@ -757,6 +768,14 @@ def _generate_name_for_temp(expr: Array, state: CodeGenState) -> str:
         return state.var_name_gen("_pt_temp")
 
 
+def _filter_tags_not_of_type(expr: Array,
+                             ignore_tag_t: FrozenSet[Type[Tag]]
+                             ) -> FrozenSet[Tag]:
+    return frozenset(tag
+                     for tag in expr.tags
+                     if not isinstance(tag, tuple(ignore_tag_t)))
+
+
 def add_store(name: str, expr: Array, result: ImplementedResult,
               state: CodeGenState, cgen_mapper: CodeGenMapper,
               output_to_temporary: bool = False) -> str:
@@ -812,7 +831,10 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 dtype=expr.dtype,
                 order="C",
                 is_input=False,
-                is_output=True)
+                is_output=True,
+                tags=_filter_tags_not_of_type(expr,
+                                              cgen_mapper
+                                              .array_tag_t_to_not_propagate))
         kernel = kernel.copy(args=kernel.args + [arg],
                 domains=kernel.domains + [domain],
                 instructions=kernel.instructions + [insn])
@@ -838,7 +860,10 @@ def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
     return lp.TemporaryVariable(name,
             shape=shape_to_scalar_expression(expr.shape, cgen_mapper, state),
             dtype=expr.dtype,
-            address_space=address_space)
+            address_space=address_space,
+            tags=_filter_tags_not_of_type(expr,
+                                          cgen_mapper
+                                          .array_tag_t_to_not_propagate))
 
 # }}}
 
@@ -862,6 +887,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    options: Optional[lp.Options] = None,
                    *,
                    cl_device: Optional["pyopencl.Device"] = None,
+                   array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
+                       ImplStored, Named, PrefixNamed]),
                    axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset(),
                    ) -> BoundProgram:
     r"""Code generation entry point.
@@ -885,6 +912,14 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
           allocation instruction are tagged with the corresponding
           :class:`~pytato.array.Axis`'s tags. The caller may choose to not
           propagate axis tags of type *axis_tag_t_to_not_propagate*.
+        - :attr:`pytato.Array.tags` of inputs/outputs in *outputs*
+          would be copied over to the tags of the corresponding
+          :class:`loopy.ArrayArg`. The caller may choose to not
+          propagate array tags of type *array_tag_t_to_not_propagate*.
+        - Arrays tagged with :class:`pytato.tags.ImplStored` would have their
+          tags copied over to the tags of corresponding
+          :class:`loopy.TemporaryVariable`. The caller may choose to not
+          propagate array tags of type *array_tag_t_to_not_propagate*.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
@@ -927,7 +962,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     state.var_name_gen.add_names(outputs)
 
-    cg_mapper = CodeGenMapper(axis_tag_t_to_not_propagate)
+    cg_mapper = CodeGenMapper(array_tag_t_to_not_propagate,
+                              axis_tag_t_to_not_propagate)
 
     # Generate code for outputs.
     for name in compute_order:
