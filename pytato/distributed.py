@@ -24,8 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Dict, Hashable, Tuple, Optional, Set,
-    List, FrozenSet, Callable, cast)
+from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
+    List, FrozenSet, Callable, cast, Mapping)  # Mapping required by sphinx
 
 from dataclasses import dataclass
 
