@@ -258,8 +258,6 @@ class DistributedGraphPart(GraphPart):
     .. attribute:: output_name_to_send_node
     .. attribute:: distributed_sends
     """
-    # TODO Document these
-
     input_name_to_recv_node: Dict[str, DistributedRecv]
     output_name_to_send_node: Dict[str, DistributedSend]
     distributed_sends: List[DistributedSend]
