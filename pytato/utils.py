@@ -171,6 +171,12 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
 
+    if isinstance(a1, SCALAR_CLASSES):
+        a1 = np.dtype(type(a1)).type(a1)
+
+    if isinstance(a2, SCALAR_CLASSES):
+        a2 = np.dtype(type(a2)).type(a2)
+
     if np.isscalar(a1) and np.isscalar(a2):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
