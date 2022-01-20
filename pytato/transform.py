@@ -62,6 +62,7 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: EdgeCachedMapper
+.. autoclass:: NodeCountMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -1334,5 +1335,27 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
     # }}}
 
 # }}}
+
+
+# {{{ NodeCountMapper
+
+class NodeCountMapper(CachedWalkMapper):
+    """
+    Counts the number of nodes in a DAG.
+
+    .. attribute:: count
+
+       The number of nodes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.count = 0
+
+    def post_visit(self, expr: Any) -> None:
+        self.count += 1
+
+# }}}
+
 
 # vim: foldmethod=marker
