@@ -1513,6 +1513,19 @@ def test_array_tags_propagated_to_loopy():
                 .tags_of_type(BazTag))
 
 
+def test_scalars_are_typed(ctx_factory):
+    # See https://github.com/inducer/pytato/issues/246
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_in = np.random.rand(3, 3)
+    x = pt.make_data_wrapper(x_in)
+    evt, (pt_out,) = pt.generate_loopy(x * 3.14j)(cq)
+    np_out = x_in * 3.14j
+    assert pt_out.dtype == np_out.dtype
+    np.testing.assert_allclose(pt_out, np_out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
