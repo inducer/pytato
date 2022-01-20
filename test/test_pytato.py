@@ -591,7 +591,7 @@ def test_nodecountmapper():
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
 
-        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
 
 
 if __name__ == "__main__":
