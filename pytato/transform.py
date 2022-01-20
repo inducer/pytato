@@ -62,7 +62,6 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: EdgeCachedMapper
-.. autoclass:: NodeCountMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -1332,30 +1331,26 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                 for name, child in expr.bindings.items()},
             )
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> \
+                DistributedSendRefHolder:
+        from pytato.distributed import DistributedSendRefHolder
+        return DistributedSendRefHolder(
+            send=self.handle_edge(expr, expr.send.data),
+            passthrough_data=self.handle_edge(expr, expr.passthrough_data),
+            tags=expr.tags
+        )
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedRecv
+        return DistributedRecv(
+            src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+            shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
+            dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
+
     # }}}
 
 # }}}
-
-
-# {{{ NodeCountMapper
-
-class NodeCountMapper(CachedWalkMapper):
-    """
-    Counts the number of nodes in a DAG.
-
-    .. attribute:: count
-
-       The number of nodes.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.count = 0
-
-    def post_visit(self, expr: Any) -> None:
-        self.count += 1
-
-# }}}
-
 
 # vim: foldmethod=marker

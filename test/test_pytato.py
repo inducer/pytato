@@ -582,21 +582,16 @@ def test_repr_array_is_deterministic():
 
 def test_nodecountmapper():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.transform import NodeCountMapper
+    from pytato.analysis import get_num_nodes
 
     axis_len = 5
-    counts = []
 
     for i in range(10):
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
-        ncm = NodeCountMapper()
-        ncm(dag)
 
-        counts.append(ncm.count)
-
-    assert counts == [32, 32, 1, 1, 17, 15, 47, 18, 1, 13]
+        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
 if __name__ == "__main__":

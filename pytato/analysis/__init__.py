@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
+Copyright (C) 2022 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -28,7 +29,7 @@ from typing import Mapping, Dict, Union, Set, Tuple
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase)
-from pytato.transform import Mapper, ArrayOrNames
+from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 
 __doc__ = """
@@ -37,6 +38,8 @@ __doc__ = """
 .. autofunction:: get_nusers
 
 .. autofunction:: is_einsum_similar_to_subscript
+
+.. autofunction:: get_num_nodes
 """
 
 
@@ -241,3 +244,32 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
         # }}}
 
     return True
+
+
+# {{{ NodeCountMapper
+
+class NodeCountMapper(CachedWalkMapper):
+    """
+    Counts the number of nodes in a DAG.
+
+    .. attribute:: count
+
+       The number of nodes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.count = 0
+
+    def post_visit(self, expr: Any) -> None:
+        self.count += 1
+
+
+def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
+
+    ncm = NodeCountMapper()
+    ncm(outputs)
+
+    return ncm.count
+
+# }}}
