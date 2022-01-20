@@ -448,10 +448,11 @@ def find_distributed_partition(
 
     from functools import partial
 
-    def get_part_id_x(topo: List[ArrayOrNames], expr: ArrayOrNames) -> DistributedPartitionId:
+    def get_part_id_x(topo: List[ArrayOrNames], expr: ArrayOrNames) \
+            -> DistributedPartitionId:
         return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
                                       frozenset(node_to_feeding_recvs[expr]),
-                                      (topo.index(expr)//500))
+                                      (topo.index(expr)//30000))
 
     pfunc = partial(get_part_id_x, tm.topological_order)
 
