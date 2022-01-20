@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Mapping, Dict, Union, Set, Tuple
+from typing import Mapping, Dict, Union, Set, Tuple, Any
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase)
@@ -266,6 +266,7 @@ class NodeCountMapper(CachedWalkMapper):
 
 
 def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
+    """Returns the number of nodes in DAG *outputs*."""
 
     ncm = NodeCountMapper()
     ncm(outputs)
