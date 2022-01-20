@@ -231,7 +231,8 @@ class EqualityComparer:
                 )
 
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
-        return (self.rec(expr1._container, expr2._container)
+        return (expr1.__class__ is expr2.__class__
+                and self.rec(expr1._container, expr2._container)
                 and expr1.tags == expr2.tags)
 
     def map_dict_of_named_arrays(self, expr1: DictOfNamedArrays, expr2: Any) -> bool:

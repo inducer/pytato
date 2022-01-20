@@ -381,6 +381,7 @@ def _gather_distributed_comm_info(partition: GraphPartition,
 class DistributedPartitionId():
     fed_sends: object
     feeding_recvs: object
+    num: int
 
 
 class _DistributedGraphPartitioner(_GraphPartitioner):
@@ -415,7 +416,7 @@ def find_distributed_partition(
     """Finds a partitioning in a distributed context."""
 
     from pytato.transform import (UsersCollector, TopoSortMapper,
-                                  reverse_graph, tag_user_nodes)
+                                  reverse_graph, tag_user_nodes, NodeCountMapper)
 
     gdm = UsersCollector()
     gdm(outputs)
@@ -442,9 +443,17 @@ def find_distributed_partition(
             tag_user_nodes(rev_graph, tag=node, starting_point=node,
                             node_to_tags=node_to_fed_sends)
 
-    def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
+    tm = TopoSortMapper()
+    tm(outputs)
+
+    from functools import partial
+
+    def get_part_id_x(topo: List[ArrayOrNames], expr: ArrayOrNames) -> DistributedPartitionId:
         return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
-                                      frozenset(node_to_feeding_recvs[expr]))
+                                      frozenset(node_to_feeding_recvs[expr]),
+                                      (topo.index(expr)//500))
+
+    pfunc = partial(get_part_id_x, tm.topological_order)
 
     # {{{ Sanity checks
 
@@ -458,16 +467,23 @@ def find_distributed_partition(
                 assert(isinstance(n, DistributedSend))
 
         tm = TopoSortMapper()
+
         tm(outputs)
 
+        ncm = NodeCountMapper()
+
+        ncm(outputs)
+
+        print("FULL DAG:", ncm.count, "nodes")
+
         for node in tm.topological_order:
-            get_part_id(node)
+            pfunc(node)
 
     # }}}
 
     from pytato.partition import find_partition
     return cast(DistributedGraphPartition,
-            find_partition(outputs, get_part_id, _DistributedGraphPartitioner))
+            find_partition(outputs, pfunc, _DistributedGraphPartitioner))
 
 # }}}
 
