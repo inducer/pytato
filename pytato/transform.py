@@ -1420,26 +1420,4 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 
 # }}}
 
-
-# {{{ NodeCountMapper
-
-class NodeCountMapper(CachedWalkMapper):
-    """
-    Counts the number of nodes in a DAG.
-
-    .. attribute:: count
-
-       The number of nodes.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.count = 0
-
-    def post_visit(self, expr: Any) -> None:
-        self.count += 1
-
-# }}}
-
-
 # vim: foldmethod=marker
