@@ -216,7 +216,8 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1._container, expr2._container)
                 and expr1.tags == expr2.tags
-                and expr1.axes == expr2.axes)
+                and expr1.axes == expr2.axes
+                and expr1.name == expr2.name)
 
     def map_loopy_call(self, expr1: LoopyCall, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -233,7 +234,9 @@ class EqualityComparer:
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1._container, expr2._container)
-                and expr1.tags == expr2.tags)
+                and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
+                and expr1.name == expr2.name)
 
     def map_dict_of_named_arrays(self, expr1: DictOfNamedArrays, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
