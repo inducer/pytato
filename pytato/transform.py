@@ -68,7 +68,6 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: EdgeCachedMapper
-.. autoclass:: NodeCountMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
