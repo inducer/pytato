@@ -595,6 +595,19 @@ def test_nodecountmapper():
         assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
 
 
+def test_rec_get_user_nodes():
+    x1 = pt.make_placeholder("x1", shape=(10, 4), dtype=np.float64)
+    x2 = pt.make_placeholder("x2", shape=(10, 4), dtype=np.float64)
+
+    expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
+                                         "out2": 7 * x1 + 3 * x2})
+
+    assert (pt.transform.rec_get_user_nodes(expr, x1)
+            == frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr}))
+    assert (pt.transform.rec_get_user_nodes(expr, x2)
+            == frozenset({3 * x2, 7*x1 + 3 * x2, expr}))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
