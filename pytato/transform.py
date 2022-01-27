@@ -27,6 +27,7 @@ THE SOFTWARE.
 from abc import ABC, abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Optional, Tuple)
+from pyrsistent.typing import PMap as PMapT
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -38,6 +39,7 @@ from pytato.array import (
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
+from pyrsistent import pmap
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -72,7 +74,7 @@ Dict representation of DAGs
 
 .. autoclass:: UsersCollector
 .. autofunction:: reverse_graph
-.. autofunction:: tag_child_nodes
+.. autofunction:: rec_get_user_nodes
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1127,6 +1129,17 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.node_to_users.setdefault(child, set()).add(expr)
                 self.rec(child)
 
+
+def get_users(expr: ArrayOrNames) -> PMapT[ArrayOrNames,
+                                           FrozenSet[ArrayOrNames]]:
+    """
+    Returns a mapping from node in *expr* to its direct users.
+    """
+    user_collector = UsersCollector()
+    user_collector(expr)
+    return pmap({node: frozenset(users)
+                 for node, users in user_collector.node_to_users.items()})
+
 # }}}
 
 
@@ -1154,30 +1167,32 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
     return result
 
 
-def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
-        starting_point: ArrayOrNames,
-        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None) \
-        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
-    """Tags all nodes reachable from *starting_point* with *tag*.
-
-    :param graph: A :class:`dict` representation of a directed graph, mapping each
-        node to other nodes to which it is connected by edges. A possible
-        use case for this function is the graph in
-        :attr:`UsersCollector.node_to_users`.
-    :param tag: The value to tag the nodes with.
-    :param starting_point: An optional starting point in *graph*.
-    :param node_to_tags: The resulting mapping of nodes to tags.
-    :returns: the updated value of *node_to_tags*.
+def rec_get_user_nodes(expr: ArrayOrNames,
+                       node: ArrayOrNames,
+                       ) -> FrozenSet[ArrayOrNames]:
     """
-    if node_to_tags is None:
-        node_to_tags = {}
-    node_to_tags.setdefault(starting_point, set()).add(tag)
-    if starting_point in graph:
-        for other_node_key in graph[starting_point]:
-            tag_child_nodes(graph, tag, other_node_key,
-                                          node_to_tags)
+    Returns all direct and indirect users of *node* in *expr*.
+    """
+    users = get_users(expr)
+    result = set()
+    queue = list(users.get(node, set()))
+    ids_already_noted_to_visit: Set[int] = set()
 
-    return node_to_tags
+    while queue:
+        current_node = queue[0]
+        queue = queue[1:]
+        result.add(current_node)
+        # visit each user only once.
+        users_to_visit = frozenset({user
+                                    for user in users.get(current_node, set())
+                                    if id(user) not in ids_already_noted_to_visit})
+
+        ids_already_noted_to_visit.update({id(k)
+                                           for k in users_to_visit})
+
+        queue.extend(list(users_to_visit))
+
+    return frozenset(result)
 
 # }}}
 
