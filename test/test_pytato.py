@@ -608,6 +608,36 @@ def test_rec_get_user_nodes():
             == frozenset({3 * x2, 7*x1 + 3 * x2, expr}))
 
 
+def test_rec_get_user_nodes_linear_complexity():
+
+    def construct_intestine_graph(depth=100, seed=0):
+        from numpy.random import default_rng
+        rng = default_rng(seed)
+        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        y = x
+
+        for _ in range(depth):
+            coeff1, coeff2 = rng.integers(0, 10, 2)
+            y = coeff1 * y + coeff2 * y
+
+        return y, x
+
+    expected_result = set()
+
+    class SubexprRecorder(pt.transform.CachedWalkMapper):
+        def post_visit(self, expr):
+            if not isinstance(expr, pt.Placeholder):
+                expected_result.add(expr)
+            else:
+                assert expr.name == "x"
+
+    expr, inp = construct_intestine_graph()
+    result = pt.transform.rec_get_user_nodes(expr, inp)
+    SubexprRecorder()(expr)
+
+    assert (expected_result == result)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
