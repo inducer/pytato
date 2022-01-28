@@ -595,6 +595,80 @@ def test_nodecountmapper():
         assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
 
 
+def test_rec_get_user_nodes():
+    x1 = pt.make_placeholder("x1", shape=(10, 4), dtype=np.float64)
+    x2 = pt.make_placeholder("x2", shape=(10, 4), dtype=np.float64)
+
+    expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
+                                         "out2": 7 * x1 + 3 * x2})
+
+    assert (pt.transform.rec_get_user_nodes(expr, x1)
+            == frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr}))
+    assert (pt.transform.rec_get_user_nodes(expr, x2)
+            == frozenset({3 * x2, 7*x1 + 3 * x2, expr}))
+
+
+def test_rec_get_user_nodes_linear_complexity():
+
+    def construct_intestine_graph(depth=100, seed=0):
+        from numpy.random import default_rng
+        rng = default_rng(seed)
+        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        y = x
+
+        for _ in range(depth):
+            coeff1, coeff2 = rng.integers(0, 10, 2)
+            y = coeff1 * y + coeff2 * y
+
+        return y, x
+
+    expected_result = set()
+
+    class SubexprRecorder(pt.transform.CachedWalkMapper):
+        def post_visit(self, expr):
+            if not isinstance(expr, pt.Placeholder):
+                expected_result.add(expr)
+            else:
+                assert expr.name == "x"
+
+    expr, inp = construct_intestine_graph()
+    result = pt.transform.rec_get_user_nodes(expr, inp)
+    SubexprRecorder()(expr)
+
+    assert (expected_result == result)
+
+
+def test_tag_user_nodes_linear_complexity():
+    from numpy.random import default_rng
+
+    def construct_intestine_graph(depth=100, seed=0):
+        rng = default_rng(seed)
+        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        y = x
+
+        for _ in range(depth):
+            coeff1, coeff2 = rng.integers(0, 10, 2)
+            y = coeff1 * y + coeff2 * y
+
+        return y, x
+
+    expr, inp = construct_intestine_graph()
+    user_collector = pt.transform.UsersCollector()
+    user_collector(expr)
+
+    expected_result = {}
+
+    class ExpectedResultComputer(pt.transform.CachedWalkMapper):
+        def post_visit(self, expr):
+            expected_result[expr] = {"foo"}
+
+    expr, inp = construct_intestine_graph()
+    result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
+    ExpectedResultComputer()(expr)
+
+    assert expected_result == result
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

@@ -79,6 +79,7 @@ Dict representation of DAGs
 .. autoclass:: UsersCollector
 .. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
+.. autofunction:: rec_get_user_nodes
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1198,6 +1199,16 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
+
+def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
+                                             Set[ArrayOrNames]]:
+    """
+    Returns a mapping from node in *expr* to its direct users.
+    """
+    user_collector = UsersCollector()
+    user_collector(expr)
+    return user_collector.node_to_users  # type: ignore
+
 # }}}
 
 
@@ -1225,10 +1236,46 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
     return result
 
 
-def tag_user_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
+def _recursively_get_all_users(
+        direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
+        node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
+    result = set()
+    queue = list(direct_users.get(node, set()))
+    ids_already_noted_to_visit: Set[int] = set()
+
+    while queue:
+        current_node = queue[0]
+        queue = queue[1:]
+        result.add(current_node)
+        # visit each user only once.
+        users_to_visit = frozenset({user
+                                    for user in direct_users.get(current_node, set())
+                                    if id(user) not in ids_already_noted_to_visit})
+
+        ids_already_noted_to_visit.update({id(k)
+                                           for k in users_to_visit})
+
+        queue.extend(list(users_to_visit))
+
+    return frozenset(result)
+
+
+def rec_get_user_nodes(expr: ArrayOrNames,
+                       node: ArrayOrNames,
+                       ) -> FrozenSet[ArrayOrNames]:
+    """
+    Returns all direct and indirect users of *node* in *expr*.
+    """
+    users = get_users(expr)
+    return _recursively_get_all_users(users, node)
+
+
+def tag_user_nodes(
+        graph: Mapping[ArrayOrNames, Set[ArrayOrNames]],
+        tag: Any,
         starting_point: ArrayOrNames,
-        node_to_tags: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
-        -> None:
+        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None
+        ) -> Dict[ArrayOrNames, Set[Any]]:
     """Tags all nodes reachable from *starting_point* with *tag*.
 
     :param graph: A :class:`dict` representation of a directed graph, mapping each
@@ -1239,11 +1286,19 @@ def tag_user_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
     :param starting_point: A starting point in *graph*.
     :param node_to_tags: The resulting mapping of nodes to tags.
     """
+    from warnings import warn
+    warn("tag_user_nodes is set for deprecation in June, 2022",
+         DeprecationWarning)
+
+    if node_to_tags is None:
+        node_to_tags = {}
+
     node_to_tags.setdefault(starting_point, set()).add(tag)
-    if starting_point in graph:
-        for other_node_key in graph[starting_point]:
-            tag_user_nodes(graph, tag=tag, starting_point=other_node_key,
-                                          node_to_tags=node_to_tags)
+
+    for user in _recursively_get_all_users(graph, starting_point):
+        node_to_tags.setdefault(user, set()).add(tag)
+
+    return node_to_tags
 
 # }}}
 
