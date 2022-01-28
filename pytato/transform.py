@@ -1174,7 +1174,7 @@ def tag_child_nodes(graph: Dict[ArrayOrNames, Set[ArrayOrNames]], tag: Any,
     node_to_tags.setdefault(starting_point, set()).add(tag)
     if starting_point in graph:
         for other_node_key in graph[starting_point]:
-            tag_child_nodes(graph, other_node_key, tag,
+            tag_child_nodes(graph, tag, other_node_key,
                                           node_to_tags)
 
     return node_to_tags
