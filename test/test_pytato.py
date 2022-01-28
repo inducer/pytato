@@ -638,6 +638,37 @@ def test_rec_get_user_nodes_linear_complexity():
     assert (expected_result == result)
 
 
+def test_tag_child_nodes_linear_complexity():
+    from numpy.random import default_rng
+
+    def construct_intestine_graph(depth=100, seed=0):
+        rng = default_rng(seed)
+        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        y = x
+
+        for _ in range(depth):
+            coeff1, coeff2 = rng.integers(0, 10, 2)
+            y = coeff1 * y + coeff2 * y
+
+        return y, x
+
+    expr, inp = construct_intestine_graph()
+    user_collector = pt.transform.UsersCollector()
+    user_collector(expr)
+
+    expected_result = {}
+
+    class ExpectedResultComputer(pt.transform.CachedWalkMapper):
+        def post_visit(self, expr):
+            expected_result[expr] = {"foo"}
+
+    expr, inp = construct_intestine_graph()
+    result = pt.transform.tag_child_nodes(user_collector.node_to_users, "foo", inp)
+    ExpectedResultComputer()(expr)
+
+    assert expected_result == result
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
