@@ -1167,15 +1167,11 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
     return result
 
 
-def rec_get_user_nodes(expr: ArrayOrNames,
-                       node: ArrayOrNames,
-                       ) -> FrozenSet[ArrayOrNames]:
-    """
-    Returns all direct and indirect users of *node* in *expr*.
-    """
-    users = get_users(expr)
+def _recursively_get_all_users(
+        direct_users: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]],
+        node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
     result = set()
-    queue = list(users.get(node, set()))
+    queue = list(direct_users.get(node, set()))
     ids_already_noted_to_visit: Set[int] = set()
 
     while queue:
@@ -1184,7 +1180,7 @@ def rec_get_user_nodes(expr: ArrayOrNames,
         result.add(current_node)
         # visit each user only once.
         users_to_visit = frozenset({user
-                                    for user in users.get(current_node, set())
+                                    for user in direct_users.get(current_node, set())
                                     if id(user) not in ids_already_noted_to_visit})
 
         ids_already_noted_to_visit.update({id(k)
@@ -1193,6 +1189,48 @@ def rec_get_user_nodes(expr: ArrayOrNames,
         queue.extend(list(users_to_visit))
 
     return frozenset(result)
+
+
+def rec_get_user_nodes(expr: ArrayOrNames,
+                       node: ArrayOrNames,
+                       ) -> FrozenSet[ArrayOrNames]:
+    """
+    Returns all direct and indirect users of *node* in *expr*.
+    """
+    users = get_users(expr)
+    return _recursively_get_all_users(users, node)
+
+
+def tag_child_nodes(
+        graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]],
+        tag: Any,
+        starting_point: ArrayOrNames,
+        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None
+        ) -> Dict[ArrayOrNames, Set[Any]]:
+    """Tags all nodes reachable from *starting_point* with *tag*.
+
+    :param graph: A :class:`dict` representation of a directed graph, mapping each
+        node to other nodes to which it is connected by edges. A possible
+        use case for this function is the graph in
+        :attr:`UsersCollector.node_to_users`.
+    :param tag: The value to tag the nodes with.
+    :param starting_point: An optional starting point in *graph*.
+    :param node_to_tags: The resulting mapping of nodes to tags.
+    :returns: the updated value of *node_to_tags*.
+    """
+    from warnings import warn
+    warn("tag_child_nodes is set for deprecation in June, 2022",
+         DeprecationWarning)
+
+    if node_to_tags is None:
+        node_to_tags = {}
+
+    node_to_tags.setdefault(starting_point, set()).add(tag)
+
+    for user in _recursively_get_all_users(graph, starting_point):
+        node_to_tags.setdefault(user, set()).add(tag)
+
+    return node_to_tags
 
 # }}}
 
