@@ -116,26 +116,53 @@ def test_distributed_execution_random_dag():
     run_test_with_mpi(2, _do_test_distributed_execution_random_dag)
 
 
+class _RandomDAGTag:
+    pass
+
+
 def _do_test_distributed_execution_random_dag(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
 
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
     from testlib import RandomDAGContext, make_random_dag
 
     axis_len = 4
+    comm_fake_prob = 500
 
-    have_comm = False
+    gen_comm_called = False
 
     ntests = 10
-    comm_tag = 17
     for i in range(ntests):
         print("Step", i)
         seed = 120 + i
 
         # {{{ Compute value with communication
 
+        comm_tag = 17
+
+        def gen_comm(rdagc):
+            nonlocal gen_comm_called
+            gen_comm_called = True
+
+            nonlocal comm_tag
+            comm_tag += 1
+            tag = (comm_tag, _RandomDAGTag)
+
+            inner = make_random_dag(rdagc)
+            return staple_distributed_send(
+                    inner, dest_rank=(rank-1) % size, comm_tag=tag,
+                    stapled_to=make_distributed_recv(
+                        src_rank=(rank+1) % size, comm_tag=tag,
+                        shape=inner.shape, dtype=inner.dtype))
+
         rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False, use_comm=True)
+                axis_len=axis_len, use_numpy=False,
+                additional_generators=[
+                    (comm_fake_prob, gen_comm)
+                    ])
         x_comm = make_random_dag(rdagc_comm)
 
         distributed_partition = find_distributed_partition(
@@ -146,19 +173,6 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 comm,
                 distributed_partition,
                 base_tag=comm_tag)
-
-        if not have_comm:
-            from pytato.transform import UsersCollector
-            from pytato.distributed import DistributedSendRefHolder
-
-            gdm = UsersCollector()
-            gdm(x_comm)
-
-            graph = gdm.node_to_users
-            for node in graph:
-                if isinstance(node, DistributedSendRefHolder):
-                    have_comm = True
-                    break
 
         prg_per_partition = generate_code_for_partition(distributed_partition)
 
@@ -175,7 +189,10 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
         # {{{ compute ref value without communication
 
         rdagc_no_comm = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False, use_comm=False)
+                axis_len=axis_len, use_numpy=False,
+                additional_generators=[
+                    (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
+                    ])
         x_no_comm = make_random_dag(rdagc_no_comm)
 
         prg = pt.generate_loopy(x_no_comm, cl_device=queue.device)
@@ -188,7 +205,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
         np.testing.assert_allclose(res_comm, res_no_comm)
 
-    assert have_comm
+    assert gen_comm_called
 
 # }}}
 
