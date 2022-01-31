@@ -36,7 +36,7 @@ from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           Placeholder, make_placeholder,
                           _get_default_axes, AxesT)
 from pytato.transform import ArrayOrNames, CopyMapper
-from pytato.partition import GraphPart, GraphPartition, PartId, _GraphPartitioner
+from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
 from pytato.target import BoundProgram
 
 import numpy as np
@@ -383,7 +383,7 @@ class DistributedPartitionId():
     feeding_recvs: object
 
 
-class _DistributedGraphPartitioner(_GraphPartitioner):
+class _DistributedGraphPartitioner(GraphPartitioner):
 
     def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
         super().__init__(get_part_id)

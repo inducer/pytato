@@ -41,11 +41,19 @@ from pytato.target import BoundProgram
 __doc__ = """
 .. autoclass:: GraphPart
 .. autoclass:: GraphPartition
-.. autoclass:: _GraphPartitioner
+.. autoclass:: GraphPartitioner
 .. autoexception:: PartitionInducedCycleError
 
 .. autofunction:: find_partition
 .. autofunction:: execute_partition
+
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: T
+
+    A type variable for :class:`~pytato.array.AbstractResultWithNamedArrays`.
 """
 
 
@@ -56,10 +64,14 @@ PartId = Hashable
 
 # {{{ graph partitioner
 
-class _GraphPartitioner(EdgeCachedMapper):
+class GraphPartitioner(EdgeCachedMapper):
     """Given a function *get_part_id*, produces subgraphs representing
     the computation. Users should not use this class directly, but use
     :meth:`find_partition` instead.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    .. automethod:: make_partition
     """
 
     def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
@@ -297,7 +309,7 @@ class PartitionInducedCycleError(Exception):
 
 def find_partition(outputs: DictOfNamedArrays,
         part_func: Callable[[ArrayOrNames], PartId],
-        partitioner_class: Type[_GraphPartitioner] = _GraphPartitioner) ->\
+        partitioner_class: Type[GraphPartitioner] = GraphPartitioner) ->\
         GraphPartition:
     """Partitions the *expr* according to *part_func* and generates code for
     each partition. Raises :exc:`PartitionInducedCycleError` if the partitioning
@@ -318,7 +330,7 @@ def find_partition(outputs: DictOfNamedArrays,
     :param outputs: The outputs to partition.
     :param part_func: A callable that returns an instance of
         :class:`Hashable` for a node.
-    :param partitioner_class: A :class:`_GraphPartitioner` to
+    :param partitioner_class: A :class:`GraphPartitioner` to
         guide the partitioning.
     :returns: An instance of :class:`GraphPartition` that contains the partition.
     """
