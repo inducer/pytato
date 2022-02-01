@@ -634,6 +634,7 @@ def execute_distributed_partition(
         if not complete_recv_indices:
             complete_recv_indices = []
 
+        # reverse to preserve indices
         for idx in sorted(complete_recv_indices, reverse=True):
             name = recv_names.pop(idx)
             recv_requests.pop(idx)
