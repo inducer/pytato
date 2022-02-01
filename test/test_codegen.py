@@ -1360,6 +1360,43 @@ def test_random_dag_against_numpy(ctx_factory):
             assert np.allclose(pt_result["result"], ref_result)
 
 
+def test_random_dag_against_numpy_additional_gen(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    comm_fake_prob = 500
+    axis_len = 4
+
+    from testlib import RandomDAGContext, make_random_dag
+    # ntests = 10
+    # for i in range(ntests):
+    for i in [49, 6]:
+        seed = 140 + i
+        print(f"Step {i} {seed}")
+
+        rdagc_numpy = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=True,
+                additional_generators=[
+                    (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
+                    ])
+        res_no_comm_numpy = make_random_dag(rdagc_numpy)
+
+        rdagc = RandomDAGContext(np.random.default_rng(seed=seed),
+                axis_len=axis_len, use_numpy=False,
+                additional_generators=[
+                    (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
+                    ])
+
+        rdag = make_random_dag(rdagc)
+
+        prg = pt.generate_loopy(rdag, cl_device=queue.device,
+                #options=lp.Options(write_cl=True)
+                )
+        _, (res_no_comm, ) = prg(queue)
+
+        np.testing.assert_allclose(res_no_comm, res_no_comm_numpy)
+
+
 def test_partitioner(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
