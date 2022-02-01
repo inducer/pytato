@@ -124,6 +124,9 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
 
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
     rank = comm.Get_rank()
     size = comm.Get_size()
 
@@ -136,10 +139,10 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
     ntests = 10
     for i in range(ntests):
-        print("Step", i)
         seed = 120 + i
+        print(f"Step {i} {seed}")
 
-        # {{{ Compute value with communication
+        # {{{ compute value with communication
 
         comm_tag = 17
 
@@ -176,9 +179,6 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
         prg_per_partition = generate_code_for_partition(distributed_partition)
 
-        ctx = cl.create_some_context()
-        queue = cl.CommandQueue(ctx)
-
         context = execute_distributed_partition(
                     distributed_partition, prg_per_partition, queue, comm)
 
@@ -188,22 +188,21 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
         # {{{ compute ref value without communication
 
+        # compiled evaluation (i.e. use_numpy=False) fails for some of these
+        # graphs, cf. https://github.com/inducer/pytato/pull/255
         rdagc_no_comm = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False,
+                axis_len=axis_len, use_numpy=True,
                 additional_generators=[
                     (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
                     ])
-        x_no_comm = make_random_dag(rdagc_no_comm)
-
-        prg = pt.generate_loopy(x_no_comm, cl_device=queue.device)
-        _, (res_no_comm, ) = prg(queue)
+        res_no_comm_numpy = make_random_dag(rdagc_no_comm)
 
         # }}}
 
         if not isinstance(res_comm, np.ndarray):
             res_comm = res_comm.get(queue=queue)
 
-        np.testing.assert_allclose(res_comm, res_no_comm)
+        np.testing.assert_allclose(res_comm, res_no_comm_numpy)
 
     assert gen_comm_called
 
