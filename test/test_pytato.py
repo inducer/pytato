@@ -669,6 +669,13 @@ def test_tag_child_nodes_linear_complexity():
     assert expected_result == result
 
 
+def test_basic_index_equality_traverses_underlying_arrays():
+    # to test bug in pytato which didn't account underlying arrays
+    a = pt.make_placeholder("a", (10,), float)
+    b = pt.make_placeholder("b", (10,), float)
+    assert a[0] != b[0]
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
