@@ -1331,24 +1331,36 @@ def test_random_dag_against_numpy(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    from testlib import RandomDAGContext, make_random_dag
+    from testlib import RandomDAGContext, make_random_dag, make_random_dag_rec
     axis_len = 5
     from warnings import filterwarnings, catch_warnings
     with catch_warnings():
         # We'd like to know if Numpy divides by zero.
         filterwarnings("error")
 
-        for i in range(50):
-            print(i)  # progress indicator for somewhat slow test
+        size = 20
 
+        for i in range(50):
             seed = 120 + i
+
+            additional_generators = [
+                    (500, lambda rdagc, size: make_random_dag_rec(rdagc, size=size))
+                    ]
+
             rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                    additional_generators=additional_generators,
                     axis_len=axis_len, use_numpy=False)
             rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
+                    additional_generators=additional_generators,
                     axis_len=axis_len, use_numpy=True)
 
-            ref_result = make_random_dag(rdagc_np)
-            dag = make_random_dag(rdagc_pt)
+            ref_result, ref_size = make_random_dag(rdagc_np, size=size)
+            dag, dag_size = make_random_dag(rdagc_pt, size=size)
+
+            assert ref_size == dag_size
+
+            print(f"Step {i} {seed=} {dag_size=}")
+
             from pytato.transform import materialize_with_mpms
             dict_named_arys = pt.DictOfNamedArrays({"result": dag})
             dict_named_arys = materialize_with_mpms(dict_named_arys)

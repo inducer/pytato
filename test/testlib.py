@@ -79,9 +79,12 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
 # {{{ random DAG generation
 
 class RandomDAGContext:
-    def __init__(self, rng: np.random.Generator, axis_len: int, use_numpy: bool,
+    def __init__(
+            self, rng: np.random.Generator, axis_len: int, use_numpy: bool,
             additional_generators: Optional[Sequence[
-                Tuple[int, Callable[[RandomDAGContext], Array]]]] = None) -> None:
+                Tuple[int, Callable[[RandomDAGContext, int],
+                    Tuple[Array, int]]]]] = None
+            ) -> None:
         """
         :param additional_generators: A sequence of tuples
             ``(fake_probability, gen_func)``, where *fake_probability* is
@@ -132,68 +135,89 @@ _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
         operator.pow, "maximum", "minimum"]
 
 
-def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
+def make_random_binary_op(rdagc: RandomDAGContext,
+        op1: Any, *, size: int) -> Tuple[Any, int]:
+    rng = rdagc.rng
+
+    op2, op2_size = make_random_dag_rec(rdagc, size=size - 1)
+    m = min(op1.ndim, op2.ndim)
+    naxes = rng.integers(m, m+2)
+
+    # Introduce a few new 1-long axes to test broadcasting.
+    op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
+    op2 = op2.reshape(*make_random_reshape(rdagc, op2.shape, naxes))
+
+    # type ignore because rng.choice doesn't have broad enough type
+    # annotation to represent choosing callables.
+    which_op = rng.choice(_BINOPS)  # type: ignore[arg-type]
+
+    if which_op is operator.pow:
+        op1 = abs(op1)
+
+    # Squeeze because all axes need to be of rdagc.axis_len, and we've
+    # just inserted a few new 1-long axes. Those need to go before we
+    # return.
+    if which_op in ["maximum", "minimum"]:
+        result = getattr(rdagc.np, which_op)(op1, op2)
+    else:
+        result = which_op(op1, op2)
+
+    return rdagc.np.squeeze(result), op2_size + 1
+
+
+def make_random_dag_choice(rdagc: RandomDAGContext, *, size: int) -> Tuple[Any, int]:
     rng = rdagc.rng
 
     max_prob_hardcoded = 1500
     additional_prob = sum(
             fake_prob
             for fake_prob, _func in rdagc.additional_generators)
+
+    if size <= 1:
+        return make_random_constant(rdagc, naxes=rng.integers(1, 3)), 1
+
     while True:
         v = rng.integers(0, max_prob_hardcoded + additional_prob)
 
         if v < 600:
-            return make_random_constant(rdagc, naxes=rng.integers(1, 3))
+            return make_random_constant(rdagc, naxes=rng.integers(1, 3)), 1
 
         elif v < 1000:
-            op1 = make_random_dag(rdagc)
-            op2 = make_random_dag(rdagc)
-            m = min(op1.ndim, op2.ndim)
-            naxes = rng.integers(m, m+2)
+            op1, op1_size = make_random_dag_rec(rdagc, size=size)
 
-            # Introduce a few new 1-long axes to test broadcasting.
-            op1 = op1.reshape(*make_random_reshape(rdagc, op1.shape, naxes))
-            op2 = op2.reshape(*make_random_reshape(rdagc, op2.shape, naxes))
+            if op1_size > size:
+                continue
 
-            # type ignore because rng.choice doesn't have broad enough type
-            # annotation to represent choosing callables.
-            which_op = rng.choice(_BINOPS)  # type: ignore[arg-type]
+            result, op2_and_root_size = make_random_binary_op(
+                    rdagc, op1, size=size - op1_size)
 
-            if which_op is operator.pow:
-                op1 = abs(op1)
-
-            # Squeeze because all axes need to be of rdagc.axis_len, and we've
-            # just inserted a few new 1-long axes. Those need to go before we
-            # return.
-            if which_op in ["maximum", "minimum"]:
-                return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))
-            else:
-                return rdagc.np.squeeze(which_op(op1, op2))
+            return result, op1_size + op2_and_root_size
 
         elif v < 1075:
-            op1 = make_random_dag(rdagc)
-            op2 = make_random_dag(rdagc)
+            op1, op1_size = make_random_dag_rec(rdagc, size=size)
+            op2, op2_size = make_random_dag_rec(rdagc, size=size-op1_size-1)
             if op1.ndim <= 1 and op2.ndim <= 1:
                 continue
 
-            return op1 @ op2
+            return op1 @ op2, op1_size + 1 + op2_size
 
         elif v < 1275:
             if not rdagc.past_results:
                 continue
-            return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
+
+            return rdagc.past_results[rng.integers(0, len(rdagc.past_results))], 0
 
         elif v < max_prob_hardcoded:
-            result = make_random_dag(rdagc)
+            result, res_size = make_random_dag_rec(rdagc, size=size-1)
             return rdagc.np.transpose(
                     result,
-                    tuple(rng.permuted(list(range(result.ndim)))))
+                    tuple(rng.permuted(list(range(result.ndim))))), res_size + 1
 
         else:
             base_prob = max_prob_hardcoded
             for fake_prob, gen_func in rdagc.additional_generators:
                 if base_prob <= v < base_prob + fake_prob:
-                    return gen_func(rdagc)
+                    return gen_func(rdagc, size)
 
                 base_prob += fake_prob
 
@@ -207,15 +231,9 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     # FIXME: include DictOfNamedArrays
 
 
-def make_random_dag(rdagc: RandomDAGContext) -> Any:
-    """Return a :class:`pytato.Array` or a :class:`numpy.ndarray`
-    (cf. :attr:`RandomDAGContext.use_numpy`) that is the result of a random
-    (cf. :attr:`RandomDAGContext.rng`) array computation. All axes
-    of the array are of length :attr:`RandomDAGContext.axis_len` (there is
-    at least one axis, but arbitrarily more may be present).
-    """
+def make_random_dag_rec(rdagc: RandomDAGContext, *, size: int) -> Tuple[Any, int]:
     rng = rdagc.rng
-    result = make_random_dag_inner(rdagc)
+    result, actual_size = make_random_dag_choice(rdagc, size=size)
 
     if result.ndim > 2:
         v = rng.integers(0, 2)
@@ -225,21 +243,39 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
             subscript[rng.integers(0, result.ndim)] = int(
                     rng.integers(0, rdagc.axis_len))
 
-            return result[tuple(subscript)]
+            return result[tuple(subscript)], actual_size+1
 
         elif v == 1:
             # reduce away an axis
 
             # FIXME do reductions other than sum?
             return rdagc.np.sum(
-                    result, axis=int(rng.integers(0, result.ndim)))
+                    result, axis=int(rng.integers(0, result.ndim))), actual_size+1
 
         else:
             raise AssertionError()
 
     rdagc.past_results.append(result)
 
-    return result
+    return result, actual_size
+
+
+def make_random_dag(rdagc: RandomDAGContext, *, size: int) -> Tuple[Any, int]:
+    """Return a :class:`pytato.Array` or a :class:`numpy.ndarray`
+    (cf. :attr:`RandomDAGContext.use_numpy`) that is the result of a random
+    (cf. :attr:`RandomDAGContext.rng`) array computation. All axes
+    of the array are of length :attr:`RandomDAGContext.axis_len` (there is
+    at least one axis, but arbitrarily more may be present).
+    """
+    result, actual_size = make_random_dag_rec(rdagc, size=size)
+
+    while actual_size < size:
+        result, op2_and_root_size = make_random_binary_op(
+                rdagc, result, size=size - actual_size)
+
+        actual_size = actual_size + op2_and_root_size
+
+    return result, actual_size
 
 # }}}
 
