@@ -170,6 +170,7 @@ class EqualityComparer:
 
     def _map_index_base(self, expr1: IndexBase, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
+                and self.rec(expr1.array, expr2.array)
                 and len(expr1.indices) == len(expr2.indices)
                 and all(self.rec(idx1, idx2)
                         if (isinstance(idx1, Array)
