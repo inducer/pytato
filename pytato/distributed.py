@@ -655,18 +655,16 @@ def execute_distributed_partition(
                 and (set(partition.parts[pid].input_name_to_recv_node)
                     <= recv_names_completed)}
         for pid in ready_pids:
-
             exec_ready_part(partition.parts[pid])
 
-            partition_input_names_required = set()
+            partition_input_names_required: Set[str] = set()
 
-            for pid in pids_to_execute:
-                partition_input_names_required.add(
-                        partition.parts[pid].all_input_names())
+            for npid in pids_to_execute:
+                partition_input_names_required.update(
+                        partition.parts[npid].all_input_names())
 
             for p in partition.parts[pid].partition_input_names:
                 if p not in partition_input_names_required and p in context:
-                    print(f"deleting {p}")
                     del context[p]
 
         if not ready_pids:
