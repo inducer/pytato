@@ -645,9 +645,6 @@ def execute_distributed_partition(
             context[name] = cl.array.to_device(queue, buf)
             recv_names_completed.add(name)
 
-    # FIXME: This keeps all variables alive that are used to get data into
-    # and out of partitions. Probably not what we want long-term.
-
     # {{{ main loop
 
     while pids_to_execute:
@@ -658,7 +655,18 @@ def execute_distributed_partition(
                 and (set(partition.parts[pid].input_name_to_recv_node)
                     <= recv_names_completed)}
         for pid in ready_pids:
+
             exec_ready_part(partition.parts[pid])
+
+            partition_input_names_required = set()
+
+            for pid in pids_to_execute:
+                partition_input_names_required.add(partition.parts[pid].all_input_names())
+
+            for p in partition.parts[pid].partition_input_names:
+                if not p in partition_input_names_required and p in context:
+                    print(f"deleting {p}")
+                    del context[p]
 
         if not ready_pids:
             wait_for_some_recvs()
