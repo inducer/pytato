@@ -609,6 +609,17 @@ def execute_distributed_partition(
     recv_names_completed = set()
     send_requests = []
 
+    # Keep a count on how often each input name is used,
+    # in order to be able to free them.
+    partition_input_names_refcount: Dict[str, int] = {}
+
+    for pid in pids_to_execute:
+        for name in partition.parts[pid].all_input_names():
+            if name in partition_input_names_refcount:
+                partition_input_names_refcount[name] += 1
+            else:
+                partition_input_names_refcount[name] = 1
+
     def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.all_input_names()}
 
@@ -657,14 +668,9 @@ def execute_distributed_partition(
         for pid in ready_pids:
             exec_ready_part(partition.parts[pid])
 
-            partition_input_names_required: Set[str] = set()
-
-            for npid in pids_to_execute:
-                partition_input_names_required.update(
-                        partition.parts[npid].all_input_names())
-
-            for p in partition.parts[pid].partition_input_names:
-                if p not in partition_input_names_required and p in context:
+            for p in partition.parts[pid].all_input_names():
+                partition_input_names_refcount[p] -= 1
+                if partition_input_names_refcount[p] == 0:
                     del context[p]
 
         if not ready_pids:
@@ -674,6 +680,10 @@ def execute_distributed_partition(
 
     for send_req in send_requests:
         send_req.Wait()
+
+    if __debug__:
+        for _, v in partition_input_names_refcount.items():
+            assert v == 0
 
     return context
 
