@@ -683,8 +683,9 @@ def execute_distributed_partition(
         send_req.Wait()
 
     if __debug__:
-        for _, v in partition_input_names_refcount.items():
-            assert v == 0
+        for name, count in partition_input_names_refcount.items():
+            assert count == 0
+            assert name not in context
 
     return context
 
