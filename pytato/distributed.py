@@ -666,9 +666,10 @@ def execute_distributed_partition(
                 and (set(partition.parts[pid].input_name_to_recv_node)
                     <= recv_names_completed)}
         for pid in ready_pids:
-            exec_ready_part(partition.parts[pid])
+            part = partition.parts[pid]
+            exec_ready_part(part)
 
-            for p in partition.parts[pid].all_input_names():
+            for p in part.all_input_names():
                 partition_input_names_refcount[p] -= 1
                 if partition_input_names_refcount[p] == 0:
                     del context[p]
