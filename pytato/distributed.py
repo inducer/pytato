@@ -619,7 +619,6 @@ def execute_distributed_partition(
     @memoize_method
     def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
             -> Dict[str, int]:
-        print("_get_partition_input_name_refcount")
         partition_input_names_refcount: Dict[str, int] = {}
         for pid in set(partition.parts):
             for name in partition.parts[pid].all_input_names():
