@@ -28,6 +28,11 @@ Partitioning Array Expression Graphs
 
 .. automodule:: pytato.partition
 
+Support for Distributed-Memory/Message Passing
+==============================================
+
+.. automodule:: pytato.distributed
+
 Utilities and Diagnostics
 =========================
 

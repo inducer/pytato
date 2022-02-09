@@ -32,7 +32,6 @@ from pytato.array import (
         AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         SizeParam, Axis,
 
-
         make_dict_of_named_arrays,
         make_placeholder, make_size_param, make_data_wrapper,
         einsum,
@@ -70,6 +69,15 @@ from pytato.visualization import (get_dot_graph, show_dot_graph,
 import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.transform as transform
+from pytato.distributed import (make_distributed_send, make_distributed_recv,
+                                DistributedRecv, DistributedSend,
+                                DistributedSendRefHolder,
+                                staple_distributed_send,
+                                find_distributed_partition,
+                                number_distributed_tags,
+                                execute_distributed_partition)
+
+from pytato.partition import generate_code_for_partition
 
 __all__ = (
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
@@ -110,6 +118,15 @@ __all__ = (
         "dot", "vdot", "squeeze",
 
         "broadcast_to",
+
+        "make_distributed_recv", "make_distributed_send", "DistributedRecv",
+        "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
+
+        "find_distributed_partition",
+        "number_distributed_tags",
+        "execute_distributed_partition",
+
+        "generate_code_for_partition",
 
         # sub-modules
         "analysis", "tags", "transform",

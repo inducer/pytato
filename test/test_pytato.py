@@ -638,7 +638,7 @@ def test_rec_get_user_nodes_linear_complexity():
     assert (expected_result == result)
 
 
-def test_tag_child_nodes_linear_complexity():
+def test_tag_user_nodes_linear_complexity():
     from numpy.random import default_rng
 
     def construct_intestine_graph(depth=100, seed=0):
@@ -663,7 +663,7 @@ def test_tag_child_nodes_linear_complexity():
             expected_result[expr] = {"foo"}
 
     expr, inp = construct_intestine_graph()
-    result = pt.transform.tag_child_nodes(user_collector.node_to_users, "foo", inp)
+    result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
     ExpectedResultComputer()(expr)
 
     assert expected_result == result

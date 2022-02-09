@@ -2,6 +2,8 @@ from __future__ import annotations
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
+Copyright (C) 2020-21 Kaushik Kulkarni
+Copyright (C) 2020-21 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -24,10 +26,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Optional, Tuple)
-from pyrsistent.typing import PMap as PMapT
+                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -36,10 +37,13 @@ from pytato.array import (
         IndexRemappingBase, Einsum, InputArgumentBase,
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         IndexBase)
+
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
-from pyrsistent import pmap
+
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
 T = TypeVar("T", Array, AbstractResultWithNamedArrays)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
@@ -74,6 +78,7 @@ Dict representation of DAGs
 
 .. autoclass:: UsersCollector
 .. autofunction:: reverse_graph
+.. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
 Internal stuff that is only here because the documentation tool wants it
@@ -306,6 +311,23 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                        axes=expr.axes,
                        tags=expr.tags)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> Array:
+        from pytato.distributed import DistributedSend, DistributedSendRefHolder
+        return DistributedSendRefHolder(
+                DistributedSend(
+                    data=self.rec(expr.send.data),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag),
+                self.rec(expr.passthrough_data))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> Array:
+        from pytato.distributed import DistributedRecv
+        return DistributedRecv(
+               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+               shape=self.rec_idx_or_size_tuple(expr.shape),
+               dtype=expr.dtype, tags=expr.tags)
+
 # }}}
 
 
@@ -400,6 +422,16 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_loopy_call_result(self, expr: LoopyCallResult) -> CombineT:
         return self.rec(expr._container)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> CombineT:
+        return self.combine(
+                self.rec(expr.send.data),
+                self.rec(expr.passthrough_data),
+                )
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
+        return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
+
 # }}}
 
 
@@ -458,6 +490,14 @@ class DependencyMapper(CombineMapper[R]):
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> R:
         return self.combine(frozenset([expr]), super().map_loopy_call_result(expr))
+
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> R:
+        return self.combine(
+                frozenset([expr]), super().map_distributed_send_ref_holder(expr))
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> R:
+        return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
 # }}}
 
@@ -645,6 +685,24 @@ class WalkMapper(Mapper):
 
         for child in expr._data.values():
             self.rec(child)
+
+        self.post_visit(expr)
+
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec(expr.send.data)
+        self.rec(expr.passthrough_data)
+
+        self.post_visit(expr)
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec_idx_or_size_tuple(expr.shape)
 
         self.post_visit(expr)
 
@@ -1031,7 +1089,9 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+        from pytato.distributed import DistributedSend
+        self.node_to_users: Dict[ArrayOrNames,
+                Set[Union[DistributedSend, ArrayOrNames]]] = {}
 
     def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         # Root node has no predecessor
@@ -1129,16 +1189,25 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.node_to_users.setdefault(child, set()).add(expr)
                 self.rec(child)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> None:
+        self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
+        self.rec(expr.passthrough_data)
+        self.node_to_users.setdefault(expr.send.data, set()).add(expr.send)
+        self.rec(expr.send.data)
 
-def get_users(expr: ArrayOrNames) -> PMapT[ArrayOrNames,
-                                           FrozenSet[ArrayOrNames]]:
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+        self.rec_idx_or_size_tuple(expr, expr.shape)
+
+
+def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
+                                             Set[ArrayOrNames]]:
     """
     Returns a mapping from node in *expr* to its direct users.
     """
     user_collector = UsersCollector()
     user_collector(expr)
-    return pmap({node: frozenset(users)
-                 for node, users in user_collector.node_to_users.items()})
+    return user_collector.node_to_users  # type: ignore
 
 # }}}
 
@@ -1168,7 +1237,7 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
 
 
 def _recursively_get_all_users(
-        direct_users: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]],
+        direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
         node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
     result = set()
     queue = list(direct_users.get(node, set()))
@@ -1201,8 +1270,8 @@ def rec_get_user_nodes(expr: ArrayOrNames,
     return _recursively_get_all_users(users, node)
 
 
-def tag_child_nodes(
-        graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]],
+def tag_user_nodes(
+        graph: Mapping[ArrayOrNames, Set[ArrayOrNames]],
         tag: Any,
         starting_point: ArrayOrNames,
         node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None
@@ -1214,12 +1283,11 @@ def tag_child_nodes(
         use case for this function is the graph in
         :attr:`UsersCollector.node_to_users`.
     :param tag: The value to tag the nodes with.
-    :param starting_point: An optional starting point in *graph*.
+    :param starting_point: A starting point in *graph*.
     :param node_to_tags: The resulting mapping of nodes to tags.
-    :returns: the updated value of *node_to_tags*.
     """
     from warnings import warn
-    warn("tag_child_nodes is set for deprecation in June, 2022",
+    warn("tag_user_nodes is set for deprecation in June, 2022",
          DeprecationWarning)
 
     if node_to_tags is None:
@@ -1237,7 +1305,7 @@ def tag_child_nodes(
 
 # {{{ EdgeCachedMapper
 
-class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
+class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
     """
     Mapper class to execute a rewriting method (:meth:`handle_edge`) on each
     edge in the graph.
@@ -1383,6 +1451,24 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames], ABC):
                 if isinstance(child, Array) else child
                 for name, child in expr.bindings.items()},
             )
+
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, *args: Any) -> \
+                DistributedSendRefHolder:
+        from pytato.distributed import DistributedSendRefHolder
+        return DistributedSendRefHolder(
+            send=self.handle_edge(expr, expr.send.data),
+            passthrough_data=self.handle_edge(expr, expr.passthrough_data),
+            tags=expr.tags
+        )
+
+    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
+            -> Any:
+        from pytato.distributed import DistributedRecv
+        return DistributedRecv(
+            src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+            shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
+            dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
 
     # }}}
 

@@ -29,7 +29,9 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-from typing import Callable, Dict, Union, Iterator, List, Mapping, Hashable
+
+from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
+        Mapping, Hashable)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -44,6 +46,10 @@ from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
 
 from pytato.partition import GraphPartition
+from pytato.distributed import DistributedGraphPart
+
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedSendRefHolder
 
 
 __doc__ = """
@@ -80,7 +86,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
+class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def __init__(self) -> None:
         super().__init__()
         self.nodes: Dict[ArrayOrNames, DotNodeInfo] = {}
@@ -111,8 +117,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                 info.edges[field] = attr
 
             elif isinstance(attr, AbstractResultWithNamedArrays):
-                # type-ignore-reason: incompatible with superclass
-                self.rec(attr)  # type: ignore[arg-type]
+                self.rec(attr)
                 info.edges[field] = attr
 
             elif isinstance(attr, tuple):
@@ -189,6 +194,19 @@ class ArrayToDotNodeInfoMapper(CachedMapper[Array]):
                             entrypoint=expr.entrypoint),
                 edges=edges)
 
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> None:
+
+        info = self.get_common_dot_info(expr)
+
+        self.rec(expr.passthrough_data)
+        info.edges["passthrough"] = expr.passthrough_data
+
+        self.rec(expr.send.data)
+        info.edges["sent"] = expr.send.data
+
+        self.nodes[expr] = info
+
 
 def dot_escape(s: str) -> str:
     # "\" and HTML are significant in graphviz.
@@ -205,22 +223,22 @@ class DotEmitter(CodeGeneratorBase):
         self("}")
 
 
-def _emit_array(emit: DotEmitter, info: DotNodeInfo, id: str,
-                color: str = "white") -> None:
+def _emit_array(emit: DotEmitter, title: str, fields: Dict[str, str],
+        dot_node_id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
     rows = ['<tr><td colspan="2" %s>%s</td></tr>'
-            % (td_attrib, dot_escape(info.title))]
+            % (td_attrib, dot_escape(title))]
 
-    for name, field in info.fields.items():
+    for name, field in fields.items():
         field_content = dot_escape(field).replace("\n", "<br/>")
         rows.append(
                 f"<tr><td {td_attrib}>{dot_escape(name)}:</td><td {td_attrib}>"
                 f"<FONT FACE='monospace'>{field_content}</FONT></td></tr>"
         )
     table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s> style=filled fillcolor=%s]" % (id, table, color))
+    emit("%s [label=<%s> style=filled fillcolor=%s]" % (dot_node_id, table, color))
 
 
 def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, ArrayOrNames],
@@ -282,11 +300,13 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
         with emit.block("subgraph cluster_Inputs"):
             emit('label="Inputs"')
             for array in input_arrays:
-                _emit_array(emit, nodes[array], array_to_id[array])
+                _emit_array(emit,
+                        nodes[array].title, nodes[array].fields, array_to_id[array])
 
         # Emit non-inputs.
         for array in internal_arrays:
-            _emit_array(emit, nodes[array], array_to_id[array])
+            _emit_array(emit,
+                    nodes[array].title, nodes[array].fields, array_to_id[array])
 
         # Emit edges.
         for array, node in nodes.items():
@@ -334,6 +354,26 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
         # Second pass: emit the graph.
         for part in partition.parts.values():
+            # {{{ emit receives nodes if distributed
+
+            if isinstance(part, DistributedGraphPart):
+                part_dist_recv_var_name_to_node_id = {}
+                for name, recv in (
+                        part.input_name_to_recv_node.items()):
+                    node_id = id_gen("recv")
+                    _emit_array(emit, "Recv", {
+                        "shape": stringify_shape(recv.shape),
+                        "dtype": str(recv.dtype),
+                        "src_rank": str(recv.src_rank),
+                        "comm_tag": str(recv.comm_tag),
+                        }, node_id)
+
+                    part_dist_recv_var_name_to_node_id[name] = node_id
+            else:
+                part_dist_recv_var_name_to_node_id = {}
+
+            # }}}
+
             part_node_to_info = part_id_to_node_info[part.pid]
             input_arrays: List[Array] = []
             internal_arrays: List[ArrayOrNames] = []
@@ -355,13 +395,27 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 # Non-Placeholders are emitted *inside* their subgraphs below.
                 if isinstance(array, Placeholder):
                     if array not in emitted_placeholders:
-                        _emit_array(emit, part_node_to_info[array],
+                        _emit_array(emit,
+                                    part_node_to_info[array].title,
+                                    part_node_to_info[array].fields,
                                     array_to_id[array], "deepskyblue")
-                        emitted_placeholders.add(array)
 
                         # Emit cross-partition edges
-                        tgt = array_to_id[partition.var_name_to_result[array.name]]
-                        emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
+                        if array.name in part_dist_recv_var_name_to_node_id:
+                            tgt = part_dist_recv_var_name_to_node_id[array.name]
+                            emit(f"{tgt} -> {array_to_id[array]} [style=dotted]")
+                            emitted_placeholders.add(array)
+                        elif array.name in part.user_input_names:
+                            # These are placeholders for external input. They
+                            # are cleanly associated with a single partition
+                            # and thus emitted below.
+                            pass
+                        else:
+                            # placeholder for a value from a different partition
+                            tgt = array_to_id[
+                                    partition.var_name_to_result[array.name]]
+                            emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
+                            emitted_placeholders.add(array)
 
             # }}}
 
@@ -370,13 +424,42 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 emit(f'label="{part.pid}"')
 
                 for array in input_arrays:
-                    if not isinstance(array, Placeholder):
-                        _emit_array(emit, part_node_to_info[array],
+                    if (not isinstance(array, Placeholder)
+                            or array.name in part.user_input_names):
+                        _emit_array(emit,
+                                    part_node_to_info[array].title,
+                                    part_node_to_info[array].fields,
                                     array_to_id[array], "deepskyblue")
 
                 # Emit internal nodes
                 for array in internal_arrays:
-                    _emit_array(emit, part_node_to_info[array], array_to_id[array])
+                    _emit_array(emit,
+                                part_node_to_info[array].title,
+                                part_node_to_info[array].fields,
+                                array_to_id[array])
+
+                # {{{ emit send nodes if distributed
+
+                deferred_send_edges = []
+                if isinstance(part, DistributedGraphPart):
+                    for name, send in (
+                            part.output_name_to_send_node.items()):
+                        node_id = id_gen("send")
+                        _emit_array(emit, "Send", {
+                            "dest_rank": str(send.dest_rank),
+                            "comm_tag": str(send.comm_tag),
+                            }, node_id)
+
+                        deferred_send_edges.append(
+                                f"{array_to_id[send.data]} -> {node_id}"
+                                f'[style=dotted, label="{dot_escape(name)}"]')
+
+                # }}}
+
+            # If an edge is emitted in a subgraph, it drags its nodes into the
+            # subgraph, too. Not what we want.
+            for edge in deferred_send_edges:
+                emit(edge)
 
             # Emit intra-partition edges
             for array, node in part_node_to_info.items():

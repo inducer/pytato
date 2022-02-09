@@ -146,6 +146,9 @@ Reserved Identifiers
         transport across parts of a partitioned DAG
         (cf. :func:`~pytato.partition.find_partition`).
 
+    -   ``_pt_dist``: Used to automatically generate identifiers for
+        placeholders at distributed communication boundaries.
+
 -   Identifiers used in index lambdas are also reserved. These include:
 
     -   Identifiers matching the regular expression ``_[0-9]+``. They are used
