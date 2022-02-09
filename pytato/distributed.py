@@ -609,16 +609,31 @@ def execute_distributed_partition(
     recv_names_completed = set()
     send_requests = []
 
-    # Keep a count on how often each input name is used,
-    # in order to be able to free them.
-    partition_input_names_refcount: Dict[str, int] = {}
+    # {{{ Input name refcount
 
-    for pid in pids_to_execute:
-        for name in partition.parts[pid].all_input_names():
-            if name in partition_input_names_refcount:
-                partition_input_names_refcount[name] += 1
-            else:
-                partition_input_names_refcount[name] = 1
+    # Keep a count on how often each input name is used
+    # in order to be able to free them.
+
+    from pytools import memoize_method
+
+    @memoize_method
+    def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
+            -> Dict[str, int]:
+        print("_get_partition_input_name_refcount")
+        partition_input_names_refcount: Dict[str, int] = {}
+        for pid in set(partition.parts):
+            for name in partition.parts[pid].all_input_names():
+                if name in partition_input_names_refcount:
+                    partition_input_names_refcount[name] += 1
+                else:
+                    partition_input_names_refcount[name] = 1
+
+        return partition_input_names_refcount
+
+    partition_input_names_refcount = \
+        _get_partition_input_name_refcount(partition).copy()
+
+    # }}}
 
     def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.all_input_names()}
