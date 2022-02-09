@@ -151,7 +151,7 @@ class DistributedSendRefHolder(Array):
     :mod:`pytato` represents data flow, and since no data flows 'out'
     of a :class:`DistributedSend`, no node in all of :mod:`pytato` has
     a good reason to hold a reference to a send node, since there is
-    no useful result of a send (at least of of an :class:`~pytato.Array` type).
+    no useful result of a send (at least of an :class:`~pytato.Array` type).
 
     This is where this node type comes in. Its value is the same as that of
     :attr:`passthrough_data`, *and* it holds a reference to the send node.
