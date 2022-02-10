@@ -3,7 +3,7 @@ Python 3 POCL:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
+  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -19,7 +19,7 @@ Python 3 POCL Examples:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
+  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
   - ". ./build-py-project-and-run-examples.sh"
   tags:
   - python3
@@ -32,7 +32,7 @@ Pylint:
   script:
   - export PY_EXE=python3
   - EXTRA_INSTALL="pyopencl"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
+  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
   - . ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py examples
   tags:
   - python3
@@ -42,7 +42,7 @@ Pylint:
 
 Flake8:
   script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
+  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
   - . ./prepare-and-run-flake8.sh ${CI_PROJECT_NAME} test examples
   tags:
   - python3
@@ -67,8 +67,8 @@ Documentation:
   script: |
     EXTRA_INSTALL="pyopencl sphinx-autodoc-typehints"
     ./.ci-support/fix-code-for-docs.sh
-    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-    . ./ci-support.sh
+    curl -L -O https://tiker.net/ci-support-v0
+    . ./ci-support-v0
     build_py_project_in_venv
     build_docs
     maybe_upload_docs
