@@ -151,7 +151,7 @@ class DistributedSendRefHolder(Array):
     :mod:`pytato` represents data flow, and since no data flows 'out'
     of a :class:`DistributedSend`, no node in all of :mod:`pytato` has
     a good reason to hold a reference to a send node, since there is
-    no useful result of a send (at least of of an :class:`~pytato.Array` type).
+    no useful result of a send (at least of an :class:`~pytato.Array` type).
 
     This is where this node type comes in. Its value is the same as that of
     :attr:`passthrough_data`, *and* it holds a reference to the send node.
@@ -609,6 +609,31 @@ def execute_distributed_partition(
     recv_names_completed = set()
     send_requests = []
 
+    # {{{ Input name refcount
+
+    # Keep a count on how often each input name is used
+    # in order to be able to free them.
+
+    from pytools import memoize_on_first_arg
+
+    @memoize_on_first_arg
+    def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
+            -> Dict[str, int]:
+        partition_input_names_refcount: Dict[str, int] = {}
+        for pid in set(partition.parts):
+            for name in partition.parts[pid].all_input_names():
+                if name in partition_input_names_refcount:
+                    partition_input_names_refcount[name] += 1
+                else:
+                    partition_input_names_refcount[name] = 1
+
+        return partition_input_names_refcount
+
+    partition_input_names_refcount = \
+        _get_partition_input_name_refcount(partition).copy()
+
+    # }}}
+
     def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.all_input_names()}
 
@@ -645,9 +670,6 @@ def execute_distributed_partition(
             context[name] = cl.array.to_device(queue, buf)
             recv_names_completed.add(name)
 
-    # FIXME: This keeps all variables alive that are used to get data into
-    # and out of partitions. Probably not what we want long-term.
-
     # {{{ main loop
 
     while pids_to_execute:
@@ -658,7 +680,13 @@ def execute_distributed_partition(
                 and (set(partition.parts[pid].input_name_to_recv_node)
                     <= recv_names_completed)}
         for pid in ready_pids:
-            exec_ready_part(partition.parts[pid])
+            part = partition.parts[pid]
+            exec_ready_part(part)
+
+            for p in part.all_input_names():
+                partition_input_names_refcount[p] -= 1
+                if partition_input_names_refcount[p] == 0:
+                    del context[p]
 
         if not ready_pids:
             wait_for_some_recvs()
@@ -667,6 +695,11 @@ def execute_distributed_partition(
 
     for send_req in send_requests:
         send_req.Wait()
+
+    if __debug__:
+        for name, count in partition_input_names_refcount.items():
+            assert count == 0
+            assert name not in context
 
     return context
 
