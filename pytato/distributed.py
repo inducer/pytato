@@ -614,9 +614,9 @@ def execute_distributed_partition(
     # Keep a count on how often each input name is used
     # in order to be able to free them.
 
-    from pytools import memoize_method
+    from pytools import memoize_on_first_arg
 
-    @memoize_method
+    @memoize_on_first_arg
     def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
             -> Dict[str, int]:
         partition_input_names_refcount: Dict[str, int] = {}
