@@ -2,7 +2,7 @@ Python 3 POCL:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
-  - export EXTRA_INSTALL="pyopencl"
+  - export EXTRA_INSTALL="pyopencl mpi4py"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
@@ -18,7 +18,7 @@ Python 3 POCL Examples:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
-  - export EXTRA_INSTALL="pyopencl"
+  - export EXTRA_INSTALL="pyopencl mpi4py"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
   - ". ./build-py-project-and-run-examples.sh"
   tags:
@@ -31,7 +31,7 @@ Python 3 POCL Examples:
 Pylint:
   script:
   - export PY_EXE=python3
-  - EXTRA_INSTALL="pyopencl"
+  - EXTRA_INSTALL="pyopencl mpi4py"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
   - . ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py examples
   tags:
@@ -55,7 +55,7 @@ Mypy:
     curl -L -O https://tiker.net/ci-support-v0
     . ./ci-support-v0
     build_py_project_in_venv
-    python -m pip install mypy
+    python -m pip install mypy mpi4py
     ./run-mypy.sh
   tags:
   - python3
