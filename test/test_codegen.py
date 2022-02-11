@@ -1526,6 +1526,42 @@ def test_scalars_are_typed(ctx_factory):
     np.testing.assert_allclose(pt_out, np_out)
 
 
+def test_regression_reduction_in_conditional(ctx_factory):
+    # Regression test for https://github.com/inducer/pytato/pull/255
+    # which was ultimately caused by https://github.com/inducer/loopy/issues/533
+    # Reproducer from
+    # https://github.com/inducer/pytato/pull/255#issuecomment-1028248714
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    def kernel(usr_np, _pt_data_9):
+        _pt_tmp_53 = _pt_data_9 @ _pt_data_9
+        _pt_tmp_42 = usr_np.maximum(_pt_tmp_53, _pt_tmp_53)
+        _pt_tmp_27 = usr_np.sum(_pt_tmp_42)
+        _pt_tmp_0 = usr_np.maximum(_pt_tmp_27, _pt_tmp_53)
+        return _pt_tmp_0
+
+    def get_np_input_args():
+        return {
+            "_pt_data_9": np.ones((2, 2)),
+        }
+
+    np_inputs = get_np_input_args()
+    np_result = kernel(np, **np_inputs)
+    pt_dag = kernel(pt, **{kw: pt.make_data_wrapper(arg)
+                           for kw, arg in np_inputs.items()})
+
+    knl = pt.generate_loopy(pt_dag, options=lp.Options(write_cl=True))
+
+    _, (pt_result,) = knl(cq)
+
+    from pytato.analysis import get_num_nodes
+    print(get_num_nodes(pt_dag))
+
+    np.testing.assert_allclose(pt_result, np_result)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
