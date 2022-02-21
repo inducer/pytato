@@ -1333,11 +1333,9 @@ def test_random_dag_against_numpy(ctx_factory):
 
     from testlib import RandomDAGContext, make_random_dag
     axis_len = 5
-    from warnings import filterwarnings, catch_warnings
-    with catch_warnings():
-        # We'd like to know if Numpy divides by zero.
-        filterwarnings("error")
 
+    # We'd like to know if Numpy divides by zero.
+    with np.errstate(all="raise"):
         for i in range(50):
             print(i)  # progress indicator for somewhat slow test
 
