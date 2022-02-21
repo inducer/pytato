@@ -1011,6 +1011,26 @@ def test_eye(ctx_factory, n, m, k):
     np.testing.assert_allclose(out.get(), np_eye)
 
 
+def test_arange(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    from numpy.random import default_rng
+    rng = default_rng(seed=0)
+    for _ in range(30):
+        nargs = rng.integers(1, 3, endpoint=True)
+        bounds = {0: (-300, 300), 1: (-300, 300), 2: (-10, 10)}
+        args = [rng.integers(*bounds[iarg], endpoint=True) for iarg in range(nargs)]
+
+        np_res = np.arange(*args, dtype=np.int64)
+        pt_res_sym = pt.arange(*args, dtype=np.int64)
+
+        print(np_res.shape, args)
+        _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+
+        assert np.array_equal(pt_res.get(), np_res)
+
+
 @pytest.mark.parametrize("which,num_args", ([("maximum", 2),
                                              ("minimum", 2),
                                              ]))

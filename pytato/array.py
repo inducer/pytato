@@ -61,6 +61,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: ones
 .. autofunction:: full
 .. autofunction:: eye
+.. autofunction:: arange
 .. autofunction:: equal
 .. autofunction:: not_equal
 .. autofunction:: less
@@ -2002,6 +2003,8 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 # }}}
 
 
+# {{{ eye
+
 def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
         dtype: Any = np.float64) -> Array:
     """
@@ -2024,6 +2027,101 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
                        shape=(N, M), dtype=dtype, bindings={},
                        axes=_get_default_axes(2))
+
+# }}}
+
+
+# {{{ arange
+
+@dataclass
+class _ArangeInfo:
+    start: Optional[int]
+    stop: Optional[int]
+    step: Optional[int]
+    dtype: Optional[np.dtype[Any]]
+
+
+def arange(*args: Any, **kwargs: Any) -> Array:
+    """``arange([start, ]stop, [step, ]dtype=None)``
+
+    Semantically equivalent to :func:`numpy.arange`.
+    """
+
+    explicit_dtype = False
+
+    # {{{ argument processing
+
+    inf = _ArangeInfo(
+            start=None,
+            stop=None,
+            step=None,
+            dtype=None)
+
+    # Yuck. Thanks, numpy developers. ;)
+    if isinstance(args[-1], np.dtype):
+        inf.dtype = args[-1]
+        args = args[:-1]
+        explicit_dtype = True
+
+    argc = len(args)
+    if argc == 0:
+        raise TypeError("stop argument required")
+    elif argc == 1:
+        inf.stop, = args
+    elif argc == 2:
+        inf.start, inf.stop = args
+    elif argc == 3:
+        inf.start, inf.stop, inf.step = args
+    else:
+        raise TypeError("arange() takes 0 to 4 positional arguments but"
+                f" {argc} were given")
+
+    admissible_names = ["start", "stop", "step", "dtype"]
+    for k, v in kwargs.items():
+        if k in admissible_names:
+            if getattr(inf, k) is None:
+                setattr(inf, k, v)
+                if k == "dtype":
+                    explicit_dtype = True
+            else:
+                raise TypeError(
+                        "may not specify '%s' by position and keyword" % k)
+        else:
+            raise TypeError("unexpected keyword argument '%s'" % k)
+
+    if inf.start is None:
+        inf.start = 0
+    if inf.step is None:
+        inf.step = 1
+    from numbers import Number
+    if not isinstance(inf.start, Number):
+        raise NotImplementedError("non-numerical start")
+    if not isinstance(inf.stop, Number):
+        raise NotImplementedError("non-numerical stop")
+    if not isinstance(inf.step, Number):
+        raise TypeError("non-numerical step")
+    if inf.dtype is None:
+        inf.dtype = np.array([inf.start, inf.stop, inf.step]).dtype
+
+    # }}}
+
+    if not explicit_dtype:
+        raise TypeError("arange requires a dtype argument")
+
+    dtype = np.dtype(inf.dtype)
+    start = dtype.type(inf.start)
+    step = dtype.type(inf.step)
+    stop = dtype.type(inf.stop)
+
+    from math import ceil
+    size = max(0, int(ceil((stop-start)/step)))
+
+    from pymbolic.primitives import Variable
+    return IndexLambda(start + Variable("_0") * step,
+                       shape=(size,), dtype=dtype, bindings={},
+                       axes=_get_default_axes(1))
+
+# }}}
 
 
 # {{{ comparison operator
