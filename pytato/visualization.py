@@ -31,7 +31,7 @@ import dataclasses
 import html
 
 from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
-        Mapping, Hashable)
+        Mapping, Hashable, Any)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -474,13 +474,14 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition]) \
-        -> None:
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
+        **kwargs: Any) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
         or the output of :func:`~pytato.partition.find_partition`.
+    :arg kwargs: Passed on to :func:pymbolc.imperative.utils.show_dot` unmodified.
     """
     dot_code: str
 
@@ -492,7 +493,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition])
         dot_code = get_dot_graph(result)
 
     from pymbolic.imperative.utils import show_dot
-    show_dot(dot_code)
+    show_dot(dot_code, **kwargs)
 
 
 # {{{ Show ASCII representation of DAG
