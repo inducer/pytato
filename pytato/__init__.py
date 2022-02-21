@@ -24,6 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from numpy import dtype
+
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
         IndexLambda, NamedArray, DataWrapper, InputArgumentBase, Reshape,
@@ -80,6 +82,8 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
 from pytato.partition import generate_code_for_partition
 
 __all__ = (
+        "dtype",
+
         "Array", "AbstractResultWithNamedArrays", "DictOfNamedArrays",
         "Placeholder", "IndexLambda", "NamedArray", "LoopyCall",
         "DataWrapper", "InputArgumentBase", "Reshape", "Einsum",
