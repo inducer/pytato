@@ -160,6 +160,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         self.nodes[expr] = info
 
+    map_concatenate = map_stack
+
     def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
 
