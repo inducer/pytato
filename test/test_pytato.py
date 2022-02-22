@@ -32,6 +32,9 @@ import pytest
 
 import pytato as pt
 
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+
 
 def test_matmul_input_validation():
     a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
@@ -731,6 +734,37 @@ def test_idx_lambda_to_hlo():
                                                                         (b, a))
     assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
             == BroadcastOp(a))
+
+
+def test_deduplicate_data_wrappers():
+    from pytato.transform import CachedWalkMapper, deduplicate_data_wrappers
+
+    class DataWrapperCounter(CachedWalkMapper):
+        def __init__(self):
+            self.count = 0
+            super().__init__()
+
+        def map_data_wrapper(self, expr):
+            self.count += 1
+            return super().map_data_wrapper(expr)
+
+    def count_data_wrappers(expr):
+        dwc = DataWrapperCounter()
+        dwc(expr)
+        return dwc.count
+
+    a = pt.make_data_wrapper(np.arange(27))
+    b = pt.make_data_wrapper(np.arange(27))
+    c = pt.make_data_wrapper(a.data.view())
+    d = pt.make_data_wrapper(np.arange(1, 28))
+
+    res = a+b+c+d
+
+    assert count_data_wrappers(res) == 4
+
+    dd_res = deduplicate_data_wrappers(res)
+
+    assert count_data_wrappers(dd_res) == 3
 
 
 if __name__ == "__main__":

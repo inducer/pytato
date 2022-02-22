@@ -26,9 +26,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
+import numpy as np
 from abc import abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING)
+                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
+                    Hashable)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -36,7 +39,7 @@ from pytato.array import (
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
         IndexRemappingBase, Einsum, InputArgumentBase,
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase)
+        IndexBase, DataInterface)
 
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
@@ -81,6 +84,8 @@ Dict representation of DAGs
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
+.. autofunction:: deduplicate_data_wrappers
+
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -88,6 +93,8 @@ Internal stuff that is only here because the documentation tool wants it
 
     A type variable representing the input type of a :class:`Mapper`.
 """
+
+logger = logging.getLogger(__file__)
 
 
 class UnsupportedArrayError(ValueError):
@@ -997,7 +1004,7 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 
-def map_and_copy(expr: T,
+def map_and_copy(expr: ArrayOrNames,
                  map_fn: Callable[[ArrayOrNames], ArrayOrNames]
                  ) -> ArrayOrNames:
     """
@@ -1471,6 +1478,83 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
             dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
 
     # }}}
+
+# }}}
+
+
+# {{{ deduplicate_data_wrappers
+
+def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
+    import sys
+    if "pyopencl" in sys.modules:
+        from pyopencl.array import Array as CLArray  # type: ignore[import]
+        if isinstance(ary, CLArray):
+            return (
+                    ary.base_data.int_ptr,
+                    ary.offset,
+                    ary.shape,
+                    ary.strides,
+                    ary.dtype,
+                    )
+    if isinstance(ary, np.ndarray):
+        return (
+                ary.__array_interface__["data"],
+                ary.shape,
+                ary.strides,
+                ary.dtype,
+                )
+    else:
+        raise NotImplementedError(str(type(ary)))
+
+
+def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
+    """For the expression graph given as *array_or_names*, replace all
+    :class:`pytato.array.DataWrapper` instances containing identical data
+    with a single instance.
+
+    .. note::
+
+        Currently only supports :class:`numpy.ndarray` and
+        :class:`pyopencl.array.Array`.
+
+    .. note::
+
+        This function currently uses addresses of memory buffers to detect
+        duplicate data, and so it may fail to deduplicate some instances
+        of identical-but-separately-stored data. User code must tolerate
+        this, but it must *also* tolerate this function doing a more thorough
+        job of deduplication.
+    """
+
+    data_wrapper_cache: Dict[Hashable, DataWrapper] = {}
+    data_wrappers_encountered = 0
+
+    def cached_data_wrapper_if_present(ary: ArrayOrNames) -> ArrayOrNames:
+        nonlocal data_wrappers_encountered
+
+        if isinstance(ary, DataWrapper):
+            data_wrappers_encountered += 1
+            cache_key = _get_data_dedup_cache_key(ary.data)
+
+            try:
+                return data_wrapper_cache[cache_key]
+            except KeyError:
+                result = ary
+                data_wrapper_cache[cache_key] = result
+                return result
+        else:
+            return ary
+
+    array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
+
+    if data_wrappers_encountered:
+        logger.info("data wrapper de-duplication: "
+                "%d encountered, %d kept, %d eliminated",
+                data_wrappers_encountered,
+                len(data_wrapper_cache),
+                data_wrappers_encountered - len(data_wrapper_cache))
+
+    return array_or_names
 
 # }}}
 
