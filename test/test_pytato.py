@@ -91,6 +91,20 @@ def test_slice_input_validation():
         a[10]
 
 
+def test_index_type_validation():
+    a = pt.make_placeholder(name="a", shape=(10,), dtype=np.float64)
+
+    idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.int8)
+    a[idx]
+
+    idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.uint8)
+    a[idx]
+
+    idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.float64)
+    with pytest.raises(IndexError):
+        a[idx]
+
+
 def test_stack_input_validation():
     x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
     y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)

@@ -510,7 +510,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
                     and _is_non_negative(ary.shape[i] - 1 - idx)):
                 raise IndexError(f"{idx} is out of bounds for axis {i}")
         elif isinstance(idx, Array):
-            if idx.dtype.kind != "i":
+            if idx.dtype.kind not in ["i", "u"]:
                 raise IndexError("only integer arrays are valid array indices")
         else:
             raise IndexError("only integers, slices, ellipsis and integer arrays"
