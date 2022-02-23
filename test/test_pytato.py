@@ -92,7 +92,7 @@ def test_slice_input_validation():
 
 
 def test_index_type_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10,), dtype=np.float64)
 
     idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.int8)
     a[idx]
