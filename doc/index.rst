@@ -22,6 +22,7 @@ Here's an example usage:
     codegen
     internal
     design
+    gotchas
     misc
     🚀 Github <https://github.com/inducer/pytato>
     💾 Download Releases <https://pypi.org/project/pytato>
