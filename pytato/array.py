@@ -432,6 +432,9 @@ class Array(Taggable):
                 kwargs[field] = getattr(self, field)
         return type(self)(**kwargs)
 
+    def _with_new_tags(self: ArrayT, tags: TagsType) -> ArrayT:
+        return self.copy(tags=tags)
+
     @property
     def shape(self) -> ShapeType:
         raise NotImplementedError
