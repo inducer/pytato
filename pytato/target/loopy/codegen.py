@@ -746,8 +746,9 @@ def _generate_name_for_temp(expr: Array, state: CodeGenState) -> str:
             name_tag, = expr.tags_of_type(Named)
             if state.var_name_gen.is_name_conflicting(name_tag.name):
                 raise ValueError(f"Cannot assign the name {name_tag.name} to the"
-                                 f" temporary corresponding to {expr} as it is"
-                                 " referring a loopy kernel argument.")
+                                 f" temporary corresponding to {expr} as it "
+                                 "conflicts with an existing name. ")
+            state.var_name_gen.add_name(name_tag.name)
             return name_tag.name
         elif expr.tags_of_type(PrefixNamed):
             prefix_tag, = expr.tags_of_type(PrefixNamed)
