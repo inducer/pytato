@@ -345,7 +345,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 # {{{ CombineMapper
 
 class CombineMapper(Mapper, Generic[CombineT]):
-    """Abstract base class to combine user nodes of a given expression.
+    """
+    Abstract mapper that recursively combines the results of user nodes
+    of a given expression.
 
     .. automethod:: combine
     """
