@@ -198,8 +198,8 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     .. attribute:: comm_tag
 
         A hashable, picklable object to serve as a 'tag' for the communication.
-        Only a :class:`DistributedRecv` with the same tag will be able to
-        receive the data being sent here.
+        Only a :class:`DistributedSend` with the same tag will be able to
+        send the data being received here.
 
     .. attribute:: shape
     .. attribute:: dtype
@@ -224,6 +224,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
                           send_tags: TagsType = frozenset()) -> \
          DistributedSend:
+    """Make a :class:`DistributedSend` object."""
     return DistributedSend(sent_data, dest_rank, comm_tag, send_tags)
 
 
@@ -232,6 +233,8 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
                           send_tags: TagsType = frozenset(),
                           ref_holder_tags: TagsType = frozenset()) -> \
          DistributedSendRefHolder:
+    """Make a :class:`DistributedSend` object wrapped in a
+    :class:`DistributedSendRefHolder` object."""
     return DistributedSendRefHolder(
             DistributedSend(sent_data, dest_rank, comm_tag, send_tags),
             stapled_to, tags=ref_holder_tags)
@@ -241,6 +244,7 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ShapeType, dtype: Any,
                           tags: TagsType = frozenset()) \
                           -> DistributedRecv:
+    """Make a :class:`DistributedRecv` object."""
     dtype = np.dtype(dtype)
     return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
 

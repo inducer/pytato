@@ -92,6 +92,10 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: T
 
     A type variable representing the input type of a :class:`Mapper`.
+
+.. class:: CombineT
+
+    A type variable representing the type of a :class:`CombineMapper`.
 """
 
 logger = logging.getLogger(__file__)
@@ -341,6 +345,12 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 # {{{ CombineMapper
 
 class CombineMapper(Mapper, Generic[CombineT]):
+    """
+    Abstract mapper that recursively combines the results of user nodes
+    of a given expression.
+
+    .. automethod:: combine
+    """
     def __init__(self) -> None:
         self.cache: Dict[ArrayOrNames, CombineT] = {}
 
@@ -361,6 +371,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
         return self.rec(expr)
 
     def combine(self, *args: CombineT) -> CombineT:
+        """Combine the arguments."""
         raise NotImplementedError
 
     def map_index_lambda(self, expr: IndexLambda) -> CombineT:

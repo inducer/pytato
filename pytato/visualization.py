@@ -481,7 +481,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
         or the output of :func:`~pytato.partition.find_partition`.
-    :arg kwargs: Passed on to :func:pymbolc.imperative.utils.show_dot` unmodified.
+    :arg kwargs: Passed on to :func:`pymbolic.imperative.utils.show_dot` unmodified.
     """
     dot_code: str
 
@@ -574,7 +574,8 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
 
 
 def show_ascii_graph(result: Union[Array, DictOfNamedArrays]) -> None:
-    """Show a graph representing the computation of *result* in a browser.
+    """Print a graph representing the computation of *result* to stdout using the
+    `asciidag <https://pypi.org/project/asciidag/>`_ package.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`.
