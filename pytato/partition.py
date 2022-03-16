@@ -345,7 +345,8 @@ def find_partition(outputs: DictOfNamedArrays,
     from pytato.analysis import get_num_nodes
     num_nodes = []
     for part in result.parts.values():
-        output_vars = {x: result.var_name_to_result[x] for x in part.output_names}
+        output_vars = DictOfNamedArrays(
+            {x: result.var_name_to_result[x] for x in part.output_names})
         num_nodes.append(get_num_nodes(output_vars))
 
     logger.info(f"find_partition: Split {get_num_nodes(outputs)} nodes into "
