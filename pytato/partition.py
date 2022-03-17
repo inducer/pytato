@@ -28,6 +28,8 @@ from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, Type
         FrozenSet, Mapping, Optional, Type)
 from dataclasses import dataclass
 
+import logging
+logger = logging.getLogger(__name__)
 
 from pytools import memoize_method
 from pytato.transform import EdgeCachedMapper, CachedWalkMapper
@@ -337,8 +339,21 @@ def find_partition(outputs: DictOfNamedArrays,
 
     result = partitioner_class(part_func).make_partition(outputs)
 
+    # {{{ Check partitions and log statistics
+
     if __debug__:
         _check_partition_disjointness(result)
+
+    from pytato.analysis import get_num_nodes
+    num_nodes_per_part = [get_num_nodes(DictOfNamedArrays(
+            {x: result.var_name_to_result[x] for x in part.output_names}))
+            for part in result.parts.values()]
+
+    logger.info(f"find_partition: Split {get_num_nodes(outputs)} nodes into "
+        f"{len(result.parts)} parts, with {num_nodes_per_part} nodes in each "
+        "partition.")
+
+    # }}}
 
     return result
 
