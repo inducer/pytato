@@ -339,18 +339,21 @@ def find_partition(outputs: DictOfNamedArrays,
 
     result = partitioner_class(part_func).make_partition(outputs)
 
+    # {{{ Check partitions and log statistics
+
     if __debug__:
         _check_partition_disjointness(result)
 
     from pytato.analysis import get_num_nodes
-    num_nodes = []
-    for part in result.parts.values():
-        output_vars = DictOfNamedArrays(
-            {x: result.var_name_to_result[x] for x in part.output_names})
-        num_nodes.append(get_num_nodes(output_vars))
+    num_nodes_per_part = [get_num_nodes(DictOfNamedArrays(
+            {x: result.var_name_to_result[x] for x in part.output_names}))
+            for part in result.parts.values()]
 
     logger.info(f"find_partition: Split {get_num_nodes(outputs)} nodes into "
-        f"{len(result.parts)} parts, with {num_nodes} nodes in each partition.")
+        f"{len(result.parts)} parts, with {num_nodes_per_part} nodes in each "
+        "partition.")
+
+    # }}}
 
     return result
 
