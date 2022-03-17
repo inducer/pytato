@@ -35,7 +35,7 @@ from pytools import memoize_method
 from pytato.transform import EdgeCachedMapper, CachedWalkMapper
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, Placeholder,
-        DictOfNamedArrays, make_placeholder)
+        DictOfNamedArrays, make_placeholder, InputArgumentBase)
 
 from pytato.target import BoundProgram
 
@@ -126,7 +126,8 @@ class GraphPartitioner(EdgeCachedMapper):
                 (pid_target, pid_dependency), set()).add(placeholder_name)
 
     def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
-        if self.does_edge_cross_part_boundary(expr, child):
+        if (self.does_edge_cross_part_boundary(expr, child)
+                and not isinstance(child, InputArgumentBase)):
             try:
                 ph = self._seen_node_to_placeholder[child]
             except KeyError:
