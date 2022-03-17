@@ -266,9 +266,9 @@ class InlinedResult(ImplementedResult):
 class CodeGenState:
     """A container for data kept by :class:`CodeGenMapper`.
 
-    .. attribute:: _program
+    .. attribute:: _t_unit
 
-        The partial :class:`loopy.LoopKernel` or :class:`loopy.TranslationUnit`
+        The partial :class:`loopy.TranslationUnit`
         being built.
 
     .. attribute:: results
@@ -281,43 +281,33 @@ class CodeGenState:
 
     .. automethod:: update_kernel
     """
-    _program: Union["lp.TranslationUnit", lp.LoopKernel]
+    _t_unit: lp.TranslationUnit
     results: Dict[Array, ImplementedResult]
 
     var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
     insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        if isinstance(self._program, lp.LoopKernel):
-            self.var_name_gen = self._program.get_var_name_generator()
-            self.insn_id_gen = self._program.get_instruction_id_generator()
-        else:
-            self.var_name_gen = self._program["_pt_kernel"].get_var_name_generator()
-            self.insn_id_gen = (
-                    self._program["_pt_kernel"].get_instruction_id_generator())
+        self.var_name_gen = self._t_unit["_pt_kernel"].get_var_name_generator()
+        self.insn_id_gen = (
+                self._t_unit["_pt_kernel"].get_instruction_id_generator())
 
     @property
-    def program(self) -> Union["lp.Program", lp.LoopKernel]:
-        return self._program
+    def t_unit(self) -> lp.TranslationUnit:
+        return self._t_unit
 
     @property
     def kernel(self) -> lp.LoopKernel:
         """
-        Returns the entry kernel of the loopy program being built.
+        Returns the entry kernel of the loopy kernel being built.
         """
-        if isinstance(self._program, lp.LoopKernel):
-            return self._program
-        else:
-            return self._program["_pt_kernel"]
+        return self._t_unit["_pt_kernel"]
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
-        if isinstance(self._program, lp.LoopKernel):
-            self._program = kernel
-        else:
-            self._program = self._program.with_kernel(kernel)
+        self._t_unit = self._t_unit.with_kernel(kernel)
 
-    def update_program(self, program: lp.Program) -> None:
-        self._program = program
+    def update_t_unit(self, t_unit: lp.TranslationUnit) -> None:
+        self._t_unit = t_unit
 
 # }}}
 
@@ -434,7 +424,7 @@ class CodeGenMapper(Mapper):
 
         callee_kernel = expr.translation_unit[expr.entrypoint]
 
-        state.update_program(lp.merge([state.program, expr.translation_unit]))
+        state.update_t_unit(lp.merge([state.t_unit, expr.translation_unit]))
 
         domains = []
 
@@ -876,7 +866,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    return CodeGenState(_program=kernel,
+    return CodeGenState(_t_unit=kernel,
             results=dict())
 
 
@@ -897,7 +887,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     :param target: Code generation target.
     :param options: Code generation options for the kernel.
     :returns: A :class:`pytato.target.BoundProgram` wrapping the generated
-        :mod:`loopy` program.
+        :class:`loopy.TranslationUnit`.
 
     If *result* is a :class:`dict` or a :class:`pytato.DictOfNamedArrays` and
     *options* is not supplied, then the Loopy option
@@ -973,15 +963,15 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 
     # Why call make_reduction_inames_unique?
-    # Consider pt.generate_loopy(pt.sum(x) + pt.sum(x)), the generated program
-    # would be a single instruction with rhs: `_pt_subst() + _pt_subst()`.
-    # The result of pt.sum(x) is cached => same instance of InlinedResult is
-    # emitted for both invocations and we would be required to avoid such
-    # reduction iname collisions.
-    program = lp.make_reduction_inames_unique(state.program)
+    # Consider pt.generate_loopy(pt.sum(x) + pt.sum(x)), the generated
+    # translation unit would be a single instruction with rhs: `_pt_subst() +
+    # _pt_subst()`.  The result of pt.sum(x) is cached => same instance of
+    # InlinedResult is emitted for both invocations and we would be required to
+    # avoid such reduction iname collisions.
+    t_unit = lp.make_reduction_inames_unique(state.t_unit)
 
     return target.bind_program(
-            program=program,
+            program=t_unit,
             bound_arguments=preproc_result.bound_arguments)
 
 # }}}
