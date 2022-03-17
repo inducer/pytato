@@ -42,8 +42,19 @@ from pytato.target import BoundProgram
 import numpy as np
 
 __doc__ = r"""
-Distributed communication
--------------------------
+Distributed-memory evaluation of expression graphs is accomplished
+by :ref:`partitioning <partitioning>` the graph to reveal communication-free
+pieces of the computation. Communication (i.e. sending/receving data) is then
+accomplished at the boundaries of the parts of the resulting graph partitioning.
+
+Recall the requirement for partitioning that, "no part may depend on its own
+outputs as inputs". That sounds obvious, but in the distributed-memory case,
+this is harder to decide than it looks, since we do not have full knowledge of
+the computation graph.  Edges go off to other nodes and then come back.
+
+As a first step towards making this tractable, we currently strengthen the
+requirement to create partition boundaries on every edge that goes between
+nodes that are/are not a dependency of a receive or that feed/do not feed a send.
 
 .. currentmodule:: pytato
 .. autoclass:: DistributedSend

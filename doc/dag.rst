@@ -23,10 +23,14 @@ Stringifying Expression Graphs
 
 .. automodule:: pytato.stringifier
 
+.. _partitioning:
+
 Partitioning Array Expression Graphs
 ====================================
 
 .. automodule:: pytato.partition
+
+.. _distributed:
 
 Support for Distributed-Memory/Message Passing
 ==============================================

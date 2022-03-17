@@ -41,6 +41,19 @@ from pytato.target import BoundProgram
 
 
 __doc__ = """
+Partitioning of graphs in :mod:`pytato` currently mainly serves to enable
+:ref:`distributed computation <distributed>`, i.e. sending and receiving data
+as part of graph evaluation.
+
+However, as implemented, it is completely general and not specific to this use
+case.  Partitioning of expression graphs is based on a few assumptions:
+
+- We must be able to execute parts in any dependency-respecting order.
+- Parts are compiled at partitioning time, so what inputs they take from memory
+  vs. what they compute is decided at that time.
+- No part may depend on its own outputs as inputs.
+  (cf. :exc:`PartitionInducedCycleError`)
+
 .. autoclass:: GraphPart
 .. autoclass:: GraphPartition
 .. autoclass:: GraphPartitioner
@@ -48,7 +61,6 @@ __doc__ = """
 
 .. autofunction:: find_partition
 .. autofunction:: execute_partition
-
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
