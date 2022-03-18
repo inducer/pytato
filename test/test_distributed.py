@@ -21,13 +21,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys
+import os
+
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pyopencl as cl
 import numpy as np
 import pytato as pt
-import sys
-import os
+
+import pytest
 
 from pytato.distributed import (staple_distributed_send, make_distributed_recv,
     find_distributed_partition,
@@ -205,6 +208,71 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
         np.testing.assert_allclose(res_comm, res_no_comm_numpy)
 
     assert gen_comm_called
+
+# }}}
+
+
+# {{{ test batching
+
+@pytest.mark.parametrize("use_batching", [False, True])
+def test_batch_comm(use_batching):
+    run_test_with_mpi(2, _do_test_batch_comm, use_batching)
+
+
+def _do_test_batch_comm(ctx_factory, use_batching):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    rng = np.random.default_rng(seed=27)
+
+    x_in = rng.integers(100, size=(4, 4))
+    x = pt.make_data_wrapper(x_in)
+
+    from pytato.tags import CommunicationBatch
+    from testlib import MY_COMM_BATCH
+
+    if use_batching:
+        comm_batch_tags = frozenset({CommunicationBatch(MY_COMM_BATCH)})
+    else:
+        comm_batch_tags = frozenset()
+
+    n_sends = 10
+
+    halos = [
+            staple_distributed_send(
+                x, dest_rank=(rank-1) % size, comm_tag=42+i,
+                send_tags=comm_batch_tags,
+                stapled_to=make_distributed_recv(
+                    src_rank=(rank+1) % size, comm_tag=42+i, shape=(4, 4), dtype=int,
+                    tags=comm_batch_tags))
+            for i in range(n_sends)]
+
+    y = sum(halos)
+
+    # Find the partition
+    outputs = pt.DictOfNamedArrays({"out": y})
+    distributed_parts = find_distributed_partition(outputs)
+    prg_per_partition = generate_code_for_partition(distributed_parts)
+
+    if use_batching:
+        assert len(prg_per_partition) == 2
+    else:
+        assert len(prg_per_partition) == 2*n_sends
+
+    # Execute the distributed partition
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+
+    context = execute_distributed_partition(distributed_parts, prg_per_partition,
+                                             queue, comm)
+
+    final_res = context["out"].get(queue)
+
+    # All ranks generate the same random numbers (same seed).
+    np.testing.assert_allclose(x_in*n_sends, final_res)
 
 # }}}
 

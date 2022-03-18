@@ -244,6 +244,10 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
 # }}}
 
 
+class MY_COMM_BATCH:  # noqa: N801
+    pass
+
+
 # {{{ tags used only by the regression tests
 
 class FooInameTag(Tag):

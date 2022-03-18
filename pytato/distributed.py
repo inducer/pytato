@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
-    List, FrozenSet, Callable, cast, Mapping)  # Mapping required by sphinx
+    List, FrozenSet, Callable, cast, Union, Mapping)  # Mapping required by sphinx
 
 from dataclasses import dataclass
 
@@ -441,12 +441,22 @@ def find_distributed_partition(
     # 'graph' also includes DistributedSend nodes, which are not Arrays
     rev_graph = reverse_graph(graph)  # type: ignore[arg-type]
 
+    def _tag_for_node(expr_node: Union[Array, DistributedSend]) -> Hashable:
+        from pytato.tags import CommunicationBatch
+        comm_batch_tags = expr_node.tags_of_type(CommunicationBatch)
+
+        if comm_batch_tags:
+            comm_batch_tag, = comm_batch_tags
+            return comm_batch_tag.batch_tag
+        else:
+            return node
+
     # FIXME: Inefficient... too many traversals
     node_to_feeding_recvs: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
     for node in graph:
         node_to_feeding_recvs.setdefault(node, set())
         if isinstance(node, DistributedRecv):
-            tag_user_nodes(graph, tag=node,  # type: ignore[arg-type]
+            tag_user_nodes(graph, tag=_tag_for_node(node),  # type: ignore[arg-type]
                             starting_point=node,
                             node_to_tags=node_to_feeding_recvs)
 
@@ -454,7 +464,7 @@ def find_distributed_partition(
     for node in rev_graph:
         node_to_fed_sends.setdefault(node, set())
         if isinstance(node, DistributedSend):
-            tag_user_nodes(rev_graph, tag=node, starting_point=node,
+            tag_user_nodes(rev_graph, tag=_tag_for_node(node), starting_point=node,
                             node_to_tags=node_to_fed_sends)
 
     def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
@@ -464,14 +474,6 @@ def find_distributed_partition(
     # {{{ Sanity checks
 
     if __debug__:
-        for node, _ in node_to_feeding_recvs.items():
-            for n in node_to_feeding_recvs[node]:
-                assert(isinstance(n, DistributedRecv))
-
-        for node, _ in node_to_fed_sends.items():
-            for n in node_to_fed_sends[node]:
-                assert(isinstance(n, DistributedSend))
-
         tm = TopoSortMapper()
         tm(outputs)
 

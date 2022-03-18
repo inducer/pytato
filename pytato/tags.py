@@ -9,9 +9,11 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
+.. autoclass:: CommunicationBatch
 """
 
 
+from typing import Hashable
 from pytools.tag import Tag, UniqueTag, tag_dataclass
 
 
@@ -101,3 +103,20 @@ class AssumeNonNegative(Tag):
     :class:`~pytato.target.Target` that all entries of the tagged array are
     non-negative.
     """
+
+
+@tag_dataclass
+class CommunicationBatch(UniqueTag):
+    """
+    A tag attached to :class:`~pytato.DistributedSend` or
+    :class:`~pytato.DistributedRecv` to indicate that all communication of each
+    direction (send/receive) with the same :attr:`batch_tag` should be carried
+    out in a single batch.
+
+    .. attribute:: batch_tag
+
+        A hashable identifier for the communication batch.
+    """
+    # FIXME: For now, "batching" just results in fewer partitions. The data
+    # is still being sent with separate send/recv operations.
+    batch_tag: Hashable
