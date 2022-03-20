@@ -47,6 +47,13 @@ class NUserCollector(Mapper):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
     times an array expression is a direct dependency of other nodes.
+
+    .. note::
+
+        - We do not consider the :class:`pytato.DistributedSendRefHolder`
+          a user of :attr:`pytato.DistributedSendRefHolder.send`. This is
+          because in a data flow sense, the send-ref holder does not use the
+          send's data.
     """
     def __init__(self) -> None:
         from collections import defaultdict
@@ -140,6 +147,20 @@ class NUserCollector(Mapper):
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
+
+    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder
+                                        ) -> None:
+        # Note: We do not consider 'expr.send.data' as a predecessor of *expr*,
+        # as there is no dataflow from *expr.send.data* to *expr*
+        self.nusers[expr.passthrough_data] += 1
+        self.rec(expr.passthrough_data)
+        self.rec(expr.send.data)
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.nusers[dim] += 1
+                self.rec(dim)
 
 
 def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
