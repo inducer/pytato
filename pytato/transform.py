@@ -985,6 +985,28 @@ class MPMSMaterializer(Mapper):
         # loopy call result is always materialized
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
+    def map_distributed_send_ref_holder(self,
+                                        expr: DistributedSendRefHolder
+                                        ) -> MPMSMaterializerAccumulator:
+        from pytato.distributed import (DistributedSendRefHolder,
+                                        DistributedSend)
+        rec_passthrough = self.rec(expr.passthrough_data)
+        rec_send_data = self.rec(expr.send.data)
+        new_expr = DistributedSendRefHolder(
+            send=DistributedSend(rec_send_data.expr,
+                                 dest_rank=expr.send.dest_rank,
+                                 comm_tag=expr.send.comm_tag,
+                                 tags=expr.send.tags),
+            passthrough_data=rec_passthrough.expr,
+            tags=expr.tags,
+        )
+        return MPMSMaterializerAccumulator(
+            rec_passthrough.materialized_predecessors, new_expr)
+
+    def map_distributed_recv(self, expr: DistributedRecv
+                             ) -> MPMSMaterializerAccumulator:
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
 # }}}
 
 
