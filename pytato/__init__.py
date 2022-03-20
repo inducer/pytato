@@ -75,7 +75,8 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 staple_distributed_send,
                                 find_distributed_partition,
                                 number_distributed_tags,
-                                execute_distributed_partition)
+                                execute_distributed_partition,
+                                )
 
 from pytato.partition import generate_code_for_partition
 
