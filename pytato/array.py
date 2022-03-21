@@ -1133,7 +1133,11 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         access_descriptors.append(access_descriptor)
 
     return Einsum(tuple(access_descriptors), operands,
-                  axes=_get_default_axes(len(out_spec)))
+                  axes=_get_default_axes(len({descr
+                                              for descr in index_to_descr.values()
+                                              if isinstance(descr,
+                                                            ElementwiseAxis)})
+                                         ))
 
 # }}}
 

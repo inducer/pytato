@@ -781,6 +781,15 @@ def test_deduplicate_data_wrappers():
     assert count_data_wrappers(dd_res) == 3
 
 
+def test_einsum_dot_axes_has_correct_dim():
+    # before 'pytato@895bae5', this test would fail because of incorrect
+    # default 'Einsum.axes' instantiation.
+    a = pt.make_placeholder("a", (10, 10), "float64")
+    b = pt.make_placeholder("b", (10, 10), "float64")
+    einsum = pt.einsum("ij,jk   ->    ik", a, b)
+    assert len(einsum.axes) == einsum.ndim
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
