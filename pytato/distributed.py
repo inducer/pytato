@@ -613,6 +613,8 @@ def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
         Dict[Hashable, BoundProgram],
         queue: Any, mpi_communicator: Any,
+        *,
+        allocator: Optional[Any] = None,
         input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
     if input_args is None:
@@ -672,7 +674,9 @@ def execute_distributed_partition(
     def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.all_input_names()}
 
-        _evt, result_dict = prg_per_partition[part.pid](queue, **inputs)
+        _evt, result_dict = prg_per_partition[part.pid](queue,
+                                                        allocator=allocator,
+                                                        **inputs)
 
         context.update(result_dict)
 
@@ -702,7 +706,7 @@ def execute_distributed_partition(
 
             # FIXME: pytato shouldn't depend on pyopencl
             import pyopencl as cl
-            context[name] = cl.array.to_device(queue, buf)
+            context[name] = cl.array.to_device(queue, buf, allocator=allocator)
             recv_names_completed.add(name)
 
     # {{{ main loop
