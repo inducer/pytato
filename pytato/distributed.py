@@ -97,7 +97,7 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-# {{{ Distributed node types
+# {{{ distributed node types
 
 CommTagType = Hashable
 
@@ -179,6 +179,16 @@ class DistributedSendRefHolder(Array):
     .. attribute:: passthrough_data
 
         A :class:`~pytato.Array`. The value of this node.
+
+    .. note::
+
+        It is the user's responsibility to ensure matching sends and receives
+        are part of the computation graph on all ranks. If this rule is not heeded,
+        undefined behavior (in particular deadlock) may result.
+        Notably, by the nature of the data flow graph built by :mod:`pytato`,
+        unused results do not appear in the graph. It is thus possible for a
+        :class:`DistributedSendRefHolder` to be constructed and yet to not
+        become part of the graph constructed by the user.
     """
 
     _mapper_method = "map_distributed_send_ref_holder"
@@ -214,6 +224,16 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
     .. attribute:: shape
     .. attribute:: dtype
+
+    .. note::
+
+        It is the user's responsibility to ensure matching sends and receives
+        are part of the computation graph on all ranks. If this rule is not heeded,
+        undefined behavior (in particular deadlock) may result.
+        Notably, by the nature of the data flow graph built by :mod:`pytato`,
+        unused results do not appear in the graph. It is thus possible for a
+        :class:`DistributedRecv` to be constructed and yet to not become part
+        of the graph constructed by the user.
     """
 
     _fields = Array._fields + ("shape", "dtype", "src_rank", "comm_tag")
