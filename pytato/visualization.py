@@ -207,6 +207,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         self.rec(expr.send.data)
         info.edges["sent"] = expr.send.data
 
+        info.fields["dest_rank"] = str(expr.send.dest_rank)
+
         self.nodes[expr] = info
 
 
