@@ -790,6 +790,21 @@ def test_einsum_dot_axes_has_correct_dim():
     assert len(einsum.axes) == einsum.ndim
 
 
+def test_created_at():
+    a = pt.make_placeholder("a", (10, 10), "float64")
+    b = pt.make_placeholder("b", (10, 10), "float64")
+
+    res = a+b
+
+    from pytato.tags import CreatedAt
+    assert any(isinstance(tag, CreatedAt) for tag in res.tags)
+
+    # Make sure the function name appears in the traceback
+    for tag in res.tags:
+        if isinstance(tag, CreatedAt):
+            assert "test_created_at" in tag.traceback
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

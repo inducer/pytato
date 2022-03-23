@@ -101,3 +101,13 @@ class AssumeNonNegative(Tag):
     :class:`~pytato.target.Target` that all entries of the tagged array are
     non-negative.
     """
+
+
+@tag_dataclass
+class CreatedAt(UniqueTag):
+    """
+    A tag attached to a :class:`~pytato.Array` to store the traceback
+    of where it was created.
+    """
+
+    traceback: str

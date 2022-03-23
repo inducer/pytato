@@ -419,8 +419,12 @@ class Array(Taggable):
     __array_priority__ = 1  # disallow numpy arithmetic to take precedence
 
     def __init__(self, axes: AxesT, tags: FrozenSet[Tag]) -> None:
+        import traceback
+        v = "".join(traceback.format_stack())
+        from pytato.tags import CreatedAt
+        c = CreatedAt(v)
         self.axes = axes
-        self.tags = tags
+        self.tags = frozenset({*tags, c})
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         for field in self._fields:
