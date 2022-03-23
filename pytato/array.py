@@ -419,12 +419,8 @@ class Array(Taggable):
     __array_priority__ = 1  # disallow numpy arithmetic to take precedence
 
     def __init__(self, axes: AxesT, tags: FrozenSet[Tag]) -> None:
-        import traceback
-        v = "".join(traceback.format_stack())
-        from pytato.tags import CreatedAt
-        c = CreatedAt(v)
         self.axes = axes
-        self.tags = frozenset({*tags, c})
+        self.tags = tags
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         for field in self._fields:
@@ -1680,7 +1676,12 @@ def _get_default_axes(ndim: int) -> AxesT:
 
 
 def _get_default_tags() -> TagsType:
-    return frozenset()
+    import traceback
+    from pytato.tags import CreatedAt
+
+    v = "".join(traceback.format_stack())
+    c = CreatedAt(v)
+    return frozenset((c,))
 
 
 def _get_matmul_ndim(ndim1: int, ndim2: int) -> int:
