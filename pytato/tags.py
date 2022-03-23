@@ -104,7 +104,7 @@ class AssumeNonNegative(Tag):
 
 
 @tag_dataclass
-class CreatedAt(Tag):
+class CreatedAt(UniqueTag):
     """
     A tag attached to a :class:`~pytato.Array` to store the traceback
     of where it was created.
