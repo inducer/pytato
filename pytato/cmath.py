@@ -59,7 +59,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from typing import Tuple, Optional
 from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
-                          _get_default_axes)
+                          _get_default_axes, _get_default_tags)
 from pytato.scalar_expr import SCALAR_CLASSES
 from pymbolic import var
 
@@ -110,8 +110,11 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
     assert ret_dtype is not None
 
     return IndexLambda(
-            prim.Call(var(f"pytato.c99.{func_name}"), tuple(sym_args)),
-            shape, ret_dtype, bindings, axes=_get_default_axes(len(shape)))
+        prim.Call(var(f"pytato.c99.{func_name}"),
+                  tuple(sym_args)),
+        shape, ret_dtype, bindings,
+        tags=_get_default_tags(),
+        axes=_get_default_axes(len(shape)))
 
 
 def abs(x: Array) -> ArrayOrScalar:

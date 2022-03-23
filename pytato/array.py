@@ -474,6 +474,7 @@ class Array(Taggable):
     def T(self) -> Array:
         return AxisPermutation(self,
                                tuple(range(self.ndim)[::-1]),
+                               tags=_get_default_tags(),
                                axes=_get_default_axes(self.ndim))
 
     @memoize_method
@@ -539,6 +540,7 @@ class Array(Taggable):
                 shape=self.shape,
                 dtype=self.dtype,
                 bindings=bindings,
+                tags=_get_default_tags(),
                 axes=_get_default_axes(self.ndim))
 
     __mul__ = partialmethod(_binary_op, operator.mul)
@@ -1133,6 +1135,7 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         access_descriptors.append(access_descriptor)
 
     return Einsum(tuple(access_descriptors), operands,
+                  tags=_get_default_tags(),
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
                                               if isinstance(descr,
@@ -1672,6 +1675,10 @@ def _get_default_axes(ndim: int) -> AxesT:
     return tuple(Axis(frozenset()) for _ in range(ndim))
 
 
+def _get_default_tags() -> TagsType:
+    return frozenset()
+
+
 def _get_matmul_ndim(ndim1: int, ndim2: int) -> int:
     if ndim1 == 1 and ndim2 == 1:
         return 0
@@ -1738,7 +1745,9 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     if shift == 0:
         return a
 
-    return Roll(a, shift, axis, axes=_get_default_axes(a.ndim))
+    return Roll(a, shift, axis,
+                tags=_get_default_tags(),
+                axes=_get_default_axes(a.ndim))
 
 
 def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
@@ -1758,7 +1767,9 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
     if set(axes) != set(range(a.ndim)):
         raise ValueError("repeated or out-of-bounds axes detected")
 
-    return AxisPermutation(a, tuple(axes), axes=_get_default_axes(a.ndim))
+    return AxisPermutation(a, tuple(axes),
+                           tags=_get_default_tags(),
+                           axes=_get_default_axes(a.ndim))
 
 
 def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -1790,7 +1801,9 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Stack(tuple(arrays), axis, axes=_get_default_axes(arrays[0].ndim+1))
+    return Stack(tuple(arrays), axis,
+                 tags=_get_default_tags(),
+                 axes=_get_default_axes(arrays[0].ndim+1))
 
 
 def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -1823,7 +1836,9 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Concatenate(tuple(arrays), axis, axes=_get_default_axes(arrays[0].ndim))
+    return Concatenate(tuple(arrays), axis,
+                       tags=_get_default_tags(),
+                       axes=_get_default_axes(arrays[0].ndim))
 
 
 def reshape(array: Array, newshape: Union[int, Sequence[int]],
@@ -1885,6 +1900,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
                 f" into {newshape}")
 
     return Reshape(array, tuple(newshape_explicit), order,
+                   tags=_get_default_tags(),
                    axes=_get_default_axes(len(newshape_explicit)))
 
 
@@ -1925,7 +1941,8 @@ def make_placeholder(name: str,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return Placeholder(name, shape, dtype, axes=axes, tags=tags)
+    return Placeholder(name, shape, dtype, axes=axes,
+                       tags=(tags | _get_default_tags()))
 
 
 def make_size_param(name: str,
@@ -1939,7 +1956,7 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=tags)
+    return SizeParam(name, tags=(tags | _get_default_tags()))
 
 
 def make_data_wrapper(data: DataInterface,
@@ -1967,7 +1984,9 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(name, data, shape, axes=axes, tags=tags)
+    return DataWrapper(name, data, shape,
+                       axes=axes,
+                       tags=(tags | _get_default_tags()))
 
 # }}}
 
@@ -1985,6 +2004,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
     shape = normalize_shape(shape)
     dtype = np.dtype(dtype)
     return IndexLambda(dtype.type(fill_value), shape, dtype, {},
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)))
 
 
@@ -2029,6 +2049,7 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
 
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
                        shape=(N, M), dtype=dtype, bindings={},
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(2))
 
 # }}}
@@ -2122,6 +2143,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     from pymbolic.primitives import Variable
     return IndexLambda(start + Variable("_0") * step,
                        shape=(size,), dtype=dtype, bindings={},
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(1))
 
 # }}}
@@ -2222,6 +2244,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        shape=x.shape,
                        dtype=np.dtype(np.bool8),
                        bindings={"_in0": x},
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(len(x.shape)))
 
 # }}}
@@ -2274,6 +2297,7 @@ def where(condition: ArrayOrScalar,
             shape=result_shape,
             dtype=dtype,
             bindings=bindings,
+            tags=_get_default_tags(),
             axes=_get_default_axes(len(result_shape)))
 
 # }}}
@@ -2330,6 +2354,7 @@ def make_index_lambda(
                        bindings=bindings,
                        shape=shape,
                        dtype=dtype,
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)))
 
 # }}}
@@ -2407,6 +2432,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        shape=shape,
                        dtype=array.dtype,
                        bindings={"in": array},
+                       tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)))
 
 
