@@ -158,7 +158,13 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
     """
 
     if isinstance(arr, SCALAR_CLASSES):
-        return arr
+        if np.isnan(arr):
+            # allowing NaNs to stay in our expression trees could potentially
+            # lead to spuriously unequal comparisons between expressions
+            from pymbolic.primitives import NaN
+            return NaN(np.array(arr).dtype.type)
+        else:
+            return arr
 
     assert isinstance(arr, Array)
     bindings[bnd_name] = arr

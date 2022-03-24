@@ -263,6 +263,7 @@ class Reduce(ExpressionBase):
     def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
+    init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
 
 # }}}

@@ -1996,7 +1996,14 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
         dtype = np.dtype(dtype)
 
     shape = normalize_shape(shape)
-    return IndexLambda(dtype.type(fill_value), shape, dtype, {},
+
+    if np.isnan(fill_value):
+        from pymbolic.primitives import NaN
+        fill_value = NaN(dtype.type)
+    else:
+        fill_value = dtype.type(fill_value)
+
+    return IndexLambda(fill_value, shape, dtype, {},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)))
 
@@ -2310,7 +2317,8 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+                     common_dtype.type(np.NaN),
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2328,7 +2336,8 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+                     common_dtype.type(np.NaN),
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)
