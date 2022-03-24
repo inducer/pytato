@@ -797,12 +797,18 @@ def test_created_at():
     res = a+b
 
     from pytato.tags import CreatedAt
-    assert any(isinstance(tag, CreatedAt) for tag in res.tags)
+
+    found = False
 
     # Make sure the function name appears in the traceback
     for tag in res.tags:
         if isinstance(tag, CreatedAt):
-            assert "test_created_at" in tag.traceback
+            for line in tag.traceback:
+                if line[2] == "test_created_at":
+                    found = True
+                    break
+
+    assert found
 
 
 if __name__ == "__main__":

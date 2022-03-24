@@ -1679,8 +1679,11 @@ def _get_default_tags() -> TagsType:
     import traceback
     from pytato.tags import CreatedAt
 
-    v = "".join(traceback.format_stack())
-    c = CreatedAt(v)
+    # extract_stack returns a StackSummary, which is a list
+    # You can restore the StackSummary object by calling
+    # StackSummary.from_list(c.traceback)
+    stack_summary = traceback.extract_stack()
+    c = CreatedAt(tuple(tuple(t) for t in tuple(stack_summary)))
     return frozenset((c,))
 
 
