@@ -1679,17 +1679,6 @@ def _get_default_tags() -> TagsType:
     return frozenset()
 
 
-def _get_matmul_ndim(ndim1: int, ndim2: int) -> int:
-    if ndim1 == 1 and ndim2 == 1:
-        return 0
-    elif {ndim1, ndim2} == {1, 2}:
-        return 1
-    elif ndim1 == 2 and ndim2 == 2:
-        return 2
-
-    raise AssertionError()
-
-
 def matmul(x1: Array, x2: Array) -> Array:
     """Matrix multiplication.
 
