@@ -887,7 +887,7 @@ class MPMSMaterializer(Mapper):
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
-                        for bnd_name, bnd in expr.bindings.items()}
+                        for bnd_name, bnd in sorted(expr.bindings.items())}
 
         new_expr = IndexLambda(expr.expr,
                                expr.shape,
@@ -1003,7 +1003,8 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     if not source_dict:
         return DictOfNamedArrays({})
 
-    data = {name: copy_mapper(val.expr) for name, val in source_dict.items()}
+    data = {name: copy_mapper(val.expr)
+            for name, val in sorted(source_dict.items())}
     return DictOfNamedArrays(data)
 
 
@@ -1357,7 +1358,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 shape=self.rec_idx_or_size_tuple(expr, expr.shape),
                 dtype=expr.dtype,
                 bindings={name: self.handle_edge(expr, child)
-                          for name, child in expr.bindings.items()},
+                          for name, child in sorted(expr.bindings.items())},
                 axes=expr.axes,
                 tags=expr.tags)
 
@@ -1467,7 +1468,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
             bindings={
                 name: self.handle_edge(expr, child)
                 if isinstance(child, Array) else child
-                for name, child in expr.bindings.items()},
+                for name, child in sorted(expr.bindings.items())},
             )
 
     def map_distributed_send_ref_holder(

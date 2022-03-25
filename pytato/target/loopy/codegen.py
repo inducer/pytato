@@ -400,7 +400,7 @@ class CodeGenMapper(Mapper):
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
             state: CodeGenState) -> None:
-        for key in expr:
+        for key in sorted(expr.keys()):
             subexpr = expr[key].expr
             name = _generate_name_for_temp(subexpr, state)
             insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
