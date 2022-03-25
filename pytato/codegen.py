@@ -657,7 +657,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                   - frozenset([name]))
            for name, val in deps.items()}
 
-    output_order: List[str] = compute_topological_order(dag)[::-1]
+    output_order: List[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
 
     # }}}
 

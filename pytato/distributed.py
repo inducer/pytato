@@ -363,11 +363,12 @@ def _gather_distributed_comm_info(partition: GraphPartition,
 
     dist_name_generator = UniqueNameGenerator(forced_prefix="_pt_dist_")
 
-    for part in partition.parts.values():
+    for part in sorted(partition.parts.values(),
+                       key=lambda k: sorted(k.output_names)):
         comm_replacer = _DistributedCommReplacer(dist_name_generator)
         part_results = {
                 var_name: comm_replacer(partition.var_name_to_result[var_name])
-                for var_name in part.output_names}
+                for var_name in sorted(part.output_names)}
 
         dist_sends = [
                 comm_replacer.map_distributed_send(send)

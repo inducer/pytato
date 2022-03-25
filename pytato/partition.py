@@ -178,7 +178,7 @@ class GraphPartitioner(EdgeCachedMapper):
 
     def make_partition(self, outputs: DictOfNamedArrays) -> GraphPartition:
         rewritten_outputs = {
-                name: self(expr) for name, expr in outputs._data.items()}
+                name: self(expr) for name, expr in sorted(outputs._data.items())}
 
         pid_to_output_names: Dict[PartId, Set[str]] = {
             pid: set() for pid in self.seen_part_ids}
@@ -187,7 +187,7 @@ class GraphPartitioner(EdgeCachedMapper):
 
         var_name_to_result = self.var_name_to_result.copy()
 
-        for out_name, rewritten_output in rewritten_outputs.items():
+        for out_name, rewritten_output in sorted(rewritten_outputs.items()):
             out_part_id = self._get_part_id(outputs._data[out_name])
             pid_to_output_names.setdefault(out_part_id, set()).add(out_name)
             var_name_to_result[out_name] = rewritten_output
@@ -209,7 +209,9 @@ class GraphPartitioner(EdgeCachedMapper):
 
         from pytools.graph import compute_topological_order, CycleError
         try:
-            toposorted_part_ids = compute_topological_order(pid_to_needing_pids)
+            toposorted_part_ids = compute_topological_order(
+                    pid_to_needing_pids,
+                    lambda x: sorted(pid_to_output_names[x]))
         except CycleError:
             raise PartitionInducedCycleError
 
@@ -419,7 +421,8 @@ def generate_code_for_partition(partition: GraphPartition) \
     from pytato import generate_loopy
     part_id_to_prg = {}
 
-    for part in partition.parts.values():
+    for part in sorted(partition.parts.values(),
+                       key=lambda part_: sorted(part_.output_names)):
         d = DictOfNamedArrays(
                     {var_name: partition.var_name_to_result[var_name]
                         for var_name in part.output_names
