@@ -74,3 +74,15 @@ Documentation:
     maybe_upload_docs
   tags:
   - python3
+
+Downstream:
+  parallel:
+    matrix:
+    - DOWNSTREAM_PROJECT: [meshmode, mirgecom, arraycontext]
+  tags:
+  - large-node
+  - "docker-runner"
+  script: |
+    curl -L -O https://tiker.net/ci-support-v0
+    . ./ci-support-v0
+    test_downstream "$DOWNSTREAM_PROJECT"
