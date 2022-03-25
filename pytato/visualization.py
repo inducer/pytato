@@ -40,7 +40,8 @@ from pytato.loopy import LoopyCall
 
 from pytato.array import (
         Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays)
+        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays,
+        IndexBase)
 
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
@@ -161,6 +162,38 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         self.nodes[expr] = info
 
     map_concatenate = map_stack
+
+    def map_basic_index(self, expr: IndexBase) -> None:
+        info = self.get_common_dot_info(expr)
+
+        from pytato.scalar_expr import INT_CLASSES
+
+        indices_parts = []
+        for i, index in enumerate(expr.indices):
+            if isinstance(index, INT_CLASSES):
+                indices_parts.append(str(index))
+
+            elif isinstance(index, Array):
+                label = f"i{i}"
+                self.rec(index)
+                indices_parts.append(label)
+                info.edges[label] = index
+
+            elif index is None:
+                indices_parts.append("newaxis")
+
+            else:
+                indices_parts.append(str(index))
+
+        info.fields["indices"] = ", ".join(indices_parts)
+
+        self.rec(expr.array)
+        info.edges["array"] = expr.array
+
+        self.nodes[expr] = info
+
+    map_contiguous_advanced_index = map_basic_index
+    map_non_contiguous_advanced_index = map_basic_index
 
     def map_einsum(self, expr: Einsum) -> None:
         info = self.get_common_dot_info(expr)
