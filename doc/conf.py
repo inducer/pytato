@@ -26,6 +26,7 @@ intersphinx_mapping = {
     "https://documen.tician.de/loopy/": None,
     "https://documen.tician.de/sumpy/": None,
     "https://documen.tician.de/islpy/": None,
+    "https://pyrsistent.readthedocs.io/en/latest/": None,
 }
 
 import sys
@@ -33,4 +34,6 @@ sys.PYTATO_BUILDING_SPHINX_DOCS = True
 
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
+    ["py:class", r"pyrsistent.typing.(.+)"],
+
 ]

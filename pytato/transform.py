@@ -44,6 +44,8 @@ from pytato.array import (
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
+from pyrsistent import pmap
+from pyrsistent.typing import PMap as PMapT
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
@@ -1255,15 +1257,16 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 
 # {{{ operations on graphs in dict form
 
-def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
-        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
-    """Reverses a graph.
+def reverse_graph(graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]]
+                  ) -> PMapT[ArrayOrNames, FrozenSet[ArrayOrNames]]:
+    """
+    Reverses a graph.
 
     :param graph: A :class:`dict` representation of a directed graph, mapping each
         node to other nodes to which it is connected by edges. A possible
         use case for this function is the graph in
         :attr:`UsersCollector.node_to_users`.
-    :returns: A :class:`dict` representing *graph* with edges reversed.
+    :returns: A :class:`pyrsistent.PMap` representing *graph* with edges reversed.
     """
     result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
@@ -1274,7 +1277,7 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
         for other_node_key in edges:
             result.setdefault(other_node_key, set()).add(node_key)
 
-    return result
+    return pmap({k: frozenset(v) for k, v in result.items()})
 
 
 def _recursively_get_all_users(
