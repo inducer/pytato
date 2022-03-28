@@ -805,16 +805,20 @@ def test_created_at():
 
     from pytato.tags import CreatedAt
 
+    created_tag = res.tags_of_type(CreatedAt)
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
     found = False
 
     # Make sure the function name appears in the traceback
-    for tag in res.tags:
-        if isinstance(tag, CreatedAt):
-            _unused = tag.traceback.to_stacksummary()  # noqa
-            for frame in tag.traceback.frames:
-                if frame.name == "test_created_at":
-                    found = True
-                    break
+    _unused = tag.traceback.to_stacksummary()  # noqa
+    for frame in tag.traceback.frames:
+        if frame.name == "test_created_at":
+            found = True
+            break
 
     assert found
 
