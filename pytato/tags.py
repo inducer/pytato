@@ -14,7 +14,6 @@ Pre-Defined Tags
 
 from dataclasses import dataclass
 from pytools.tag import Tag, UniqueTag, tag_dataclass
-from typing import Tuple, Any
 from pytato.array import _PytatoStackSummary
 
 
