@@ -1678,26 +1678,48 @@ def _get_default_axes(ndim: int) -> AxesT:
 
 @dataclass(frozen=True, eq=True)
 class _PytatoFrameSummary:
+    """Class to store a single call frame."""
     filename: str
     lineno: int
     name: str
     line: str
 
+    def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
+        key_builder.rec(key_hash,
+                (self.__class__.__module__, self.__class__.__qualname__))
 
-class _PytatoStackSummary(Tag):
-    def __init__(self, stack_summary: StackSummary) -> None:
-        self.frames: List[_PytatoFrameSummary] = []
-        for s in stack_summary:
-            pfs = _PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
-            self.frames.append(pfs)
+        from dataclasses import fields
+        # Fields are ordered consistently, so ordered hashing is OK.
+        #
+        # No need to dispatch to superclass: fields() automatically gives us
+        # fields from the entire class hierarchy.
+        for f in fields(self):
+            key_builder.rec(key_hash, getattr(self, f.name))
+
+
+@dataclass(frozen=True, eq=True)
+class _PytatoStackSummary:
+    """Class to store a list of :class:`_PytatoFrameSummary` call frames."""
+    frames: Tuple[_PytatoFrameSummary, ...]
 
     def to_stacksummary(self) -> StackSummary:
-        frames = []
-        for f in self.frames:
-            frames.append(FrameSummary(f.filename, f.lineno, f.name, line=f.line))
+        frames = [FrameSummary(f.filename, f.lineno, f.name, line=f.line)
+                  for f in self.frames]
 
         # type-ignore-reason: from_list also takes List[FrameSummary]
         return StackSummary.from_list(frames)  # type: ignore[arg-type]
+
+    def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
+        key_builder.rec(key_hash,
+                (self.__class__.__module__, self.__class__.__qualname__))
+
+        from dataclasses import fields
+        # Fields are ordered consistently, so ordered hashing is OK.
+        #
+        # No need to dispatch to superclass: fields() automatically gives us
+        # fields from the entire class hierarchy.
+        for f in fields(self):
+            key_builder.rec(key_hash, getattr(self, f.name))
 
 
 def _get_default_tags() -> TagsType:
@@ -1705,8 +1727,12 @@ def _get_default_tags() -> TagsType:
     from pytato.tags import CreatedAt
 
     if __debug__:
-        c = CreatedAt(_PytatoStackSummary(traceback.extract_stack()))
+        frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
+                       for s in traceback.extract_stack())
+        c = CreatedAt(_PytatoStackSummary(frames))
         return frozenset((c,))
+    else:
+        return frozenset()
 
 
 def matmul(x1: Array, x2: Array) -> Array:

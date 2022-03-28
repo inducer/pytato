@@ -1033,7 +1033,7 @@ def map_and_copy(expr: ArrayOrNames,
 
 
 def remove_tags_of_type(tag_types: Union[type, Tuple[type]], expr: ArrayOrNames
-        ) -> ArrayOrNames:
+                        ) -> ArrayOrNames:
     def process_node(expr: ArrayOrNames) -> ArrayOrNames:
         if isinstance(expr, Array):
             return expr.copy(tags=frozenset({
