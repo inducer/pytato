@@ -81,6 +81,19 @@ Computation and Results
     Operations that *can* be expressed as :class:`~pytato.array.IndexLambda`
     without loss of information, *should* be expressed that way.
 
+-   Every :class:`~pytato.array.Array` instance can be viewed a computation
+    graph, where the :class:`~pytato.array.Array` instances form the nodes of
+    the graph and there is an edge between a node and the array it uses. Since
+    :class:`~pytato.array.Array` is an immutable type, the computation
+    computation graphs would belong to the class of Directed Acyclic Graphs
+    (DAGs). We choose the direction of the edges in the DAG to resemble the one
+    typically seen in a data-flow graph, i.e. the successors of a node are its
+    *users* and the predecessors of a node are the arrays that it *uses*.
+
+    -   Borrowing the notation from `LLVM
+        <https://llvm.org/doxygen/classllvm_1_1User.html>`__, we often refer to
+        the direct successors of a node by *users*.
+
 Naming
 ------
 
