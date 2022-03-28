@@ -74,6 +74,7 @@ __doc__ = """
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
+.. autofunction:: remove_tags_of_type
 .. autofunction:: materialize_with_mpms
 
 Dict representation of DAGs
@@ -1029,6 +1030,21 @@ def map_and_copy(expr: ArrayOrNames,
         caching nature each node is mapped exactly once.
     """
     return CachedMapAndCopyMapper(map_fn)(expr)
+
+
+def remove_tags_of_type(tag_types: Union[type, Tuple[type]], expr: ArrayOrNames
+        ) -> ArrayOrNames:
+    def process_node(expr: ArrayOrNames) -> ArrayOrNames:
+        if isinstance(expr, Array):
+            return expr.copy(tags=frozenset({
+                tag for tag in expr.tags
+                if not isinstance(tag, tag_types)}))
+        elif isinstance(expr, AbstractResultWithNamedArrays):
+            return expr
+        else:
+            raise AssertionError()
+
+    return map_and_copy(expr, process_node)
 
 
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
