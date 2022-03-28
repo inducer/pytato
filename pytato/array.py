@@ -1704,8 +1704,9 @@ def _get_default_tags() -> TagsType:
     import traceback
     from pytato.tags import CreatedAt
 
-    c = CreatedAt(_PytatoStackSummary(traceback.extract_stack()))
-    return frozenset((c,))
+    if __debug__:
+        c = CreatedAt(_PytatoStackSummary(traceback.extract_stack()))
+        return frozenset((c,))
 
 
 def matmul(x1: Array, x2: Array) -> Array:
