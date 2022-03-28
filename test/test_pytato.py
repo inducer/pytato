@@ -27,6 +27,8 @@ THE SOFTWARE.
 
 import sys
 
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -462,7 +464,12 @@ def test_array_dot_repr():
     x = pt.make_placeholder("x", (10, 4), np.int64)
     y = pt.make_placeholder("y", (10, 4), np.int64)
 
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+
     def _assert_stripped_repr(ary: pt.Array, expected_repr: str):
+        ary = cast(pt.Array, remove_tags_of_type(CreatedAt, ary))
+
         expected_str = "".join([c for c in repr(ary) if c not in [" ", "\n"]])
         result_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
         assert expected_str == result_str
