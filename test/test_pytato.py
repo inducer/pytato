@@ -803,8 +803,8 @@ def test_created_at():
     # Make sure the function name appears in the traceback
     for tag in res.tags:
         if isinstance(tag, CreatedAt):
-            for line in tag.traceback:
-                if line[2] == "test_created_at":
+            for frame in tag.traceback.frames:
+                if frame.name == "test_created_at":
                     found = True
                     break
 

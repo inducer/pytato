@@ -15,6 +15,7 @@ Pre-Defined Tags
 from dataclasses import dataclass
 from pytools.tag import Tag, UniqueTag, tag_dataclass
 from typing import Tuple, Any
+from pytato.array import _PytatoStackSummary
 
 
 # {{{ pre-defined tag: ImplementationStrategy
@@ -115,4 +116,4 @@ class CreatedAt(UniqueTag):
     of where it was created.
     """
 
-    traceback: Tuple[Tuple[Any, ...], ...]
+    traceback: _PytatoStackSummary

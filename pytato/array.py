@@ -1,4 +1,5 @@
 from __future__ import annotations
+from traceback import FrameSummary, StackSummary
 
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
@@ -1675,15 +1676,35 @@ def _get_default_axes(ndim: int) -> AxesT:
     return tuple(Axis(frozenset()) for _ in range(ndim))
 
 
+@dataclass(frozen=True, eq=True)
+class _PytatoFrameSummary:
+    filename: str
+    lineno: int
+    name: str
+    line: str
+
+
+class _PytatoStackSummary(Tag):
+    def __init__(self, stack_summary: StackSummary) -> None:
+        self.frames: List[_PytatoFrameSummary] = []
+        for s in stack_summary:
+            pfs = _PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
+            self.frames.append(pfs)
+
+    def to_stacksummary(self) -> StackSummary:
+        frames = []
+        for f in self.frames:
+            frames.append(FrameSummary(f.filename, f.lineno, f.name, line=f.line))
+
+        # type-ignore-reason: from_list also takes List[FrameSummary]
+        return StackSummary.from_list(frames)  # type: ignore[arg-type]
+
+
 def _get_default_tags() -> TagsType:
     import traceback
     from pytato.tags import CreatedAt
 
-    # extract_stack returns a StackSummary, which is a list
-    # You can restore the StackSummary object by calling
-    # StackSummary.from_list(c.traceback)
-    stack_summary = traceback.extract_stack()
-    c = CreatedAt(tuple(tuple(t) for t in tuple(stack_summary)))
+    c = CreatedAt(_PytatoStackSummary(traceback.extract_stack()))
     return frozenset((c,))
 
 
