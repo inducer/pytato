@@ -116,3 +116,6 @@ class CreatedAt(UniqueTag):
     """
 
     traceback: _PytatoStackSummary
+
+    def __repr__(self) -> str:
+        return "CreatedAt(" + str(self.traceback) + ")"
