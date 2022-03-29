@@ -1696,6 +1696,9 @@ class _PytatoFrameSummary:
         for f in fields(self):
             key_builder.rec(key_hash, getattr(self, f.name))
 
+    def __repr__(self) -> str:
+        return f"{self.filename}:{self.lineno}, in {self.name}: {self.line}"
+
 
 @dataclass(frozen=True, eq=True)
 class _PytatoStackSummary:
@@ -1720,6 +1723,9 @@ class _PytatoStackSummary:
         # fields from the entire class hierarchy.
         for f in fields(self):
             key_builder.rec(key_hash, getattr(self, f.name))
+
+    def __repr__(self) -> str:
+        return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
 def _get_default_tags() -> TagsType:
