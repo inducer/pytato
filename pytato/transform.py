@@ -1042,7 +1042,7 @@ def remove_tags_of_type(tag_types: Union[type, Tuple[type]], expr: ArrayOrNames
         elif isinstance(expr, AbstractResultWithNamedArrays):
             return expr
         else:
-            raise AssertionError()
+            raise AssertionError(type(expr))
 
     return map_and_copy(expr, process_node)
 

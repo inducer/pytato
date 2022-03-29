@@ -297,6 +297,14 @@ def test_dict_of_named_arrays_comparison():
     dict2 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict3 = pt.make_dict_of_named_arrays({"not_out": 2 * x})
     dict4 = pt.make_dict_of_named_arrays({"out": 3 * x})
+
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+    dict1 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict1))
+    dict2 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict2))
+    dict3 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict3))
+    dict4 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict4))
+
     assert dict1 == dict2
     assert dict1 != dict3
     assert dict1 != dict4
@@ -626,10 +634,22 @@ def test_rec_get_user_nodes():
     expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
                                          "out2": 7 * x1 + 3 * x2})
 
-    assert (pt.transform.rec_get_user_nodes(expr, x1)
-            == frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr}))
-    assert (pt.transform.rec_get_user_nodes(expr, x2)
-            == frozenset({3 * x2, 7*x1 + 3 * x2, expr}))
+    t1 = pt.transform.rec_get_user_nodes(expr, x1)
+    t1r = frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr})
+
+    t2 = pt.transform.rec_get_user_nodes(expr, x2)
+    t2r = frozenset({3 * x2, 7*x1 + 3 * x2, expr})
+
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+
+    t1 = frozenset({remove_tags_of_type(CreatedAt, t) for t in t1})
+    t1r = frozenset({remove_tags_of_type(CreatedAt, t) for t in t1r})
+    t2 = frozenset({remove_tags_of_type(CreatedAt, t) for t in t2})
+    t2r = frozenset({remove_tags_of_type(CreatedAt, t) for t in t2r})
+
+    assert (t1 == t1r)
+    assert (t2 == t2r)
 
 
 def test_rec_get_user_nodes_linear_complexity():
