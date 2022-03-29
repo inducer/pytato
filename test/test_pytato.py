@@ -707,8 +707,28 @@ def test_tag_user_nodes_linear_complexity():
             expected_result[expr] = {"foo"}
 
     expr, inp = construct_intestine_graph()
+
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+    # node_to_users = remove_tags_of_type(CreatedAt, user_collector.node_to_users)
+
+    node_to_users = {}
+
+    for k in user_collector.node_to_users.keys():
+        new_key = remove_tags_of_type(CreatedAt, k)
+        new_values = set({remove_tags_of_type(CreatedAt, v) for v in user_collector.node_to_users[k]})
+
+        node_to_users[new_key] = new_values
+
+
+
     result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
     ExpectedResultComputer()(expr)
+
+    import pudb
+    pu.db
+
+
 
     assert expected_result == result
 
