@@ -1696,6 +1696,14 @@ class _PytatoFrameSummary:
         for f in fields(self):
             key_builder.rec(key_hash, getattr(self, f.name))
 
+    def short_str(self) -> str:
+        s = f"{self.filename}:{self.lineno}, in {self.name}():\n{self.line}"
+        s1, s2 = s.split("\n")
+        # Limit display to 35 characters
+        s1 = "[...] " + s1[len(s1)-35:] if len(s1) > 35 else s1
+        s2 = s2[:35] + " [...]" if len(s2) > 35 else s2
+        return s1 + "\n" + s2
+
     def __repr__(self) -> str:
         return f"{self.filename}:{self.lineno}, in {self.name}(): {self.line}"
 
@@ -1724,31 +1732,19 @@ class _PytatoStackSummary:
         for f in fields(self):
             key_builder.rec(key_hash, getattr(self, f.name))
 
-    def __str__(self) -> str:
+    def short_str(self) -> str:
         from os.path import dirname
-
-        res = None
 
         # Find the first file in the frames that it is not in pytato's pytato/
         # directory.
-        for idx, frame in enumerate(reversed(self.frames)):
+        for frame in reversed(self.frames):
             frame_dir = dirname(frame.filename)
             if not frame_dir.endswith("pytato"):
-                res = str(frame)
+                return frame.short_str()
 
-                # Indicate whether frames were omitted
-                if idx < len(self.frames)-1:
-                    res += " ..."
-                if idx > 0:
-                    res = "... " + res
-                break
-
-        if not res:
-            # Fallback in case we don't find any file that is not in the pytato/
-            # directory (should be unlikely).
-            return self.__repr__()
-
-        return res
+        # Fallback in case we don't find any file that is not in the pytato/
+        # directory (should be unlikely).
+        return self.__repr__()
 
     def __repr__(self) -> str:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])

@@ -73,13 +73,40 @@ class DotNodeInfo:
     edges: Dict[str, ArrayOrNames]
 
 
+def stringify_created_at(tags: TagsType) -> str:
+    from pytato.tags import CreatedAt
+    for tag in tags:
+        if isinstance(tag, CreatedAt):
+            return tag.traceback.short_str()
+
+    return "<unknown>"
+
+
 def stringify_tags(tags: TagsType) -> str:
+    # The CreatedAt tag is handled in stringify_created_at()
+    from pytato.tags import CreatedAt
+    tags = set(tag for tag in tags if not isinstance(tag, CreatedAt))
+
     components = sorted(str(elem) for elem in tags)
     return "{" + ", ".join(components) + "}"
 
 
 def stringify_shape(shape: ShapeType) -> str:
-    components = [str(elem) for elem in shape]
+    from pytato.tags import CreatedAt
+    from pytato import SizeParam
+
+    new_elems = set()
+    for elem in shape:
+        # Remove CreatedAt tags from SizeParam
+        if isinstance(elem, SizeParam):
+            new_elem = elem.copy(
+                    tags=frozenset(tag for tag in elem.tags
+                                    if not isinstance(tag, CreatedAt)))
+            new_elems.add(new_elem)
+        else:
+            new_elems.add(elem)
+
+    components = [str(elem) for elem in new_elems]
     if not components:
         components = [","]
     elif len(components) == 1:
@@ -95,6 +122,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
         fields = dict(addr=hex(id(expr)),
+                created_at=stringify_created_at(expr.tags),
                 shape=stringify_shape(expr.shape),
                 dtype=str(expr.dtype),
                 tags=stringify_tags(expr.tags))
