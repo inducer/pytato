@@ -85,7 +85,7 @@ def stringify_created_at(tags: TagsType) -> str:
 def stringify_tags(tags: TagsType) -> str:
     # The CreatedAt tag is handled in stringify_created_at()
     from pytato.tags import CreatedAt
-    tags = set(tag for tag in tags if not isinstance(tag, CreatedAt))
+    tags = frozenset(tag for tag in tags if not isinstance(tag, CreatedAt))
 
     components = sorted(str(elem) for elem in tags)
     return "{" + ", ".join(components) + "}"
@@ -97,14 +97,14 @@ def stringify_shape(shape: ShapeType) -> str:
 
     new_elems = set()
     for elem in shape:
-        # Remove CreatedAt tags from SizeParam
-        if isinstance(elem, SizeParam):
+        if not isinstance(elem, SizeParam):
+            new_elems.add(elem)
+        else:
+            # Remove CreatedAt tags from SizeParam
             new_elem = elem.copy(
                     tags=frozenset(tag for tag in elem.tags
                                     if not isinstance(tag, CreatedAt)))
             new_elems.add(new_elem)
-        else:
-            new_elems.add(elem)
 
     components = [str(elem) for elem in new_elems]
     if not components:

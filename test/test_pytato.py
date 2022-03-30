@@ -399,7 +399,7 @@ def test_linear_complexity_inequality():
     from pytato.equality import EqualityComparer
     from numpy.random import default_rng
 
-    def construct_intestine_graph(depth=100, seed=0):
+    def construct_intestine_graph(depth=90, seed=0):
         rng = default_rng(seed)
         x = pt.make_placeholder("x", shape=(10,), dtype=float)
 
@@ -412,6 +412,13 @@ def test_linear_complexity_inequality():
     graph1 = construct_intestine_graph()
     graph2 = construct_intestine_graph()
     graph3 = construct_intestine_graph(seed=3)
+
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+
+    graph1 = remove_tags_of_type(CreatedAt, graph1)
+    graph2 = remove_tags_of_type(CreatedAt, graph2)
+    graph3 = remove_tags_of_type(CreatedAt, graph3)
 
     assert EqualityComparer()(graph1, graph2)
     assert EqualityComparer()(graph2, graph1)
@@ -685,7 +692,7 @@ def test_rec_get_user_nodes_linear_complexity():
 def test_tag_user_nodes_linear_complexity():
     from numpy.random import default_rng
 
-    def construct_intestine_graph(depth=100, seed=0):
+    def construct_intestine_graph(depth=90, seed=0):
         rng = default_rng(seed)
         x = pt.make_placeholder("x", shape=(10,), dtype=float)
         y = x
@@ -696,7 +703,13 @@ def test_tag_user_nodes_linear_complexity():
 
         return y, x
 
+    from pytato.transform import remove_tags_of_type
+    from pytato.tags import CreatedAt
+
     expr, inp = construct_intestine_graph()
+    expr = remove_tags_of_type(CreatedAt, expr)
+    inp = remove_tags_of_type(CreatedAt, inp)
+
     user_collector = pt.transform.UsersCollector()
     user_collector(expr)
 
@@ -707,28 +720,11 @@ def test_tag_user_nodes_linear_complexity():
             expected_result[expr] = {"foo"}
 
     expr, inp = construct_intestine_graph()
-
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-    # node_to_users = remove_tags_of_type(CreatedAt, user_collector.node_to_users)
-
-    node_to_users = {}
-
-    for k in user_collector.node_to_users.keys():
-        new_key = remove_tags_of_type(CreatedAt, k)
-        new_values = set({remove_tags_of_type(CreatedAt, v) for v in user_collector.node_to_users[k]})
-
-        node_to_users[new_key] = new_values
-
-
+    expr = remove_tags_of_type(CreatedAt, expr)
+    inp = remove_tags_of_type(CreatedAt, inp)
 
     result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
     ExpectedResultComputer()(expr)
-
-    import pudb
-    pu.db
-
-
 
     assert expected_result == result
 
