@@ -59,6 +59,18 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
+def test_named_clash(ctx_factory):
+    x = pt.make_placeholder("x", (5,), np.int64)
+
+    from pytato.tags import ImplStored, Named
+    expr = (
+            (2*x).tagged((Named("xx"), ImplStored()))
+            + (3*x).tagged((Named("xx"), ImplStored())))
+
+    with pytest.raises(ValueError):
+        pt.generate_loopy(expr)
+
+
 def test_scalar_placeholder(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
