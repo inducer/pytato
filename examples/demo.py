@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import numpy as np
 import pytato as pt
 
@@ -22,11 +24,17 @@ assert np.allclose(out["aat"], a@a.T)
 
 # }}}
 
-# {{{ generate OpenCL code
+# {{{ print generated Loopy and OpenCL code
 
 prg = pt.generate_loopy(result)
 
+print("=============== Loopy code =================")
+print(prg.program)
+print("============= End Loopy code ===============")
+
 import loopy as lp
+print("============== OpenCL code =================")
 print(lp.generate_code_v2(prg.program).device_code())
+print("============ End OpenCL code ===============")
 
 # }}}
