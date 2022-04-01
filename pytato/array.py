@@ -1735,7 +1735,7 @@ class _PytatoStackSummary:
     def short_str(self, maxlen: int = 100) -> str:
         from os.path import dirname
 
-        # Find the first file in the frames that it is not in pytato's pytato/
+        # Find the first file in the frames that is not in pytato's pytato/
         # directory.
         for frame in reversed(self.frames):
             frame_dir = dirname(frame.filename)
@@ -1750,11 +1750,13 @@ class _PytatoStackSummary:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
-def _get_default_tags() -> TagsType:
+def _get_default_tags(existing_tags: Optional[TagsType] = None) -> TagsType:
     import traceback
     from pytato.tags import CreatedAt
 
-    if __debug__:
+    if __debug__ and (
+            existing_tags is None
+            or not any(isinstance(tag, CreatedAt) for tag in existing_tags)):
         frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
                        for s in traceback.extract_stack())
         c = CreatedAt(_PytatoStackSummary(frames))
@@ -2015,7 +2017,7 @@ def make_placeholder(name: str,
                          f" expected {len(shape)}, got {len(axes)}.")
 
     return Placeholder(name, shape, dtype, axes=axes,
-                       tags=(tags | _get_default_tags()))
+                       tags=(tags | _get_default_tags(tags)))
 
 
 def make_size_param(name: str,
@@ -2029,7 +2031,7 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags()))
+    return SizeParam(name, tags=(tags | _get_default_tags(tags)))
 
 
 def make_data_wrapper(data: DataInterface,
@@ -2059,7 +2061,7 @@ def make_data_wrapper(data: DataInterface,
 
     return DataWrapper(name, data, shape,
                        axes=axes,
-                       tags=(tags | _get_default_tags()))
+                       tags=(tags | _get_default_tags(tags)))
 
 # }}}
 
