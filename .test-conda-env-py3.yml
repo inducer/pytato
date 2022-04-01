@@ -12,3 +12,4 @@ dependencies:
 - islpy
 - sphinx-autodoc-typehints
 - mpi4py
+- openmpi  # Force using Open MPI since our pytest infrastructure needs it
