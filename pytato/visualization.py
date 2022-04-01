@@ -293,8 +293,10 @@ def _emit_array(emit: DotEmitter, title: str, fields: Dict[str, str],
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
-    rows = ['<tr><td colspan="2" %s>%s</td></tr>'
-            % (td_attrib, dot_escape(title))]
+    rows = [f"<tr><td colspan='2' {td_attrib}>{dot_escape(title)}</td></tr>"]
+
+    created_at = fields.pop("created_at", "")
+    tooltip = dot_escape(created_at)
 
     for name, field in fields.items():
         field_content = dot_escape(field).replace("\n", "<br/>")
@@ -302,8 +304,9 @@ def _emit_array(emit: DotEmitter, title: str, fields: Dict[str, str],
                 f"<tr><td {td_attrib}>{dot_escape(name)}:</td><td {td_attrib}>"
                 f"<FONT FACE='monospace'>{field_content}</FONT></td></tr>"
         )
-    table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s> style=filled fillcolor=%s]" % (dot_node_id, table, color))
+    table = f"<table {table_attrib}>\n{''.join(rows)}</table>"
+    emit(f"{dot_node_id} [label=<{table}> style=filled fillcolor={color} "
+         f'tooltip="{tooltip}"]')
 
 
 def _emit_name_cluster(emit: DotEmitter, names: Mapping[str, ArrayOrNames],
