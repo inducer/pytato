@@ -1592,6 +1592,34 @@ def test_regression_reduction_in_conditional(ctx_factory):
     np.testing.assert_allclose(pt_result, np_result)
 
 
+def test_zero_size_cl_array_dedup(ctx_factory):
+    # At pytato@0d8b909 this regression would fail as
+    # 'deduplicate_data_wrappers' could not handle 0-long buffers
+    import pyopencl.array as cla
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+    x_cl1 = cla.empty(cq=cq, shape=(0,), dtype="float64")
+    x_cl2 = cla.empty(cq=cq, shape=(1,), dtype="float64")
+    x1 = pt.make_data_wrapper(x_cl1)
+    x2 = pt.make_data_wrapper(x_cl1)
+    x3 = pt.make_data_wrapper(x_cl2)
+    x4 = pt.make_data_wrapper(x_cl2)
+
+    out = pt.make_dict_of_named_arrays({"out1": 2*x1,
+                                        "out2": 2*x2,
+                                        "out3": x3 + x4
+                                        })
+
+    dedup_dw_out = pt.transform.deduplicate_data_wrappers(out)
+
+    num_nodes_old = pt.analysis.get_num_nodes(out)
+    num_nodes_new = pt.analysis.get_num_nodes(dedup_dw_out)
+    # 'x2' would be merged with 'x1' as both of them point to the same data
+    # 'x3' would be merged with 'x4' as both of them point to the same data
+    assert num_nodes_new == (num_nodes_old - 2)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
