@@ -1717,7 +1717,8 @@ def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     if "pyopencl" in sys.modules:
         from pyopencl.array import Array as CLArray  # type: ignore[import]
         from pyopencl import Buffer as CLBuffer
-        from pyopencl._cl import PooledBuffer
+        # type-ignore-reason: no type info in pyopencl._cl
+        from pyopencl._cl import PooledBuffer  # type: ignore[import]
         if isinstance(ary, CLArray):
             # pyopencl represents 0-long arrays' base_data as None
             assert (isinstance(ary.base_data, (PooledBuffer, CLBuffer))
