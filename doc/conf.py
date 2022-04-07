@@ -35,5 +35,5 @@ sys.PYTATO_BUILDING_SPHINX_DOCS = True
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"pyrsistent.typing.(.+)"],
-
+    ["py:class", r"typing_extensions(.+)"],
 ]
