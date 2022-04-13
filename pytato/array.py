@@ -164,7 +164,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable, TagsType
+from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
@@ -428,7 +428,7 @@ class Array(Taggable):
                 kwargs[field] = getattr(self, field)
         return type(self)(**kwargs)
 
-    def _with_new_tags(self: ArrayT, tags: TagsType) -> ArrayT:
+    def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
         return self.copy(tags=tags)
 
     @property
@@ -682,7 +682,7 @@ class NamedArray(Array):
             container: AbstractResultWithNamedArrays,
             name: str,
             axes: AxesT,
-            tags: TagsType = frozenset()) -> None:
+            tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(axes=axes, tags=tags)
         self._container = container
         self.name = name
@@ -692,7 +692,7 @@ class NamedArray(Array):
              container: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
              axes: Optional[AxesT] = None,
-             tags: Optional[TagsType] = None) -> NamedArray:
+             tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
@@ -837,7 +837,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             dtype: np.dtype[Any],
             bindings: Dict[str, Array],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
 
         super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
 
@@ -907,7 +907,7 @@ class Einsum(Array):
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
                  axes: AxesT,
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
         self.args = args
@@ -1167,7 +1167,7 @@ class Stack(Array):
             arrays: Tuple[Array, ...],
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
@@ -1207,7 +1207,7 @@ class Concatenate(Array):
             arrays: Tuple[Array, ...],
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
@@ -1245,7 +1245,7 @@ class IndexRemappingBase(Array):
     def __init__(self,
             array: Array,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.array = array
 
@@ -1277,7 +1277,7 @@ class Roll(IndexRemappingBase):
             shift: int,
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.shift = shift
         self.axis = axis
@@ -1307,7 +1307,7 @@ class AxisPermutation(IndexRemappingBase):
             array: Array,
             axis_permutation: Tuple[int, ...],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.array = array
         self.axis_permutation = axis_permutation
@@ -1350,7 +1350,7 @@ class Reshape(IndexRemappingBase):
             newshape: Tuple[int, ...],
             order: str,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1379,7 +1379,7 @@ class IndexBase(IndexRemappingBase, ABC):
                  array: Array,
                  indices: Tuple[IndexExpr, ...],
                  axes: AxesT,
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.indices = indices
 
@@ -1579,7 +1579,7 @@ class DataWrapper(InputArgumentBase):
             data: DataInterface,
             shape: ShapeType,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
 
         self.name = name
@@ -1625,7 +1625,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             shape: ShapeType,
             dtype: np.dtype[Any],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
@@ -1654,7 +1654,7 @@ class SizeParam(InputArgumentBase):
     def __init__(self,
                  name: str,
                  axes: AxesT = (),
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.name = name
 
@@ -1675,7 +1675,7 @@ def _get_default_axes(ndim: int) -> AxesT:
     return tuple(Axis(frozenset()) for _ in range(ndim))
 
 
-def _get_default_tags() -> TagsType:
+def _get_default_tags() -> FrozenSet[Tag]:
     return frozenset()
 
 
@@ -1908,7 +1908,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any,
-                     tags: TagsType = frozenset(),
+                     tags: FrozenSet[Tag] = frozenset(),
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -1935,7 +1935,7 @@ def make_placeholder(name: str,
 
 
 def make_size_param(name: str,
-                    tags: TagsType = frozenset()) -> SizeParam:
+                    tags: FrozenSet[Tag] = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -1951,7 +1951,7 @@ def make_size_param(name: str,
 def make_data_wrapper(data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: TagsType = frozenset(),
+        tags: FrozenSet[Tag] = frozenset(),
         axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 

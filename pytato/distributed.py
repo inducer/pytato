@@ -32,7 +32,7 @@ from pyrsistent.typing import PMap as PMapT
 from dataclasses import dataclass
 
 from pytools import UniqueNameGenerator
-from pytools.tag import Taggable, TagsType, UniqueTag
+from pytools.tag import Taggable, UniqueTag, Tag
 from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           DictOfNamedArrays, ShapeType, Placeholder,
                           make_placeholder, _get_default_axes, AxesT,
@@ -87,14 +87,13 @@ nodes that are/are not a dependency of a receive or that feed/do not feed a send
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
 
 .. class:: CommTagType
 
     A type representing a communication tag.
-
-.. class:: TagsType
-
-    A :class:`frozenset` of :class:`pytools.tag.Tag`\ s.
 
 .. class:: ShapeType
 
@@ -130,7 +129,7 @@ class DistributedSend(Taggable):
     """
 
     def __init__(self, data: Array, dest_rank: int, comm_tag: CommTagType,
-                 tags: TagsType = frozenset()) -> None:
+                 tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(tags=tags)
         self.data = data
         self.dest_rank = dest_rank
@@ -157,7 +156,7 @@ class DistributedSend(Taggable):
         data: Optional[Array] = kwargs.get("data")
         dest_rank: Optional[int] = kwargs.get("dest_rank")
         comm_tag: Optional[CommTagType] = kwargs.get("comm_tag")
-        tags: Optional[TagsType] = kwargs.get("tags")
+        tags = cast(FrozenSet[Tag], kwargs.get("tags"))
         return type(self)(
                 data=data or self.data,
                 dest_rank=dest_rank if dest_rank is not None else self.dest_rank,
@@ -204,7 +203,7 @@ class DistributedSendRefHolder(Array):
     _fields = Array._fields + ("passthrough_data", "send",)
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
-                 tags: TagsType = frozenset()) -> None:
+                 tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(axes=passthrough_data.axes, tags=tags)
         self.send = send
         self.passthrough_data = passthrough_data
@@ -264,7 +263,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
     def __init__(self, src_rank: int, comm_tag: CommTagType,
                  shape: ShapeType, dtype: Any,
-                 tags: Optional[TagsType] = frozenset(),
+                 tags: Optional[FrozenSet[Tag]] = frozenset(),
                  axes: Optional[AxesT] = None) -> None:
 
         if not axes:
@@ -276,7 +275,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
 
 
 def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
-                          send_tags: TagsType = frozenset()) -> \
+                          send_tags: FrozenSet[Tag] = frozenset()) -> \
          DistributedSend:
     """Make a :class:`DistributedSend` object."""
     return DistributedSend(sent_data, dest_rank, comm_tag, send_tags)
@@ -284,8 +283,8 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
                           stapled_to: Array, *,
-                          send_tags: TagsType = frozenset(),
-                          ref_holder_tags: TagsType = frozenset()) -> \
+                          send_tags: FrozenSet[Tag] = frozenset(),
+                          ref_holder_tags: FrozenSet[Tag] = frozenset()) -> \
          DistributedSendRefHolder:
     """Make a :class:`DistributedSend` object wrapped in a
     :class:`DistributedSendRefHolder` object."""
@@ -296,7 +295,7 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ShapeType, dtype: Any,
-                          tags: TagsType = frozenset()) \
+                          tags: FrozenSet[Tag] = frozenset()) \
                           -> DistributedRecv:
     """Make a :class:`DistributedRecv` object."""
     dtype = np.dtype(dtype)
