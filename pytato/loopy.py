@@ -36,7 +36,7 @@ from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from pytools.tag import TagsType
+from pytools.tag import Tag
 from pyrsistent import PMap, pmap
 import islpy as isl
 
@@ -51,10 +51,9 @@ __doc__ = r"""
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. class:: Tag
 
-.. class:: TagsType
-
-    A :class:`frozenset` of :class:`pytools.tag.Tag`\ s.
+    See :class:`pytools.tag.Tag`.
 
 .. class:: AxesT
 
@@ -144,7 +143,7 @@ class LoopyCallResult(NamedArray):
             loopy_call: LoopyCall,
             name: str,
             axes: AxesT,
-            tags: TagsType = frozenset()) -> None:
+            tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(loopy_call, name, axes=axes, tags=tags)
 
     # type-ignore reason: `copy` signature incompatible with super-class
@@ -152,7 +151,7 @@ class LoopyCallResult(NamedArray):
              loopy_call: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
              axes: Optional[AxesT] = None,
-             tags: Optional[TagsType] = None) -> LoopyCallResult:
+             tags: Optional[FrozenSet[Tag]] = None) -> LoopyCallResult:
         loopy_call = self._container if loopy_call is None else loopy_call
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
