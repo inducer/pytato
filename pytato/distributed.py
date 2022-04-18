@@ -918,6 +918,10 @@ def find_distributed_partition(outputs: DictOfNamedArrays
 
     def get_part_id(expr: ArrayOrNames) -> int:
         if not isinstance(expr, Array):
+            import pudb
+            pu.db
+            tag, = expr["out"].tags_of_type(PartIDTag)
+            return tag.part_id
             raise NotImplementedError("find_distributed_partition"
                                       " cannot partition DictOfNamedArrays")
         assert isinstance(expr, Array)

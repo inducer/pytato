@@ -36,7 +36,7 @@ from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from pytools.tag import Tag
+from pytools.tag import Tag, Taggable
 from pyrsistent import PMap, pmap
 import islpy as isl
 
@@ -61,7 +61,7 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-class LoopyCall(AbstractResultWithNamedArrays):
+class LoopyCall(AbstractResultWithNamedArrays, Taggable):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.

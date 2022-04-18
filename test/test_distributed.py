@@ -245,6 +245,27 @@ def test_dag_with_no_comm_nodes():
 # }}}
 
 
+def test_call_loopy_partition():
+    from pytato.loopy import call_loopy
+    import loopy as lp
+
+    knl = lp.make_kernel(
+            ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
+             "{[ii, jj]: 0<=ii<m and 0<=jj<n}"],
+            """
+            <> tmp = sum([i, j], A[i, j])
+            out[ii, jj] = tmp*(ii + jj)
+            """, lang_version=(2018, 2))
+
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    y = call_loopy(knl, {"A": A})["out"]
+
+    outputs = pt.DictOfNamedArrays({"out": y})
+
+    find_distributed_partition(outputs)
+
+
+
 if __name__ == "__main__":
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
