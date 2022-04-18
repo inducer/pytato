@@ -177,6 +177,11 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 distributed_partition,
                 base_tag=comm_tag)
 
+        # Regression check for https://github.com/inducer/pytato/issues/307
+        from pytato.distributed import PartIDTag
+        for ary in distributed_partition.var_name_to_result.values():
+            assert not ary.tags_of_type(PartIDTag)
+
         prg_per_partition = generate_code_for_partition(distributed_partition)
 
         context = execute_distributed_partition(

@@ -165,7 +165,7 @@ class DistributedSend(Taggable):
         comm_tag: Optional[CommTagType] = kwargs.get("comm_tag")
         tags = cast(FrozenSet[Tag], kwargs.get("tags"))
         return type(self)(
-                data=data or self.data,
+                data=data if data is not None else self.data,
                 dest_rank=dest_rank if dest_rank is not None else self.dest_rank,
                 comm_tag=comm_tag if comm_tag is not None else self.comm_tag,
                 tags=tags if tags is not None else self.tags)
@@ -335,6 +335,35 @@ class DistributedGraphPartition(GraphPartition):
     instances of :class:`DistributedGraphPart`.
     """
     parts: Dict[PartId, DistributedGraphPart]
+
+
+def _map_distributed_graph_partion_nodes(
+        map_array: Callable[[Array], Array],
+        map_send: Callable[[DistributedSend], DistributedSend],
+        gp: DistributedGraphPartition) -> DistributedGraphPartition:
+    """Return a new copy of *gp* with all :class:`~pytato.Array` instances
+    mapped by *map_array* and all :class:`DistributedSend` instances mapped
+    by *map_send*.
+    """
+
+    from dataclasses import replace
+    return replace(
+            gp,
+            var_name_to_result={name: map_array(ary)
+                for name, ary in gp.var_name_to_result.items()},
+            parts={
+                pid: replace(part,
+                    input_name_to_recv_node={
+                        in_name: map_array(recv)
+                        for in_name, recv in part.input_name_to_recv_node.items()},
+                    output_name_to_send_node={
+                        out_name: map_send(send)
+                        for out_name, send in part.output_name_to_send_node.items()},
+                    distributed_sends=[
+                        map_send(send) for send in part.distributed_sends]
+                    )
+                for pid, part in gp.parts.items()
+                })
 
 
 class _DistributedCommReplacer(CopyMapper):
@@ -800,6 +829,15 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
             return result
 
 
+def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
+    assert isinstance(ary, Array)
+
+    # Spurious assignment because of
+    # https://github.com/python/mypy/issues/12626
+    result: Array = ary.without_tags(ary.tags_of_type(PartIDTag))
+    return result
+
+
 def find_distributed_partition(outputs: DictOfNamedArrays
                                ) -> DistributedGraphPartition:
     """
@@ -931,11 +969,34 @@ def find_distributed_partition(outputs: DictOfNamedArrays
         tag, = expr.tags_of_type(PartIDTag)
         return tag.part_id
 
-    return cast(DistributedGraphPartition,
+    gp = cast(DistributedGraphPartition,
                 find_partition(partitioned_outputs,
                                get_part_id,
-                               _DistributedGraphPartitioner)
-                )
+                               _DistributedGraphPartitioner))
+
+    # Remove PartIDTag from arrays that may be returned from the evaluation
+    # of the partitioned graph. If we don't, those may end up on inputs to
+    # another graph, which may also get partitioned, which will endlessly
+    # confuse that subsequent partitioning process. In addition, those
+    # tags may cause arrays to look spuriously different, defeating
+    # caching.
+    # See https://github.com/inducer/pytato/issues/307 for further discussion.
+
+    # Note that it does not suffice to remove those tags from just, say,
+    # var_name_to_result: This may produce inconsistent Placeholder instances.
+    # For the same reason, we need to use the same mapper for all nodes.
+    from pytato.transform import CachedMapAndCopyMapper
+    cmac = CachedMapAndCopyMapper(_remove_part_id_tag)
+
+    def map_array(ary: Array) -> Array:
+        result = cmac(ary)
+        assert isinstance(result, Array)
+        return result
+
+    def map_send(send: DistributedSend) -> DistributedSend:
+        return send.copy(data=cmac(send.data))
+
+    return _map_distributed_graph_partion_nodes(map_array, map_send, gp)
 
 # }}}
 
