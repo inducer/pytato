@@ -956,11 +956,11 @@ def number_distributed_tags(
     tags = frozenset({
             recv.comm_tag
             for part in partition.parts.values()
-            for name, recv in part.input_name_to_recv_node.items()
+            for recv in part.input_name_to_recv_node.values()
             } | {
             send.comm_tag
             for part in partition.parts.values()
-            for name, send in part.output_name_to_send_node.items()})
+            for send in part.output_name_to_send_node.values()})
 
     from mpi4py import MPI
 
