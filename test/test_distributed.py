@@ -250,6 +250,66 @@ def test_dag_with_no_comm_nodes():
 # }}}
 
 
+# {{{ test deterministic partitioning
+
+def _check_deterministic_partition(dag, ref_partition,
+                                   iproc, results):
+    partition = find_distributed_partition(dag)
+    are_equal = int(partition == ref_partition)
+    print(iproc, are_equal)
+    results[iproc] = are_equal
+
+
+def test_deterministic_partitioning():
+    import multiprocessing as mp
+    import os
+    from testlib import get_random_pt_dag_with_send_recv_nodes
+
+    original_hash_seed = os.environ.pop("PYTHONHASHSEED", None)
+
+    nprocs = 4
+
+    mp_ctx = mp.get_context("spawn")
+
+    ntests = 10
+    for i in range(ntests):
+        seed = 120 + i
+        results = mp_ctx.Array("i", (0, ) * nprocs)
+        print(f"Step {i} {seed}")
+
+        ref_dag = get_random_pt_dag_with_send_recv_nodes(
+            seed, rank=0, size=7,
+            convert_dws_to_placeholders=True)
+
+        ref_partition = find_distributed_partition(ref_dag)
+
+        # {{{ spawn nprocs-processes and verify they all compare equally
+
+        procs = [mp_ctx.Process(target=_check_deterministic_partition,
+                                args=(ref_dag,
+                                      ref_partition,
+                                      iproc, results))
+                 for iproc in range(nprocs)]
+
+        for iproc, proc in enumerate(procs):
+            # See
+            # https://replit.com/@KaushikKulkarn1/spawningprocswithhashseedv2?v=1#main.py
+            os.environ["PYTHONHASHSEED"] = str(iproc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        if original_hash_seed is not None:
+            os.environ["PYTHONHASHSEED"] = original_hash_seed
+
+        assert set(results[:]) == {1}
+
+        # }}}
+
+# }}}
+
+
 if __name__ == "__main__":
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
