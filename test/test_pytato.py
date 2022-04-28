@@ -749,6 +749,12 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
             == BroadcastOp(a))
 
+    hlo = index_lambda_to_high_level_op(np.nan * a)
+    assert isinstance(hlo, BinaryOp)
+    assert hlo.binary_op == BinaryOpType.MULT
+    assert np.isnan(hlo.x1)
+    assert hlo.x2 is a
+
 
 def test_deduplicate_data_wrappers():
     from pytato.transform import CachedWalkMapper, deduplicate_data_wrappers

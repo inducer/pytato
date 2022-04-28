@@ -1,3 +1,4 @@
+import numpy as np
 import pymbolic.primitives as p
 
 from enum import Enum, auto, unique
@@ -145,6 +146,11 @@ def _as_array_or_scalar(exprs: Sequence[ScalarExpression],
               and (binding_to_subscript[expr.aggregate.name]
                    == expr)):
             result.append(bindings[expr.aggregate.name])
+        elif isinstance(expr, p.NaN):
+            if expr.data_type:
+                result.append(expr.data_type(float("nan")))
+            else:
+                result.append(np.nan)
         else:
             raise UnknownIndexLambdaExpr()
 
