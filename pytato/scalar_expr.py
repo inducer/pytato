@@ -41,6 +41,8 @@ from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
 from pymbolic.mapper.stringifier import (StringifyMapper as
         StringifyMapperBase)
+from pymbolic.mapper.equality import (EqualityMapper as
+        EqualityMapperBase)
 from pymbolic.mapper import CombineMapper as CombineMapperBase
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 from immutables import Map
@@ -184,6 +186,20 @@ class StringifyMapper(StringifyMapperBase):
         bounds_expr = "{" + bounds_expr + "}"
         return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
 
+
+class EqualityMapper(EqualityMapperBase):
+    def map_reduce(self, expr: Reduce, other: Reduce) -> bool:
+        return (
+                len(expr.bounds) == len(other.bounds)
+                and all(k == other_k
+                        and self.rec(lb, other_lb) and self.rec(ub, other_ub)
+                    for (k, (lb, ub)), (other_k, (other_lb, other_ub)) in zip(
+                        sorted(expr.bounds.items()),
+                        sorted(other.bounds.items())))
+                and expr.op == other.op
+                and self.rec(expr.inner_expr, other.inner_expr)
+                )
+
 # }}}
 
 
@@ -240,6 +256,9 @@ def distribute(expr: Any, parameters: FrozenSet[Any] = frozenset(),
 # {{{ custom scalar expression nodes
 
 class ExpressionBase(prim.Expression):
+    def make_equality_mapper(self) -> EqualityMapper:
+        return EqualityMapper()
+
     def make_stringifier(self, originating_stringifier: Any = None) -> str:
         return StringifyMapper()
 
