@@ -521,6 +521,10 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
         elif isinstance(idx, Array):
             if idx.dtype.kind not in ["i", "u"]:
                 raise IndexError("only integer arrays are valid array indices")
+            if (_is_non_positive(ary.shape[i])
+                    and (not are_shape_components_equal(idx.size, 0))):
+                raise IndexError("Indirect indexing into a non-postive"
+                                 f" dimension (axis {i}) is illegal.")
         else:
             raise IndexError("only integers, slices, ellipsis and integer arrays"
                              " are valid indices")
