@@ -369,7 +369,7 @@ def _is_non_negative(expr: ShapeComponent) -> BoolT:
     aff = ShapeToISLExpressionMapper(space)(expr)
     # type-ignore reason: mypy doesn't know comparing isl.Sets returns bool
     return (aff.ge_set(aff * 0)  # type: ignore[no-any-return]
-            <= _get_size_params_assumptions_bset(space))
+            >= _get_size_params_assumptions_bset(space))
 
 
 def _is_non_positive(expr: ShapeComponent) -> BoolT:
