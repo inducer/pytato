@@ -844,6 +844,46 @@ def test_pickling_and_unpickling_is_equal():
     # }}}
 
 
+def test_adv_indexing_into_zero_long_axes():
+    # See https://github.com/inducer/meshmode/issues/321#issuecomment-1105577180
+    n = pt.make_size_param("n")
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(0, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(n-n-2, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    # {{{ no index error => sanity checks are working fine
+
+    a = pt.make_placeholder("a", shape=(n-n+1, 10), dtype="float64")
+    idx = pt.zeros(5, dtype=np.int64)
+    a[idx]
+
+    # }}}
+
+    # {{{ indexer array is of zero size => should be fine
+
+    a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+    idx = pt.zeros((0, 10), dtype=np.int64)
+    a[idx]
+
+    a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+    idx = pt.zeros((n-n, 10), dtype=np.int64)
+    a[idx]
+
+    # }}}
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
