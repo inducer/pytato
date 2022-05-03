@@ -349,7 +349,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     Similar to :class:`CopyMapper`, but each mapper method takes extra
     ``*args``, ``**kwargs`` that are propagated along a path by default.
 
-    The logic in :class:`CopyMapper` purposefully does not take the extra
+    The logic in :class:`CopyMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
     """
     def __init__(self) -> None:
