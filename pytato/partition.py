@@ -414,7 +414,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
 # {{{ generate_code_for_partition
 
 def generate_code_for_partition(partition: GraphPartition) \
-        -> Dict[PartId, BoundProgram]:
+        -> Mapping[PartId, BoundProgram]:
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy

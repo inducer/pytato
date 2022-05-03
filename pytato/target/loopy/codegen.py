@@ -923,6 +923,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         if cl_device is not None:
             raise TypeError("may not pass both 'target' and 'cl_device'")
 
+    assert isinstance(target, LoopyTarget)
+
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
     compute_order = preproc_result.compute_order

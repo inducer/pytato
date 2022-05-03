@@ -37,7 +37,7 @@ __doc__ = """
 import sys
 from dataclasses import dataclass
 
-from typing import Any, Mapping, Optional, Union, Callable
+from typing import Any, Mapping, Optional, Callable
 
 from pytato.target import Target, BoundProgram
 
@@ -55,10 +55,23 @@ class LoopyTarget(Target):
     """An :mod:`loopy` target.
 
     .. automethod:: get_loopy_target
+
+    .. automethod:: bind_program
     """
 
     def get_loopy_target(self) -> "loopy.TargetBase":
         """Return the corresponding :mod:`loopy` target."""
+        raise NotImplementedError
+
+    def bind_program(self, program: loopy.TranslationUnit,
+                     bound_arguments: Mapping[str, Any]) -> BoundProgram:
+        """
+        Create a :class:`pytato.target.BoundProgram` for this code generation
+        target.
+
+        :param program: the :mod:`loopy` program
+        :param bound_arguments: a mapping from argument names to outputs
+        """
         raise NotImplementedError
 
 
@@ -81,11 +94,11 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         import loopy as lp
         return lp.PyOpenCLTarget(self.device)
 
-    def bind_program(self, program: Union["loopy.Program", "loopy.LoopKernel"],
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
+    def bind_program(self, program: loopy.TranslationUnit,
+                     bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
-                bound_arguments=bound_arguments,
-                target=self)
+                                    bound_arguments=bound_arguments,
+                                    target=self)
 
 
 @dataclass(init=True, repr=False, eq=False)
