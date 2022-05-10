@@ -806,6 +806,16 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     # Get the domain.
     domain = domain_for_shape(inames, shape, {})
 
+    from pytato.utils import are_shape_components_equal
+    result_is_empty = any(are_shape_components_equal(s_i, 0) for s_i in expr.shape)
+    if result_is_empty:
+        # empty array, no need to do computation
+        additional_domains = []
+        additional_insns = []
+    else:
+        additional_domains = [domain]
+        additional_insns = [insn]
+
     # Update the kernel.
     kernel = state.kernel
 
@@ -814,8 +824,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
         temporary_variables = kernel.temporary_variables.copy()
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
-                domains=kernel.domains + [domain],
-                instructions=kernel.instructions + [insn])
+                domains=kernel.domains + additional_domains,
+                instructions=kernel.instructions + additional_insns)
     else:
         arg = lp.GlobalArg(name,
                 shape=shape,
@@ -827,16 +837,17 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                                               cgen_mapper
                                               .array_tag_t_to_not_propagate))
         kernel = kernel.copy(args=kernel.args + [arg],
-                domains=kernel.domains + [domain],
-                instructions=kernel.instructions + [insn])
+                domains=kernel.domains + additional_domains,
+                instructions=kernel.instructions + additional_insns)
 
     # {{{ axes tags -> iname tags
 
-    for axis, iname in zip(expr.axes, inames):
-        for tag in axis.tags:
-            if all(not isinstance(tag, tag_t)
-                   for tag_t in cgen_mapper.axis_tag_t_to_not_propagate):
-                kernel = lp.tag_inames(kernel, {iname: tag})
+    if not result_is_empty:
+        for axis, iname in zip(expr.axes, inames):
+            for tag in axis.tags:
+                if all(not isinstance(tag, tag_t)
+                       for tag_t in cgen_mapper.axis_tag_t_to_not_propagate):
+                    kernel = lp.tag_inames(kernel, {iname: tag})
 
     # }}}
 
