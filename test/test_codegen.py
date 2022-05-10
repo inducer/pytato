@@ -1673,6 +1673,25 @@ def test_deterministic_codegen():
 # }}}
 
 
+def test_no_computation_for_empty_arrays(ctx_factory):
+    # fails at faee1d2f4ffabed96e758a2c0fbd1b1fc1e78719
+    import pyopencl.array as cla
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_cl1 = cla.empty(cq=cq, shape=(0, 17, 1), dtype="float64")
+    x_cl2 = cla.empty(cq=cq, shape=(0, 1, 20), dtype="float64")
+
+    x1 = pt.make_data_wrapper(x_cl1)
+    x2 = pt.make_data_wrapper(x_cl2)
+
+    res = x1 + x2
+
+    bprg = pt.generate_loopy(res)
+    assert not bprg.program.default_entrypoint.instructions
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
