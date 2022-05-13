@@ -165,7 +165,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable, TagsType
+from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
@@ -429,7 +429,7 @@ class Array(Taggable):
                 kwargs[field] = getattr(self, field)
         return type(self)(**kwargs)
 
-    def _with_new_tags(self: ArrayT, tags: TagsType) -> ArrayT:
+    def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
         return self.copy(tags=tags)
 
     @property
@@ -683,7 +683,7 @@ class NamedArray(Array):
             container: AbstractResultWithNamedArrays,
             name: str,
             axes: AxesT,
-            tags: TagsType = frozenset()) -> None:
+            tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(axes=axes, tags=tags)
         self._container = container
         self.name = name
@@ -693,7 +693,7 @@ class NamedArray(Array):
              container: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
              axes: Optional[AxesT] = None,
-             tags: Optional[TagsType] = None) -> NamedArray:
+             tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
@@ -838,7 +838,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             dtype: np.dtype[Any],
             bindings: Dict[str, Array],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
 
         super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
 
@@ -908,7 +908,7 @@ class Einsum(Array):
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
                  axes: AxesT,
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
         self.args = args
@@ -1168,7 +1168,7 @@ class Stack(Array):
             arrays: Tuple[Array, ...],
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
@@ -1208,7 +1208,7 @@ class Concatenate(Array):
             arrays: Tuple[Array, ...],
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.arrays = arrays
         self.axis = axis
@@ -1219,7 +1219,9 @@ class Concatenate(Array):
 
     @property
     def shape(self) -> ShapeType:
-        common_axis_len = sum(ary.shape[self.axis] for ary in self.arrays)
+        # See https://github.com/python/typeshed/issues/7739
+        common_axis_len = sum(ary.shape[self.axis]  # type: ignore[type-var]
+                              for ary in self.arrays)
 
         return (self.arrays[0].shape[:self.axis]
                 + (common_axis_len,)
@@ -1246,7 +1248,7 @@ class IndexRemappingBase(Array):
     def __init__(self,
             array: Array,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.array = array
 
@@ -1278,7 +1280,7 @@ class Roll(IndexRemappingBase):
             shift: int,
             axis: int,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.shift = shift
         self.axis = axis
@@ -1308,7 +1310,7 @@ class AxisPermutation(IndexRemappingBase):
             array: Array,
             axis_permutation: Tuple[int, ...],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.array = array
         self.axis_permutation = axis_permutation
@@ -1351,7 +1353,7 @@ class Reshape(IndexRemappingBase):
             newshape: Tuple[int, ...],
             order: str,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1380,7 +1382,7 @@ class IndexBase(IndexRemappingBase, ABC):
                  array: Array,
                  indices: Tuple[IndexExpr, ...],
                  axes: AxesT,
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(array, axes, tags)
         self.indices = indices
 
@@ -1580,7 +1582,7 @@ class DataWrapper(InputArgumentBase):
             data: DataInterface,
             shape: ShapeType,
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
 
         self.name = name
@@ -1626,7 +1628,7 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
             shape: ShapeType,
             dtype: np.dtype[Any],
             axes: AxesT,
-            tags: TagsType = frozenset()):
+            tags: FrozenSet[Tag] = frozenset()):
         """Should not be called directly. Use :func:`make_placeholder`
         instead.
         """
@@ -1655,7 +1657,7 @@ class SizeParam(InputArgumentBase):
     def __init__(self,
                  name: str,
                  axes: AxesT = (),
-                 tags: TagsType = frozenset()):
+                 tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.name = name
 
@@ -1994,7 +1996,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any,
-                     tags: TagsType = frozenset(),
+                     tags: FrozenSet[Tag] = frozenset(),
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2021,7 +2023,7 @@ def make_placeholder(name: str,
 
 
 def make_size_param(name: str,
-                    tags: TagsType = frozenset()) -> SizeParam:
+                    tags: FrozenSet[Tag] = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -2037,7 +2039,7 @@ def make_size_param(name: str,
 def make_data_wrapper(data: DataInterface,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: TagsType = frozenset(),
+        tags: FrozenSet[Tag] = frozenset(),
         axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
@@ -2082,7 +2084,14 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
         dtype = np.dtype(dtype)
 
     shape = normalize_shape(shape)
-    return IndexLambda(dtype.type(fill_value), shape, dtype, {},
+
+    if np.isnan(fill_value):
+        from pymbolic.primitives import NaN
+        fill_value = NaN(dtype.type)
+    else:
+        fill_value = dtype.type(fill_value)
+
+    return IndexLambda(fill_value, shape, dtype, {},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)))
 
@@ -2396,7 +2405,8 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+                     common_dtype.type(np.NaN),
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2414,7 +2424,8 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)), np.NaN,  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+                     common_dtype.type(np.NaN),
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)

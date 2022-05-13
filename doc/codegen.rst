@@ -6,6 +6,8 @@ Code Generation
 
 .. automodule:: pytato.target.loopy
 
+.. automodule:: pytato.target.python
+
 Generic target support
 ----------------------
 

@@ -31,11 +31,11 @@ import dataclasses
 import html
 
 from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
-        Mapping, Hashable, Any)
+        Mapping, Hashable, Any, FrozenSet)
 
 from pytools import UniqueNameGenerator
+from pytools.tag import Tag
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
-from pytools.tag import TagsType
 from pytato.loopy import LoopyCall
 
 from pytato.array import (

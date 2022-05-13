@@ -44,7 +44,7 @@ import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
 
 import pytato as pt
-from testlib import assert_allclose_to_numpy
+from testlib import assert_allclose_to_numpy, get_random_pt_dag
 import pymbolic.primitives as p
 
 
@@ -1618,6 +1618,78 @@ def test_zero_size_cl_array_dedup(ctx_factory):
     # 'x2' would be merged with 'x1' as both of them point to the same data
     # 'x3' would be merged with 'x4' as both of them point to the same data
     assert num_nodes_new == (num_nodes_old - 2)
+
+
+# {{{ test_deterministic_codegen
+
+
+def _check_deterministic_codegen(ref_dag, ref_t_unit, iproc, results):
+    t_unit = pt.generate_loopy(ref_dag).program
+    results[iproc] = int(ref_t_unit == t_unit)
+
+
+def test_deterministic_codegen():
+    import multiprocessing as mp
+    import os
+    original_hash_seed = os.environ.pop("PYTHONHASHSEED", None)
+
+    nprocs = 4
+
+    mp_ctx = mp.get_context("spawn")
+
+    ntests = 15
+    for i in range(ntests):
+        seed = 120 + i
+        results = mp_ctx.Array("i", (0, ) * nprocs)
+        print(f"Step {i} {seed}")
+
+        ref_dag = get_random_pt_dag(seed)
+        ref_t_unit = pt.generate_loopy(ref_dag).program
+
+        # {{{ spawn nprocs-processes and verify they all compare equally
+
+        procs = [mp_ctx.Process(target=_check_deterministic_codegen,
+                                args=(ref_dag,
+                                      ref_t_unit,
+                                      iproc, results))
+                 for iproc in range(nprocs)]
+
+        for iproc, proc in enumerate(procs):
+            # See
+            # https://replit.com/@KaushikKulkarn1/spawningprocswithhashseedv2?v=1#main.py
+            os.environ["PYTHONHASHSEED"] = str(iproc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        if original_hash_seed is not None:
+            os.environ["PYTHONHASHSEED"] = original_hash_seed
+
+        assert set(results[:]) == {1}
+
+        # }}}
+
+# }}}
+
+
+def test_no_computation_for_empty_arrays(ctx_factory):
+    # fails at faee1d2f4ffabed96e758a2c0fbd1b1fc1e78719
+    import pyopencl.array as cla
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_cl1 = cla.empty(cq=cq, shape=(0, 17, 1), dtype="float64")
+    x_cl2 = cla.empty(cq=cq, shape=(0, 1, 20), dtype="float64")
+
+    x1 = pt.make_data_wrapper(x_cl1)
+    x2 = pt.make_data_wrapper(x_cl2)
+
+    res = x1 + x2
+
+    bprg = pt.generate_loopy(res)
+    assert not bprg.program.default_entrypoint.instructions
 
 
 if __name__ == "__main__":

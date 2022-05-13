@@ -37,19 +37,9 @@ from typing import Any, Mapping
 
 
 class Target:
-    """An abstract code generation target.
-
-    .. automethod:: bind_program
     """
-
-    def bind_program(self, program: Any,
-            bound_arguments: Mapping[str, Any]) -> BoundProgram:
-        """Create a :class:`BoundProgram` for this code generation target.
-
-        :param program: the :mod:`loopy` program
-        :param bound_arguments: a mapping from argument names to outputs
-        """
-        raise NotImplementedError
+    An abstract code generation target.
+    """
 
 
 @dataclass(init=True, repr=False, eq=False)

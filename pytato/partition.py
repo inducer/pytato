@@ -253,14 +253,13 @@ class GraphPart:
 
     .. attribute:: user_input_names
 
-        A :class:`dict` mapping names to :class:`~pytato.array.Placeholder`
-        instances that represent input to the computational graph, i.e. were
-        *not* introduced by partitioning.
+        A :class:`frozenset` of names representing input to the computational
+        graph, i.e. which were *not* introduced by partitioning.
 
     .. attribute:: partition_input_names
 
-        Names of placeholders the part requires as input from other parts
-        in the partition.
+        A :class:`frozenset` of names of placeholders the part requires as
+        input from other parts in the partition.
 
     .. attribute:: output_names
 
@@ -412,10 +411,10 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
 # }}}
 
 
-# {{{ generate_code_for_partitions
+# {{{ generate_code_for_partition
 
 def generate_code_for_partition(partition: GraphPartition) \
-        -> Dict[PartId, BoundProgram]:
+        -> Mapping[PartId, BoundProgram]:
     """Return a mapping of partition identifiers to their
        :class:`pytato.target.BoundProgram`."""
     from pytato import generate_loopy

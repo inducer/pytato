@@ -158,7 +158,13 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
     """
 
     if isinstance(arr, SCALAR_CLASSES):
-        return arr
+        if np.isnan(arr):
+            # allowing NaNs to stay in our expression trees could potentially
+            # lead to spuriously unequal comparisons between expressions
+            from pymbolic.primitives import NaN
+            return NaN(np.array(arr).dtype.type)
+        else:
+            return arr
 
     assert isinstance(arr, Array)
     bindings[bnd_name] = arr
@@ -365,7 +371,7 @@ def _is_non_negative(expr: ShapeComponent) -> BoolT:
     aff = ShapeToISLExpressionMapper(space)(expr)
     # type-ignore reason: mypy doesn't know comparing isl.Sets returns bool
     return (aff.ge_set(aff * 0)  # type: ignore[no-any-return]
-            <= _get_size_params_assumptions_bset(space))
+            >= _get_size_params_assumptions_bset(space))
 
 
 def _is_non_positive(expr: ShapeComponent) -> BoolT:
@@ -517,6 +523,10 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
         elif isinstance(idx, Array):
             if idx.dtype.kind not in ["i", "u"]:
                 raise IndexError("only integer arrays are valid array indices")
+            if (_is_non_positive(ary.shape[i])
+                    and (not are_shape_components_equal(idx.size, 0))):
+                raise IndexError("Indirect indexing into a non-postive"
+                                 f" dimension (axis {i}) is illegal.")
         else:
             raise IndexError("only integers, slices, ellipsis and integer arrays"
                              " are valid indices")

@@ -74,7 +74,7 @@ BoolT = Union[bool, np.bool8]
 INT_CLASSES = (int, np.int8, np.int16, np.int32, np.int64, np.uint8,
                np.uint16, np.uint32, np.uint64)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[Number, int, np.bool_, bool]
+ScalarType = Union[Number, int, np.bool_, bool, float]
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
@@ -263,6 +263,7 @@ class Reduce(ExpressionBase):
     def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
+    init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
 
 # }}}

@@ -166,16 +166,21 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 additional_generators=[
                     (comm_fake_prob, gen_comm)
                     ])
-        x_comm = make_random_dag(rdagc_comm)
+        pt_dag = pt.DictOfNamedArrays({"result": make_random_dag(rdagc_comm)})
+        x_comm = pt.transform.materialize_with_mpms(pt_dag)
 
-        distributed_partition = find_distributed_partition(
-                pt.DictOfNamedArrays({"result": x_comm}))
+        distributed_partition = find_distributed_partition(x_comm)
 
         # Transform symbolic tags into numeric ones for MPI
         distributed_partition, _new_mpi_base_tag = number_distributed_tags(
                 comm,
                 distributed_partition,
                 base_tag=comm_tag)
+
+        # Regression check for https://github.com/inducer/pytato/issues/307
+        from pytato.distributed import PartIDTag
+        for ary in distributed_partition.var_name_to_result.values():
+            assert not ary.tags_of_type(PartIDTag)
 
         prg_per_partition = generate_code_for_partition(distributed_partition)
 
@@ -205,6 +210,102 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
         np.testing.assert_allclose(res_comm, res_no_comm_numpy)
 
     assert gen_comm_called
+
+# }}}
+
+
+# {{{ test DAG with no comm nodes
+
+def _test_dag_with_no_comm_nodes_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    x_np = rng.random((10, 4))
+    x = pt.make_data_wrapper(x_np)
+
+    # {{{ construct the DAG
+
+    out1 = 2 * x
+    out2 = 4 * out1
+    dag = pt.make_dict_of_named_arrays({"out1": out1, "out2": out2})
+
+    # }}}
+
+    parts = find_distributed_partition(dag)
+    assert len(parts.parts) == 1
+    prg_per_partition = generate_code_for_partition(parts)
+    out_dict = execute_distributed_partition(parts, prg_per_partition, queue, comm)
+
+    np.testing.assert_allclose(out_dict["out1"], 2 * x_np)
+    np.testing.assert_allclose(out_dict["out2"], 8 * x_np)
+
+
+def test_dag_with_no_comm_nodes():
+    run_test_with_mpi(2, _test_dag_with_no_comm_nodes_inner)
+
+# }}}
+
+
+# {{{ test deterministic partitioning
+
+def _check_deterministic_partition(dag, ref_partition,
+                                   iproc, results):
+    partition = find_distributed_partition(dag)
+    are_equal = int(partition == ref_partition)
+    print(iproc, are_equal)
+    results[iproc] = are_equal
+
+
+def test_deterministic_partitioning():
+    import multiprocessing as mp
+    import os
+    from testlib import get_random_pt_dag_with_send_recv_nodes
+
+    original_hash_seed = os.environ.pop("PYTHONHASHSEED", None)
+
+    nprocs = 4
+
+    mp_ctx = mp.get_context("spawn")
+
+    ntests = 10
+    for i in range(ntests):
+        seed = 120 + i
+        results = mp_ctx.Array("i", (0, ) * nprocs)
+        print(f"Step {i} {seed}")
+
+        ref_dag = get_random_pt_dag_with_send_recv_nodes(
+            seed, rank=0, size=7,
+            convert_dws_to_placeholders=True)
+
+        ref_partition = find_distributed_partition(ref_dag)
+
+        # {{{ spawn nprocs-processes and verify they all compare equally
+
+        procs = [mp_ctx.Process(target=_check_deterministic_partition,
+                                args=(ref_dag,
+                                      ref_partition,
+                                      iproc, results))
+                 for iproc in range(nprocs)]
+
+        for iproc, proc in enumerate(procs):
+            # See
+            # https://replit.com/@KaushikKulkarn1/spawningprocswithhashseedv2?v=1#main.py
+            os.environ["PYTHONHASHSEED"] = str(iproc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        if original_hash_seed is not None:
+            os.environ["PYTHONHASHSEED"] = original_hash_seed
+
+        assert set(results[:]) == {1}
+
+        # }}}
 
 # }}}
 

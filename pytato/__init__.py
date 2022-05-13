@@ -63,6 +63,7 @@ from pytato.loopy import LoopyCall
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
+from pytato.target.python.jax import generate_jax
 from pytato.visualization import (get_dot_graph, show_dot_graph,
                                   get_ascii_graph, show_ascii_graph,
                                   get_dot_graph_from_partition)
@@ -75,7 +76,8 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 staple_distributed_send,
                                 find_distributed_partition,
                                 number_distributed_tags,
-                                execute_distributed_partition)
+                                execute_distributed_partition,
+                                )
 
 from pytato.partition import generate_code_for_partition
 
@@ -95,7 +97,7 @@ __all__ = (
 
         "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
 
-        "generate_loopy",
+        "generate_loopy", "generate_jax",
 
         "Target", "LoopyPyOpenCLTarget",
 

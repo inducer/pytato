@@ -44,6 +44,8 @@ from pytato.array import (
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
+from pyrsistent import pmap
+from pyrsistent.typing import PMap as PMapT
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
@@ -61,6 +63,7 @@ __doc__ = """
 .. autoclass:: Mapper
 .. autoclass:: CachedMapper
 .. autoclass:: CopyMapper
+.. autoclass:: CopyMapperWithExtraArgs
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
@@ -331,13 +334,203 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                     data=self.rec(expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data))
+                self.rec(expr.passthrough_data),
+                tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         from pytato.distributed import DistributedRecv
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape),
+               dtype=expr.dtype, tags=expr.tags)
+
+
+class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
+    """
+    Similar to :class:`CopyMapper`, but each mapper method takes extra
+    ``*args``, ``**kwargs`` that are propagated along a path by default.
+
+    The logic in :class:`CopyMapper` purposely does not take the extra
+    arguments to keep the cost of its each call frame low.
+    """
+    def __init__(self) -> None:
+        # type-ignored as '._cache' attribute is not coherent with the base
+        # class
+        self._cache: Dict[Tuple[ArrayOrNames,
+                                Tuple[Any, ...],
+                                Tuple[Tuple[str, Any], ...]
+                                ],
+                          Any] = {}  # type: ignore[assignment]
+
+    def cache_key(self,
+                  expr: ArrayOrNames,
+                  *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
+                                                      Tuple[Any, ...],
+                                                      Tuple[Tuple[str, Any], ...]
+                                                      ]:
+        return (expr, args, tuple(sorted(kwargs.items())))
+
+    def rec(self,
+            expr: ArrayOrNames,
+            *args: Any, **kwargs: Any) -> Any:
+        key = self.cache_key(expr, *args, **kwargs)
+        try:
+            return self._cache[key]
+        except KeyError:
+            result = Mapper.rec(self, expr,
+                                *args,
+                                **kwargs)  # type: ignore[type-var]
+            self._cache[key] = result
+            return result
+
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
+                              *args: Any, **kwargs: Any
+                              ) -> Tuple[IndexOrShapeExpr, ...]:
+        return tuple(self.rec(s, *args, **kwargs) if isinstance(s, Array) else s
+                     for s in situp)
+
+    def map_index_lambda(self, expr: IndexLambda,
+                         *args: Any, **kwargs: Any) -> Array:
+        bindings: Dict[str, Array] = {
+                name: self.rec(subexpr, *args, **kwargs)
+                for name, subexpr in sorted(expr.bindings.items())}
+        return IndexLambda(expr=expr.expr,
+                           shape=self.rec_idx_or_size_tuple(expr.shape,
+                                                            *args, **kwargs),
+                           dtype=expr.dtype,
+                           bindings=bindings,
+                           axes=expr.axes,
+                           tags=expr.tags)
+
+    def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
+        assert expr.name is not None
+        return Placeholder(name=expr.name,
+                           shape=self.rec_idx_or_size_tuple(expr.shape,
+                                                            *args, **kwargs),
+                           dtype=expr.dtype,
+                           axes=expr.axes,
+                           tags=expr.tags)
+
+    def map_stack(self, expr: Stack, *args: Any, **kwargs: Any) -> Array:
+        arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
+        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags)
+
+    def map_concatenate(self, expr: Concatenate, *args: Any, **kwargs: Any) -> Array:
+        arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
+        return Concatenate(arrays=arrays, axis=expr.axis,
+                           axes=expr.axes, tags=expr.tags)
+
+    def map_roll(self, expr: Roll, *args: Any, **kwargs: Any) -> Array:
+        return Roll(array=self.rec(expr.array, *args, **kwargs),
+                    shift=expr.shift,
+                    axis=expr.axis,
+                    axes=expr.axes,
+                    tags=expr.tags)
+
+    def map_axis_permutation(self, expr: AxisPermutation,
+                             *args: Any, **kwargs: Any) -> Array:
+        return AxisPermutation(array=self.rec(expr.array, *args, **kwargs),
+                               axis_permutation=expr.axis_permutation,
+                               axes=expr.axes,
+                               tags=expr.tags)
+
+    def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> Array:
+        return type(expr)(self.rec(expr.array, *args, **kwargs),
+                          indices=self.rec_idx_or_size_tuple(expr.indices,
+                                                             *args, **kwargs),
+                          axes=expr.axes,
+                          tags=expr.tags)
+
+    def map_basic_index(self, expr: BasicIndex, *args: Any, **kwargs: Any) -> Array:
+        return self._map_index_base(expr, *args, **kwargs)
+
+    def map_contiguous_advanced_index(self,
+                                      expr: AdvancedIndexInContiguousAxes,
+                                      *args: Any, **kwargs: Any
+
+                                      ) -> Array:
+        return self._map_index_base(expr, *args, **kwargs)
+
+    def map_non_contiguous_advanced_index(self,
+                                          expr: AdvancedIndexInNoncontiguousAxes,
+                                          *args: Any, **kwargs: Any
+                                          ) -> Array:
+        return self._map_index_base(expr)
+
+    def map_data_wrapper(self, expr: DataWrapper,
+                         *args: Any, **kwargs: Any) -> Array:
+        return DataWrapper(name=expr.name,
+                data=expr.data,
+                shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
+                axes=expr.axes,
+                tags=expr.tags)
+
+    def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
+        assert expr.name is not None
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
+
+    def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> Array:
+        return Einsum(expr.access_descriptors,
+                      tuple(self.rec(arg, *args, **kwargs) for arg in expr.args),
+                      axes=expr.axes,
+                      tags=expr.tags)
+
+    def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
+        return type(expr)(self.rec(expr._container, *args, **kwargs),
+                          expr.name,
+                          axes=expr.axes,
+                          tags=expr.tags)
+
+    def map_dict_of_named_arrays(self,
+            expr: DictOfNamedArrays, *args: Any, **kwargs: Any) -> DictOfNamedArrays:
+        return DictOfNamedArrays({key: self.rec(val.expr, *args, **kwargs)
+                                  for key, val in expr.items()})
+
+    def map_loopy_call(self, expr: LoopyCall,
+                       *args: Any, **kwargs: Any) -> LoopyCall:
+        bindings = {name: (self.rec(subexpr, *args, **kwargs)
+                           if isinstance(subexpr, Array)
+                           else subexpr)
+                    for name, subexpr in sorted(expr.bindings.items())}
+
+        return LoopyCall(translation_unit=expr.translation_unit,
+                         bindings=bindings,
+                         entrypoint=expr.entrypoint)
+
+    def map_loopy_call_result(self, expr: LoopyCallResult,
+                              *args: Any, **kwargs: Any) -> Array:
+        return LoopyCallResult(
+                loopy_call=self.rec(expr._container, *args, **kwargs),
+                name=expr.name,
+                axes=expr.axes,
+                tags=expr.tags)
+
+    def map_reshape(self, expr: Reshape,
+                    *args: Any, **kwargs: Any) -> Array:
+        return Reshape(self.rec(expr.array, *args, **kwargs),
+                       newshape=self.rec_idx_or_size_tuple(expr.newshape,
+                                                           *args, **kwargs),
+                       order=expr.order,
+                       axes=expr.axes,
+                       tags=expr.tags)
+
+    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
+                                        *args: Any, **kwargs: Any) -> Array:
+        from pytato.distributed import DistributedSend, DistributedSendRefHolder
+        return DistributedSendRefHolder(
+                DistributedSend(
+                    data=self.rec(expr.send.data, *args, **kwargs),
+                    dest_rank=expr.send.dest_rank,
+                    comm_tag=expr.send.comm_tag),
+                self.rec(expr.passthrough_data, *args, **kwargs),
+                tags=expr.tags)
+
+    def map_distributed_recv(self, expr: DistributedRecv,
+                             *args: Any, **kwargs: Any) -> Array:
+        from pytato.distributed import DistributedRecv
+        return DistributedRecv(
+               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+               shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
                dtype=expr.dtype, tags=expr.tags)
 
 # }}}
@@ -986,6 +1179,28 @@ class MPMSMaterializer(Mapper):
         # loopy call result is always materialized
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
+    def map_distributed_send_ref_holder(self,
+                                        expr: DistributedSendRefHolder
+                                        ) -> MPMSMaterializerAccumulator:
+        from pytato.distributed import (DistributedSendRefHolder,
+                                        DistributedSend)
+        rec_passthrough = self.rec(expr.passthrough_data)
+        rec_send_data = self.rec(expr.send.data)
+        new_expr = DistributedSendRefHolder(
+            send=DistributedSend(rec_send_data.expr,
+                                 dest_rank=expr.send.dest_rank,
+                                 comm_tag=expr.send.comm_tag,
+                                 tags=expr.send.tags),
+            passthrough_data=rec_passthrough.expr,
+            tags=expr.tags,
+        )
+        return MPMSMaterializerAccumulator(
+            rec_passthrough.materialized_predecessors, new_expr)
+
+    def map_distributed_recv(self, expr: DistributedRecv
+                             ) -> MPMSMaterializerAccumulator:
+        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+
 # }}}
 
 
@@ -1249,15 +1464,16 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 
 # {{{ operations on graphs in dict form
 
-def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
-        -> Dict[ArrayOrNames, Set[ArrayOrNames]]:
-    """Reverses a graph.
+def reverse_graph(graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]]
+                  ) -> PMapT[ArrayOrNames, FrozenSet[ArrayOrNames]]:
+    """
+    Reverses a graph.
 
     :param graph: A :class:`dict` representation of a directed graph, mapping each
         node to other nodes to which it is connected by edges. A possible
         use case for this function is the graph in
         :attr:`UsersCollector.node_to_users`.
-    :returns: A :class:`dict` representing *graph* with edges reversed.
+    :returns: A :class:`pyrsistent.PMap` representing *graph* with edges reversed.
     """
     result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
@@ -1268,7 +1484,7 @@ def reverse_graph(graph: Dict[ArrayOrNames, Set[ArrayOrNames]]) \
         for other_node_key in edges:
             result.setdefault(other_node_key, set()).add(node_key)
 
-    return result
+    return pmap({k: frozenset(v) for k, v in result.items()})
 
 
 def _recursively_get_all_users(
@@ -1516,10 +1732,11 @@ def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     import sys
     if "pyopencl" in sys.modules:
         from pyopencl.array import Array as CLArray  # type: ignore[import]
-        from pyopencl import Buffer as CLBuffer
+        from pyopencl import MemoryObjectHolder
         if isinstance(ary, CLArray):
             # pyopencl represents 0-long arrays' base_data as None
-            assert isinstance(ary.base_data, CLBuffer) or (ary.base_data is None)
+            assert (isinstance(ary.base_data, MemoryObjectHolder)
+                    or (ary.base_data is None))
             return (
                     None if ary.base_data is None else ary.base_data.int_ptr,
                     ary.offset,

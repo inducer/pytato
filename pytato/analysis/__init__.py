@@ -25,12 +25,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Mapping, Dict, Union, Set, Tuple, Any
+from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
+                    TYPE_CHECKING)
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
-                          IndexBase, IndexRemappingBase, InputArgumentBase)
+                          IndexBase, IndexRemappingBase, InputArgumentBase,
+                          ShapeType)
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
+
+if TYPE_CHECKING:
+    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
@@ -40,6 +45,8 @@ __doc__ = """
 .. autofunction:: is_einsum_similar_to_subscript
 
 .. autofunction:: get_num_nodes
+
+.. autoclass:: DirectPredecessorsGetter
 """
 
 
@@ -47,6 +54,13 @@ class NUserCollector(Mapper):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
     times an array expression is a direct dependency of other nodes.
+
+    .. note::
+
+        - We do not consider the :class:`pytato.DistributedSendRefHolder`
+          a user of :attr:`pytato.DistributedSendRefHolder.send`. This is
+          because in a data flow sense, the send-ref holder does not use the
+          send's data.
     """
     def __init__(self) -> None:
         from collections import defaultdict
@@ -140,6 +154,20 @@ class NUserCollector(Mapper):
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
+
+    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder
+                                        ) -> None:
+        # Note: We do not consider 'expr.send.data' as a predecessor of *expr*,
+        # as there is no dataflow from *expr.send.data* to *expr*
+        self.nusers[expr.passthrough_data] += 1
+        self.rec(expr.passthrough_data)
+        self.rec(expr.send.data)
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> None:
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.nusers[dim] += 1
+                self.rec(dim)
 
 
 def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
@@ -244,6 +272,83 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
         # }}}
 
     return True
+
+
+# {{{ DirectPredecessorsGetter
+
+class DirectPredecessorsGetter(Mapper):
+    """
+    Mapper to get the
+    `direct predecessors
+    <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
+    of a node.
+
+    .. note::
+
+        We only consider the predecessors of a nodes in a data-flow sense.
+    """
+    def _get_preds_from_shape(self, shape: ShapeType) -> FrozenSet[Array]:
+        return frozenset({dim for dim in shape if isinstance(dim, Array)})
+
+    def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
+        return (frozenset(expr.bindings.values())
+                | self._get_preds_from_shape(expr.shape))
+
+    def map_stack(self, expr: Stack) -> FrozenSet[Array]:
+        return (frozenset(expr.arrays)
+                | self._get_preds_from_shape(expr.shape))
+
+    def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
+        return (frozenset(expr.arrays)
+                | self._get_preds_from_shape(expr.shape))
+
+    def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
+        return (frozenset(expr.args)
+                | self._get_preds_from_shape(expr.shape))
+
+    def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
+        from pytato.loopy import LoopyCallResult, LoopyCall
+        assert isinstance(expr, LoopyCallResult)
+        assert isinstance(expr._container, LoopyCall)
+        return (frozenset(ary
+                          for ary in expr._container.bindings.values()
+                          if isinstance(ary, Array))
+                | self._get_preds_from_shape(expr.shape))
+
+    def _map_index_base(self, expr: IndexBase) -> FrozenSet[Array]:
+        return (frozenset([expr.array])
+                | frozenset(idx for idx in expr.indices
+                            if isinstance(idx, Array))
+                | self._get_preds_from_shape(expr.shape))
+
+    map_basic_index = _map_index_base
+    map_contiguous_advanced_index = _map_index_base
+    map_non_contiguous_advanced_index = _map_index_base
+
+    def _map_index_remapping_base(self, expr: IndexRemappingBase
+                                  ) -> FrozenSet[Array]:
+        return frozenset([expr.array])
+
+    map_roll = _map_index_remapping_base
+    map_axis_permutation = _map_index_remapping_base
+    map_reshape = _map_index_remapping_base
+
+    def _map_input_base(self, expr: InputArgumentBase) -> FrozenSet[Array]:
+        return self._get_preds_from_shape(expr.shape)
+
+    map_placeholder = _map_input_base
+    map_data_wrapper = _map_input_base
+    map_size_param = _map_input_base
+
+    def map_distributed_recv(self, expr: DistributedRecv) -> FrozenSet[Array]:
+        return self._get_preds_from_shape(expr.shape)
+
+    def map_distributed_send_ref_holder(self,
+                                        expr: DistributedSendRefHolder
+                                        ) -> FrozenSet[Array]:
+        return frozenset([expr.passthrough_data])
+
+# }}}
 
 
 # {{{ NodeCountMapper

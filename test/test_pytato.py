@@ -792,6 +792,12 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
             == BroadcastOp(a))
 
+    hlo = index_lambda_to_high_level_op(np.nan * a)
+    assert isinstance(hlo, BinaryOp)
+    assert hlo.binary_op == BinaryOpType.MULT
+    assert np.isnan(hlo.x1)
+    assert hlo.x2 is a
+
 
 def test_deduplicate_data_wrappers():
     from pytato.transform import CachedWalkMapper, deduplicate_data_wrappers
@@ -857,6 +863,94 @@ def test_created_at():
             break
 
     assert found
+
+
+def test_pickling_and_unpickling_is_equal():
+    from testlib import RandomDAGContext, make_random_dag
+    import pickle
+    from pytools import UniqueNameGenerator
+    axis_len = 5
+
+    for i in range(50):
+        print(i)  # progress indicator
+
+        seed = 120 + i
+        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                                    axis_len=axis_len, use_numpy=False)
+
+        dag = pt.make_dict_of_named_arrays({"out": make_random_dag(rdagc_pt)})
+
+        # {{{ convert data-wrappers to placeholders
+
+        vng = UniqueNameGenerator()
+
+        def make_dws_placeholder(expr):
+            if isinstance(expr, pt.DataWrapper):
+                return pt.make_placeholder(vng("_pt_ph"),
+                                           expr.shape, expr.dtype)
+            else:
+                return expr
+
+        dag = pt.transform.map_and_copy(dag, make_dws_placeholder)
+
+        # }}}
+
+        assert pickle.loads(pickle.dumps(dag)) == dag
+
+    # {{{ adds an example which guarantees NaN in expression tree
+
+    # pytato<=d015f914 used IEEE-representation of NaN in its expression graphs
+    # and since NaN != NaN the following assertions would fail.
+
+    x = pt.make_placeholder("x", shape=(10, 4), dtype="float64")
+    expr = pt.maximum(2*x, 3*x)
+
+    assert pickle.loads(pickle.dumps(expr)) == expr
+
+    expr = pt.full((10, 4), np.nan)
+    assert pickle.loads(pickle.dumps(expr)) == expr
+
+    # }}}
+
+
+def test_adv_indexing_into_zero_long_axes():
+    # See https://github.com/inducer/meshmode/issues/321#issuecomment-1105577180
+    n = pt.make_size_param("n")
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(0, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    with pytest.raises(IndexError):
+        a = pt.make_placeholder("a", shape=(n-n-2, 10), dtype="float64")
+        idx = pt.zeros(5, dtype=np.int64)
+        a[idx]
+
+    # {{{ no index error => sanity checks are working fine
+
+    a = pt.make_placeholder("a", shape=(n-n+1, 10), dtype="float64")
+    idx = pt.zeros(5, dtype=np.int64)
+    a[idx]
+
+    # }}}
+
+    # {{{ indexer array is of zero size => should be fine
+
+    a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+    idx = pt.zeros((0, 10), dtype=np.int64)
+    a[idx]
+
+    a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+    idx = pt.zeros((n-n, 10), dtype=np.int64)
+    a[idx]
+
+    # }}}
 
 
 if __name__ == "__main__":
