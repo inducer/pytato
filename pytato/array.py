@@ -258,7 +258,7 @@ def normalize_shape(
 # }}}
 
 
-# {{{ array inteface
+# {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
@@ -1682,9 +1682,9 @@ def _get_default_axes(ndim: int) -> AxesT:
 class _PytatoFrameSummary:
     """Class to store a single call frame."""
     filename: str
-    lineno: int
+    lineno: Optional[int]
     name: str
-    line: str
+    line: Optional[str]
 
     def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
         key_builder.rec(key_hash,
@@ -1752,7 +1752,8 @@ class _PytatoStackSummary:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
-def _get_default_tags(existing_tags: Optional[TagsType] = None) -> TagsType:
+def _get_default_tags(existing_tags: Optional[FrozenSet[Tag]] = None) \
+        -> FrozenSet[Tag]:
     import traceback
     from pytato.tags import CreatedAt
 

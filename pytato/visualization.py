@@ -31,7 +31,7 @@ import dataclasses
 import html
 
 from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
-        Mapping, Hashable, Any)
+        Mapping, Hashable, Any, FrozenSet)
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
@@ -44,6 +44,7 @@ from pytato.array import (
 
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
+from pytools.tag import Tag
 
 from pytato.partition import GraphPartition
 from pytato.distributed import DistributedGraphPart
@@ -72,7 +73,7 @@ class DotNodeInfo:
     edges: Dict[str, ArrayOrNames]
 
 
-def stringify_created_at(tags: TagsType) -> str:
+def stringify_created_at(tags: FrozenSet[Tag]) -> str:
     from pytato.tags import CreatedAt
     for tag in tags:
         if isinstance(tag, CreatedAt):
@@ -81,7 +82,7 @@ def stringify_created_at(tags: TagsType) -> str:
     return "<unknown>"
 
 
-def stringify_tags(tags: TagsType) -> str:
+def stringify_tags(tags: FrozenSet[Tag]) -> str:
     # The CreatedAt tag is handled in stringify_created_at()
     from pytato.tags import CreatedAt
     tags = frozenset(tag for tag in tags if not isinstance(tag, CreatedAt))
