@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union, FrozenSet
 from pytato.array import (AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, AxisPermutation,
                           BasicIndex, Concatenate, DataWrapper, Einsum,
@@ -32,16 +32,28 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
                           Reshape, Roll, Stack, AbstractResultWithNamedArrays,
                           Array, DictOfNamedArrays, Placeholder, SizeParam)
 
+from pytools.tag import Tag
+from pytato.tags import InfoTag
+
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall, LoopyCallResult
     from pytato.distributed import DistributedRecv, DistributedSendRefHolder
 
+
 __doc__ = """
+.. autofunction:: preprocess_tags_for_equality
 .. autoclass:: EqualityComparer
 """
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+
+
+def preprocess_tags_for_equality(tags: FrozenSet[Tag]) -> FrozenSet[Tag]:
+    """Remove tags of :class:`InfoTag` for equality comparison."""
+    return frozenset(tag
+                     for tag in tags
+                     if not isinstance(tag, InfoTag))
 
 
 # {{{ EqualityComparer
@@ -95,6 +107,10 @@ class EqualityComparer:
                                  expr2: Any) -> bool:
         raise NotImplementedError(type(expr1).__name__)
 
+    def are_tags_equal(self, tags1: FrozenSet[Tag], tags2: FrozenSet[Tag]) -> bool:
+        return (preprocess_tags_for_equality(tags1)
+                == preprocess_tags_for_equality(tags2))
+
     def map_foreign(self, expr1: Any, expr2: Any) -> bool:
         raise NotImplementedError(type(expr1).__name__)
 
@@ -103,14 +119,14 @@ class EqualityComparer:
                 and expr1.name == expr2.name
                 and expr1.shape == expr2.shape
                 and expr1.dtype == expr2.dtype
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
     def map_size_param(self, expr1: SizeParam, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.name == expr2.name
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -129,7 +145,7 @@ class EqualityComparer:
                         if isinstance(dim1, Array)
                         else dim1 == dim2
                         for dim1, dim2 in zip(expr1.shape, expr2.shape))
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes)
 
     def map_stack(self, expr1: Stack, expr2: Any) -> bool:
@@ -138,7 +154,7 @@ class EqualityComparer:
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -148,7 +164,7 @@ class EqualityComparer:
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -156,7 +172,7 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and expr1.axis == expr2.axis
                 and self.rec(expr1.array, expr2.array)
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -164,7 +180,7 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and expr1.axis_permutation == expr2.axis_permutation
                 and self.rec(expr1.array, expr2.array)
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -177,7 +193,7 @@ class EqualityComparer:
                             and isinstance(idx2, Array))
                         else idx1 == idx2
                         for idx1, idx2 in zip(expr1.indices, expr2.indices))
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -200,7 +216,7 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and expr1.newshape == expr2.newshape
                 and self.rec(expr1.array, expr2.array)
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
@@ -210,14 +226,14 @@ class EqualityComparer:
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.args,
                                               expr2.args))
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 )
 
     def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1._container, expr2._container)
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 and expr1.name == expr2.name)
 
@@ -236,7 +252,7 @@ class EqualityComparer:
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.rec(expr1._container, expr2._container)
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 and expr1.axes == expr2.axes
                 and expr1.name == expr2.name)
 
@@ -254,7 +270,7 @@ class EqualityComparer:
                 and expr1.send.dest_rank == expr2.send.dest_rank
                 and expr1.send.comm_tag == expr2.send.comm_tag
                 and expr1.send.tags == expr2.send.tags
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 )
 
     def map_distributed_recv(self, expr1: DistributedRecv, expr2: Any) -> bool:
@@ -263,7 +279,7 @@ class EqualityComparer:
                 and expr1.comm_tag == expr2.comm_tag
                 and expr1.shape == expr2.shape
                 and expr1.dtype == expr2.dtype
-                and expr1.tags == expr2.tags
+                and self.are_tags_equal(expr1.tags, expr2.tags)
                 )
 
 # }}}

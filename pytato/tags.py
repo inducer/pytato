@@ -105,11 +105,16 @@ class AssumeNonNegative(Tag):
     """
 
 
+class InfoTag(Tag):
+    """A type of tag whose value is purely informational and should not be used
+    for equality comparison."""
+
+
 # See
 # https://mypy.readthedocs.io/en/stable/additional_features.html#caveats-known-issues
 # on why this can not be '@tag_dataclass'.
 @dataclass(init=True, eq=True, frozen=True, repr=True)
-class CreatedAt(UniqueTag):
+class CreatedAt(UniqueTag, InfoTag):
     """
     A tag attached to a :class:`~pytato.Array` to store the traceback
     of where it was created.

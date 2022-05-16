@@ -480,9 +480,12 @@ class Array(Taggable):
 
     @memoize_method
     def __hash__(self) -> int:
+        from pytato.equality import preprocess_tags_for_equality
         attrs = []
         for field in self._fields:
             attr = getattr(self, field)
+            if field == "tags":
+                attr = preprocess_tags_for_equality(attr)
             if isinstance(attr, dict):
                 attr = frozenset(attr.items())
             attrs.append(attr)
@@ -1590,7 +1593,9 @@ class DataWrapper(InputArgumentBase):
         self._shape = shape
 
     def __hash__(self) -> int:
-        return id(self)
+        from pytato.equality import preprocess_tags_for_equality
+        return hash((self.name, id(self.data), self._shape, self.axes,
+                     preprocess_tags_for_equality(self.tags), self.axes))
 
     def __eq__(self, other: Any) -> bool:
         return self is other
