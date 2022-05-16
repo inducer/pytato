@@ -50,7 +50,7 @@ ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 
 
 def preprocess_tags_for_equality(tags: FrozenSet[Tag]) -> FrozenSet[Tag]:
-    """Remove tags of :class:`InfoTag` for equality comparison."""
+    """Remove tags of :class:`~pytato.tags.InfoTag` for equality comparison."""
     return frozenset(tag
                      for tag in tags
                      if not isinstance(tag, InfoTag))

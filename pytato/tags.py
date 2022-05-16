@@ -9,6 +9,8 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
+.. autoclass:: InfoTag
+.. autoclass:: CreatedAt
 """
 
 
