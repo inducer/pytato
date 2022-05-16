@@ -142,6 +142,9 @@ Internal API
 .. autoclass:: ReductionAxis
 .. autoclass:: NormalizedSlice
 
+.. autoclass:: _PytatoFrameSummary
+.. autoclass:: _PytatoStackSummary
+
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
