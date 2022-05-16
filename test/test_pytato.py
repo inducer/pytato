@@ -844,6 +844,10 @@ def test_created_at():
     b = pt.make_placeholder("b", (10, 10), "float64")
 
     res = a+b
+    res2 = a+b
+
+    # CreatedAt tags need to be filtered for equality to work correctly.
+    assert res == res2
 
     from pytato.tags import CreatedAt
 
