@@ -32,8 +32,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
                           Reshape, Roll, Stack, AbstractResultWithNamedArrays,
                           Array, DictOfNamedArrays, Placeholder, SizeParam)
 
-from pytools.tag import Tag
-from pytato.tags import InfoTag
+from pytools.tag import Tag, IgnoredForEqualityTag
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall, LoopyCallResult
@@ -50,10 +49,11 @@ ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 
 
 def preprocess_tags_for_equality(tags: FrozenSet[Tag]) -> FrozenSet[Tag]:
-    """Remove tags of :class:`~pytato.tags.InfoTag` for equality comparison."""
+    """Remove tags of :class:`~pytools.tag.IgnoredForEqualityTag` for equality
+    comparison."""
     return frozenset(tag
                      for tag in tags
-                     if not isinstance(tag, InfoTag))
+                     if not isinstance(tag, IgnoredForEqualityTag))
 
 
 # {{{ EqualityComparer
