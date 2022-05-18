@@ -846,8 +846,16 @@ def test_created_at():
     res = a+b
     res2 = a+b
 
-    # CreatedAt tags need to be filtered for equality to work correctly.
+    # {{{ Check that CreatedAt tags are filtered correctly for equality
+    from pytato.equality import preprocess_tags_for_equality
+
     assert res == res2
+
+    assert res.tags != res2.tags
+    assert (preprocess_tags_for_equality(res.tags)
+            == preprocess_tags_for_equality(res2.tags))
+
+    # }}}
 
     from pytato.tags import CreatedAt
 
@@ -855,18 +863,23 @@ def test_created_at():
 
     assert len(created_tag) == 1
 
+    # {{{ Make sure the function name appears in the traceback
+
     tag, = created_tag
 
     found = False
 
-    # Make sure the function name appears in the traceback
-    _unused = tag.traceback.to_stacksummary()  # noqa
+    stacksummary = tag.traceback.to_stacksummary()
+    assert len(stacksummary) > 10
+
     for frame in tag.traceback.frames:
         if frame.name == "test_created_at":
             found = True
             break
 
     assert found
+
+    # }}}
 
 
 def test_pickling_and_unpickling_is_equal():
