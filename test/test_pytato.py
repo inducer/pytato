@@ -297,14 +297,6 @@ def test_dict_of_named_arrays_comparison():
     dict2 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict3 = pt.make_dict_of_named_arrays({"not_out": 2 * x})
     dict4 = pt.make_dict_of_named_arrays({"out": 3 * x})
-
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-    dict1 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict1))
-    dict2 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict2))
-    dict3 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict3))
-    dict4 = cast(pt.Array, remove_tags_of_type(CreatedAt, dict4))
-
     assert dict1 == dict2
     assert dict1 != dict3
     assert dict1 != dict4
@@ -413,13 +405,6 @@ def test_linear_complexity_inequality():
     graph2 = construct_intestine_graph()
     graph3 = construct_intestine_graph(seed=3)
 
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-
-    graph1 = remove_tags_of_type(CreatedAt, graph1)
-    graph2 = remove_tags_of_type(CreatedAt, graph2)
-    graph3 = remove_tags_of_type(CreatedAt, graph3)
-
     assert EqualityComparer()(graph1, graph2)
     assert EqualityComparer()(graph2, graph1)
     assert not EqualityComparer()(graph1, graph3)
@@ -479,10 +464,9 @@ def test_array_dot_repr():
     x = pt.make_placeholder("x", (10, 4), np.int64)
     y = pt.make_placeholder("y", (10, 4), np.int64)
 
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-
     def _assert_stripped_repr(ary: pt.Array, expected_repr: str):
+        from pytato.transform import remove_tags_of_type
+        from pytato.tags import CreatedAt
         ary = cast(pt.Array, remove_tags_of_type(CreatedAt, ary))
 
         expected_str = "".join([c for c in repr(ary) if c not in [" ", "\n"]])
@@ -641,22 +625,10 @@ def test_rec_get_user_nodes():
     expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
                                          "out2": 7 * x1 + 3 * x2})
 
-    t1 = pt.transform.rec_get_user_nodes(expr, x1)
-    t1r = frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr})
-
-    t2 = pt.transform.rec_get_user_nodes(expr, x2)
-    t2r = frozenset({3 * x2, 7*x1 + 3 * x2, expr})
-
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-
-    t1 = frozenset({remove_tags_of_type(CreatedAt, t) for t in t1})
-    t1r = frozenset({remove_tags_of_type(CreatedAt, t) for t in t1r})
-    t2 = frozenset({remove_tags_of_type(CreatedAt, t) for t in t2})
-    t2r = frozenset({remove_tags_of_type(CreatedAt, t) for t in t2r})
-
-    assert (t1 == t1r)
-    assert (t2 == t2r)
+    assert (pt.transform.rec_get_user_nodes(expr, x1)
+            == frozenset({2 * x1, 7*x1, 7*x1 + 3 * x2, expr}))
+    assert (pt.transform.rec_get_user_nodes(expr, x2)
+            == frozenset({3 * x2, 7*x1 + 3 * x2, expr}))
 
 
 def test_rec_get_user_nodes_linear_complexity():
@@ -703,13 +675,7 @@ def test_tag_user_nodes_linear_complexity():
 
         return y, x
 
-    from pytato.transform import remove_tags_of_type
-    from pytato.tags import CreatedAt
-
     expr, inp = construct_intestine_graph()
-    expr = remove_tags_of_type(CreatedAt, expr)
-    inp = remove_tags_of_type(CreatedAt, inp)
-
     user_collector = pt.transform.UsersCollector()
     user_collector(expr)
 
@@ -720,9 +686,6 @@ def test_tag_user_nodes_linear_complexity():
             expected_result[expr] = {"foo"}
 
     expr, inp = construct_intestine_graph()
-    expr = remove_tags_of_type(CreatedAt, expr)
-    inp = remove_tags_of_type(CreatedAt, inp)
-
     result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
     ExpectedResultComputer()(expr)
 

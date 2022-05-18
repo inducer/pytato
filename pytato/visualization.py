@@ -34,6 +34,7 @@ from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
         Mapping, Hashable, Any, FrozenSet)
 
 from pytools import UniqueNameGenerator
+from pytools.tag import Tag
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
 from pytato.loopy import LoopyCall
 
@@ -44,7 +45,6 @@ from pytato.array import (
 
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
-from pytools.tag import Tag
 
 from pytato.partition import GraphPartition
 from pytato.distributed import DistributedGraphPart
