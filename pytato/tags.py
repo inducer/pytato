@@ -9,7 +9,7 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
-.. autoclass:: InfoTag
+.. autoclass:: IgnoredForEqualityTag
 .. autoclass:: CreatedAt
 """
 
@@ -107,7 +107,7 @@ class AssumeNonNegative(Tag):
     """
 
 
-class InfoTag(Tag):
+class IgnoredForEqualityTag(Tag):
     """A type of tag whose value is purely informational and should not be used
     for equality comparison."""
 
@@ -116,7 +116,7 @@ class InfoTag(Tag):
 # https://mypy.readthedocs.io/en/stable/additional_features.html#caveats-known-issues
 # on why this can not be '@tag_dataclass'.
 @dataclass(init=True, eq=True, frozen=True, repr=True)
-class CreatedAt(UniqueTag, InfoTag):
+class CreatedAt(UniqueTag, IgnoredForEqualityTag):
     """
     A tag attached to a :class:`~pytato.Array` to store the traceback
     of where it was created.
