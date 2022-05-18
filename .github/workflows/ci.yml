@@ -112,11 +112,7 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
 
-                if [[ "$DOWNSTREAM_PROJECT" != "meshmode" ]]; then
-                    test_downstream "$DOWNSTREAM_PROJECT"
-                else
-                    test_downstream https://github.com/inducer/meshmode@filter_tags
-                fi
+                test_downstream "$DOWNSTREAM_PROJECT"
 
                 if [[ "$DOWNSTREAM_PROJECT" = "meshmode" ]]; then
                     python ../examples/simple-dg.py --lazy
