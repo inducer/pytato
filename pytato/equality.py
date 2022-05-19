@@ -82,7 +82,7 @@ class EqualityComparer:
                 else:
                     result = self.map_foreign(expr1, expr2)
             else:
-                result = method(expr1, expr2)
+                result = (expr1 is expr2) or method(expr1, expr2)
 
             self._cache[cache_key] = result
             return result
