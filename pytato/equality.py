@@ -115,7 +115,13 @@ class EqualityComparer:
                 )
 
     def map_data_wrapper(self, expr1: DataWrapper, expr2: Any) -> bool:
-        return expr1 is expr2
+        return (expr1.__class__ is expr2.__class__
+                and expr1.name == expr2.name
+                and expr1.shape == expr2.shape
+                and expr1.data is expr2.data
+                and expr1.tags == expr2.tags
+                and expr1.axes == expr2.axes
+                )
 
     def map_index_lambda(self, expr1: IndexLambda, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__

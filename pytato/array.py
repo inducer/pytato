@@ -1568,9 +1568,9 @@ class DataWrapper(InputArgumentBase):
 
     .. note::
 
-        Since we cannot compare instances of :class:`DataInterface` being
-        wrapped, a :class:`DataWrapper` instances compare equal to themselves
-        (i.e. the very same instance).
+        Since we cannot compare instances of :class:`DataInterface`, two
+        instances of :class:`DataWrapper` can be equal only if they wrap
+        the same instance of :class:`DataInterface`.
     """
 
     _fields = InputArgumentBase._fields + ("data", "shape", "name")
@@ -1589,10 +1589,7 @@ class DataWrapper(InputArgumentBase):
         self._shape = shape
 
     def __hash__(self) -> int:
-        return id(self)
-
-    def __eq__(self, other: Any) -> bool:
-        return self is other
+        return hash((self.name, id(self.data), self._shape, self.axes, self.tags))
 
     @property
     def shape(self) -> ShapeType:
