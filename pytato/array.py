@@ -1765,7 +1765,9 @@ def _get_default_tags(existing_tags: Optional[FrozenSet[Tag]] = None) \
     import traceback
     from pytato.tags import CreatedAt
 
-    if __debug__ and not any(isinstance(tag, CreatedAt) for tag in existing_tags):
+    if __debug__ and (
+            existing_tags is None
+            or not any(isinstance(tag, CreatedAt) for tag in existing_tags)):
         frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
                        for s in traceback.extract_stack())
         c = CreatedAt(_PytatoStackSummary(frames))
