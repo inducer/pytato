@@ -9,13 +9,12 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
-.. autoclass:: IgnoredForEqualityTag
 .. autoclass:: CreatedAt
 """
 
 
 from dataclasses import dataclass
-from pytools.tag import Tag, UniqueTag, tag_dataclass
+from pytools.tag import Tag, UniqueTag, tag_dataclass, IgnoredForEqualityTag
 from pytato.array import _PytatoStackSummary
 
 
@@ -105,11 +104,6 @@ class AssumeNonNegative(Tag):
     :class:`~pytato.target.Target` that all entries of the tagged array are
     non-negative.
     """
-
-
-class IgnoredForEqualityTag(Tag):
-    """A type of tag whose value is purely informational and should not be used
-    for equality comparison."""
 
 
 # See
