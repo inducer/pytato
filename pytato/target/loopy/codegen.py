@@ -50,6 +50,9 @@ from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
 from pytools.tag import Tag
 import pytato.reductions as red
 
+from loopy.symbolic import IdentityMapper as LoopyIdentityMapper
+from pymbolic.mapper.subst_applier import SubstitutionApplier
+
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
@@ -76,10 +79,11 @@ __doc__ = """
 """
 
 
-def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
-    from loopy.symbolic import SubstitutionMapper
-    from pymbolic.mapper.substitutor import make_subst_func
+class LoopySubstitutionApplier(SubstitutionApplier, LoopyIdentityMapper):
+    pass
 
+
+def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
     # {{{ early exit for identity substitution
 
     if all(isinstance(v, prim.Variable) and v.name == k
@@ -89,7 +93,7 @@ def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) ->
 
     # }}}
 
-    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+    return prim.Substitution(expression, *zip(*variable_assigments.items()))
 
 
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
@@ -787,7 +791,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
             for d in range(expr.ndim))
     indices = tuple(prim.Variable(iname) for iname in inames)
     loopy_expr_context = PersistentExpressionContext(state)
-    loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
+    loopy_expr = LoopySubstitutionApplier()(
+        result.to_loopy_expression(indices, loopy_expr_context))
 
     # Make the instruction
     from loopy.kernel.instruction import make_assignment
