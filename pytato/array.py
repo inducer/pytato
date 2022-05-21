@@ -355,7 +355,7 @@ class Array(Taggable):
             :class:`~pytato.array.IndexLambda` is used to produce
             references to named arrays. Since any array that needs to be
             referenced in this way needs to obey this restriction anyway,
-            a decision was made to requir the same of *all* array expressions.
+            a decision was made to require the same of *all* array expressions.
 
     .. attribute:: dtype
 
@@ -677,7 +677,7 @@ class _SuppliedShapeAndDtypeMixin(object):
 
 class NamedArray(Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
-    back to thecontaining instance as well as the name by which *self* is
+    back to the containing instance as well as the name by which *self* is
     known there.
 
     .. automethod:: __init__
