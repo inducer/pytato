@@ -1348,11 +1348,11 @@ class Reshape(IndexRemappingBase):
     _mapper_method = "map_reshape"
 
     def __init__(self,
-            array: Array,
-            newshape: Tuple[int, ...],
-            order: str,
-            axes: AxesT,
-            tags: FrozenSet[Tag] = frozenset()):
+                 array: Array,
+                 newshape: ShapeType,
+                 order: str,
+                 axes: AxesT,
+                 tags: FrozenSet[Tag] = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1361,7 +1361,7 @@ class Reshape(IndexRemappingBase):
         self.order = order
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> ShapeType:
         return self.newshape
 
 # }}}

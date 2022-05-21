@@ -380,7 +380,7 @@ class CodeGenPreprocessor(CopyMapper):
             assert expr.size == 1
             return ()
 
-        newstrides = [1]  # reshaped array strides
+        newstrides: List[IntegralT] = [1]  # reshaped array strides
         for new_axis_len in reversed(expr.shape[1:]):
             assert isinstance(new_axis_len, INT_CLASSES)
             newstrides.insert(0, newstrides[0]*new_axis_len)
