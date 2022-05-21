@@ -1692,6 +1692,35 @@ def test_no_computation_for_empty_arrays(ctx_factory):
     assert not bprg.program.default_entrypoint.instructions
 
 
+def test_expand_dims(ctx_factory):
+    from numpy.random import default_rng
+
+    ntests = 50
+    rng = default_rng(seed=0)
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    for _ in range(ntests):
+        in_dim = rng.integers(2, 7)
+        n_new_axes = rng.integers(0, 7)
+        in_shape = rng.integers(2, 7, in_dim)
+        np_input = rng.random(in_shape, "float32")
+        pt_input = pt.make_data_wrapper(np_input)
+        axis = tuple(int(rng.integers(-(n_new_axes+in_dim), n_new_axes+in_dim))
+                     for _ in range(n_new_axes))
+
+        try:
+            np_output = np.expand_dims(np_input, axis=axis)
+        except ValueError:
+            with pytest.raises(ValueError):
+                pt.expand_dims(pt_input, axis=axis)
+        else:
+            _, (pt_output, ) = pt.generate_loopy(pt.expand_dims(pt_input,
+                                                                axis=axis))(cq)
+
+            np.testing.assert_allclose(np_output, pt_output)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
