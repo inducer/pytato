@@ -901,11 +901,14 @@ def test_tagcountmapper():
     rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
                                     axis_len=axis_len, use_numpy=False)
 
-    dag = pt.make_dict_of_named_arrays(
-        {"out": make_random_dag(rdagc_pt).tagged(ExistentTag())})
+    out = make_random_dag(rdagc_pt).tagged(ExistentTag())
 
+    dag = pt.make_dict_of_named_arrays({"out": out})
+
+    # get_num_nodes() returns an extra DictOfNamedArrays node
     assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
-    assert get_num_tags_of_type(dag, frozenset((NonExistentTag(),))) == 0
+
+    assert get_num_tags_of_type(dag, NonExistentTag()) == 0
     assert get_num_tags_of_type(dag, frozenset((ExistentTag(),))) == 1
     assert get_num_tags_of_type(dag,
         frozenset((ExistentTag(), NonExistentTag()))) == 0

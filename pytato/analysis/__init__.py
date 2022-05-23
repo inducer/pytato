@@ -401,11 +401,13 @@ class TagCountMapper(CachedWalkMapper):
 
     def __init__(self, tags: Union[Tag, Iterable[Tag]]) -> None:
         super().__init__()
+        if isinstance(tags, Tag):
+            tags = frozenset((tags,))
         self._tags = tags
         self.count = 0
 
     def post_visit(self, expr: Any) -> None:
-        if hasattr(expr, "tags") and self._tags <= expr.tags:
+        if isinstance(expr, Array) and self._tags <= expr.tags:
             self.count += 1
 
 
@@ -414,8 +416,6 @@ def get_num_tags_of_type(
         tags: Union[Tag, Iterable[Tag]]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tags in *tags*."""
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
 
     tcm = TagCountMapper(tags)
     tcm(outputs)
