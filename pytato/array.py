@@ -1999,7 +1999,8 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
 
     shape = normalize_shape(shape)
 
-    if np.isnan(fill_value):
+    # https://github.com/python/mypy/issues/3186
+    if np.isnan(fill_value):  # type: ignore[arg-type]
         from pymbolic.primitives import NaN
         fill_value = NaN(dtype.type)
     else:
