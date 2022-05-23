@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    TYPE_CHECKING)
+                    TYPE_CHECKING, Iterable)
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
@@ -403,6 +403,8 @@ class TagCountMapper(CachedWalkMapper):
         super().__init__()
         if isinstance(tags, Tag):
             tags = frozenset((tags,))
+        elif not isinstance(tags, frozenset):
+            tags = frozenset(tags)
         self._tags = tags
         self.count = 0
 
@@ -416,6 +418,9 @@ def get_num_tags_of_type(
         tags: Union[Tag, Iterable[Tag]]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tags in *tags*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
 
     tcm = TagCountMapper(tags)
     tcm(outputs)
