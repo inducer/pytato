@@ -33,6 +33,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           ShapeType)
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
+from pytools.tag import Tag
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedRecv, DistributedSendRefHolder
@@ -47,6 +48,9 @@ __doc__ = """
 .. autofunction:: get_num_nodes
 
 .. autoclass:: DirectPredecessorsGetter
+
+.. autoclass:: TagCountMapper
+.. autofunction:: get_num_tags_of_type
 """
 
 
@@ -380,5 +384,42 @@ def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     ncm(outputs)
 
     return ncm.count
+
+# }}}
+
+
+# {{{ TagCountMapper
+
+class TagCountMapper(CachedWalkMapper):
+    """
+    Counts the number of nodes in a DAG that are tagged with a superset of *tags*.
+
+    .. attribute:: count
+
+       The number of nodes that are tagged with a superset of *tags*.
+    """
+
+    def __init__(self, tags: FrozenSet[Tag]) -> None:
+        super().__init__()
+        self._tags = tags
+        self.count = 0
+
+    def post_visit(self, expr: Any) -> None:
+        if hasattr(expr, "tags") and self._tags <= expr.tags:
+            self.count += 1
+
+
+def get_num_tags_of_type(
+        outputs: Union[Array, DictOfNamedArrays], tags: FrozenSet[Tag]) -> int:
+    """Returns the number of nodes in DAG *outputs* that are tagged with a
+    superset of *tags*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    tcm = TagCountMapper(tags)
+    tcm(outputs)
+
+    return tcm.count
 
 # }}}

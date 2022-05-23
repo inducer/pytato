@@ -884,6 +884,33 @@ def test_adv_indexing_into_zero_long_axes():
     # }}}
 
 
+def test_tagcountmapper():
+    from testlib import RandomDAGContext, make_random_dag
+    from pytato.analysis import get_num_tags_of_type, get_num_nodes
+    from pytools.tag import Tag
+
+    class NonExistentTag(Tag):
+        pass
+
+    class ExistentTag(Tag):
+        pass
+
+    seed = 199
+    axis_len = 3
+
+    rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                                    axis_len=axis_len, use_numpy=False)
+
+    dag = pt.make_dict_of_named_arrays(
+        {"out": make_random_dag(rdagc_pt).tagged(ExistentTag())})
+
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
+    assert get_num_tags_of_type(dag, frozenset((NonExistentTag(),))) == 0
+    assert get_num_tags_of_type(dag, frozenset((ExistentTag(),))) == 1
+    assert get_num_tags_of_type(dag,
+        frozenset((ExistentTag(), NonExistentTag()))) == 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
