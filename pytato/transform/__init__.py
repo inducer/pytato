@@ -1300,9 +1300,9 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 
     res = DictOfNamedArrays(new_data)
 
-    logger.info("materialize_with_mpms: materialized",
-        get_num_tags_of_type(res, ImplStored()), "out of",
-        get_num_nodes(res), "nodes")
+    logger.info("materialize_with_mpms: materialized "
+        f"{get_num_tags_of_type(res, ImplStored())} out of "
+        f"{get_num_nodes(res)} nodes")
 
     return res
 
