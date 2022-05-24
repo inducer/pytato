@@ -404,8 +404,7 @@ class TagCountMapper(CombineMapper[int]):
         self._tags = tags
 
     def combine(self, *args: int) -> int:
-        from functools import reduce
-        return reduce(lambda a, b: a + b, args, 0)
+        return sum(args)
 
     # type-ignore reason: incompatible return type with super class
     def rec(self, expr: ArrayOrNames) -> int:  # type: ignore
