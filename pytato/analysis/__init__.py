@@ -412,12 +412,12 @@ class TagCountMapper(CombineMapper[int]):
             return self.cache[expr]
 
         if isinstance(expr, Array) and self._tags <= expr.tags:
-            result = 1
+            result = 1 + super().rec(expr)
         else:
-            result = 0
+            result = 0 + super().rec(expr)
 
-        self.cache[expr] = result + super().rec(expr)
-        return self.cache[expr]
+        self.cache[expr] = 0
+        return result
 
 
 def get_num_tags_of_type(
