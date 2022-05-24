@@ -549,8 +549,7 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
         numpy_backend=target.numpy_like_module_name_shorthand,
         numpy="np",
         vng=var_name_gen)
-    # type-ignore-reason: https://github.com/inducer/pytato/issues/236
-    result_var = cgen_mapper(expr)  # type: ignore[type-var]
+    result_var = cgen_mapper(expr)
 
     lines = cgen_mapper.lines
     lines.append(ast.Return(ast.Name(result_var)))
