@@ -31,7 +31,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
                           ShapeType)
-from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
+from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper, CombineMapper
 from pytato.loopy import LoopyCall
 from pytools.tag import Tag
 
@@ -390,13 +390,9 @@ def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
 
 # {{{ TagCountMapper
 
-class TagCountMapper(CachedWalkMapper):
+class TagCountMapper(CombineMapper[int]):
     """
-    Counts the number of nodes in a DAG that are tagged with all the tags in *tags*.
-
-    .. attribute:: count
-
-       The number of nodes that are tagged with all the tags in *tags*.
+    Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
     """
 
     def __init__(self, tags: Union[Tag, Iterable[Tag]]) -> None:
@@ -406,11 +402,23 @@ class TagCountMapper(CachedWalkMapper):
         elif not isinstance(tags, frozenset):
             tags = frozenset(tags)
         self._tags = tags
-        self.count = 0
 
-    def post_visit(self, expr: Any) -> None:
+    def combine(self, *args: int) -> int:
+        from functools import reduce
+        return reduce(lambda a, b: a + b, args, 0)
+
+    # type-ignore reason: incompatible return type with super class
+    def rec(self, expr: ArrayOrNames) -> int:  # type: ignore
+        if expr in self.cache:
+            return self.cache[expr]
+
         if isinstance(expr, Array) and self._tags <= expr.tags:
-            self.count += 1
+            result = 1
+        else:
+            result = 0
+
+        self.cache[expr] = result + super().rec(expr)
+        return self.cache[expr]
 
 
 def get_num_tags_of_type(
@@ -423,8 +431,7 @@ def get_num_tags_of_type(
     outputs = normalize_outputs(outputs)
 
     tcm = TagCountMapper(tags)
-    tcm(outputs)
 
-    return tcm.count
+    return tcm(outputs)
 
 # }}}
