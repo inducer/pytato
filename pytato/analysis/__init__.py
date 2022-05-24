@@ -76,9 +76,7 @@ class NUserCollector(Mapper):
         if id(expr) in self._visited_ids:
             return
 
-        # type-ignore reason: super().rec expects either 'Array' or
-        # 'AbstractResultWithNamedArrays', passed 'ArrayOrNames'
-        super().rec(expr)  # type: ignore
+        super().rec(expr)
         self._visited_ids.add(id(expr))
 
     def map_index_lambda(self, expr: IndexLambda) -> None:

@@ -578,8 +578,7 @@ class _DominantMaterializedPredecessorsCollector(Mapper):
         try:
             return self.cache[expr]
         except KeyError:
-            # type-ignore reason: type not compatible with super.rec() type
-            result: FrozenSet[Array] = super().rec(expr)  # type: ignore[type-var]
+            result: FrozenSet[Array] = super().rec(expr)
             self.cache[expr] = result
             return result
 
