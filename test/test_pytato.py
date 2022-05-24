@@ -913,6 +913,12 @@ def test_tagcountmapper():
     assert get_num_tags_of_type(dag,
         frozenset((ExistentTag(), NonExistentTag()))) == 0
 
+    a = pt.make_data_wrapper(np.arange(27))
+    dag = a+a+a+a+a+a+a+a
+
+    # get_num_nodes() returns an extra DictOfNamedArrays node
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
+
 
 def test_expand_dims_input_validate():
     a = pt.make_placeholder("x", (10, 4), dtype="float64")
