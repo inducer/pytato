@@ -1348,11 +1348,11 @@ class Reshape(IndexRemappingBase):
     _mapper_method = "map_reshape"
 
     def __init__(self,
-            array: Array,
-            newshape: Tuple[int, ...],
-            order: str,
-            axes: AxesT,
-            tags: FrozenSet[Tag] = frozenset()):
+                 array: Array,
+                 newshape: ShapeType,
+                 order: str,
+                 axes: AxesT,
+                 tags: FrozenSet[Tag] = frozenset()):
         # FIXME: Get rid of this restriction
         assert order == "C"
 
@@ -1361,7 +1361,7 @@ class Reshape(IndexRemappingBase):
         self.order = order
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> ShapeType:
         return self.newshape
 
 # }}}
@@ -2463,5 +2463,45 @@ def squeeze(array: Array) -> Array:
             0 if are_shape_components_equal(s_i, 1) else slice(s_i)
             for i, s_i in enumerate(array.shape))]
 
+
+def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
+    """
+    Reshapes *array* by adding 1-long axes at *axis* dimensions of the returned
+    array.
+    """
+    from pytato.tags import ExpandedDimsReshape
+
+    if isinstance(axis, int):
+        axis = axis,
+
+    output_ndim = array.ndim + len(axis)
+
+    normalized_axis: List[int] = []
+
+    # {{{ sanity checks
+
+    for ax in axis:
+        if not (-output_ndim <= ax < output_ndim):
+            raise ValueError(f"Dimension {ax} not present in {output_ndim}-D array.")
+
+        normalized_axis.append(ax if ax >= 0 else (ax+output_ndim))
+
+    if len(set(normalized_axis)) != len(normalized_axis):
+        raise ValueError(f"repeated axis in '{axis}'.")
+
+    # }}}
+
+    new_shape = list(array.shape)
+
+    for ax in sorted(normalized_axis):
+        assert (0 <= ax < output_ndim)
+        new_shape.insert(ax, 1)
+
+    assert len(new_shape) == output_ndim
+
+    return Reshape(array, tuple(new_shape), "C",
+                   tags=(_get_default_tags()
+                         | {ExpandedDimsReshape(tuple(normalized_axis))}),
+                   axes=_get_default_axes(len(new_shape)))
 
 # vim: foldmethod=marker
