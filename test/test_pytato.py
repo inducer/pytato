@@ -1010,6 +1010,85 @@ def test_cached_walk_mapper_with_extra_args():
         my_walk_mapper(dag, bad_arg_name=7)
 
 
+def test_unify_axes_tags():
+    from pytato.array import EinsumReductionAxis
+    from testlib import FooTag, BarTag, BazTag, QuuxTag, TestlibTag
+
+    # {{{ 1. broadcasting + expand_dims
+
+    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = x.with_tagged_axis(0, FooTag())
+    x = x.with_tagged_axis(1, BarTag())
+
+    y = pt.expand_dims(x, (2, 3)) + x
+
+    y_unified = pt.unify_axes_tags(y)
+    assert (y_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[2].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (y_unified.axes[3].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+
+    # }}}
+
+    # {{{ 2. back-propagation + einsum
+
+    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = x.with_tagged_axis(0, FooTag())
+
+    y = pt.make_placeholder("y", (10, 4), "float64")
+    y = y.with_tagged_axis(1, BarTag())
+
+    z = pt.einsum("ij, ij -> i", x, y)
+    z_unified = pt.unify_axes_tags(z)
+
+    assert (z_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (z_unified.args[0].axes[1].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (z_unified.args[1].axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (z_unified.redn_axis_to_redn_descr[EinsumReductionAxis(0)]
+            .tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+
+    # }}}
+
+    # {{{ 3. advanced indexing
+
+    idx1 = pt.make_placeholder("idx1", (42, 1), "int32")
+    idx1 = idx1.with_tagged_axis(0, FooTag())
+
+    idx2 = pt.make_placeholder("idx2", (1, 1729), "int32")
+    idx2 = idx2.with_tagged_axis(1, BarTag())
+
+    u = pt.make_placeholder("u", (4, 5, 6, 7, 8, 9), "float32")
+    u = u.with_tagged_axis(0, BazTag())
+    u = u.with_tagged_axis(1, QuuxTag())
+    u = u.with_tagged_axis(2, QuuxTag())
+    u = u.with_tagged_axis(5, QuuxTag())
+
+    y = u[:, 1:4, 2*idx1, 0, 3*idx2, :]
+
+    y_unified = pt.unify_axes_tags(y)
+
+    assert (y_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([BazTag()]))
+    assert (y_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset())
+    assert (y_unified.axes[2].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[3].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (y_unified.axes[4].tags_of_type(TestlibTag)
+            == frozenset([QuuxTag()]))
+
+    # }}}
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
