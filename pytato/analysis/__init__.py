@@ -375,9 +375,6 @@ class NodeCountMapper(CachedWalkMapper):
 def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
     ncm = NodeCountMapper()
     ncm(outputs)
 
@@ -423,9 +420,6 @@ def get_num_tags_of_type(
         tags: Union[Tag, Iterable[Tag]]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tags in *tags*."""
-
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
 
     tcm = TagCountMapper(tags)
 
