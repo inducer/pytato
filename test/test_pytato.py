@@ -608,8 +608,7 @@ def test_nodecountmapper():
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
 
-        # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
-        assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
 def test_rec_get_user_nodes():
@@ -916,8 +915,7 @@ def test_tagcountmapper():
     a = pt.make_data_wrapper(np.arange(27))
     dag = a+a+a+a+a+a+a+a
 
-    # get_num_nodes() returns an extra DictOfNamedArrays node
-    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
 
 
 def test_expand_dims_input_validate():
