@@ -50,11 +50,11 @@ from pyrsistent.typing import PMap as PMapT
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
-T = TypeVar("T", Array, AbstractResultWithNamedArrays)
+ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+T = TypeVar("T", bound=ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
-ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 R = FrozenSet[Array]
 
 __doc__ = """
@@ -378,7 +378,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         except KeyError:
             result = Mapper.rec(self, expr,
                                 *args,
-                                **kwargs)  # type: ignore[type-var]
+                                **kwargs)
             self._cache[key] = result
             return result
 
@@ -554,8 +554,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def rec(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
-        # type-ignore reason: type not compatible with super.rec() type
-        result: CombineT = super().rec(expr)  # type: ignore
+        result: CombineT = super().rec(expr)
         self.cache[expr] = result
         return result
 
@@ -961,9 +960,7 @@ class CachedWalkMapper(WalkMapper):
         if id(expr) in self._visited_ids:
             return
 
-        # type-ignore reason: super().rec expects either 'Array' or
-        # 'AbstractResultWithNamedArrays', passed 'ArrayOrNames'
-        super().rec(expr)  # type: ignore
+        super().rec(expr)
         self._visited_ids.add(id(expr))
 
 # }}}
@@ -1061,8 +1058,7 @@ class MPMSMaterializer(Mapper):
     def rec(self, expr: ArrayOrNames) -> MPMSMaterializerAccumulator:  # type: ignore
         if expr in self.cache:
             return self.cache[expr]
-        # type-ignore reason: type not compatible with super.rec() type
-        result: MPMSMaterializerAccumulator = super().rec(expr)  # type: ignore
+        result: MPMSMaterializerAccumulator = super().rec(expr)
         self.cache[expr] = result
         return result
 

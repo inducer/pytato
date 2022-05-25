@@ -72,7 +72,7 @@ Internal stuff that is only here because the documentation tool wants it
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-T = TypeVar("T", Array, AbstractResultWithNamedArrays)
+T = TypeVar("T", bound=ArrayOrNames)
 PartId = Hashable
 
 
