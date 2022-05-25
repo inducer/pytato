@@ -80,6 +80,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: vdot
 .. autofunction:: broadcast_to
 .. autofunction:: squeeze
+.. autofunction:: expand_dims
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
