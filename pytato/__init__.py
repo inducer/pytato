@@ -26,6 +26,28 @@ THE SOFTWARE.
 
 from numpy import dtype
 
+
+# {{{ debug control
+
+import os
+try:
+    v = os.environ.get("PYTATO_DEBUG")
+    if v is None:
+        v = ""
+
+    DEBUG_ENABLED = bool(eval(v))
+except Exception:
+    DEBUG_ENABLED = False
+
+
+def set_debug_enabled(flag: bool) -> None:
+    """Set whether :mod:`pytato` should log additional debug information."""
+    global DEBUG_ENABLED
+    DEBUG_ENABLED = flag
+
+# }}}
+
+
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
         IndexLambda, NamedArray, DataWrapper, InputArgumentBase, Reshape,
