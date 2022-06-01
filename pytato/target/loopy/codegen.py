@@ -79,8 +79,12 @@ __doc__ = """
 """
 
 
-class LoopySubstitutionApplier(SubstitutionApplier, LoopyIdentityMapper):
-    def get_cache_key(self, expr, current_substs):
+# type-ignore-reason: superclasses have no type information
+class LoopySubstitutionApplier(
+        SubstitutionApplier, LoopyIdentityMapper):  # type: ignore
+    def get_cache_key(self, expr: ScalarExpression,
+                      current_substs: Dict[ScalarExpression, ScalarExpression])\
+                      -> Tuple[Any, ScalarExpression, Any]:
         return (type(expr), expr, tuple(sorted(current_substs.items())))
 
 
