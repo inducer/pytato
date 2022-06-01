@@ -12,9 +12,9 @@ Pre-Defined Tags
 .. autoclass:: CreatedAt
 """
 
-
-from dataclasses import dataclass
+from typing import Tuple
 from pytools.tag import Tag, UniqueTag, tag_dataclass, IgnoredForEqualityTag
+from dataclasses import dataclass
 from pytato.array import _PytatoStackSummary
 
 
@@ -120,3 +120,25 @@ class CreatedAt(UniqueTag, IgnoredForEqualityTag):
 
     def __repr__(self) -> str:
         return "CreatedAt(" + str(self.traceback) + ")"
+
+
+@dataclass(eq=True, frozen=True, repr=True)
+class ExpandedDimsReshape(UniqueTag):
+    """
+    A tag that can be attached to a :class:`~pytato.array.Reshape` to indicate
+    that the new dimensions created by :func:`pytato.expand_dims`.
+
+    :attr new_dims: A :class:`tuple` of the dimensions of the reshaped array
+        that were added.
+
+    .. testsetup::
+
+        >>> import pytato as pt
+
+    .. doctest::
+
+        >>> x = pt.make_placeholder("x", (10, 4), "float64")
+        >>> pt.expand_dims(x, (0, 2, 4)).tags_of_type(pt.tags.ExpandedDimsReshape)
+        frozenset({ExpandedDimsReshape(new_dims=(0, 2, 4))})
+    """
+    new_dims: Tuple[int, ...]
