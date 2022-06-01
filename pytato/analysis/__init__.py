@@ -432,7 +432,7 @@ def get_num_tags_of_type(
 
 
 def get_num_materialized(outputs: Union[Array, DictOfNamedArrays]) \
-        -> Dict[Array, int]:
+        -> Dict[ArrayOrNames, int]:
     """Returns the number of materialized nodes each node in *outputs* depends on."""
     from pytato.transform import rec_get_all_user_nodes
     users = rec_get_all_user_nodes(outputs)
@@ -444,7 +444,7 @@ def get_num_materialized(outputs: Union[Array, DictOfNamedArrays]) \
         else:
             return False
 
-    res = {}
+    res: Dict[ArrayOrNames, int] = {}
 
     for node in users.keys():
         if is_materialized(node):

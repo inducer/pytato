@@ -1510,7 +1510,8 @@ def rec_get_user_nodes(expr: ArrayOrNames,
     return _recursively_get_all_users(users, node)
 
 
-def rec_get_all_user_nodes(expr: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
+def rec_get_all_user_nodes(expr: ArrayOrNames) \
+        -> Dict[ArrayOrNames, FrozenSet[ArrayOrNames]]:
     """
     Returns all direct and indirect users of all nodes in *expr*.
     """
