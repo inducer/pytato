@@ -26,6 +26,28 @@ THE SOFTWARE.
 
 from numpy import dtype
 
+
+# {{{ debug control
+
+import os
+try:
+    v = os.environ.get("PYTATO_DEBUG")
+    if v is None:
+        v = ""
+
+    DEBUG_ENABLED = bool(eval(v))
+except Exception:
+    DEBUG_ENABLED = False
+
+
+def set_debug_enabled(flag: bool) -> None:
+    """Set whether :mod:`pytato` should log additional debug information."""
+    global DEBUG_ENABLED
+    DEBUG_ENABLED = flag
+
+# }}}
+
+
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, DictOfNamedArrays, Placeholder,
         IndexLambda, NamedArray, DataWrapper, InputArgumentBase, Reshape,
@@ -39,6 +61,7 @@ from pytato.array import (
         einsum,
 
         matmul, roll, transpose, stack, reshape, concatenate,
+        expand_dims,
 
         maximum, minimum, where,
 
@@ -95,7 +118,8 @@ __all__ = (
         "make_dict_of_named_arrays", "make_placeholder", "make_size_param",
         "make_data_wrapper", "einsum",
 
-        "matmul", "roll", "transpose", "stack", "reshape", "concatenate",
+        "matmul", "roll", "transpose", "stack", "reshape", "expand_dims",
+        "concatenate",
 
         "generate_loopy", "generate_jax",
 

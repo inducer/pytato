@@ -884,6 +884,23 @@ def test_adv_indexing_into_zero_long_axes():
     # }}}
 
 
+def test_expand_dims_input_validate():
+    a = pt.make_placeholder("x", (10, 4), dtype="float64")
+
+    assert pt.expand_dims(a, (0, 2, 4)).shape == (1, 10, 1, 4, 1)
+    assert pt.expand_dims(a, (-5, -3, -1)).shape == (1, 10, 1, 4, 1)
+    assert pt.expand_dims(a, (-3)).shape == (1, 10, 4)
+
+    with pytest.raises(ValueError):
+        pt.expand_dims(a, (3, 3))
+
+    with pytest.raises(ValueError):
+        pt.expand_dims(a, (0, 2, 5))
+
+    with pytest.raises(ValueError):
+        pt.expand_dims(a, -4)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

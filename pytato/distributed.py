@@ -46,7 +46,7 @@ from pytato.target import BoundProgram
 from pytato.analysis import DirectPredecessorsGetter
 from pyrsistent import pmap
 from functools import cached_property
-from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 
 import numpy as np
 
@@ -578,8 +578,7 @@ class _DominantMaterializedPredecessorsCollector(Mapper):
         try:
             return self.cache[expr]
         except KeyError:
-            # type-ignore reason: type not compatible with super.rec() type
-            result: FrozenSet[Array] = super().rec(expr)  # type: ignore[type-var]
+            result: FrozenSet[Array] = super().rec(expr)
             self.cache[expr] = result
             return result
 
@@ -1088,8 +1087,11 @@ def number_distributed_tags(
 
 def _post_receive(mpi_communicator: Any,
                  recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
-    # FIXME: recv.shape might be parametric, evaluate
-    buf = np.empty(recv.shape, dtype=recv.dtype)
+    if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
+        raise NotImplementedError("Parametric shapes not supported yet.")
+
+    # mypy is right here, size params in 'recv.shape' must be evaluated
+    buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[arg-type]
 
     return mpi_communicator.Irecv(
             buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
