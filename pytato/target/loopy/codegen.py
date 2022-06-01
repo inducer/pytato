@@ -80,7 +80,8 @@ __doc__ = """
 
 
 class LoopySubstitutionApplier(SubstitutionApplier, LoopyIdentityMapper):
-    pass
+    def get_cache_key(self, expr, current_substs):
+        return (type(expr), expr, tuple(sorted(current_substs.items())))
 
 
 def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
