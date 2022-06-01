@@ -88,17 +88,17 @@ class LoopySubstitutionApplier(
         return (type(expr), expr, tuple(sorted(current_substs.items())))
 
 
-def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
+def loopy_substitute(expression: Any, variable_assignments: Mapping[str, Any]) -> Any:
     # {{{ early exit for identity substitution
 
     if all(isinstance(v, prim.Variable) and v.name == k
-           for k, v in variable_assigments.items()):
+           for k, v in variable_assignments.items()):
         # Nothing to do here, move on.
         return expression
 
     # }}}
 
-    return prim.Substitution(expression, *zip(*variable_assigments.items()))
+    return prim.Substitution(expression, *zip(*variable_assignments.items()))
 
 
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
