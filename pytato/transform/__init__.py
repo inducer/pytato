@@ -86,6 +86,7 @@ Dict representation of DAGs
 .. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
+.. autofunction:: rec_get_all_user_nodes
 
 .. autofunction:: deduplicate_data_wrappers
 
@@ -1507,6 +1508,19 @@ def rec_get_user_nodes(expr: ArrayOrNames,
     """
     users = get_users(expr)
     return _recursively_get_all_users(users, node)
+
+
+def rec_get_all_user_nodes(expr: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
+    """
+    Returns all direct and indirect users of all nodes in *expr*.
+    """
+    users = get_users(expr)
+
+    res = {}
+
+    for node in users.keys():
+        res[node] = _recursively_get_all_users(users, node)
+    return res
 
 
 def tag_user_nodes(
