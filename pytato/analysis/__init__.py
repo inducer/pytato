@@ -52,6 +52,8 @@ __doc__ = """
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
+
+.. autofunction:: get_num_materialized
 """
 
 
