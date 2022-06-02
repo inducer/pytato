@@ -1596,9 +1596,8 @@ class DataWrapper(InputArgumentBase):
         self._shape = shape
 
     def __hash__(self) -> int:
-        from pytato.equality import preprocess_tags_for_equality
         return hash((self.name, id(self.data), self._shape, self.axes,
-                     preprocess_tags_for_equality(self.tags)))
+                     Taggable.__hash__(self)))
 
     def __eq__(self, other: Any) -> bool:
         return self is other
