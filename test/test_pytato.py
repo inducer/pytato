@@ -847,11 +847,20 @@ def test_created_at():
     assert len(stacksummary) > 10
 
     for frame in tag.traceback.frames:
-        if frame.name == "test_created_at":
+        if frame.name == "test_created_at" and "a+b" in frame.line:
             found = True
             break
 
     assert found
+
+    # }}}
+
+    # {{{ Make sure that CreatedAt tags are in the visualization
+
+    from pytato.visualization import get_dot_graph
+    s = get_dot_graph(res1)
+    assert "test_created_at" in s
+    assert "a+b" in s
 
     # }}}
 
