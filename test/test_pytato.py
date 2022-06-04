@@ -806,23 +806,34 @@ def test_created_at():
     a = pt.make_placeholder("a", (10, 10), "float64")
     b = pt.make_placeholder("b", (10, 10), "float64")
 
-    res = a+b
+    # res1 and res2 are defined on different lines and should have different
+    # CreatedAt tags.
+    res1 = a+b
     res2 = a+b
 
-    # {{{ Check that CreatedAt tags are filtered correctly for equality
+    # res3 and res4 are defined on the same line and should have the same
+    # CreatedAt tags.
+    res3 = a+b; res4 = a+b  # noqa: E702
+
+    # {{{ Check that CreatedAt tags are handled correctly for equality
+
     from pytato.equality import preprocess_tags_for_equality
 
-    assert res == res2
+    assert res1 == res2 == res3 == res4
 
-    assert res.tags != res2.tags
-    assert (preprocess_tags_for_equality(res.tags)
+    assert res1.tags != res2.tags
+    assert res3.tags == res4.tags
+
+    assert (preprocess_tags_for_equality(res1.tags)
             == preprocess_tags_for_equality(res2.tags))
+    assert (preprocess_tags_for_equality(res3.tags)
+            == preprocess_tags_for_equality(res4.tags))
 
     # }}}
 
     from pytato.tags import CreatedAt
 
-    created_tag = res.tags_of_type(CreatedAt)
+    created_tag = res1.tags_of_type(CreatedAt)
 
     assert len(created_tag) == 1
 
