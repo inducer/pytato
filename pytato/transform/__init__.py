@@ -1030,8 +1030,8 @@ def _materialize_if_mpms(expr: Array,
                          ) -> MPMSMaterializerAccumulator:
     """
     Returns an instance of :class:`MPMSMaterializerAccumulator`, that
-    materializes *expr* if it has more than 1 successors and more than 1
-    materialized predecessors.
+    materializes *expr* if it has more than 1 successor and more than 1
+    materialized predecessor.
     """
     from functools import reduce
 
@@ -1250,8 +1250,8 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     .. note::
 
         - MPMS materialization strategy is a greedy materialization algorithm in
-          which any node with more than 1 materialized predecessors and more than
-          1 successors is materialized.
+          which any node with more than 1 materialized predecessor and more than
+          1 successor is materialized.
         - Materializing here corresponds to tagging a node with
           :class:`~pytato.tags.ImplStored`.
         - Does not attempt to materialize sub-expressions in
@@ -1292,13 +1292,21 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
         ======  ========  =======
 
     """
-    from pytato.analysis import get_nusers
+    from pytato.analysis import get_nusers, get_num_nodes, get_num_tags_of_type
     materializer = MPMSMaterializer(get_nusers(expr))
     new_data = {}
     for name, ary in expr.items():
         new_data[name] = materializer(ary.expr).expr
 
-    return DictOfNamedArrays(new_data)
+    res = DictOfNamedArrays(new_data)
+
+    from pytato import DEBUG_ENABLED
+    if DEBUG_ENABLED:
+        logger.info("materialize_with_mpms: materialized "
+            f"{get_num_tags_of_type(res, ImplStored())} out of "
+            f"{get_num_nodes(res)} nodes")
+
+    return res
 
 # }}}
 
