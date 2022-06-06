@@ -34,6 +34,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper, CombineMapper
 from pytato.loopy import LoopyCall
 from pytools.tag import Tag
+from pytato.tags import ImplStored
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedRecv, DistributedSendRefHolder
@@ -51,6 +52,8 @@ __doc__ = """
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
+
+.. autofunction:: get_num_materialized
 """
 
 
@@ -426,3 +429,27 @@ def get_num_tags_of_type(
     return tcm(outputs)
 
 # }}}
+
+
+def get_num_materialized(outputs: Union[Array, DictOfNamedArrays]) \
+        -> Dict[ArrayOrNames, int]:
+    """Returns the number of materialized nodes each node in *outputs* depends on."""
+    from pytato.transform import rec_get_all_user_nodes
+    users = rec_get_all_user_nodes(outputs)
+
+    def is_materialized(expr: ArrayOrNames) -> bool:
+        if (isinstance(expr, Array) and
+                any(isinstance(tag, ImplStored) for tag in expr.tags)):
+            return True
+        else:
+            return False
+
+    res: Dict[ArrayOrNames, int] = {}
+
+    for node in users.keys():
+        if is_materialized(node):
+            for user in users[node]:
+                res.setdefault(user, 0)
+                res[user] += 1
+
+    return res
