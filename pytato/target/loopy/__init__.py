@@ -138,7 +138,6 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
                  allocator=None, wait_for=None, out_host=None,
-                 entrypoint="_pt_kernel",
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
@@ -158,7 +157,7 @@ class BoundPyOpenCLProgram(BoundProgram):
 
         return self.program(queue,
                             allocator=allocator, wait_for=wait_for,
-                            out_host=out_host, entrypoint=entrypoint,
+                            out_host=out_host,
                             **updated_kwargs)
 
     @property
@@ -166,7 +165,7 @@ class BoundPyOpenCLProgram(BoundProgram):
         if isinstance(self.program, loopy.LoopKernel):
             return self.program
         else:
-            return self.program["_pt_kernel"]
+            return self.program.default_entrypoint
 
 
 # vim: foldmethod=marker

@@ -288,9 +288,9 @@ class CodeGenState:
     insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.var_name_gen = self._t_unit["_pt_kernel"].get_var_name_generator()
+        self.var_name_gen = self._t_unit.default_entrypoint.get_var_name_generator()
         self.insn_id_gen = (
-                self._t_unit["_pt_kernel"].get_instruction_id_generator())
+                self._t_unit.default_entrypoint.get_instruction_id_generator())
 
     @property
     def t_unit(self) -> lp.TranslationUnit:
@@ -301,7 +301,7 @@ class CodeGenState:
         """
         Returns the entry kernel of the loopy kernel being built.
         """
-        return self._t_unit["_pt_kernel"]
+        return self._t_unit.default_entrypoint
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
         self._t_unit = self._t_unit.with_kernel(kernel)
@@ -871,9 +871,10 @@ def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
 
 
 def get_initial_codegen_state(target: LoopyTarget,
-        options: lp.Options) -> CodeGenState:
+        options: lp.Options,
+        function_name: str) -> CodeGenState:
     kernel = lp.make_kernel("{:}", [],
-            name="_pt_kernel",
+            name=function_name,
             target=target.get_loopy_target(),
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
@@ -888,6 +889,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    target: Optional[LoopyTarget] = None,
                    options: Optional[lp.Options] = None,
                    *,
+                   function_name: str = "_pt_kernel",
                    cl_device: Optional["pyopencl.Device"] = None,
                    array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
                        ImplStored, Named, PrefixNamed]),
@@ -953,7 +955,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         raise ValueError("options.result_is_dict is expected to match "
                 "whether the returned value is a dictionary")
 
-    state = get_initial_codegen_state(target, options)
+    state = get_initial_codegen_state(target, options, function_name=function_name)
 
     from pytato.transform import InputGatherer
     ing = InputGatherer()
