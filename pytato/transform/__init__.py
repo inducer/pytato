@@ -1776,7 +1776,7 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
     array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
 
     if data_wrappers_encountered:
-        logger.info("data wrapper de-duplication: "
+        logger.debug("data wrapper de-duplication: "
                 "%d encountered, %d kept, %d eliminated",
                 data_wrappers_encountered,
                 len(data_wrapper_cache),
