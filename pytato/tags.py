@@ -12,13 +12,13 @@ Pre-Defined Tags
 """
 
 from typing import Tuple
-from pytools.tag import Tag, UniqueTag, tag_dataclass
+from pytools.tag import Tag, UniqueTag
 from dataclasses import dataclass
 
 
 # {{{ pre-defined tag: ImplementationStrategy
 
-@tag_dataclass
+@dataclass(frozen=True)
 class ImplementationStrategy(UniqueTag):
     """
     Metadata to be attached to :class:`pytato.Array` to convey information to a
@@ -26,7 +26,7 @@ class ImplementationStrategy(UniqueTag):
     """
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class ImplStored(ImplementationStrategy):
     """
     An :class:`ImplementationStrategy` that is tagged to an
@@ -36,7 +36,7 @@ class ImplStored(ImplementationStrategy):
     """
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class ImplInlined(ImplementationStrategy):
     """
     An :class:`ImplementationStrategy` that is tagged to an
@@ -49,7 +49,7 @@ class ImplInlined(ImplementationStrategy):
 
 # {{{ pre-defined tag: Named, CountNamed, PrefixNamed
 
-@tag_dataclass
+@dataclass(frozen=True)
 class CountNamed(UniqueTag):
     """
     Tagged to a :class:`bool`-dtyped :class:`~pytato.Array` ``A``. If ``A``
@@ -67,7 +67,7 @@ class _BaseNameTag(UniqueTag):
     pass
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class Named(_BaseNameTag):
     """
     Tagged to an :class:`~pytato.Array` to indicate the
@@ -80,7 +80,7 @@ class Named(_BaseNameTag):
     name: str
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class PrefixNamed(_BaseNameTag):
     """
     Tagged to an :class:`~pytato.Array` to indicate the
@@ -95,7 +95,7 @@ class PrefixNamed(_BaseNameTag):
 # }}}
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class AssumeNonNegative(Tag):
     """
     A tag attached to a :class:`~pytato.Array` to indicate the
@@ -104,7 +104,7 @@ class AssumeNonNegative(Tag):
     """
 
 
-@dataclass(eq=True, frozen=True, repr=True)
+@dataclass(frozen=True)
 class ExpandedDimsReshape(UniqueTag):
     """
     A tag that can be attached to a :class:`~pytato.array.Reshape` to indicate
