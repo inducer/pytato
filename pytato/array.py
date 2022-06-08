@@ -317,9 +317,9 @@ class Axis(Taggable):
     """
     tags: FrozenSet[Tag]
 
-    def copy(self, **kwargs: Any) -> Axis:
+    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Taggable:
         from dataclasses import replace
-        return replace(self, **kwargs)
+        return replace(self, tags=tags)
 
 
 class Array(Taggable):
