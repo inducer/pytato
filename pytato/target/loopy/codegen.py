@@ -930,11 +930,13 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
+    if cl_device is not None:
+        from warnings import warn
+        warn("Passing 'cl_device' is deprecated. This will stop working in 2023.",
+                DeprecationWarning, stacklevel=2)
+
     if target is None:
-        target = LoopyPyOpenCLTarget(device=cl_device)
-    else:
-        if cl_device is not None:
-            raise TypeError("may not pass both 'target' and 'cl_device'")
+        target = LoopyPyOpenCLTarget()
 
     assert isinstance(target, LoopyTarget)
 
