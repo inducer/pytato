@@ -62,7 +62,7 @@ from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
                           _get_default_axes, _get_default_tags)
 from pytato.scalar_expr import SCALAR_CLASSES
 from pymbolic import var
-from pyrsistent import pmap
+from immutables import Map
 
 
 def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
@@ -116,7 +116,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
         shape, ret_dtype, bindings,
         tags=_get_default_tags(),
         axes=_get_default_axes(len(shape)),
-        var_to_reduction_descr=pmap(),
+        var_to_reduction_descr=Map(),
     )
 
 

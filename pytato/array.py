@@ -171,8 +171,7 @@ from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
                                 INT_CLASSES, get_reduction_induction_variables)
 import re
-from pyrsistent import pmap
-from pyrsistent.typing import PMap
+from immutables import Map
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -557,7 +556,7 @@ class Array(Taggable):
                 bindings=bindings,
                 tags=_get_default_tags(),
                 axes=_get_default_axes(self.ndim),
-                var_to_reduction_descr=pmap())
+                var_to_reduction_descr=Map())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
@@ -860,7 +859,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             dtype: np.dtype[Any],
             bindings: Dict[str, Array],
             axes: AxesT,
-            var_to_reduction_descr: PMap[str, ReductionDescriptor],
+            var_to_reduction_descr: Mapping[str, ReductionDescriptor],
             tags: FrozenSet[Tag] = frozenset()):
 
         super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
@@ -893,6 +892,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
                 f" '{self.var_to_reduction_descr.keys()}',"
                 f" got '{reduction_variable}'.")
 
+        assert isinstance(self.var_to_reduction_descr, Map)
         new_var_to_redn_descr = self.var_to_reduction_descr.set(
             reduction_variable,
             self.var_to_reduction_descr[reduction_variable].tagged(tag))
@@ -980,9 +980,9 @@ class Einsum(Array):
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
                  axes: AxesT,
-                 redn_axis_to_redn_descr: PMap[EinsumReductionAxis,
-                                              ReductionDescriptor],
-                 index_to_access_descr: PMap[str, EinsumAxisDescriptor],
+                 redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
+                                                  ReductionDescriptor],
+                 index_to_access_descr: Mapping[str, EinsumAxisDescriptor],
                  tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
@@ -992,7 +992,7 @@ class Einsum(Array):
 
     @memoize_method
     def _access_descr_to_axis_len(self
-                                  ) -> PMap[EinsumAxisDescriptor, ShapeComponent]:
+                                  ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
         from pytato.utils import are_shape_components_equal
         descr_to_axis_len: Dict[EinsumAxisDescriptor, ShapeComponent] = {}
 
@@ -1014,7 +1014,7 @@ class Einsum(Array):
                 else:
                     descr_to_axis_len[descr] = arg_axis_len
 
-        return pmap(descr_to_axis_len)
+        return Map(descr_to_axis_len)
 
     # type-ignore reason: github.com/python/mypy/issues/1362
     @property  # type: ignore
@@ -1076,6 +1076,7 @@ class Einsum(Array):
 
         # }}}
 
+        assert isinstance(self.redn_axis_to_redn_descr, Map)
         new_redn_axis_to_redn_descr = self.redn_axis_to_redn_descr.set(
             redn_axis, self.redn_axis_to_redn_descr[redn_axis].tagged(tag))
 
@@ -1091,7 +1092,7 @@ class Einsum(Array):
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
 
 
-def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
+def _normalize_einsum_out_subscript(subscript: str) -> Map[str,
                                                             EinsumAxisDescriptor]:
     """
     Normalizes the output subscript of an einsum (provided in the explicit
@@ -1131,19 +1132,19 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
-    return pmap({idx: EinsumElementwiseAxis(i)
+    return Map({idx: EinsumElementwiseAxis(i)
                  for i, idx in enumerate(normalized_indices)})
 
 
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
-                                   index_to_descr: PMap[str,
+                                   index_to_descr: Map[str,
                                                         EinsumAxisDescriptor],
-                                   index_to_axis_length: PMap[str,
+                                   index_to_axis_length: Map[str,
                                                                ShapeComponent],
                                    ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
-                                              PMap[str, EinsumAxisDescriptor],
-                                              PMap[str, ShapeComponent]]:
+                                              Map[str, EinsumAxisDescriptor],
+                                              Map[str, ShapeComponent]]:
     """
     Normalizes the subscript for an input operand in an einsum. Returns
     ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
@@ -1218,8 +1219,7 @@ def _normalize_einsum_in_subscript(subscript: str,
 
         in_operand_axis_descrs.append(index_to_descr[index_char])
 
-    return (tuple(in_operand_axis_descrs),
-            index_to_descr, index_to_axis_length)
+    return (tuple(in_operand_axis_descrs), index_to_descr, index_to_axis_length)
 
 
 def einsum(subscripts: str, *operands: Array,
@@ -1252,7 +1252,7 @@ def einsum(subscripts: str, *operands: Array,
         )
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
-    index_to_axis_length: PMap[str, ShapeComponent] = pmap()
+    index_to_axis_length: Map[str, ShapeComponent] = Map()
     access_descriptors = []
 
     for in_spec, in_operand in zip(in_specs, operands):
@@ -1287,7 +1287,7 @@ def einsum(subscripts: str, *operands: Array,
                                               if isinstance(descr,
                                                             EinsumElementwiseAxis)})
                                          ),
-                  redn_axis_to_redn_descr=pmap(redn_axis_to_redn_descr),
+                  redn_axis_to_redn_descr=Map(redn_axis_to_redn_descr),
                   index_to_access_descr=index_to_descr,
                   )
 
@@ -2158,7 +2158,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
     return IndexLambda(fill_value, shape, dtype, {},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=pmap())
+                       var_to_reduction_descr=Map())
 
 
 def zeros(shape: ConvertibleToShape, dtype: Any = float,
@@ -2204,7 +2204,7 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
                        shape=(N, M), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(2),
-                       var_to_reduction_descr=pmap())
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2299,7 +2299,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
                        shape=(size,), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(1),
-                       var_to_reduction_descr=pmap())
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2401,7 +2401,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(x.shape)),
-                       var_to_reduction_descr=pmap())
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2455,7 +2455,7 @@ def where(condition: ArrayOrScalar,
             bindings=bindings,
             tags=_get_default_tags(),
             axes=_get_default_axes(len(result_shape)),
-            var_to_reduction_descr=pmap())
+            var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2553,7 +2553,7 @@ def make_index_lambda(
                        dtype=dtype,
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=pmap(processed_var_to_reduction_descr))
+                       var_to_reduction_descr=Map(processed_var_to_reduction_descr))
 
 # }}}
 
@@ -2632,7 +2632,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        bindings={"in": array},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=pmap())
+                       var_to_reduction_descr=Map())
 
 
 def squeeze(array: Array) -> Array:

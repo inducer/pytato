@@ -45,7 +45,7 @@ from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytato.tags import AssumeNonNegative
 from pytools import UniqueNameGenerator
-from pyrsistent import pmap
+from immutables import Map
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -207,7 +207,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 axes=expr.axes,
                 bindings=bindings,
-                var_to_reduction_descr=pmap(),
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
@@ -255,7 +255,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings=bindings,
                 axes=expr.axes,
-                var_to_reduction_descr=pmap(),
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
@@ -282,7 +282,7 @@ class CodeGenPreprocessor(CopyMapper):
                            bindings={name: self.rec(bnd)
                                      for name, bnd in bindings.items()},
                            axes=expr.axes,
-                           var_to_reduction_descr=pmap(),
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
@@ -352,7 +352,7 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
-                           var_to_reduction_descr=pmap(var_to_redn_descr),
+                           var_to_reduction_descr=Map(var_to_redn_descr),
                            tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)
@@ -374,7 +374,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings=dict(_in0=array),
                 axes=expr.axes,
-                var_to_reduction_descr=pmap(),
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
@@ -447,7 +447,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=pmap(),
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 
@@ -513,7 +513,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=pmap(),
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 
@@ -576,7 +576,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=pmap(),
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 # }}}

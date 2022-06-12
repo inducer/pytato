@@ -34,7 +34,7 @@ import numpy as np
 
 from pytato.array import ShapeType, Array, make_index_lambda, ReductionDescriptor
 from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
-from pyrsistent import pmap, PMap
+from immutables import Map
 import pymbolic.primitives as prim
 
 # {{{ docs
@@ -181,7 +181,7 @@ def _normalize_reduction_axes(
 def _get_reduction_indices_bounds(shape: ShapeType,
                                   axes: Tuple[int, ...],
                                   ) -> Tuple[Sequence[prim.Variable],
-                                             PMap[str, Tuple[ScalarExpression,
+                                             Mapping[str, Tuple[ScalarExpression,
                                                              ScalarExpression]]]:
     """
     Given *shape* and reduction axes *axes*, produce a list of inames
@@ -213,7 +213,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, pmap(redn_bounds)
+    return indices, Map(redn_bounds)
 
 
 def _get_var_to_redn_descr(shape: ShapeType,
@@ -221,7 +221,7 @@ def _get_var_to_redn_descr(shape: ShapeType,
                            axis_to_reduction_descr: Optional[
                                Mapping[int,
                                        ReductionDescriptor]]
-                           ) -> PMap[str, ReductionDescriptor]:
+                           ) -> Mapping[str, ReductionDescriptor]:
     """
     :arg axis_to_reduction_descr: Mapping from a reduction axis to
         its instance of :class:`~pytato.ReductionDescriptor`. This mapping
@@ -258,7 +258,7 @@ def _get_var_to_redn_descr(shape: ShapeType,
             var_to_redn_descr[idx] = redn_descr
             n_redn_dims += 1
 
-    return pmap(var_to_redn_descr)
+    return Map(var_to_redn_descr)
 
 
 def _make_reduction_lambda(
