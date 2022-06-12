@@ -302,11 +302,14 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ShapeType, dtype: Any,
-                          tags: FrozenSet[Tag] = frozenset()) \
-                          -> DistributedRecv:
+                          axes: Optional[AxesT] = None,
+                          tags: FrozenSet[Tag] = frozenset()
+                          ) -> DistributedRecv:
     """Make a :class:`DistributedRecv` object."""
+    if axes is None:
+        axes = _get_default_axes(len(shape))
     dtype = np.dtype(dtype)
-    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags)
+    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags, axes=axes)
 
 # }}}
 
@@ -393,7 +396,7 @@ class _DistributedCommReplacer(CopyMapper):
         new_name = self.name_generator()
         self.input_name_to_recv_node[new_name] = expr
         return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
-                expr.dtype, tags=expr.tags)
+                                expr.dtype, tags=expr.tags, axes=expr.axes)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
