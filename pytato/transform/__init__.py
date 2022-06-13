@@ -223,6 +223,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 dtype=expr.dtype,
                 bindings=bindings,
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
@@ -289,6 +290,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg) for arg in expr.args),
                       axes=expr.axes,
+                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
@@ -399,6 +402,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
+                           var_to_reduction_descr=expr.var_to_reduction_descr,
                            tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
@@ -472,6 +476,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg, *args, **kwargs) for arg in expr.args),
                       axes=expr.axes,
+                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
@@ -1084,6 +1090,7 @@ class MPMSMaterializer(Mapper):
                                {bnd_name: bnd.expr
                                 for bnd_name, bnd in children_rec.items()},
                                axes=expr.axes,
+                               var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
@@ -1160,6 +1167,8 @@ class MPMSMaterializer(Mapper):
         new_expr = Einsum(expr.access_descriptors,
                           tuple(ary.expr for ary in rec_arrays),
                           expr.axes,
+                          expr.redn_axis_to_redn_descr,
+                          expr.index_to_access_descr,
                           expr.tags)
 
         return _materialize_if_mpms(new_expr,
@@ -1572,6 +1581,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 bindings={name: self.handle_edge(expr, child)
                           for name, child in sorted(expr.bindings.items())},
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
@@ -1580,6 +1590,8 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                      args=tuple(self.handle_edge(expr, arg, *args)
                                 for arg in expr.args),
                      axes=expr.axes,
+                     redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                     index_to_access_descr=expr.index_to_access_descr,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:

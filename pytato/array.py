@@ -42,6 +42,7 @@ Array Interface
 
 .. autoclass:: Array
 .. autoclass:: Axis
+.. autoclass:: ReductionDescriptor
 .. autoclass:: NamedArray
 .. autoclass:: DictOfNamedArrays
 .. autoclass:: AbstractResultWithNamedArrays
@@ -137,8 +138,8 @@ Internal API
 ------------
 
 .. autoclass:: EinsumAxisDescriptor
-.. autoclass:: ElementwiseAxis
-.. autoclass:: ReductionAxis
+.. autoclass:: EinsumElementwiseAxis
+.. autoclass:: EinsumReductionAxis
 .. autoclass:: NormalizedSlice
 
 Internal stuff that is only here because the documentation tool wants it
@@ -168,9 +169,9 @@ from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
-                                INT_CLASSES)
+                                INT_CLASSES, get_reduction_induction_variables)
 import re
-from pyrsistent import pmap, PMap
+from immutables import Map
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -318,6 +319,19 @@ class Axis(Taggable):
     tags: FrozenSet[Tag]
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> Taggable:
+        from dataclasses import replace
+        return replace(self, tags=tags)
+
+
+@dataclass(eq=True, frozen=True)
+class ReductionDescriptor(Taggable):
+    """
+    Records information about a reduction dimension in an
+    :class:`~pytato.Array`'.
+    """
+    tags: FrozenSet[Tag]
+
+    def _with_new_tags(self, tags: FrozenSet[Tag]) -> ReductionDescriptor:
         from dataclasses import replace
         return replace(self, tags=tags)
 
@@ -541,7 +555,8 @@ class Array(Taggable):
                 dtype=self.dtype,
                 bindings=bindings,
                 tags=_get_default_tags(),
-                axes=_get_default_axes(self.ndim))
+                axes=_get_default_axes(self.ndim),
+                var_to_reduction_descr=Map())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
@@ -826,9 +841,16 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
         expressions available for use in
         :attr:`expr`.
 
+    .. attribute:: var_to_reduction_descr
+
+        A mapping from reduction variables in :attr:`expr` to their
+        :class:`ReductionDescriptor`.
+
+    .. automethod:: with_tagged_reduction
     """
 
-    _fields = Array._fields + ("expr", "shape", "dtype", "bindings")
+    _fields = Array._fields + ("expr", "shape", "dtype",
+                               "bindings", "var_to_reduction_descr")
     _mapper_method = "map_index_lambda"
 
     def __init__(self,
@@ -837,12 +859,51 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             dtype: np.dtype[Any],
             bindings: Dict[str, Array],
             axes: AxesT,
+            var_to_reduction_descr: Mapping[str, ReductionDescriptor],
             tags: FrozenSet[Tag] = frozenset()):
 
         super().__init__(shape=shape, dtype=dtype, axes=axes, tags=tags)
 
         self.expr = expr
         self.bindings = bindings
+        self.var_to_reduction_descr = var_to_reduction_descr
+
+    def with_tagged_reduction(self,
+                              reduction_variable: str,
+                              tag: Tag) -> IndexLambda:
+        """
+        Returns a copy of *self* with the :class:`ReductionDescriptor`
+        associated with *reduction_variable* tagged with *tag*.
+
+        :arg reduction_variable: Name of reduction variable in *self* that
+            is to be tagged.
+        """
+        from pytato.diagnostic import NotAReductionAxis
+        if not isinstance(reduction_variable, str):
+            raise TypeError("Argument 'reduction_variable' expected to be str, "
+                            f"got {type(reduction_variable)}.")
+
+        assert (frozenset(self.var_to_reduction_descr)
+                == get_reduction_induction_variables(self.expr))
+
+        if reduction_variable not in self.var_to_reduction_descr:
+            raise NotAReductionAxis(
+                "reduction_variable can be one of"
+                f" '{self.var_to_reduction_descr.keys()}',"
+                f" got '{reduction_variable}'.")
+
+        assert isinstance(self.var_to_reduction_descr, Map)
+        new_var_to_redn_descr = self.var_to_reduction_descr.set(
+            reduction_variable,
+            self.var_to_reduction_descr[reduction_variable].tagged(tag))
+
+        return type(self)(expr=self.expr,
+                          shape=self.shape,
+                          dtype=self.dtype,
+                          bindings=self.bindings,
+                          axes=self.axes,
+                          var_to_reduction_descr=new_var_to_redn_descr,
+                          tags=self.tags)
 
 # }}}
 
@@ -858,20 +919,20 @@ class EinsumAxisDescriptor:
 
 
 @dataclass(eq=True, frozen=True)
-class ElementwiseAxis(EinsumAxisDescriptor):
+class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
-    nomenclature used by :class:`IndexLambda`, ``ElementwiseAxis(dim=1)`` would
+    nomenclature used by :class:`IndexLambda`, ``EinsumElementwiseAxis(dim=1)`` would
     correspond to indexing the array's axis as ``_1`` in the expression.
     """
     dim: int
 
 
 @dataclass(eq=True, frozen=True)
-class ReductionAxis(EinsumAxisDescriptor):
+class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
-    nomenclature used by :class:`IndexLambda`, ``ReductionAxis(dim=0)`` would
+    nomenclature used by :class:`IndexLambda`, ``EinsumReductionAxis(dim=0)`` would
     correspond to indexing the array's axis as ``_r0`` in the expression.
     """
     dim: int
@@ -899,22 +960,39 @@ class Einsum(Array):
 
        A :class:`tuple` of array over which the Einstein summation is being
        performed.
+
+    .. attribute:: access_descr_to_index
+
+       Mapping from the access descriptors to the index used by the user during
+       the instantiation of the :class:`Einsum` node. This is a strictly
+       non-semantic attribute and only present to support a friendlier
+       :meth:`with_tagged_reduction`.
+
+    .. automethod:: with_tagged_reduction
     """
-    _fields = Array._fields + ("access_descriptors", "args")
+    _fields = Array._fields + ("access_descriptors",
+                               "args",
+                               "redn_axis_to_redn_descr",
+                               "index_to_access_descr")
     _mapper_method = "map_einsum"
 
     def __init__(self,
                  access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...],
                  args: Tuple[Array, ...],
                  axes: AxesT,
+                 redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
+                                                  ReductionDescriptor],
+                 index_to_access_descr: Mapping[str, EinsumAxisDescriptor],
                  tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
         self.access_descriptors = access_descriptors
         self.args = args
+        self.redn_axis_to_redn_descr = redn_axis_to_redn_descr
+        self.index_to_access_descr = index_to_access_descr
 
     @memoize_method
     def _access_descr_to_axis_len(self
-                                  ) -> PMap[EinsumAxisDescriptor, ShapeComponent]:
+                                  ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
         from pytato.utils import are_shape_components_equal
         descr_to_axis_len: Dict[EinsumAxisDescriptor, ShapeComponent] = {}
 
@@ -936,7 +1014,7 @@ class Einsum(Array):
                 else:
                     descr_to_axis_len[descr] = arg_axis_len
 
-        return pmap(descr_to_axis_len)
+        return Map(descr_to_axis_len)
 
     # type-ignore reason: github.com/python/mypy/issues/1362
     @property  # type: ignore
@@ -945,9 +1023,9 @@ class Einsum(Array):
         iaxis_to_len: Dict[int, ShapeComponent] = {}
 
         for descr, axis_len in self._access_descr_to_axis_len().items():
-            if isinstance(descr, ElementwiseAxis):
+            if isinstance(descr, EinsumElementwiseAxis):
                 iaxis_to_len[descr.dim] = axis_len
-            elif isinstance(descr, ReductionAxis):
+            elif isinstance(descr, EinsumReductionAxis):
                 # reduction axes do not count towards einsum's shape
                 pass
             else:
@@ -963,16 +1041,63 @@ class Einsum(Array):
         return np.find_common_type(array_types=[arg.dtype for arg in self.args],
                                     scalar_types=[])
 
+    def with_tagged_reduction(self,
+                              redn_axis: Union[EinsumReductionAxis, str],
+                              tag: Tag) -> Einsum:
+        """
+        Returns a copy of *self* with the :class:`ReductionDescriptor`
+        associated with *redn_axis* tagged with *tag*.
+        """
+        from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+        # {{{ sanity checks
+
+        if isinstance(redn_axis, str):
+            try:
+                redn_axis_ = self.index_to_access_descr[redn_axis]
+            except KeyError:
+                raise InvalidEinsumIndex(f"'{redn_axis}': not a valid axis index.")
+            if isinstance(redn_axis_, EinsumReductionAxis):
+                redn_axis = redn_axis_
+            else:
+                raise NotAReductionAxis(f"'{redn_axis}' is not"
+                                        " a reduction axis.")
+        elif isinstance(redn_axis, EinsumReductionAxis):
+            pass
+        else:
+            raise TypeError("Argument 'redn_axis' expected to be"
+                            f" EinsumReductionAxis, got {type(redn_axis)}")
+
+        if redn_axis in self.redn_axis_to_redn_descr:
+            assert any(redn_axis in access_descrs
+                       for access_descrs in self.access_descriptors)
+        else:
+            raise ValueError(f"{redn_axis}: does not appear as a"
+                             " reduction access descriptor.")
+
+        # }}}
+
+        assert isinstance(self.redn_axis_to_redn_descr, Map)
+        new_redn_axis_to_redn_descr = self.redn_axis_to_redn_descr.set(
+            redn_axis, self.redn_axis_to_redn_descr[redn_axis].tagged(tag))
+
+        return type(self)(access_descriptors=self.access_descriptors,
+                          args=self.args,
+                          axes=self.axes,
+                          redn_axis_to_redn_descr=new_redn_axis_to_redn_descr,
+                          tags=self.tags,
+                          index_to_access_descr=self.index_to_access_descr,
+                          )
+
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
 
 
-def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
+def _normalize_einsum_out_subscript(subscript: str) -> Map[str,
                                                             EinsumAxisDescriptor]:
     """
     Normalizes the output subscript of an einsum (provided in the explicit
     mode). Returns a mapping from index name to an instance of
-    :class:`ElementwiseAxis`.
+    :class:`EinsumElementwiseAxis`.
 
     .. testsetup::
 
@@ -984,8 +1109,8 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
         >>> sorted(result.keys())
         ['i', 'j', 'k']
         >>> result["i"], result["j"], result["k"]
-        (ElementwiseAxis(dim=1), ElementwiseAxis(dim=2), ElementwiseAxis(dim=0))
-    """
+        (EinsumElementwiseAxis(dim=1), EinsumElementwiseAxis(dim=2), EinsumElementwiseAxis(dim=0))
+    """  # noqa: E501
 
     normalized_indices: List[str] = []
     acc = subscript.strip()
@@ -1007,19 +1132,19 @@ def _normalize_einsum_out_subscript(subscript: str) -> PMap[str,
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
-    return pmap({idx: ElementwiseAxis(i)
+    return Map({idx: EinsumElementwiseAxis(i)
                  for i, idx in enumerate(normalized_indices)})
 
 
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
-                                   index_to_descr: PMap[str,
+                                   index_to_descr: Map[str,
                                                         EinsumAxisDescriptor],
-                                   index_to_axis_length: PMap[str,
+                                   index_to_axis_length: Map[str,
                                                                ShapeComponent],
                                    ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
-                                              PMap[str, EinsumAxisDescriptor],
-                                              PMap[str, ShapeComponent]]:
+                                              Map[str, EinsumAxisDescriptor],
+                                              Map[str, ShapeComponent]]:
     """
     Normalizes the subscript for an input operand in an einsum. Returns
     ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
@@ -1086,24 +1211,28 @@ def _normalize_einsum_in_subscript(subscript: str,
                                                                 in_axis_len)
         else:
             redn_sr_no = len([descr for descr in index_to_descr.values()
-                              if isinstance(descr, ReductionAxis)])
-            redn_axis_descr = ReductionAxis(redn_sr_no)
+                              if isinstance(descr, EinsumReductionAxis)])
+            redn_axis_descr = EinsumReductionAxis(redn_sr_no)
             index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
             index_to_axis_length = index_to_axis_length.set(index_char,
                                                              in_axis_len)
 
         in_operand_axis_descrs.append(index_to_descr[index_char])
 
-    return (tuple(in_operand_axis_descrs),
-            index_to_descr, index_to_axis_length)
+    return (tuple(in_operand_axis_descrs), index_to_descr, index_to_axis_length)
 
 
-def einsum(subscripts: str, *operands: Array) -> Einsum:
+def einsum(subscripts: str, *operands: Array,
+           index_to_redn_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+           ) -> Einsum:
     """
     Einstein summation *subscripts* on *operands*.
     """
     if len(operands) == 0:
         raise ValueError("must specify at least one operand")
+
+    if index_to_redn_descr is None:
+        index_to_redn_descr = {}
 
     if "->" not in subscripts:
         # implicit-mode: output spec matched by alphabetical ordering of
@@ -1123,7 +1252,7 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
         )
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
-    index_to_axis_length: PMap[str, ShapeComponent] = pmap()
+    index_to_axis_length: Map[str, ShapeComponent] = Map()
     access_descriptors = []
 
     for in_spec, in_operand in zip(in_specs, operands):
@@ -1134,13 +1263,33 @@ def einsum(subscripts: str, *operands: Array) -> Einsum:
                                            index_to_axis_length))
         access_descriptors.append(access_descriptor)
 
+    # {{{ process index_to_redn_descr
+
+    redn_axis_to_redn_descr = {}
+    for idx, redn_descr in index_to_redn_descr.items():
+        descr = index_to_descr[idx]
+        if isinstance(descr, EinsumReductionAxis):
+            redn_axis_to_redn_descr[descr] = redn_descr
+        else:
+            raise ValueError(f"'{idx}' is not a reduction dim.")
+
+    for descr in index_to_descr.values():
+        if isinstance(descr, EinsumReductionAxis):
+            if descr not in redn_axis_to_redn_descr:
+                redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+
+    # }}}
+
     return Einsum(tuple(access_descriptors), operands,
                   tags=_get_default_tags(),
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
                                               if isinstance(descr,
-                                                            ElementwiseAxis)})
-                                         ))
+                                                            EinsumElementwiseAxis)})
+                                         ),
+                  redn_axis_to_redn_descr=Map(redn_axis_to_redn_descr),
+                  index_to_access_descr=index_to_descr,
+                  )
 
 # }}}
 
@@ -2008,7 +2157,8 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
 
     return IndexLambda(fill_value, shape, dtype, {},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=Map())
 
 
 def zeros(shape: ConvertibleToShape, dtype: Any = float,
@@ -2053,7 +2203,8 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
                        shape=(N, M), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(2))
+                       axes=_get_default_axes(2),
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2147,7 +2298,8 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     return IndexLambda(start + Variable("_0") * step,
                        shape=(size,), dtype=dtype, bindings={},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(1))
+                       axes=_get_default_axes(1),
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2248,7 +2400,8 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        dtype=np.dtype(np.bool8),
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(x.shape)))
+                       axes=_get_default_axes(len(x.shape)),
+                       var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2301,7 +2454,8 @@ def where(condition: ArrayOrScalar,
             dtype=dtype,
             bindings=bindings,
             tags=_get_default_tags(),
-            axes=_get_default_axes(len(result_shape)))
+            axes=_get_default_axes(len(result_shape)),
+            var_to_reduction_descr=Map())
 
 # }}}
 
@@ -2354,9 +2508,14 @@ def make_index_lambda(
         expression: Union[str, ScalarExpression],
         bindings: Dict[str, Array],
         shape: ShapeType,
-        dtype: Any) -> IndexLambda:
+        dtype: Any,
+        var_to_reduction_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+) -> IndexLambda:
     if isinstance(expression, str):
         raise NotImplementedError
+
+    if var_to_reduction_descr is None:
+        var_to_reduction_descr = {}
 
     # {{{ sanity checks
 
@@ -2369,12 +2528,32 @@ def make_index_lambda(
 
     # }}}
 
+    # {{{ process var_to_reduction_descr
+
+    processed_var_to_reduction_descr = {}
+    redn_vars = get_reduction_induction_variables(expression)
+
+    if not (frozenset(var_to_reduction_descr) <= redn_vars):
+        raise ValueError(f"'{frozenset(var_to_reduction_descr) - redn_vars}': not"
+                         " reduction induction variables.")
+
+    for redn_var in redn_vars:
+        redn_descr = var_to_reduction_descr.get(redn_var,
+                                           ReductionDescriptor(frozenset()))
+        if not isinstance(redn_descr, ReductionDescriptor):
+            raise TypeError(f"reduction_dim for {redn_var} expected to be"
+                            f" of type ReductionDescriptor, got {type(redn_descr)}.")
+        processed_var_to_reduction_descr[redn_var] = redn_descr
+
+    # }}}
+
     return IndexLambda(expr=expression,
                        bindings=bindings,
                        shape=shape,
                        dtype=dtype,
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=Map(processed_var_to_reduction_descr))
 
 # }}}
 
@@ -2452,7 +2631,8 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        dtype=array.dtype,
                        bindings={"in": array},
                        tags=_get_default_tags(),
-                       axes=_get_default_axes(len(shape)))
+                       axes=_get_default_axes(len(shape)),
+                       var_to_reduction_descr=Map())
 
 
 def squeeze(array: Array) -> Array:

@@ -45,6 +45,7 @@ from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytato.tags import AssumeNonNegative
 from pytools import UniqueNameGenerator
+from immutables import Map
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -206,6 +207,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 axes=expr.axes,
                 bindings=bindings,
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
@@ -253,6 +255,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings=bindings,
                 axes=expr.axes,
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> Array:
@@ -279,6 +282,7 @@ class CodeGenPreprocessor(CopyMapper):
                            bindings={name: self.rec(bnd)
                                      for name, bnd in bindings.items()},
                            axes=expr.axes,
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
@@ -287,12 +291,13 @@ class CodeGenPreprocessor(CopyMapper):
         from pytato.scalar_expr import Reduce
         from pytato.utils import (dim_to_index_lambda_components,
                                   are_shape_components_equal)
-        from pytato.array import ElementwiseAxis, ReductionAxis
+        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
 
         bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
         redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
         args_as_pym_expr: List[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
+        var_to_redn_descr = {}
 
         # {{{ add bindings coming from the shape expressions
 
@@ -308,10 +313,10 @@ class CodeGenPreprocessor(CopyMapper):
                     subscript_indices.append(0)
                     continue
 
-                if isinstance(axis, ElementwiseAxis):
+                if isinstance(axis, EinsumElementwiseAxis):
                     subscript_indices.append(prim.Variable(f"_{axis.dim}"))
                 else:
-                    assert isinstance(axis, ReductionAxis)
+                    assert isinstance(axis, EinsumReductionAxis)
                     redn_idx_name = f"_r{axis.dim}"
                     if redn_idx_name not in redn_bounds:
                         # convert the ShapeComponent to a ScalarExpression
@@ -322,6 +327,8 @@ class CodeGenPreprocessor(CopyMapper):
 
                         bindings.update({k: self.rec(v)
                                          for k, v in redn_bound_bindings.items()})
+                        var_to_redn_descr[redn_idx_name] = (
+                            expr.redn_axis_to_redn_descr[axis])
 
                     subscript_indices.append(prim.Variable(redn_idx_name))
 
@@ -345,6 +352,7 @@ class CodeGenPreprocessor(CopyMapper):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
+                           var_to_reduction_descr=Map(var_to_redn_descr),
                            tags=expr.tags)
 
     # {{{ index remapping (roll, axis permutation, slice)
@@ -366,6 +374,7 @@ class CodeGenPreprocessor(CopyMapper):
                 dtype=expr.dtype,
                 bindings=dict(_in0=array),
                 axes=expr.axes,
+                var_to_reduction_descr=Map(),
                 tags=expr.tags)
 
     def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
@@ -438,6 +447,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 
@@ -503,6 +513,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 
@@ -565,6 +576,7 @@ class CodeGenPreprocessor(CopyMapper):
                            shape=expr.shape,
                            dtype=expr.dtype,
                            axes=expr.axes,
+                           var_to_reduction_descr=Map(),
                            tags=expr.tags,
                            )
 # }}}
