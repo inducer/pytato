@@ -61,6 +61,32 @@ __doc__ = """
 """
 
 
+# {{{ _generate_name_for_temp
+
+def _generate_name_for_temp(
+        expr: Array, var_name_gen: UniqueNameGenerator,
+        default_prefix: str = "_pt_temp") -> str:
+    from pytato.tags import _BaseNameTag, Named, PrefixNamed
+    if expr.tags_of_type(_BaseNameTag):
+        if expr.tags_of_type(Named):
+            name_tag, = expr.tags_of_type(Named)
+            if var_name_gen.is_name_conflicting(name_tag.name):
+                raise ValueError(f"Cannot assign the name {name_tag.name} to the"
+                                 f" temporary corresponding to {expr} as it "
+                                 "conflicts with an existing name. ")
+            var_name_gen.add_name(name_tag.name)
+            return name_tag.name
+        elif expr.tags_of_type(PrefixNamed):
+            prefix_tag, = expr.tags_of_type(PrefixNamed)
+            return var_name_gen(prefix_tag.prefix)
+        else:
+            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
+    else:
+        return var_name_gen(default_prefix)
+
+# }}}
+
+
 # {{{ preprocessing for codegen
 
 class CodeGenPreprocessor(CopyMapper):
@@ -159,9 +185,7 @@ class CodeGenPreprocessor(CopyMapper):
                          entrypoint=entrypoint)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        name = expr.name
-        if name is None:
-            name = self.var_name_gen("_pt_data")
+        name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
 
         self.bound_arguments[name] = expr.data
         return Placeholder(name=name,

@@ -47,9 +47,10 @@ from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
-from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
+from pytato.tags import ImplStored, Named, PrefixNamed
 from pytools.tag import Tag
 import pytato.reductions as red
+from pytato.codegen import _generate_name_for_temp
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -397,7 +398,7 @@ class CodeGenMapper(Mapper):
         # {{{ implementation tag
 
         if expr.tags_of_type(ImplStored):
-            name = _generate_name_for_temp(expr, state)
+            name = _generate_name_for_temp(expr, state.var_name_gen)
             result = StoredResult(name, expr.ndim,
                                   frozenset([add_store(name, expr,
                                                        result, state,
@@ -411,7 +412,7 @@ class CodeGenMapper(Mapper):
             state: CodeGenState) -> None:
         for key in sorted(expr.keys()):
             subexpr = expr[key].expr
-            name = _generate_name_for_temp(subexpr, state)
+            name = _generate_name_for_temp(subexpr, state.var_name_gen)
             insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
                     output_to_temporary=True, cgen_mapper=self)
             state.results[subexpr] = state.results[expr[key]] = (
@@ -462,7 +463,8 @@ class CodeGenMapper(Mapper):
             # assignees order
             if isinstance(arg, lp.ArrayArg):
                 if arg.is_output:
-                    assignee_name = _generate_name_for_temp(expr[arg.name], state)
+                    assignee_name = _generate_name_for_temp(
+                            expr[arg.name], state.var_name_gen)
                     assignees.append(_get_sub_array_ref(expr[arg.name],
                                                         assignee_name))
 
@@ -492,7 +494,7 @@ class CodeGenMapper(Mapper):
                     else:
                         # did not find a stored result for the sub-expression, store
                         # it and then pass it to the call
-                        name = _generate_name_for_temp(pt_arg, state)
+                        name = _generate_name_for_temp(pt_arg, state.var_name_gen)
                         store_insn_id = add_store(name, pt_arg,
                                 pt_arg_rec,
                                 state, output_to_temporary=True,
@@ -759,25 +761,6 @@ def domain_for_shape(dim_names: Tuple[str, ...],
         dom, = doms
 
     return dom
-
-
-def _generate_name_for_temp(expr: Array, state: CodeGenState) -> str:
-    if expr.tags_of_type(_BaseNameTag):
-        if expr.tags_of_type(Named):
-            name_tag, = expr.tags_of_type(Named)
-            if state.var_name_gen.is_name_conflicting(name_tag.name):
-                raise ValueError(f"Cannot assign the name {name_tag.name} to the"
-                                 f" temporary corresponding to {expr} as it "
-                                 "conflicts with an existing name. ")
-            state.var_name_gen.add_name(name_tag.name)
-            return name_tag.name
-        elif expr.tags_of_type(PrefixNamed):
-            prefix_tag, = expr.tags_of_type(PrefixNamed)
-            return state.var_name_gen(prefix_tag.prefix)
-        else:
-            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
-    else:
-        return state.var_name_gen("_pt_temp")
 
 
 def _filter_tags_not_of_type(expr: Array,
