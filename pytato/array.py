@@ -1722,20 +1722,22 @@ class DataWrapper(InputArgumentBase):
         (i.e. the very same instance).
     """
 
-    _fields = InputArgumentBase._fields + ("data", "shape", "name")
+    _fields = InputArgumentBase._fields + ("data", "shape")
     _mapper_method = "map_data_wrapper"
 
     def __init__(self,
-            name: Optional[str],
             data: DataInterface,
             shape: ShapeType,
             axes: AxesT,
             tags: FrozenSet[Tag] = frozenset()):
         super().__init__(axes=axes, tags=tags)
 
-        self.name = name
         self.data = data
         self._shape = shape
+
+    @property
+    def name(self) -> None:
+        return None
 
     def __hash__(self) -> int:
         return id(self)
@@ -2100,6 +2102,7 @@ def make_size_param(name: str,
 
 
 def make_data_wrapper(data: DataInterface,
+        *,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
         tags: FrozenSet[Tag] = frozenset(),
@@ -2115,6 +2118,16 @@ def make_data_wrapper(data: DataInterface,
     if shape is None:
         shape = data.shape
 
+    if name is not None:
+        from warnings import warn
+        warn("Naming DataWrappers is deprecated and "
+                "will be converted to a PrefixNamed tag. "
+                "This will stop working in 2023. "
+                "Use pytato.tags.{Named,PrefixNamed} instead.",
+                DeprecationWarning, stacklevel=2)
+        from pytato.tags import PrefixNamed
+        tags = tags | frozenset({PrefixNamed(name)})
+
     shape = normalize_shape(shape)
 
     if axes is None:
@@ -2124,9 +2137,7 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(name, data, shape,
-                       axes=axes,
-                       tags=(tags | _get_default_tags()))
+    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()))
 
 # }}}
 

@@ -276,7 +276,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return self._map_index_base(expr)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        return DataWrapper(name=expr.name,
+        return DataWrapper(
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 axes=expr.axes,
@@ -462,7 +462,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_data_wrapper(self, expr: DataWrapper,
                          *args: Any, **kwargs: Any) -> Array:
-        return DataWrapper(name=expr.name,
+        return DataWrapper(
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
                 axes=expr.axes,
@@ -1666,7 +1666,6 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 
     def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
         return DataWrapper(
-                name=expr.name,
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
                 axes=expr.axes,
