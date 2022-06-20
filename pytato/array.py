@@ -502,12 +502,11 @@ class Array(Taggable):
 
     @memoize_method
     def __hash__(self) -> int:
-        from pytato.equality import preprocess_tags_for_equality
         attrs = []
         for field in self._fields:
             attr = getattr(self, field)
             if field == "tags":
-                attr = preprocess_tags_for_equality(attr)
+                attr = Taggable.__hash__(self)
             if isinstance(attr, dict):
                 attr = frozenset(attr.items())
             attrs.append(attr)
