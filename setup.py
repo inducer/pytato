@@ -36,7 +36,8 @@ setup(
     install_requires=[
         "loopy>=2020.2",
         "pytools>=2022.1.8",
-        "pyrsistent"
+        "pyrsistent",
+        "immutables",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",

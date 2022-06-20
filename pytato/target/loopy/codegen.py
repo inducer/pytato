@@ -38,7 +38,8 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-        SizeParam, Placeholder, NamedArray, DataWrapper)
+                          SizeParam, Placeholder, NamedArray, DataWrapper,
+                          ReductionDescriptor)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
@@ -46,9 +47,10 @@ from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
-from pytato.tags import ImplStored, _BaseNameTag, Named, PrefixNamed
+from pytato.tags import ImplStored, Named, PrefixNamed
 from pytools.tag import Tag
 import pytato.reductions as red
+from pytato.codegen import _generate_name_for_temp
 
 # set in doc/conf.py
 if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
@@ -155,6 +157,7 @@ class LocalExpressionContext:
     num_indices: int
     local_namespace: Mapping[str, Array]
     reduction_bounds: ReductionBounds
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
     def lookup(self, name: str) -> Array:
         return self.local_namespace[name]
@@ -163,6 +166,8 @@ class LocalExpressionContext:
              reduction_bounds: Optional[ReductionBounds] = None,
              num_indices: Optional[int] = None,
              local_namespace: Optional[Mapping[str, Array]] = None,
+             var_to_reduction_descr: Optional[
+                 Mapping[str, ReductionDescriptor]] = None,
              ) -> LocalExpressionContext:
         if reduction_bounds is None:
             reduction_bounds = self.reduction_bounds
@@ -170,9 +175,12 @@ class LocalExpressionContext:
             num_indices = self.num_indices
         if local_namespace is None:
             local_namespace = self.local_namespace
+        if var_to_reduction_descr is None:
+            var_to_reduction_descr = self.var_to_reduction_descr
         return LocalExpressionContext(reduction_bounds=reduction_bounds,
                                       num_indices=num_indices,
-                                      local_namespace=local_namespace)
+                                      local_namespace=local_namespace,
+                                      var_to_reduction_descr=var_to_reduction_descr)
 
 # }}}
 
@@ -288,9 +296,9 @@ class CodeGenState:
     insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.var_name_gen = self._t_unit["_pt_kernel"].get_var_name_generator()
+        self.var_name_gen = self._t_unit.default_entrypoint.get_var_name_generator()
         self.insn_id_gen = (
-                self._t_unit["_pt_kernel"].get_instruction_id_generator())
+                self._t_unit.default_entrypoint.get_instruction_id_generator())
 
     @property
     def t_unit(self) -> lp.TranslationUnit:
@@ -301,7 +309,7 @@ class CodeGenState:
         """
         Returns the entry kernel of the loopy kernel being built.
         """
-        return self._t_unit["_pt_kernel"]
+        return self._t_unit.default_entrypoint
 
     def update_kernel(self, kernel: lp.LoopKernel) -> None:
         self._t_unit = self._t_unit.with_kernel(kernel)
@@ -374,9 +382,11 @@ class CodeGenMapper(Mapper):
             return state.results[expr]
 
         prstnt_ctx = PersistentExpressionContext(state)
-        local_ctx = LocalExpressionContext(local_namespace=expr.bindings,
-                                              num_indices=expr.ndim,
-                                              reduction_bounds={})
+        local_ctx = LocalExpressionContext(
+            local_namespace=expr.bindings,
+            num_indices=expr.ndim,
+            reduction_bounds={},
+            var_to_reduction_descr=expr.var_to_reduction_descr)
         loopy_expr = self.exprgen_mapper(expr.expr, prstnt_ctx, local_ctx)
 
         result: ImplementedResult = InlinedResult(loopy_expr,
@@ -388,7 +398,7 @@ class CodeGenMapper(Mapper):
         # {{{ implementation tag
 
         if expr.tags_of_type(ImplStored):
-            name = _generate_name_for_temp(expr, state)
+            name = _generate_name_for_temp(expr, state.var_name_gen)
             result = StoredResult(name, expr.ndim,
                                   frozenset([add_store(name, expr,
                                                        result, state,
@@ -402,7 +412,7 @@ class CodeGenMapper(Mapper):
             state: CodeGenState) -> None:
         for key in sorted(expr.keys()):
             subexpr = expr[key].expr
-            name = _generate_name_for_temp(subexpr, state)
+            name = _generate_name_for_temp(subexpr, state.var_name_gen)
             insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
                     output_to_temporary=True, cgen_mapper=self)
             state.results[subexpr] = state.results[expr[key]] = (
@@ -453,7 +463,8 @@ class CodeGenMapper(Mapper):
             # assignees order
             if isinstance(arg, lp.ArrayArg):
                 if arg.is_output:
-                    assignee_name = _generate_name_for_temp(expr[arg.name], state)
+                    assignee_name = _generate_name_for_temp(
+                            expr[arg.name], state.var_name_gen)
                     assignees.append(_get_sub_array_ref(expr[arg.name],
                                                         assignee_name))
 
@@ -483,7 +494,7 @@ class CodeGenMapper(Mapper):
                     else:
                         # did not find a stored result for the sub-expression, store
                         # it and then pass it to the call
-                        name = _generate_name_for_temp(pt_arg, state)
+                        name = _generate_name_for_temp(pt_arg, state.var_name_gen)
                         store_insn_id = add_store(name, pt_arg,
                                 pt_arg_rec,
                                 state, output_to_temporary=True,
@@ -507,8 +518,9 @@ class CodeGenMapper(Mapper):
                     depends_on.update(pt_arg_rec.depends_on)
                 else:
                     local_ctx = LocalExpressionContext(reduction_bounds={},
-                                                          num_indices=0,
-                                                          local_namespace={})
+                                                       num_indices=0,
+                                                       local_namespace={},
+                                                       var_to_reduction_descr={})
                     params.append(self.exprgen_mapper(pt_arg,
                                                       prstnt_ctx,
                                                       local_ctx))
@@ -650,6 +662,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         kernel = state.kernel
         state.update_kernel(kernel.copy(domains=kernel.domains+[domain]))
 
+        # {{{ pytato tags -> loopy tags
+
+        for name_in_expr, name_in_kernel in sorted(unique_names_mapping.items()):
+            for tag in local_ctx.var_to_reduction_descr[name_in_expr].tags:
+                if all(not isinstance(tag, tag_t)
+                       for tag_t in self.codegen_mapper.axis_tag_t_to_not_propagate):
+                    state.update_kernel(lp.tag_inames(state.kernel,
+                                                      {name_in_kernel: tag}))
+
+        # }}}
+
         return inner_expr
 
 # }}}
@@ -738,25 +761,6 @@ def domain_for_shape(dim_names: Tuple[str, ...],
         dom, = doms
 
     return dom
-
-
-def _generate_name_for_temp(expr: Array, state: CodeGenState) -> str:
-    if expr.tags_of_type(_BaseNameTag):
-        if expr.tags_of_type(Named):
-            name_tag, = expr.tags_of_type(Named)
-            if state.var_name_gen.is_name_conflicting(name_tag.name):
-                raise ValueError(f"Cannot assign the name {name_tag.name} to the"
-                                 f" temporary corresponding to {expr} as it "
-                                 "conflicts with an existing name. ")
-            state.var_name_gen.add_name(name_tag.name)
-            return name_tag.name
-        elif expr.tags_of_type(PrefixNamed):
-            prefix_tag, = expr.tags_of_type(PrefixNamed)
-            return state.var_name_gen(prefix_tag.prefix)
-        else:
-            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
-    else:
-        return state.var_name_gen("_pt_temp")
 
 
 def _filter_tags_not_of_type(expr: Array,
@@ -871,9 +875,10 @@ def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
 
 
 def get_initial_codegen_state(target: LoopyTarget,
-        options: lp.Options) -> CodeGenState:
+        options: lp.Options,
+        function_name: str) -> CodeGenState:
     kernel = lp.make_kernel("{:}", [],
-            name="_pt_kernel",
+            name=function_name,
             target=target.get_loopy_target(),
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
@@ -888,6 +893,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    target: Optional[LoopyTarget] = None,
                    options: Optional[lp.Options] = None,
                    *,
+                   function_name: str = "_pt_kernel",
                    cl_device: Optional["pyopencl.Device"] = None,
                    array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
                        ImplStored, Named, PrefixNamed]),
@@ -928,11 +934,13 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
     del result
 
+    if cl_device is not None:
+        from warnings import warn
+        warn("Passing 'cl_device' is deprecated. This will stop working in 2023.",
+                DeprecationWarning, stacklevel=2)
+
     if target is None:
-        target = LoopyPyOpenCLTarget(device=cl_device)
-    else:
-        if cl_device is not None:
-            raise TypeError("may not pass both 'target' and 'cl_device'")
+        target = LoopyPyOpenCLTarget()
 
     assert isinstance(target, LoopyTarget)
 
@@ -953,7 +961,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         raise ValueError("options.result_is_dict is expected to match "
                 "whether the returned value is a dictionary")
 
-    state = get_initial_codegen_state(target, options)
+    state = get_initial_codegen_state(target, options, function_name=function_name)
 
     from pytato.transform import InputGatherer
     ing = InputGatherer()

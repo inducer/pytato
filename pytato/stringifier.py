@@ -28,8 +28,10 @@ import numpy as np
 
 from typing import Any, Dict, Tuple
 from pytato.transform import Mapper
-from pytato.array import Array, DataWrapper, DictOfNamedArrays, Axis
+from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
+                          IndexLambda, ReductionDescriptor)
 from pytato.loopy import LoopyCall
+from pyrsistent import PMap
 
 
 __doc__ = """
@@ -74,7 +76,7 @@ class Reprifier(Mapper):
     def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, dict):
+        elif isinstance(expr, (dict, PMap)):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val in expr.items())
@@ -105,6 +107,14 @@ class Reprifier(Mapper):
         if all(axis == Axis(frozenset()) for axis in expr.axes):
             # prettify: if trivial 'expr.axes' => don't print.
             fields = tuple(field for field in fields if field != "axes")
+
+        if (isinstance(expr, IndexLambda)
+                and all(redn_descr == ReductionDescriptor(frozenset())
+                        for redn_descr in expr.var_to_reduction_descr.values())):
+            # prettify: if trivial 'expr.var_to_reduction_descr' => don't print.
+            fields = tuple(field
+                           for field in fields
+                           if field != "var_to_reduction_descr")
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field}="

@@ -26,7 +26,8 @@ THE SOFTWARE.
 
 from numbers import Number
 from typing import (
-        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING)
+        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
+        Iterable)
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -40,6 +41,7 @@ from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
 from pymbolic.mapper.stringifier import (StringifyMapper as
         StringifyMapperBase)
+from pymbolic.mapper import CombineMapper as CombineMapperBase
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 import pymbolic.primitives as prim
 import numpy as np
@@ -96,6 +98,13 @@ class WalkMapper(WalkMapperBase):
         self.rec(expr.inner_expr)
 
         self.post_visit(expr)
+
+
+class CombineMapper(CombineMapperBase):
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
+        return self.combine([*(self.rec(bnd, *args, **kwargs)
+                               for _, bnd in sorted(expr.bounds.items())),
+                             self.rec(expr.inner_expr, *args, **kwargs)])
 
 
 class IdentityMapper(IdentityMapperBase):
@@ -267,5 +276,28 @@ class Reduce(ExpressionBase):
     mapper_method = "map_reduce"
 
 # }}}
+
+
+class InductionVariableCollector(CombineMapper):
+    def combine(self, values: Iterable[FrozenSet[str]]) -> FrozenSet[str]:
+        from functools import reduce
+        return reduce(frozenset.union, values, frozenset())
+
+    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:  # type: ignore[override]
+        return self.combine([frozenset(expr.bounds.keys()),
+                             super().map_reduce(expr)])
+
+    def map_algebraic_leaf(self, expr: prim.Expression) -> FrozenSet[str]:
+        return frozenset()
+
+    def map_constant(self, expr: Any) -> FrozenSet[str]:
+        return frozenset()
+
+
+def get_reduction_induction_variables(expr: prim.Expression) -> FrozenSet[str]:
+    """
+    Returns the induction variables for the reduction nodes.
+    """
+    return InductionVariableCollector()(expr)  # type: ignore[no-any-return]
 
 # vim: foldmethod=marker

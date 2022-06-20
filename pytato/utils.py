@@ -38,6 +38,7 @@ from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES, INT_CLASSES, BoolT)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
+from pyrsistent import pmap
 
 
 __doc__ = """
@@ -205,6 +206,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                        dtype=result_dtype,
                        bindings=bindings,
                        tags=_get_default_tags(),
+                       var_to_reduction_descr=pmap(),
                        axes=_get_default_axes(len(result_shape)))
 
 

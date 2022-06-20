@@ -155,9 +155,10 @@ class GraphPartitioner(EdgeCachedMapper):
                             "partitioning")
 
                 ph = make_placeholder(ph_name,
-                    shape=child.shape,
-                    dtype=child.dtype,
-                    tags=child.tags)
+                                      shape=child.shape,
+                                      dtype=child.dtype,
+                                      tags=child.tags,
+                                      axes=child.axes)
 
                 self.var_name_to_result[ph_name] = self.rec(child)
 

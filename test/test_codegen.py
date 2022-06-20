@@ -1492,9 +1492,21 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
     x = pt.make_placeholder("x", (10, 4), np.float32)
     y = 2 * x
     y = (y
-         .with_tagged_axis(0, (FooInameTag(), BazInameTag()))
-         .with_tagged_axis(1, (BarInameTag(), BazInameTag())))
-    t_unit = pt.generate_loopy({"y": y},
+         .with_tagged_axis(0, FooInameTag())
+         .with_tagged_axis(1, BarInameTag()))
+    x_sum = pt.sum(
+        x,
+        axis_to_reduction_descr={
+            1: pt.ReductionDescriptor(frozenset([FooInameTag()]))})
+    x_einsum = pt.einsum(
+        "ij->",
+        x,
+        index_to_redn_descr={"i": pt.ReductionDescriptor(frozenset([BarInameTag()]))}
+    )
+
+    t_unit = pt.generate_loopy({"y": y,
+                                "x_sum": x_sum,
+                                "x_einsum": x_einsum},
                                axis_tag_t_to_not_propagate=frozenset([BazInameTag])
                                ).program
 
@@ -1514,6 +1526,14 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
     assert len(t_unit
                .default_entrypoint
                .inames["y_dim1"]
+               .tags_of_type(BarInameTag)) == 1
+    assert len(t_unit
+               .default_entrypoint
+               .inames["_pt_sum_r1"]
+               .tags_of_type(FooInameTag)) == 1
+    assert len(t_unit
+               .default_entrypoint
+               .inames["_pt_sum_r0_0"]
                .tags_of_type(BarInameTag)) == 1
 
     # there shouldn't be any inames tagged with BazInameTag

@@ -224,6 +224,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 dtype=expr.dtype,
                 bindings=bindings,
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
@@ -276,7 +277,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return self._map_index_base(expr)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        return DataWrapper(name=expr.name,
+        return DataWrapper(
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 axes=expr.axes,
@@ -290,6 +291,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg) for arg in expr.args),
                       axes=expr.axes,
+                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
@@ -400,6 +403,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                            dtype=expr.dtype,
                            bindings=bindings,
                            axes=expr.axes,
+                           var_to_reduction_descr=expr.var_to_reduction_descr,
                            tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
@@ -459,7 +463,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_data_wrapper(self, expr: DataWrapper,
                          *args: Any, **kwargs: Any) -> Array:
-        return DataWrapper(name=expr.name,
+        return DataWrapper(
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
                 axes=expr.axes,
@@ -473,6 +477,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         return Einsum(expr.access_descriptors,
                       tuple(self.rec(arg, *args, **kwargs) for arg in expr.args),
                       axes=expr.axes,
+                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags)
 
     def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
@@ -1085,6 +1091,7 @@ class MPMSMaterializer(Mapper):
                                {bnd_name: bnd.expr
                                 for bnd_name, bnd in children_rec.items()},
                                axes=expr.axes,
+                               var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
@@ -1161,6 +1168,8 @@ class MPMSMaterializer(Mapper):
         new_expr = Einsum(expr.access_descriptors,
                           tuple(ary.expr for ary in rec_arrays),
                           expr.axes,
+                          expr.redn_axis_to_redn_descr,
+                          expr.index_to_access_descr,
                           expr.tags)
 
         return _materialize_if_mpms(new_expr,
@@ -1588,6 +1597,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 bindings={name: self.handle_edge(expr, child)
                           for name, child in sorted(expr.bindings.items())},
                 axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
@@ -1596,6 +1606,8 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                      args=tuple(self.handle_edge(expr, arg, *args)
                                 for arg in expr.args),
                      axes=expr.axes,
+                     redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                     index_to_access_descr=expr.index_to_access_descr,
                      tags=expr.tags)
 
     def map_stack(self, expr: Stack, *args: Any) -> Stack:
@@ -1670,7 +1682,6 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 
     def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
         return DataWrapper(
-                name=expr.name,
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
                 axes=expr.axes,
@@ -1792,7 +1803,7 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
     array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
 
     if data_wrappers_encountered:
-        logger.info("data wrapper de-duplication: "
+        logger.debug("data wrapper de-duplication: "
                 "%d encountered, %d kept, %d eliminated",
                 data_wrappers_encountered,
                 len(data_wrapper_cache),

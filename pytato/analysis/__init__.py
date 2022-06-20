@@ -227,7 +227,8 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     would compute the same result as *expr*.
     """
 
-    from pytato.array import ElementwiseAxis, ReductionAxis, EinsumAxisDescriptor
+    from pytato.array import (EinsumElementwiseAxis, EinsumReductionAxis,
+                              EinsumAxisDescriptor)
 
     if not isinstance(expr, Einsum):
         raise TypeError(f"{expr} expected to be Einsum, got {type(expr)}.")
@@ -243,7 +244,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
     for idim, idx in enumerate(_get_indices_from_input_subscript(out_spec,
                                                                  is_output=True)):
-        index_to_descrs[idx] = ElementwiseAxis(idim)
+        index_to_descrs[idx] = EinsumElementwiseAxis(idim)
 
     if len(in_spec.split(",")) != len(expr.args):
         return False
@@ -263,7 +264,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
                 if index_to_descrs[idx] != access_descr:
                     return False
             except KeyError:
-                if not isinstance(access_descr, ReductionAxis):
+                if not isinstance(access_descr, EinsumReductionAxis):
                     return False
                 index_to_descrs[idx] = access_descr
 

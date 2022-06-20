@@ -52,3 +52,16 @@ class UnknownIndexLambdaExpr(ValueError):
     inferred.
     """
     pass
+
+
+class InvalidEinsumIndex(ValueError):
+    """
+    Raised when an einsum index was referred by an invalid value.
+    """
+
+
+class NotAReductionAxis(ValueError):
+    """
+    Raised when a :class:`pytato.ReductionDescriptor` was referred by an invalid
+    value.
+    """
