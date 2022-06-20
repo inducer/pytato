@@ -143,8 +143,13 @@ Internal API
 .. autoclass:: EinsumReductionAxis
 .. autoclass:: NormalizedSlice
 
-.. autoclass:: _PytatoFrameSummary
-.. autoclass:: _PytatoStackSummary
+Internal classes for traceback
+------------------------------
+
+Please consider these undocumented and subject to change at any time.
+
+.. class:: _PytatoFrameSummary
+.. class:: _PytatoStackSummary
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
