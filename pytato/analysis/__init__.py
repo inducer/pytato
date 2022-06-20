@@ -404,16 +404,17 @@ class TagCountMapper(CombineMapper[int]):
 
     # type-ignore reason: incompatible return type with super class
     def rec(self, expr: ArrayOrNames) -> int:  # type: ignore
-        if expr in self.cache:
+        try:
             return self.cache[expr]
+        except KeyError:
+            s = super().rec(expr)
+            if isinstance(expr, Array) and self._tags <= expr.tags:
+                result = 1 + s
+            else:
+                result = 0 + s
 
-        if isinstance(expr, Array) and self._tags <= expr.tags:
-            result = 1 + super().rec(expr)
-        else:
-            result = 0 + super().rec(expr)
-
-        self.cache[expr] = 0
-        return result
+            self.cache[expr] = 0
+            return result
 
 
 def get_num_tags_of_type(
