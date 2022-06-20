@@ -427,3 +427,5 @@ def get_num_tags_of_type(
     return tcm(outputs)
 
 # }}}
+
+# vim: foldmethod=marker
