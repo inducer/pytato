@@ -96,7 +96,7 @@ def first_true(iterable: Iterable[T], default: T,
 
 
 def _get_einsum_subscripts(einsum: Einsum) -> str:
-    from pytato.array import (ElementwiseAxis, EinsumAxisDescriptor)
+    from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
 
     idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
     idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
@@ -113,7 +113,7 @@ def _get_einsum_subscripts(einsum: Einsum) -> str:
 
         input_specs.append(spec)
 
-    output_spec = "".join(axis_descr_to_idx[ElementwiseAxis(i)]
+    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
                           for i in range(einsum.ndim))
 
     return f"{', '.join(input_specs)} -> {output_spec}"

@@ -130,7 +130,9 @@ class EqualityComparer:
                         else dim1 == dim2
                         for dim1, dim2 in zip(expr1.shape, expr2.shape))
                 and expr1.tags == expr2.tags
-                and expr1.axes == expr2.axes)
+                and expr1.axes == expr2.axes
+                and expr1.var_to_reduction_descr == expr2.var_to_reduction_descr
+                )
 
     def map_stack(self, expr1: Stack, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -212,6 +214,7 @@ class EqualityComparer:
                                               expr2.args))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
+                and expr1.redn_axis_to_redn_descr == expr2.redn_axis_to_redn_descr
                 )
 
     def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:

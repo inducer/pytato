@@ -85,14 +85,14 @@ class LoopyPyOpenCLTarget(LoopyTarget):
     """
 
     def __init__(self, device: Optional["pyopencl.Device"] = None):
-        import pyopencl as cl
-        if device is not None and not isinstance(device, cl.Device):
-            raise TypeError("device must be cl.Device or None")
-        self.device = device
+        if device is not None:
+            from warnings import warn
+            warn("Passing 'device' is deprecated and will stop working in 2023.",
+                    DeprecationWarning, stacklevel=2)
 
     def get_loopy_target(self) -> "loopy.LoopyPyOpenCLTarget":
         import loopy as lp
-        return lp.PyOpenCLTarget(self.device)
+        return lp.PyOpenCLTarget()
 
     def bind_program(self, program: loopy.TranslationUnit,
                      bound_arguments: Mapping[str, Any]) -> BoundProgram:
@@ -138,7 +138,6 @@ class BoundPyOpenCLProgram(BoundProgram):
 
     def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
                  allocator=None, wait_for=None, out_host=None,
-                 entrypoint="_pt_kernel",
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
@@ -158,7 +157,7 @@ class BoundPyOpenCLProgram(BoundProgram):
 
         return self.program(queue,
                             allocator=allocator, wait_for=wait_for,
-                            out_host=out_host, entrypoint=entrypoint,
+                            out_host=out_host,
                             **updated_kwargs)
 
     @property
@@ -166,7 +165,7 @@ class BoundPyOpenCLProgram(BoundProgram):
         if isinstance(self.program, loopy.LoopKernel):
             return self.program
         else:
-            return self.program["_pt_kernel"]
+            return self.program.default_entrypoint
 
 
 # vim: foldmethod=marker

@@ -52,6 +52,7 @@ def run_test_with_mpi(num_ranks, f, *args):
     check_call([
         "mpiexec", "-np", str(num_ranks),
         "-x", "RUN_WITHIN_MPI=1",
+        "--oversubscribe",
         "-x", f"INVOCATION_INFO={invocation_info}",
         sys.executable, __file__])
 

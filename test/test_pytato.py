@@ -935,6 +935,44 @@ def test_expand_dims_input_validate():
         pt.expand_dims(a, -4)
 
 
+def test_with_tagged_reduction():
+    from testlib import FooRednTag
+    from pytato.raising import index_lambda_to_high_level_op
+    from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+    x = pt.make_placeholder("x", shape=(10, 10), dtype=np.float64)
+    x_sum = pt.sum(x)
+
+    with pytest.raises(NotAReductionAxis):
+        # axis='_0': not being reduced over.
+        x_sum = x_sum.with_tagged_reduction("_0", FooRednTag())
+
+    hlo = index_lambda_to_high_level_op(x_sum)
+    x_sum = x_sum.with_tagged_reduction(hlo.axes[1], FooRednTag())
+    assert x_sum.var_to_reduction_descr[hlo.axes[1]].tags_of_type(FooRednTag)
+    assert not x_sum.var_to_reduction_descr[hlo.axes[0]].tags_of_type(FooRednTag)
+
+    x_trace = pt.einsum("ii->i", x)
+    x_colsum = pt.einsum("ij->j", x)
+
+    with pytest.raises(NotAReductionAxis):
+        # 'j': not being reduced over.
+        x_colsum.with_tagged_reduction("j", FooRednTag())
+
+    with pytest.raises(InvalidEinsumIndex):
+        # 'k': unknown axis
+        x_colsum.with_tagged_reduction("k", FooRednTag())
+
+    with pytest.raises(NotAReductionAxis):
+        # 'i': not being reduced over.
+        x_trace.with_tagged_reduction("i", FooRednTag())
+
+    x_colsum = x_colsum.with_tagged_reduction("i", FooRednTag())
+
+    assert (x_colsum
+            .redn_axis_to_redn_descr[x_colsum.index_to_access_descr["i"]]
+            .tags_of_type(FooRednTag))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

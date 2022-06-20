@@ -27,13 +27,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Optional, Tuple, Union, Sequence, Dict, List
+from typing import Any, Optional, Tuple, Union, Sequence, Dict, List, Mapping
 from abc import ABC, abstractmethod
 
 import numpy as np
 
-from pytato.array import ShapeType, Array, make_index_lambda
+from pytato.array import ShapeType, Array, make_index_lambda, ReductionDescriptor
 from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
+from immutables import Map
 import pymbolic.primitives as prim
 
 # {{{ docs
@@ -142,7 +143,7 @@ class AnyReductionOperation(_StatelessReductionOperation):
 
 def _normalize_reduction_axes(
         shape: ShapeType,
-        reduction_axes: Optional[Union[int, Tuple[int]]]
+        reduction_axes: Optional[Union[int, Tuple[int, ...]]]
         ) -> Tuple[ShapeType, Tuple[int, ...]]:
     """
     Returns a :class:`tuple` of ``(new_shape, normalized_redn_axes)``, where
@@ -178,15 +179,18 @@ def _normalize_reduction_axes(
 
 
 def _get_reduction_indices_bounds(shape: ShapeType,
-        axes: Tuple[int, ...]) -> Tuple[
-                Sequence[ScalarExpression],
-                Dict[str, Tuple[ScalarExpression, ScalarExpression]]]:
-    """Given *shape* and reduction axes *axes*, produce a list of inames
+                                  axes: Tuple[int, ...],
+                                  ) -> Tuple[Sequence[prim.Variable],
+                                             Mapping[str, Tuple[ScalarExpression,
+                                                             ScalarExpression]]]:
+    """
+    Given *shape* and reduction axes *axes*, produce a list of inames
     ``indices`` named appropriately for reduction inames.
     Also fill a dictionary with bounds for reduction inames
     ``redn_bounds = {red_iname: (lower_bound, upper_bound)}``,
     where the bounds are given as a Python-style half-open interval.
-    :returns: ``indices, redn_bounds``
+
+    :returns: ``indices, redn_bounds, var_to_redn_descr``
     """
     indices: List[prim.Variable] = []
     redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
@@ -203,20 +207,65 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             idx = f"_r{n_redn_dims}"
             indices.append(prim.Variable(idx))
             redn_bounds[idx] = (0, axis_len)
+
             n_redn_dims += 1
         else:
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    from pyrsistent import pmap
-
-    # insufficient type annotation in pyrsistent
-    return indices, pmap(redn_bounds)  # type: ignore
+    return indices, Map(redn_bounds)
 
 
-def _make_reduction_lambda(op: ReductionOperation, a: Array,
-                      axis: Optional[Union[int, Tuple[int]]],
-                      initial: Any) -> Array:
+def _get_var_to_redn_descr(shape: ShapeType,
+                           axes: Tuple[int, ...],
+                           axis_to_reduction_descr: Optional[
+                               Mapping[int,
+                                       ReductionDescriptor]]
+                           ) -> Mapping[str, ReductionDescriptor]:
+    """
+    :arg axis_to_reduction_descr: Mapping from a reduction axis to
+        its instance of :class:`~pytato.ReductionDescriptor`. This mapping
+        is provided by the caller of top-level functions like
+        :func:`pytato.sum`, :func:`pytato.prod`.
+    """
+    var_to_redn_descr = {}
+
+    if axis_to_reduction_descr is None:
+        axis_to_reduction_descr = {}
+
+    if not (frozenset(axis_to_reduction_descr) <= frozenset(axes)):
+        raise ValueError("Axes "
+                         f"'{frozenset(axis_to_reduction_descr) - frozenset(axes)}'"
+                         " in 'axis_to_reduction_descr' not a part of axes"
+                         " to be reduced over.")
+
+    n_redn_dims = 0
+    for idim, axis_len in enumerate(shape):
+        if idim in axes:
+            if not isinstance(axis_len, INT_CLASSES):
+                # TODO: add bindings for shape array expressions
+                raise NotImplementedError("Parametric shapes for reduction axes"
+                                          " not yet supported.")
+
+            idx = f"_r{n_redn_dims}"
+            redn_descr = axis_to_reduction_descr.get(
+                idim,
+                ReductionDescriptor(frozenset()))
+            if not isinstance(redn_descr, ReductionDescriptor):
+                raise TypeError(f"'axis_to_reduction_descr[{idim}]': "
+                                "expected an instance of ReductionDescriptor, "
+                                f"got {type(redn_descr)}.")
+            var_to_redn_descr[idx] = redn_descr
+            n_redn_dims += 1
+
+    return Map(var_to_redn_descr)
+
+
+def _make_reduction_lambda(
+        op: ReductionOperation, a: Array,
+        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None,
+        initial: Any = _NoValue) -> Array:
     """
     Return a :class:`IndexLambda` that performs reduction over the *axis* axes
     of *a* with the reduction op *op*.
@@ -230,7 +279,12 @@ def _make_reduction_lambda(op: ReductionOperation, a: Array,
     """
     new_shape, reduction_axes = _normalize_reduction_axes(a.shape, axis)
     del axis
-    indices, redn_bounds = _get_reduction_indices_bounds(a.shape, reduction_axes)
+    indices, redn_bounds = _get_reduction_indices_bounds(a.shape,
+                                                         reduction_axes)
+
+    var_to_redn_descr = _get_var_to_redn_descr(a.shape,
+                                               reduction_axes,
+                                               axis_to_reduction_descr)
 
     if initial is _NoValue:
         for iax in reduction_axes:
@@ -258,11 +312,15 @@ def _make_reduction_lambda(op: ReductionOperation, a: Array,
                 redn_bounds),
             {"in": a},
             new_shape,
-            a.dtype)
+            a.dtype,
+            var_to_reduction_descr=var_to_redn_descr)
 
 
-def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
-        initial: Any = 0) -> Array:
+def sum(a: Array,
+        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        initial: Any = 0,
+        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        ) -> Array:
     """
     Sums array *a*'s elements along the *axis* axes.
 
@@ -273,12 +331,19 @@ def sum(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
     :arg initial: The value returned for an empty array, if supplied.
         This value also serves as the base value onto which any additional
         array entries are accumulated.
+
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(SumReductionOperation(), a, axis, initial)
+    return _make_reduction_lambda(SumReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial)
 
 
 def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None, *,
-        initial: Any = _NoValue) -> Array:
+         initial: Any = _NoValue,
+         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         ) -> Array:
     """
     Returns the max of array *a*'s elements along the *axis* axes.
 
@@ -292,12 +357,20 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None, *,
         If not supplied, an :exc:`ValueError` will be raised
         if the reduction is empty.
         In that case, the reduction size must not be symbolic.
+
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(MaxReductionOperation(), a, axis, initial)
+    return _make_reduction_lambda(MaxReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial)
 
 
-def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
-        initial: Any = _NoValue) -> Array:
+def amin(a: Array,
+         axis: Optional[Union[int, Tuple[int, ...]]] = None,
+         initial: Any = _NoValue,
+         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         ) -> Array:
     """
     Returns the min of array *a*'s elements along the *axis* axes.
 
@@ -311,12 +384,19 @@ def amin(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
         If not supplied, an :exc:`ValueError` will be raised
         if the reduction is empty.
         In that case, the reduction size must not be symbolic.
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(MinReductionOperation(), a, axis, initial)
+    return _make_reduction_lambda(MinReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial)
 
 
-def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
-        initial: Any = 1) -> Array:
+def prod(a: Array,
+         axis: Optional[Union[int, Tuple[int, ...]]] = None,
+         initial: Any = 1,
+         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         ) -> Array:
     """
     Returns the product of array *a*'s elements along the *axis* axes.
 
@@ -327,11 +407,18 @@ def prod(a: Array, axis: Optional[Union[int, Tuple[int]]] = None,
     :arg initial: The value returned for an empty array, if supplied.
         This value also serves as the base value onto which any additional
         array entries are accumulated.
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(ProductReductionOperation(), a, axis, initial)
+    return _make_reduction_lambda(ProductReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial)
 
 
-def all(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+def all(a: Array,
+        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        ) -> Array:
     """
     Returns the logical-and array *a*'s elements along the *axis* axes.
 
@@ -339,11 +426,19 @@ def all(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
+
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(AllReductionOperation(), a, axis, initial=True)
+    return _make_reduction_lambda(AllReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial=True)
 
 
-def any(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
+def any(a: Array,
+        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        ) -> Array:
     """
     Returns the logical-or of array *a*'s elements along the *axis* axes.
 
@@ -351,8 +446,13 @@ def any(a: Array, axis: Optional[Union[int, Tuple[int]]] = None) -> Array:
 
     :arg axis: The axes along which the elements are to be product-reduced.
         Defaults to all axes of the input array.
+
+    :arg axis_to_reduction_descr: A mapping from axis in *axis* to the
+        corresponding instance of :class:`~pytato.ReductionDescriptor` that the
+        :class:`~pytato.array.IndexLambda` is to be instantiated with.
     """
-    return _make_reduction_lambda(AnyReductionOperation(), a, axis, initial=False)
+    return _make_reduction_lambda(AnyReductionOperation(), a, axis,
+                                  axis_to_reduction_descr, initial=False)
 
 # }}}
 
