@@ -1741,6 +1741,21 @@ def test_expand_dims(ctx_factory):
             np.testing.assert_allclose(np_output, pt_output)
 
 
+def test_two_rolls(ctx_factory):
+    # see https://github.com/inducer/pytato/issues/341
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    n = pt.make_size_param("n")
+    x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float64)
+
+    x_in = np.arange(1., 10.).reshape(3, 3)
+    evt, (pt_out,) = pt.generate_loopy(pt.roll(x, -2, 0) + pt.roll(x, -1, 0)
+                                       )(cq, x=x_in)
+    np_out = np.roll(x_in, -2, 0) + np.roll(x_in, -1, 0)
+    np.testing.assert_allclose(np_out, pt_out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
