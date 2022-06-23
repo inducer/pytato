@@ -53,7 +53,7 @@ import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
 
 # set in doc/conf.py
-if getattr(sys, "PYTATO_BUILDING_SPHINX_DOCS", False):
+if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
     import pyopencl

@@ -169,6 +169,7 @@ class EqualityComparer:
     def map_roll(self, expr1: Roll, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.axis == expr2.axis
+                and expr1.shift == expr2.shift
                 and self.rec(expr1.array, expr2.array)
                 and Taggable.__eq__(expr1, expr2)
                 and expr1.axes == expr2.axes
