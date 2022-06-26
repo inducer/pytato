@@ -279,6 +279,7 @@ def _np_result_type(
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
     dtype = _np_result_type(arg1, arg2)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
+    # pylint: disable=no-member
     if dtype.kind in "iu":
         return np.dtype(np.float64)
     else:
