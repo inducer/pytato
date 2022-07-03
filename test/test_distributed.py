@@ -153,7 +153,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
             nonlocal comm_tag
             comm_tag += 1
-            tag = (comm_tag, _RandomDAGTag)
+            tag = (comm_tag, _RandomDAGTag)  # noqa: B023
 
             inner = make_random_dag(rdagc)
             return staple_distributed_send(
