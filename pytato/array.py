@@ -1369,7 +1369,7 @@ class Concatenate(Array):
     @property
     def shape(self) -> ShapeType:
         # See https://github.com/python/typeshed/issues/7739
-        common_axis_len = sum(ary.shape[self.axis]  # type: ignore[type-var]
+        common_axis_len = sum(ary.shape[self.axis]  # type: ignore[misc]
                               for ary in self.arrays)
 
         return (self.arrays[0].shape[:self.axis]
