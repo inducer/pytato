@@ -43,6 +43,7 @@ from pymbolic.mapper.stringifier import (StringifyMapper as
         StringifyMapperBase)
 from pymbolic.mapper import CombineMapper as CombineMapperBase
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
+from immutables import Map
 import pymbolic.primitives as prim
 import numpy as np
 import re
@@ -112,7 +113,12 @@ class IdentityMapper(IdentityMapperBase):
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
-    pass
+    def map_reduce(self, expr: Reduce) -> ScalarExpression:
+        return Reduce(self.rec(expr.inner_expr),
+                      op=expr.op,
+                      bounds=Map(
+                          {name: self.rec(bound)
+                           for name, bound in expr.bounds.items()}))
 
 
 IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
