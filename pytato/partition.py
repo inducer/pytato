@@ -398,7 +398,7 @@ def _check_partition_disjointness(partition: GraphPartition) -> None:
                 # Placeholders represent values computed in one partition
                 # and used in one or more other ones. As a result, the
                 # same placeholder may occur in more than one partition.
-                if not(isinstance(my_node, Placeholder)
+                if not (isinstance(my_node, Placeholder)
                        or my_node not in other_node_set):
                     raise RuntimeError(
                         "Partitions not disjoint: "

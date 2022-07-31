@@ -111,9 +111,9 @@ class UnsupportedArrayError(ValueError):
 # {{{ mapper base class
 
 class Mapper:
-    """A class that when called with a :class:`pytato.Array` recursively iterates over
-    the DAG, calling the *_mapper_method* of each node. Users of this
-    class are expected to override the methods of this class or create a
+    """A class that when called with a :class:`pytato.Array` recursively
+    iterates over the DAG, calling the *_mapper_method* of each node. Users of
+    this class are expected to override the methods of this class or create a
     subclass.
 
     .. note::
