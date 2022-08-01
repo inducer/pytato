@@ -270,6 +270,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
         else:
             raise UnknownIndexLambdaExpr
 
+        # pylint: disable=no-value-for-parameter
         return BinaryOp(bin_op,
                         *_as_array_or_scalar(children,
                                              expr.bindings,
@@ -294,6 +295,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
 
     if isinstance(expr.expr, p.If):
         try:
+            # pylint: disable=no-value-for-parameter
             return WhereOp(*_as_array_or_scalar((expr.expr.condition,
                                                  expr.expr.then,
                                                  expr.expr.else_),

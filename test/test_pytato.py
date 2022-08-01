@@ -886,7 +886,7 @@ def test_pickling_and_unpickling_is_equal():
 
         def make_dws_placeholder(expr):
             if isinstance(expr, pt.DataWrapper):
-                return pt.make_placeholder(vng("_pt_ph"),
+                return pt.make_placeholder(vng("_pt_ph"),  # noqa: B023
                                            expr.shape, expr.dtype)
             else:
                 return expr
