@@ -1728,7 +1728,7 @@ def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
             from pyopencl import SVMPointer
             allowed_base_data_classes = tuple((SVMPointer, MemoryObjectHolder))
         except ImportError:
-            allowed_base_data_classes = tuple(MemoryObjectHolder)
+            allowed_base_data_classes = tuple((MemoryObjectHolder,))
 
         if isinstance(ary, CLArray):
             # pyopencl represents 0-long arrays' base_data as None
