@@ -35,9 +35,12 @@ __doc__ = """
 """
 
 import sys
-from dataclasses import dataclass
+import numpy as np
+from dataclasses import dataclass, field
+from functools import cached_property
 
-from typing import Any, Mapping, Optional, Callable
+from typing import Any, Mapping, Optional, Callable, Dict, TYPE_CHECKING
+from immutables import Map
 
 from pytato.target import Target, BoundProgram
 
@@ -45,7 +48,7 @@ import loopy
 
 
 # set in doc/conf.py
-if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
+if getattr(sys, "_BUILDING_SPHINX_DOCS", False) or TYPE_CHECKING:
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
     import pyopencl
@@ -109,6 +112,8 @@ class BoundPyOpenCLProgram(BoundProgram):
     .. automethod:: copy
     .. automethod:: with_transformed_program
     """
+    _processed_bound_args_cache: Dict["pyopencl.Context",
+                                      Map[str, Any]] = field(default_factory=dict)
 
     def copy(self, *,
              program: Optional[loopy.TranslationUnit] = None,
@@ -136,8 +141,49 @@ class BoundPyOpenCLProgram(BoundProgram):
         """
         return self.copy(program=f(self.program))
 
+    def get_processed_bound_arguments(self,
+                                      queue: "pyopencl.CommandQueue",
+                                      allocator: Optional[Callable[
+                                          [int], "pyopencl.MemoryObject"]],
+                                      ) -> Map[str, Any]:
+        import pyopencl.array as cla
+
+        cache_key = queue.context
+        try:
+            return self._processed_bound_args_cache[cache_key]
+        except KeyError:
+            proc_bnd_args: Dict[str, Any] = {}
+            for name, bnd_arg in self.bound_arguments.items():
+                if np.isscalar(bnd_arg):
+                    proc_bnd_args[name] = bnd_arg
+                elif isinstance(bnd_arg, np.ndarray):
+                    if self.program.default_entrypoint.options.no_numpy:
+                        raise TypeError(f"Got numpy array for the DataWrapper {name}"
+                                        ", in no_numpy=True mode. Expects a"
+                                        " pyopencl.array.Array.")
+                    proc_bnd_args[name] = cla.to_device(queue, bnd_arg, allocator)
+                elif isinstance(bnd_arg, cla.Array):
+                    proc_bnd_args[name] = bnd_arg
+                else:
+                    raise TypeError("Data in a bound argument can be one of"
+                                    " numpy array, pyopencl array or scalar."
+                                    f" Got {type(bnd_arg).__name__} for '{name}'.")
+
+            result = Map(proc_bnd_args)
+            assert set(result.keys()) == set(self.bound_arguments.keys())
+            self._processed_bound_args_cache[cache_key] = result
+            return result
+
+    @cached_property
+    def all_bound_args_on_host(self) -> bool:
+        """
+        Returns *True* only if all bound arguments were on the host.
+        """
+        return all(isinstance(arg, np.ndarray) or np.isscalar(arg)
+                   for arg in self.bound_arguments.values())
+
     def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
-                 allocator=None, wait_for=None, out_host=None,
+                 allocator=None, wait_for=None, out_host: Optional[bool] = None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
@@ -145,7 +191,7 @@ class BoundPyOpenCLProgram(BoundProgram):
             raise ValueError("Got arguments that were previously bound: "
                     f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
 
-        updated_kwargs = dict(self.bound_arguments)
+        updated_kwargs = dict(self.get_processed_bound_arguments(queue, allocator))
         updated_kwargs.update(kwargs)
 
         # final DAG might be independent of certain placeholders, for ex.
@@ -154,6 +200,14 @@ class BoundPyOpenCLProgram(BoundProgram):
         updated_kwargs = {kw: arg
                           for kw, arg in updated_kwargs.items()
                           if kw in self.program.default_entrypoint.arg_dict}
+
+        if out_host is None and not self.program.default_entrypoint.options.no_numpy:
+            # follow loopy's device->host transfer semantics here i.e. if all
+            # the arguments to the kernel are on the host then transfer the
+            # result to the host.
+            out_host = self.all_bound_args_on_host and all(
+                isinstance(arg, np.ndarray) or np.isscalar(arg)
+                for arg in kwargs.values())
 
         return self.program(queue,
                             allocator=allocator, wait_for=wait_for,
