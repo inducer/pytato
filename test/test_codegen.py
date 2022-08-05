@@ -589,10 +589,6 @@ def test_math_functions(ctx_factory, dtype, function_name):
 
     y_np = np_func(x_in)
 
-    # See https://github.com/inducer/loopy/issues/269 on why this is necessary.
-    if function_name == "imag" and np.dtype(dtype).kind == "f":
-        y = y.get()
-
     np.testing.assert_allclose(y, y_np, rtol=1e-6)
     assert y.dtype == y_np.dtype
 
@@ -939,7 +935,7 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
     _, (out,) = pt.generate_loopy(0 * x)(cq)
 
     assert out.shape == (3, 3)
-    np.testing.assert_allclose(out.get(), 0)
+    np.testing.assert_allclose(out, 0)
 
 
 def test_call_loopy_shape_inference1(ctx_factory):
@@ -1020,7 +1016,7 @@ def test_eye(ctx_factory, n, m, k):
     _, (out,) = pt.generate_loopy(pt_eye)(cq)
 
     assert np_eye.shape == out.shape
-    np.testing.assert_allclose(out.get(), np_eye)
+    np.testing.assert_allclose(out, np_eye)
 
 
 def test_arange(ctx_factory):
@@ -1040,7 +1036,7 @@ def test_arange(ctx_factory):
         print(np_res.shape, args)
         _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
 
-        assert np.array_equal(pt_res.get(), np_res)
+        assert np.array_equal(pt_res, np_res)
 
 
 @pytest.mark.parametrize("which,num_args", ([("maximum", 2),
