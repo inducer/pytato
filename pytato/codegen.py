@@ -70,6 +70,7 @@ def _generate_name_for_temp(
     if expr.tags_of_type(_BaseNameTag):
         if expr.tags_of_type(Named):
             name_tag, = expr.tags_of_type(Named)
+            assert isinstance(name_tag, Named)
             if var_name_gen.is_name_conflicting(name_tag.name):
                 raise ValueError(f"Cannot assign the name {name_tag.name} to the"
                                  f" temporary corresponding to {expr} as it "
