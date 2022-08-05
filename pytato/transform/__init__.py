@@ -1722,7 +1722,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     import sys
     if "pyopencl" in sys.modules:
-        from pyopencl.array import Array as CLArray  # type: ignore[import]
+        from pyopencl.array import Array as CLArray
         from pyopencl import MemoryObjectHolder
         try:
             from pyopencl import SVMPointer
