@@ -2321,9 +2321,12 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
+    # type-ignored because 'broadcast_binary_op' returns Scalar, while
+    # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.Comparison(x, which, y),
-                                     lambda x, y: np.bool8)  # type: ignore
+                                     lambda x, y: np.dtype(np.bool8)
+                                     )  # type: ignore[return-value]
 
 
 def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
