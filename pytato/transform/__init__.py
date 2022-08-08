@@ -1726,18 +1726,23 @@ def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
         from pyopencl import MemoryObjectHolder
         try:
             from pyopencl import SVMPointer
-            allowed_base_data_classes: Tuple[Any, ...] = (SVMPointer,
-                                                          MemoryObjectHolder)
         except ImportError:
-            allowed_base_data_classes = (MemoryObjectHolder,)
+            SVMPointer = None  # noqa: N806
 
         if isinstance(ary, CLArray):
-            # pyopencl represents 0-long arrays' base_data as None
-            assert (isinstance(ary.base_data, allowed_base_data_classes)
-                    or ary.base_data is None)
+            base_data = ary.base_data
+            if isinstance(ary.base_data, MemoryObjectHolder):
+                ptr = base_data.int_ptr
+            elif SVMPointer is not None and isinstance(base_data, SVMPointer):
+                ptr = base_data.svm_ptr
+            elif base_data is None:
+                # pyopencl represents 0-long arrays' base_data as None
+                ptr = None
+            else:
+                raise ValueError("base_data of array not understood")
 
             return (
-                    None if ary.base_data is None else ary.base_data.int_ptr,
+                    ptr,
                     ary.offset,
                     ary.shape,
                     ary.strides,
