@@ -162,7 +162,7 @@ Internal stuff that is only here because the documentation tool wants it
 # }}}
 
 from abc import ABC, abstractmethod, abstractproperty
-from functools import partialmethod
+from functools import partialmethod, cached_property
 import operator
 from dataclasses import dataclass
 from typing import (
@@ -258,11 +258,13 @@ def normalize_shape(
         return s
 
     from numbers import Number
+    import collections
+
     if isinstance(shape, (Array, Number)):
         shape = shape,
 
-    # https://github.com/python/mypy/issues/3186
-    return tuple(normalize_shape_component(s) for s in shape)  # type: ignore
+    assert isinstance(shape, collections.abc.Sequence)
+    return tuple(normalize_shape_component(s) for s in shape)
 
 # }}}
 
@@ -282,7 +284,7 @@ def _np_result_type(
         # our dtype:
         *arrays_and_dtypes: DtypeOrScalar,
         ) -> np.dtype[Any]:
-    return np.result_type(*arrays_and_dtypes)  # type: ignore
+    return np.result_type(*arrays_and_dtypes)
 
 
 def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
@@ -462,7 +464,7 @@ class Array(Taggable):
     @property
     def size(self) -> ShapeComponent:
         from pytools import product
-        return product(self.shape)  # type: ignore
+        return product(self.shape)  # type: ignore[no-any-return]
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -547,11 +549,14 @@ class Array(Taggable):
 
         import pytato.utils as utils
         if reverse:
-            return utils.broadcast_binary_op(other, self, op,
-                                             get_result_type)  # type: ignore
+            result = utils.broadcast_binary_op(other, self, op,
+                                               get_result_type)
         else:
-            return utils.broadcast_binary_op(self, other, op,
-                                             get_result_type)  # type: ignore
+            result = utils.broadcast_binary_op(self, other, op,
+                                               get_result_type)
+
+        assert isinstance(result, Array)
+        return result
 
     def _unary_op(self, op: Any) -> Array:
         if self.ndim == 0:
@@ -633,7 +638,7 @@ class Array(Taggable):
 
         # type-ignore reason: passed: "Tuple[Union[int, Sequence[int]], ...]";
         # expected "Union[int, Sequence[int]]"
-        return pt.reshape(self, shape, order=order)  # type: ignore
+        return pt.reshape(self, shape, order=order)  # type: ignore[arg-type]
 
     def all(self, axis: int = 0) -> ArrayOrScalar:
         """
@@ -1028,9 +1033,7 @@ class Einsum(Array):
 
         return Map(descr_to_axis_len)
 
-    # type-ignore reason: github.com/python/mypy/issues/1362
-    @property  # type: ignore
-    @memoize_method
+    @cached_property
     def shape(self) -> ShapeType:
         iaxis_to_len: Dict[int, ShapeComponent] = {}
 
@@ -1046,9 +1049,7 @@ class Einsum(Array):
         assert all(i in iaxis_to_len for i in range(len(iaxis_to_len)))
         return tuple(iaxis_to_len[i] for i in range(len(iaxis_to_len)))
 
-    # type-ignore reason: github.com/python/mypy/issues/1362
-    @property  # type: ignore
-    @memoize_method
+    @cached_property
     def dtype(self) -> np.dtype[Any]:
         return np.find_common_type(array_types=[arg.dtype for arg in self.args],
                                     scalar_types=[])
@@ -2258,8 +2259,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
 
     shape = normalize_shape(shape)
 
-    # https://github.com/python/mypy/issues/3186
-    if np.isnan(fill_value):  # type: ignore[arg-type]
+    if np.isnan(fill_value):
         from pymbolic.primitives import NaN
         fill_value = NaN(dtype.type)
     else:
@@ -2419,9 +2419,12 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
+    # type-ignored because 'broadcast_binary_op' returns Scalar, while
+    # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.Comparison(x, which, y),
-                                     lambda x, y: np.bool8)  # type: ignore
+                                     lambda x, y: np.dtype(np.bool8)
+                                     )  # type: ignore[return-value]
 
 
 def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
@@ -2475,10 +2478,13 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     Returns the element-wise logical OR of *x1* and *x2*.
     """
     # https://github.com/python/mypy/issues/3186
+    # type-ignored because 'broadcast_binary_op' returns Scalar, while
+    # '_compare' returns a bool.
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalOr((x, y)),
-                                     lambda x, y: np.bool8)  # type: ignore
+                                     lambda x, y: np.dtype(np.bool8)
+                                     )  # type: ignore[return-value]
 
 
 def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
@@ -2486,10 +2492,13 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     Returns the element-wise logical AND of *x1* and *x2*.
     """
     # https://github.com/python/mypy/issues/3186
+    # type-ignored because 'broadcast_binary_op' returns Scalar, while
+    # '_compare' returns a bool.
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalAnd((x, y)),
-                                     lambda x, y: np.bool8)  # type: ignore
+                                     lambda x, y: np.dtype(np.bool8)
+                                     )  # type: ignore[return-value]
 
 
 def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
@@ -2498,7 +2507,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
     """
     if isinstance(x, SCALAR_CLASSES):
         # https://github.com/python/mypy/issues/3186
-        return np.logical_not(x)  # type: ignore
+        return np.logical_not(x)  # type: ignore[no-any-return]
 
     assert isinstance(x, Array)
 
@@ -2538,7 +2547,8 @@ def where(condition: ArrayOrScalar,
 
     if (isinstance(condition, SCALAR_CLASSES) and isinstance(x, SCALAR_CLASSES)
             and isinstance(y, SCALAR_CLASSES)):
-        return x if condition else y  # type: ignore
+        # https://github.com/python/mypy/issues/3186
+        return x if condition else y  # type: ignore[no-any-return]
 
     # {{{ find dtype
 
@@ -2583,8 +2593,7 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     if (np.issubdtype(common_dtype, np.floating)
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
-        # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),
                      common_dtype.type(np.NaN),
                      where(greater(x1, x2), x1, x2))
     else:
@@ -2602,8 +2611,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
     if (np.issubdtype(common_dtype, np.floating)
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
-        # https://github.com/python/mypy/issues/3186
-        return where(logical_or(isnan(x1), isnan(x2)),  # type: ignore
+        return where(logical_or(isnan(x1), isnan(x2)),
                      common_dtype.type(np.NaN),
                      where(less(x1, x2), x1, x2))
     else:
@@ -2677,8 +2685,7 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     import pytato as pt
 
     if isinstance(a, SCALAR_CLASSES) or isinstance(b, SCALAR_CLASSES):
-        # type-ignored because Number * bool is undefined
-        return a * b  # type: ignore
+        return a * b
 
     assert isinstance(a, Array)
     assert isinstance(b, Array)

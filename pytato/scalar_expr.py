@@ -24,7 +24,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from numbers import Number
 from typing import (
         Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
         Iterable)
@@ -71,13 +70,11 @@ __doc__ = """
 
 # {{{ scalar expressions
 
-IntegralT = Union[int, np.int8, np.int16, np.int32, np.int64, np.uint8,
-                  np.uint16, np.uint32, np.uint64]
+IntegralT = Union[int, np.integer]
 BoolT = Union[bool, np.bool8]
-INT_CLASSES = (int, np.int8, np.int16, np.int32, np.int64, np.uint8,
-               np.uint16, np.uint32, np.uint64)
+INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[Number, int, np.bool_, bool, float]
+ScalarType = Union[np.number, int, np.bool_, bool, float]
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
