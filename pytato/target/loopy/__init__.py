@@ -85,17 +85,25 @@ class LoopyPyOpenCLTarget(LoopyTarget):
 
         The :mod:`pyopencl` device used to construct the
         :class:`loopy.PyOpenCLTarget`, or *None*.
+
+    .. attribute:: limit_arg_size_nbytes
+
+        An optional int that indicates the size limit of kernel arguments
+        and gets passed to :class:`loopy.PyOpenCLTarget`.
     """
 
-    def __init__(self, device: Optional["pyopencl.Device"] = None):
+    def __init__(self, device: Optional["pyopencl.Device"] = None,
+                 limit_arg_size_nbytes: Optional[int] = None):
         if device is not None:
             from warnings import warn
             warn("Passing 'device' is deprecated and will stop working in 2023.",
                     DeprecationWarning, stacklevel=2)
+        self.limit_arg_size_nbytes = limit_arg_size_nbytes
 
     def get_loopy_target(self) -> "loopy.LoopyPyOpenCLTarget":
         import loopy as lp
-        return lp.PyOpenCLTarget()
+        return lp.PyOpenCLTarget(
+                                limit_arg_size_nbytes=self.limit_arg_size_nbytes)
 
     def bind_program(self, program: loopy.TranslationUnit,
                      bound_arguments: Mapping[str, Any]) -> BoundProgram:
