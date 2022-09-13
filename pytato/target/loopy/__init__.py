@@ -86,10 +86,10 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         The :mod:`pyopencl` device used to construct the
         :class:`loopy.PyOpenCLTarget`, or *None*.
 
-    .. attribute:: limit_arg_size_nbytes
+    .. attribute:: loopy_target
 
-        An optional int that indicates the size limit of kernel arguments
-        and gets passed to :class:`loopy.PyOpenCLTarget`.
+        An optional :class:`loopy.PyOpenCLTarget` that gets used as the
+        underlying code generation target.
     """
 
     def __init__(self, device: Optional["pyopencl.Device"] = None,
