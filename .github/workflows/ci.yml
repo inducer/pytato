@@ -78,7 +78,7 @@ jobs:
                 build_py_project_in_conda_env
                 run_examples
 
-                mpirun -n 2 python distributed.py
+                mpirun -n 2 --oversubscribe python distributed.py
 
     docs:
         name: Documentation

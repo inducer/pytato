@@ -522,7 +522,7 @@ IndexLambda(
                                   '!=',
                                   3),
                   shape=(10, 4),
-                  dtype=<class 'numpy.bool_'>,
+                  dtype='bool',
                   bindings={'_in0': Placeholder(shape=(10, 4),
                                                 dtype='int64',
                                                 name='x')})})""")

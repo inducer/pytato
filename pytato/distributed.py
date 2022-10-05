@@ -969,6 +969,7 @@ def find_distributed_partition(outputs: DictOfNamedArrays
                                       " cannot partition DictOfNamedArrays")
         assert isinstance(expr, Array)
         tag, = expr.tags_of_type(PartIDTag)
+        assert isinstance(tag, PartIDTag)
         return tag.part_id
 
     gp = cast(DistributedGraphPartition,
