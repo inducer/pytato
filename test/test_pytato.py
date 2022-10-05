@@ -608,8 +608,7 @@ def test_nodecountmapper():
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
 
-        # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
-        assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
 def test_rec_get_user_nodes():
@@ -882,6 +881,41 @@ def test_adv_indexing_into_zero_long_axes():
     a[idx]
 
     # }}}
+
+
+def test_tagcountmapper():
+    from testlib import RandomDAGContext, make_random_dag
+    from pytato.analysis import get_num_tags_of_type, get_num_nodes
+    from pytools.tag import Tag
+
+    class NonExistentTag(Tag):
+        pass
+
+    class ExistentTag(Tag):
+        pass
+
+    seed = 199
+    axis_len = 3
+
+    rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
+                                    axis_len=axis_len, use_numpy=False)
+
+    out = make_random_dag(rdagc_pt).tagged(ExistentTag())
+
+    dag = pt.make_dict_of_named_arrays({"out": out})
+
+    # get_num_nodes() returns an extra DictOfNamedArrays node
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
+
+    assert get_num_tags_of_type(dag, NonExistentTag()) == 0
+    assert get_num_tags_of_type(dag, frozenset((ExistentTag(),))) == 1
+    assert get_num_tags_of_type(dag,
+        frozenset((ExistentTag(), NonExistentTag()))) == 0
+
+    a = pt.make_data_wrapper(np.arange(27))
+    dag = a+a+a+a+a+a+a+a
+
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
 
 
 def test_expand_dims_input_validate():

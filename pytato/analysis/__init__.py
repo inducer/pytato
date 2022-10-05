@@ -26,13 +26,14 @@ THE SOFTWARE.
 """
 
 from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    TYPE_CHECKING)
+                    TYPE_CHECKING, Iterable)
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
                           ShapeType)
-from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
+from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper, CombineMapper
 from pytato.loopy import LoopyCall
+from pytools.tag import Tag
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedRecv, DistributedSendRefHolder
@@ -47,6 +48,9 @@ __doc__ = """
 .. autofunction:: get_num_nodes
 
 .. autoclass:: DirectPredecessorsGetter
+
+.. autoclass:: TagCountMapper
+.. autofunction:: get_num_tags_of_type
 """
 
 
@@ -372,12 +376,57 @@ class NodeCountMapper(CachedWalkMapper):
 def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
     ncm = NodeCountMapper()
     ncm(outputs)
 
     return ncm.count
 
 # }}}
+
+
+# {{{ TagCountMapper
+
+class TagCountMapper(CombineMapper[int]):
+    """
+    Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
+    """
+
+    def __init__(self, tags: Union[Tag, Iterable[Tag]]) -> None:
+        super().__init__()
+        if isinstance(tags, Tag):
+            tags = frozenset((tags,))
+        elif not isinstance(tags, frozenset):
+            tags = frozenset(tags)
+        self._tags = tags
+
+    def combine(self, *args: int) -> int:
+        return sum(args)
+
+    # type-ignore reason: incompatible return type with super class
+    def rec(self, expr: ArrayOrNames) -> int:  # type: ignore
+        try:
+            return self.cache[expr]
+        except KeyError:
+            s = super().rec(expr)
+            if isinstance(expr, Array) and self._tags <= expr.tags:
+                result = 1 + s
+            else:
+                result = 0 + s
+
+            self.cache[expr] = 0
+            return result
+
+
+def get_num_tags_of_type(
+        outputs: Union[Array, DictOfNamedArrays],
+        tags: Union[Tag, Iterable[Tag]]) -> int:
+    """Returns the number of nodes in DAG *outputs* that are tagged with
+    all the tags in *tags*."""
+
+    tcm = TagCountMapper(tags)
+
+    return tcm(outputs)
+
+# }}}
+
+# vim: foldmethod=marker
