@@ -284,7 +284,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
-        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
@@ -344,7 +344,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape),
-               dtype=expr.dtype, tags=expr.tags)
+               dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
 
 
 class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
@@ -470,7 +470,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
-        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> Array:
         return Einsum(expr.access_descriptors,
@@ -536,7 +536,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
-               dtype=expr.dtype, tags=expr.tags)
+               dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
 
 # }}}
 
@@ -1098,7 +1098,7 @@ class MPMSMaterializer(Mapper):
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_expr = Stack(tuple(ary.expr for ary in rec_arrays),
-                         expr.axis, expr.axes, expr.tags)
+                         expr.axis, axes=expr.axes, tags=expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1108,15 +1108,16 @@ class MPMSMaterializer(Mapper):
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
                                expr.axis,
-                               expr.axes,
-                               expr.tags)
+                               axes=expr.axes,
+                               tags=expr.tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     rec_arrays)
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, expr.axes, expr.tags)
+        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,
+                        tags=expr.tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     (rec_array,))
 
@@ -1124,7 +1125,7 @@ class MPMSMaterializer(Mapper):
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,
-                                   expr.axes, expr.tags)
+                                   axes=expr.axes, tags=expr.tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     (rec_array,))
@@ -1141,8 +1142,8 @@ class MPMSMaterializer(Mapper):
                                     else expr.indices[i]
                                     for i in range(
                                         len(expr.indices))),
-                              expr.axes,
-                              expr.tags)
+                              axes=expr.axes,
+                              tags=expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1156,7 +1157,7 @@ class MPMSMaterializer(Mapper):
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         new_expr = Reshape(rec_array.expr, expr.newshape,
-                           expr.order, expr.axes, expr.tags)
+                           expr.order, axes=expr.axes, tags=expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1166,10 +1167,10 @@ class MPMSMaterializer(Mapper):
         rec_arrays = [self.rec(ary) for ary in expr.args]
         new_expr = Einsum(expr.access_descriptors,
                           tuple(ary.expr for ary in rec_arrays),
-                          expr.axes,
                           expr.redn_axis_to_redn_descr,
                           expr.index_to_access_descr,
-                          expr.tags)
+                          axes=expr.axes,
+                          tags=expr.tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1682,7 +1683,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 
     def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
         assert expr.name
-        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         return LoopyCall(

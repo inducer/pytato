@@ -167,16 +167,20 @@ class LoopyCallResult(NamedArray):
 
     @property
     def shape(self) -> ShapeType:
-        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
-                self.name]
-        shape: ShapeType = self._container._to_pytato(  # type:ignore
+        # pylint: disable=E1101
+        # reason: (pylint doesn't respect the asserts)
+        assert isinstance(self._container, LoopyCall)
+        loopy_arg = self._container._entry_kernel.arg_dict[self.name]
+        shape: ShapeType = self._container._to_pytato(  # type:ignore[assignment]
                 loopy_arg.shape)
         return shape
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
-                self.name]
+        # pylint: disable=E1101
+        # reason: (pylint doesn't respect the asserts)
+        assert isinstance(self._container, LoopyCall)
+        loopy_arg = self._container._entry_kernel.arg_dict[self.name]
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 

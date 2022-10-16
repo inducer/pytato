@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
         FrozenSet, Mapping, Optional, Type)
-from dataclasses import dataclass
+import attrs
 
 import logging
 logger = logging.getLogger(__name__)
@@ -240,7 +240,7 @@ class GraphPartitioner(EdgeCachedMapper):
 
 # {{{ graph partition
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class GraphPart:
     """
     .. attribute:: pid
@@ -284,7 +284,7 @@ class GraphPart:
         return self.user_input_names | self. partition_input_names
 
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class GraphPartition:
     """Store information about a partitioning of an expression graph.
 
