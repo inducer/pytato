@@ -775,7 +775,9 @@ def test_deduplicate_data_wrappers():
 
     a = pt.make_data_wrapper(np.arange(27))
     b = pt.make_data_wrapper(np.arange(27))
-    c = pt.make_data_wrapper(a.data.view())
+    # pylint-disable-reason: pylint is correct, DataInterface doesn't declare a
+    # view method, but for numpy-like arrays it should be OK.
+    c = pt.make_data_wrapper(a.data.view())   # pylint: disable=E1101
     d = pt.make_data_wrapper(np.arange(1, 28))
 
     res = a+b+c+d

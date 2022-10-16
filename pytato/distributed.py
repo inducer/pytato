@@ -25,11 +25,12 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
-                    List, FrozenSet, Callable, cast, Mapping, Iterable
+                    List, FrozenSet, Callable, cast, Mapping, Iterable,
+                    ClassVar
                     )  # Mapping required by sphinx
 from pyrsistent.typing import PMap as PMapT
 
-from dataclasses import dataclass
+import attrs
 
 from pytools import UniqueNameGenerator
 from pytools.tag import Taggable, UniqueTag, Tag
@@ -53,7 +54,7 @@ import numpy as np
 __doc__ = r"""
 Distributed-memory evaluation of expression graphs is accomplished
 by :ref:`partitioning <partitioning>` the graph to reveal communication-free
-pieces of the computation. Communication (i.e. sending/receving data) is then
+pieces of the computation. Communication (i.e. sending/receiving data) is then
 accomplished at the boundaries of the parts of the resulting graph partitioning.
 
 Recall the requirement for partitioning that, "no part may depend on its own
@@ -171,6 +172,7 @@ class DistributedSend(Taggable):
                 tags=tags if tags is not None else self.tags)
 
 
+@attrs.define(frozen=True, eq=False, repr=False, init=False)
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -205,15 +207,17 @@ class DistributedSendRefHolder(Array):
         :class:`DistributedSendRefHolder` to be constructed and yet to not
         become part of the graph constructed by the user.
     """
+    send: DistributedSend
+    passthrough_data: Array
 
-    _mapper_method = "map_distributed_send_ref_holder"
-    _fields = Array._fields + ("passthrough_data", "send",)
+    _mapper_method: ClassVar[str] = "map_distributed_send_ref_holder"
+    _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("passthrough_data", "send")
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
                  tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(axes=passthrough_data.axes, tags=tags)
-        self.send = send
-        self.passthrough_data = passthrough_data
+        object.__setattr__(self, "send", send)
+        object.__setattr__(self, "passthrough_data", passthrough_data)
 
     @property
     def shape(self) -> ShapeType:
@@ -238,6 +242,7 @@ class DistributedSendRefHolder(Array):
                                         tags)
 
 
+@attrs.define(frozen=True, eq=False)
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation.
 
@@ -264,21 +269,14 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
         :class:`DistributedRecv` to be constructed and yet to not become part
         of the graph constructed by the user.
     """
+    src_rank: int
+    comm_tag: CommTagType
+    _shape: ShapeType
+    _dtype: Any  # FIXME: sphinx does not like `_dtype: _dtype_any`
 
-    _fields = Array._fields + ("shape", "dtype", "src_rank", "comm_tag")
-    _mapper_method = "map_distributed_recv"
-
-    def __init__(self, src_rank: int, comm_tag: CommTagType,
-                 shape: ShapeType, dtype: Any,
-                 tags: Optional[FrozenSet[Tag]] = frozenset(),
-                 axes: Optional[AxesT] = None) -> None:
-
-        if not axes:
-            axes = _get_default_axes(len(shape))
-        super().__init__(shape=shape, dtype=dtype, tags=tags,
-                         axes=axes)
-        self.src_rank = src_rank
-        self.comm_tag = comm_tag
+    _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("shape", "dtype",
+                                                          "src_rank", "comm_tag")
+    _mapper_method: ClassVar[str] = "map_distributed_recv"
 
 
 def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -309,14 +307,14 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
     if axes is None:
         axes = _get_default_axes(len(shape))
     dtype = np.dtype(dtype)
-    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags, axes=axes)
+    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags=tags, axes=axes)
 
 # }}}
 
 
 # {{{ distributed info collection
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class DistributedGraphPart(GraphPart):
     """For one graph partition, record send/receive information for input/
     output names.
@@ -330,7 +328,7 @@ class DistributedGraphPart(GraphPart):
     distributed_sends: List[DistributedSend]
 
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class DistributedGraphPartition(GraphPartition):
     """Store information about distributed graph partitions. This
     has the same attributes as :class:`~pytato.partition.GraphPartition`,
@@ -348,8 +346,8 @@ def _map_distributed_graph_partion_nodes(
     mapped by *map_array* and all :class:`DistributedSend` instances mapped
     by *map_send*.
     """
+    from attrs import evolve as replace
 
-    from dataclasses import replace
     return replace(
             gp,
             var_name_to_result={name: map_array(ary)
@@ -776,7 +774,7 @@ def _get_materialized_arrays_promoted_to_partition_outputs(
                       if users != {stored_ary_to_part_id[ary]}})
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@attrs.define(frozen=True, eq=True, repr=True)
 class PartIDTag(UniqueTag):
     """
     A tag applicable to a :class:`pytato.Array` recording to which part the
@@ -1068,7 +1066,7 @@ def number_distributed_tags(
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
-    from dataclasses import replace
+    from attrs import evolve as replace
     return DistributedGraphPartition(
             parts={
                 pid: replace(part,
