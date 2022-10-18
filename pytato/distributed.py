@@ -171,6 +171,13 @@ class DistributedSend(Taggable):
                 comm_tag=comm_tag if comm_tag is not None else self.comm_tag,
                 tags=tags if tags is not None else self.tags)
 
+    def __repr__(self) -> str:
+        # self.data takes a lot of space, shorten it
+        return (f"DistributedSend(data={self.data.__class__} "
+                f"at {hex(id(self.data))}, "
+                f"dest_rank={self.dest_rank}, "
+                f"tags={self.tags}, comm_tag={self.comm_tag})")
+
 
 @attrs.define(frozen=True, eq=False, repr=False, init=False)
 class DistributedSendRefHolder(Array):
