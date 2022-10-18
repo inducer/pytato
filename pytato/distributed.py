@@ -1073,6 +1073,19 @@ def number_distributed_tags(
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
+    if __debug__:
+        all_parts_inputs = [
+            set(p.input_name_to_recv_node.keys()) for p in partition.parts.values()]
+        all_parts_outputs = [
+            set(p.output_name_to_send_node.keys()) for p in partition.parts.values()]
+
+        res = mpi_communicator.gather((all_parts_inputs,
+                                       all_parts_outputs), root=root_rank)
+
+        if mpi_communicator.rank == root_rank:
+            assert len(res) == mpi_communicator.size
+            # from pytools.graph import compute_topological_order
+
     from attrs import evolve as replace
     return DistributedGraphPartition(
             parts={
