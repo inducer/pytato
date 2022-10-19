@@ -102,7 +102,7 @@ def test_random_dag_against_numpy(jit):
             ref_result = make_random_dag(rdagc_np)
             dag = make_random_dag(rdagc_pt)
             from pytato.transform import materialize_with_mpms
-            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = pt.make_dict_of_named_arrays({"result": dag})
             dict_named_arys = materialize_with_mpms(dict_named_arys)
             if 0:
                 pt.show_dot_graph(dict_named_arys)

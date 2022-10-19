@@ -92,7 +92,7 @@ def _do_test_distributed_execution_basic(ctx_factory):
     y = x+halo
 
     # Find the partition
-    outputs = pt.DictOfNamedArrays({"out": y})
+    outputs = pt.make_dict_of_named_arrays({"out": y})
     distributed_parts = find_distributed_partition(outputs)
     prg_per_partition = generate_code_for_partition(distributed_parts)
 
@@ -167,7 +167,8 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 additional_generators=[
                     (comm_fake_prob, gen_comm)
                     ])
-        pt_dag = pt.DictOfNamedArrays({"result": make_random_dag(rdagc_comm)})
+        pt_dag = pt.make_dict_of_named_arrays(
+            {"result": make_random_dag(rdagc_comm)})
         x_comm = pt.transform.materialize_with_mpms(pt_dag)
 
         distributed_partition = find_distributed_partition(x_comm)
