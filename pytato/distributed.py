@@ -1089,22 +1089,19 @@ def number_distributed_tags(
 
         if mpi_communicator.rank == root_rank:
             assert len(res) == mpi_communicator.size
-            # print(f"{res=}")
+            print(f"{res=}")
 
-            rank_to_needing_ranks = {}
-            i = 0
+            parts_to_needing_parts = {}
 
             for rank in res:
-                s = set()
+                needing_parts = rank[1]
                 for inp in rank[0]:
-                    s.add(inp[1])
+                    assert inp not in parts_to_needing_parts
+                    parts_to_needing_parts[inp] = needing_parts
 
-                rank_to_needing_ranks[i] = s
-                i += 1
-
-            # print(f"{rank_to_needing_ranks=}")
+            print(f"{parts_to_needing_parts=}")
             from pytools.graph import compute_topological_order
-            compute_topological_order(rank_to_needing_ranks)
+            compute_topological_order(parts_to_needing_parts)
 
     from attrs import evolve as replace
     return DistributedGraphPartition(
