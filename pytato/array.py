@@ -736,7 +736,8 @@ class NamedArray(Array):
         return self.expr.dtype
 
 
-class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
+@attrs.define(frozen=True, eq=False)
+class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
     is determined by concrete subclasses of this class, e.g.
@@ -751,7 +752,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
 
         This container deliberately does not implement arithmetic.
     """
-
+    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
     _mapper_method: ClassVar[str]
 
     @abstractmethod
@@ -767,6 +768,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], ABC):
         pass
 
 
+@attrs.define(frozen=True, eq=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -775,12 +777,9 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     .. automethod:: __init__
     """
+    _data: Mapping[str, Array]
 
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
-
-    def __init__(self, data: Mapping[str, Array]):
-        super().__init__()
-        self._data = data
 
     def __hash__(self) -> int:
         return hash(frozenset(self._data.items()))

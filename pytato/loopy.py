@@ -26,10 +26,11 @@ THE SOFTWARE.
 
 
 import numpy as np
+import attrs
 import loopy as lp
 import pymbolic.primitives as prim
 from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
-                    Tuple, Iterable, Mapping)
+                    Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
                           NamedArray, ArrayOrScalar, SizeParam, AxesT)
@@ -61,26 +62,25 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
+@attrs.define(eq=False, frozen=True)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
-    _mapper_method = "map_loopy_call"
+    translation_unit: "lp.TranslationUnit"
+    bindings: Dict[str, ArrayOrScalar]
+    entrypoint: str
 
-    def __init__(self,
-            translation_unit: "lp.TranslationUnit",
-            bindings: Dict[str, ArrayOrScalar],
-            entrypoint: str):
-        entry_kernel = translation_unit[entrypoint]
-        super().__init__()
-        self._result_names = frozenset({name
-                              for name, lp_arg in entry_kernel.arg_dict.items()
-                              if lp_arg.is_output})
+    _mapper_method: ClassVar[str] = "map_loopy_call"
 
-        self.translation_unit = translation_unit
-        self.bindings = bindings
-        self.entrypoint = entrypoint
+    copy = attrs.evolve
+
+    @property
+    def _result_names(self) -> FrozenSet[str]:
+        return frozenset({name
+                          for name, lp_arg in self._entry_kernel.arg_dict.items()
+                          if lp_arg.is_output})
 
     @memoize_method
     def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
