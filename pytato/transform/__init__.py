@@ -303,7 +303,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
         return DictOfNamedArrays({key: self.rec(val.expr)
-                                  for key, val in expr.items()})
+                                  for key, val in expr.items()},
+                                 tags=expr.tags
+                                 )
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
@@ -312,7 +314,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
         return LoopyCall(translation_unit=expr.translation_unit,
                          bindings=bindings,
-                         entrypoint=expr.entrypoint)
+                         entrypoint=expr.entrypoint,
+                         tags=expr.tags,
+                         )
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
         return LoopyCallResult(
@@ -489,7 +493,9 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays, *args: Any, **kwargs: Any) -> DictOfNamedArrays:
         return DictOfNamedArrays({key: self.rec(val.expr, *args, **kwargs)
-                                  for key, val in expr.items()})
+                                  for key, val in expr.items()},
+                                 tags=expr.tags,
+                                 )
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: Any, **kwargs: Any) -> LoopyCall:
@@ -500,7 +506,9 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
         return LoopyCall(translation_unit=expr.translation_unit,
                          bindings=bindings,
-                         entrypoint=expr.entrypoint)
+                         entrypoint=expr.entrypoint,
+                         tags=expr.tags,
+                         )
 
     def map_loopy_call_result(self, expr: LoopyCallResult,
                               *args: Any, **kwargs: Any) -> Array:
@@ -1222,11 +1230,12 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
         items in *source_dict*
     """
     if not source_dict:
-        return DictOfNamedArrays({})
+        data = {}
+    else:
+        data = {name: copy_mapper(val.expr)
+                for name, val in sorted(source_dict.items())}
 
-    data = {name: copy_mapper(val.expr)
-            for name, val in sorted(source_dict.items())}
-    return DictOfNamedArrays(data)
+    return DictOfNamedArrays(data, tags=source_dict.tags)
 
 
 def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
@@ -1308,7 +1317,7 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     for name, ary in expr.items():
         new_data[name] = materializer(ary.expr).expr
 
-    return DictOfNamedArrays(new_data)
+    return DictOfNamedArrays(new_data, tags=expr.tags)
 
 # }}}
 
@@ -1693,6 +1702,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
                 name: self.handle_edge(expr, child)
                 if isinstance(child, Array) else child
                 for name, child in sorted(expr.bindings.items())},
+            tags=expr.tags,
             )
 
     def map_distributed_send_ref_holder(
