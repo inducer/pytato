@@ -1096,7 +1096,7 @@ def number_distributed_tags(
             for rank in res:
                 needing_parts = rank[1]
                 for inp in rank[0]:
-                    assert inp not in parts_to_needing_parts
+                    # assert inp not in parts_to_needing_parts
                     parts_to_needing_parts[inp] = needing_parts
 
             print(f"{parts_to_needing_parts=}")
