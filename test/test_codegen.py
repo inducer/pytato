@@ -183,7 +183,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
-    result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
+    result = pt.make_dict_of_named_arrays(dict(x_out=x, y_out=y))
 
     # With return_dict.
     prog = pt.generate_loopy(result)
@@ -525,7 +525,7 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
     y = 2*x
     z = y + 4*x
 
-    yz = pt.DictOfNamedArrays({"y": y, "z": z})
+    yz = pt.make_dict_of_named_arrays({"y": y, "z": z})
 
     knl = pt.generate_loopy(yz).kernel
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
@@ -750,7 +750,7 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
     cuatro_u = 2*call_loopy(twice, {"x": u}, "callee")["y"]
     nueve_u = 3*call_loopy(thrice, {"x": u}, "callee")["y"]
 
-    out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
+    out = pt.make_dict_of_named_arrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
     evt, out_dict = pt.generate_loopy(out,
                                       options=lp.Options(return_dict=True))(queue)
@@ -1376,7 +1376,7 @@ def test_random_dag_against_numpy(ctx_factory):
             ref_result = make_random_dag(rdagc_np)
             dag = make_random_dag(rdagc_pt)
             from pytato.transform import materialize_with_mpms
-            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = pt.make_dict_of_named_arrays({"result": dag})
             dict_named_arys = materialize_with_mpms(dict_named_arys)
             if 0:
                 pt.show_dot_graph(dict_named_arys)
@@ -1407,7 +1407,7 @@ def test_partitioner(ctx_factory):
         ref_result = make_random_dag(rdagc_np)
 
         from pytato.transform import materialize_with_mpms
-        dict_named_arys = materialize_with_mpms(pt.DictOfNamedArrays(
+        dict_named_arys = materialize_with_mpms(pt.make_dict_of_named_arrays(
                 {"result": make_random_dag(rdagc_pt)}))
 
         from dataclasses import dataclass
