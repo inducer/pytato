@@ -36,7 +36,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           InputArgumentBase, Einsum,
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, BasicIndex,
-                          NormalizedSlice)
+                          NormalizedSlice, make_dict_of_named_arrays)
 
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 INT_CLASSES, IntegralT)
@@ -183,7 +183,9 @@ class CodeGenPreprocessor(CopyMapper):
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
-                         entrypoint=entrypoint)
+                         entrypoint=entrypoint,
+                         tags=expr.tags
+                         )
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
@@ -616,9 +618,9 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
                 "either an Array or a DictOfNamedArrays")
 
     if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"_pt_out": result})
+        outputs = make_dict_of_named_arrays({"_pt_out": result})
     elif isinstance(result, dict):
-        outputs = DictOfNamedArrays(result)
+        outputs = make_dict_of_named_arrays(result)
     else:
         assert isinstance(result, DictOfNamedArrays)
         outputs = result

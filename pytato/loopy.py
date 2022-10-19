@@ -207,6 +207,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
       to :class:`pytato.array.Array`.
     :arg entrypoint: the entrypoint of the ``translation_unit`` parameter.
     """
+    from pytato.array import _get_default_tags
+
     if entrypoint is None:
         if len(translation_unit.entrypoints) != 1:
             raise ValueError("cannot infer entrypoint")
@@ -285,7 +287,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     translation_unit = translation_unit.with_entrypoints(frozenset())
 
-    return LoopyCall(translation_unit, bindings, entrypoint)
+    return LoopyCall(translation_unit, bindings, entrypoint,
+                     tags=_get_default_tags())
 
 
 # {{{ shape inference

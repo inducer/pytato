@@ -1976,12 +1976,14 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 
 # {{{ make_dict_of_named_arrays
 
-def make_dict_of_named_arrays(data: Dict[str, Array]) -> DictOfNamedArrays:
+def make_dict_of_named_arrays(data: Dict[str, Array], *,
+                              tags: FrozenSet[Tag] = frozenset()
+                              ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
     :param data: member keys and arrays
     """
-    return DictOfNamedArrays(data)
+    return DictOfNamedArrays(data, tags=(tags | _get_default_tags()))
 
 # }}}
 
