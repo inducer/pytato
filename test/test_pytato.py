@@ -29,6 +29,7 @@ import sys
 
 import numpy as np
 import pytest
+import attrs
 
 import pytato as pt
 
@@ -939,6 +940,21 @@ def test_with_tagged_reduction():
     assert (x_colsum
             .redn_axis_to_redn_descr[x_colsum.index_to_access_descr["i"]]
             .tags_of_type(FooRednTag))
+
+
+def test_derived_class_uses_correct_array_eq():
+    @attrs.define(frozen=True)
+    class MyNewArrayT(pt.Array):
+        pass
+
+    with pytest.raises(AssertionError):
+        MyNewArrayT(tags=frozenset(), axes=())
+
+    @attrs.define(frozen=True, eq=False)
+    class MyNewAndCorrectArrayT(pt.Array):
+        pass
+
+    MyNewAndCorrectArrayT(tags=frozenset(), axes=())
 
 
 if __name__ == "__main__":

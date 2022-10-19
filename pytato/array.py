@@ -446,6 +446,18 @@ class Array(Taggable):
     # disallow numpy arithmetic from taking precedence
     __array_priority__: ClassVar[int] = 1
 
+    def _is_eq_valid(self) -> bool:
+        return (self.__class__.__eq__ is Array.__eq__
+                and self.__class__.__hash__ is Array.__hash__)
+
+    def __post_init__(self) -> None:
+        # ensure that a developer does not uses dataclass' "__eq__"
+        # or "__hash__" implementation as they have exponential complexity.
+        assert self._is_eq_valid()
+
+    def __attrs_post_init__(self) -> None:
+        return self.__post_init__()
+
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         for field in self._fields:
             if field not in kwargs:
@@ -1471,6 +1483,7 @@ class Reshape(IndexRemappingBase):
     def __post_init__(self) -> None:
         # FIXME: Get rid of this restriction
         assert self.order == "C"
+        super().__post_init__()
 
     __attrs_post_init__ = __post_init__
 
@@ -1689,11 +1702,14 @@ class DataWrapper(InputArgumentBase):
     def name(self) -> None:
         return None
 
+    def _is_eq_valid(self) -> bool:
+        # we override __hash__ as hashing DataInterface is impractical
+        # => promise the __post_init__ that the change was intentional
+        #    and valid by returning True
+        return True
+
     def __hash__(self) -> int:
         return id(self)
-
-    def __eq__(self, other: Any) -> bool:
-        return self is other
 
     @property
     def shape(self) -> ShapeType:
