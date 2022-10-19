@@ -197,13 +197,9 @@ class CodeGenPreprocessor(CopyMapper):
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
-
-        def get_subscript(array_index: int) -> SymbolicIndex:
-            result = []
-            for i in range(expr.ndim):
-                if i != expr.axis:
-                    result.append(var(f"_{i}"))
-            return tuple(result)
+        subscript = tuple(var(f"_{i}")
+                          for i in range(expr.ndim)
+                          if i != expr.axis)
 
         # I = axis index
         #
@@ -214,7 +210,7 @@ class CodeGenPreprocessor(CopyMapper):
         #            ...
         #                _inNm1[_0, _1, ...] ...))
         for i in range(len(expr.arrays) - 1, -1, -1):
-            subarray_expr = var(f"_in{i}")[get_subscript(i)]
+            subarray_expr = var(f"_in{i}")[subscript]
             if i == len(expr.arrays) - 1:
                 stack_expr = subarray_expr
             else:
