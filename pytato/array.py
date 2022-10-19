@@ -768,7 +768,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         pass
 
 
-@attrs.define(frozen=True, eq=False)
+@attrs.define(frozen=True, eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -780,6 +780,18 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     _data: Mapping[str, Array]
 
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
+
+    def __init__(self, data: Mapping[str, Array], *,
+                 tags: Optional[FrozenSet[Tag]] = None) -> None:
+        if tags is None:
+            from warnings import warn
+            warn("Passing `tags=None` is deprecated and will result"
+                 " in an error from 2023. To remove this message either"
+                 " call make_dict_of_named_arrays or pass the `tags` argument.")
+            tags = frozenset()
+
+        object.__setattr__(self, "_data", data)
+        object.__setattr__(self, "tags", tags)
 
     def __hash__(self) -> int:
         return hash(frozenset(self._data.items()))
