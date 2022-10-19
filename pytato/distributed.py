@@ -1069,22 +1069,42 @@ def number_distributed_tags(
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
 
+        if __debug__:
+            print(f"{sym_tag_to_int_tag=}")
+
         mpi_communicator.bcast((sym_tag_to_int_tag, next_tag), root=root_rank)
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
     if __debug__:
-        all_parts_inputs = [
-            set(p.input_name_to_recv_node.keys()) for p in partition.parts.values()]
-        all_parts_outputs = [
-            set(p.output_name_to_send_node.keys()) for p in partition.parts.values()]
+        all_parts_inputs = [(k, v.src_rank)
+                            for p in partition.parts.values()
+                            for k, v in p.input_name_to_recv_node.items()]
+        all_parts_outputs = [(k, v.dest_rank)
+                             for p in partition.parts.values()
+                             for k, v in p.output_name_to_send_node.items()]
 
         res = mpi_communicator.gather((all_parts_inputs,
                                        all_parts_outputs), root=root_rank)
 
         if mpi_communicator.rank == root_rank:
             assert len(res) == mpi_communicator.size
-            # from pytools.graph import compute_topological_order
+            # print(f"{res=}")
+
+            rank_to_needing_ranks = {}
+            i = 0
+
+            for rank in res:
+                s = set()
+                for inp in rank[0]:
+                    s.add(inp[1])
+
+                rank_to_needing_ranks[i] = s
+                i += 1
+
+            # print(f"{rank_to_needing_ranks=}")
+            from pytools.graph import compute_topological_order
+            compute_topological_order(rank_to_needing_ranks)
 
     from attrs import evolve as replace
     return DistributedGraphPartition(
