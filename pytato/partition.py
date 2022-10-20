@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
         FrozenSet, Mapping, Optional, Type)
-from dataclasses import dataclass
+import attrs
 
 import logging
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ from pytools import memoize_method
 from pytato.transform import EdgeCachedMapper, CachedWalkMapper
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, Placeholder,
-        DictOfNamedArrays, make_placeholder)
+        DictOfNamedArrays, make_placeholder, make_dict_of_named_arrays)
 
 from pytato.target import BoundProgram
 
@@ -240,7 +240,7 @@ class GraphPartitioner(EdgeCachedMapper):
 
 # {{{ graph partition
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class GraphPart:
     """
     .. attribute:: pid
@@ -284,7 +284,7 @@ class GraphPart:
         return self.user_input_names | self. partition_input_names
 
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, slots=False)
 class GraphPartition:
     """Store information about a partitioning of an expression graph.
 
@@ -359,7 +359,7 @@ def find_partition(outputs: DictOfNamedArrays,
         _check_partition_disjointness(result)
 
     from pytato.analysis import get_num_nodes
-    num_nodes_per_part = [get_num_nodes(DictOfNamedArrays(
+    num_nodes_per_part = [get_num_nodes(make_dict_of_named_arrays(
             {x: result.var_name_to_result[x] for x in part.output_names}))
             for part in result.parts.values()]
 
@@ -423,7 +423,7 @@ def generate_code_for_partition(partition: GraphPartition) \
 
     for part in sorted(partition.parts.values(),
                        key=lambda part_: sorted(part_.output_names)):
-        d = DictOfNamedArrays(
+        d = make_dict_of_named_arrays(
                     {var_name: partition.var_name_to_result[var_name]
                         for var_name in part.output_names
                      })

@@ -36,7 +36,7 @@ from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
                           InputArgumentBase, Einsum,
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, BasicIndex,
-                          NormalizedSlice)
+                          NormalizedSlice, make_dict_of_named_arrays)
 
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 INT_CLASSES, IntegralT)
@@ -121,7 +121,7 @@ class CodeGenPreprocessor(CopyMapper):
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(name=name, tags=expr.tags)
+        return SizeParam(name, tags=expr.tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         name = expr.name
@@ -183,7 +183,9 @@ class CodeGenPreprocessor(CopyMapper):
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
-                         entrypoint=entrypoint)
+                         entrypoint=entrypoint,
+                         tags=expr.tags
+                         )
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
@@ -197,13 +199,9 @@ class CodeGenPreprocessor(CopyMapper):
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
-
-        def get_subscript(array_index: int) -> SymbolicIndex:
-            result = []
-            for i in range(expr.ndim):
-                if i != expr.axis:
-                    result.append(var(f"_{i}"))
-            return tuple(result)
+        subscript = tuple(var(f"_{i}")
+                          for i in range(expr.ndim)
+                          if i != expr.axis)
 
         # I = axis index
         #
@@ -214,7 +212,7 @@ class CodeGenPreprocessor(CopyMapper):
         #            ...
         #                _inNm1[_0, _1, ...] ...))
         for i in range(len(expr.arrays) - 1, -1, -1):
-            subarray_expr = var(f"_in{i}")[get_subscript(i)]
+            subarray_expr = var(f"_in{i}")[subscript]
             if i == len(expr.arrays) - 1:
                 stack_expr = subarray_expr
             else:
@@ -620,9 +618,9 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
                 "either an Array or a DictOfNamedArrays")
 
     if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"_pt_out": result})
+        outputs = make_dict_of_named_arrays({"_pt_out": result})
     elif isinstance(result, dict):
-        outputs = DictOfNamedArrays(result)
+        outputs = make_dict_of_named_arrays(result)
     else:
         assert isinstance(result, DictOfNamedArrays)
         outputs = result

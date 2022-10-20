@@ -38,6 +38,7 @@ setup(
         "pytools>=2022.1.8",
         "pyrsistent",
         "immutables",
+        "attrs",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
