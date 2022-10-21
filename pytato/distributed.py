@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
                     List, FrozenSet, Callable, cast, Mapping, Iterable,
-                    ClassVar
+                    ClassVar, TYPE_CHECKING
                     )  # Mapping required by sphinx
 from immutables import Map
 
@@ -49,6 +49,10 @@ from functools import cached_property
 from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import mpi4py.MPI
+
 
 __doc__ = r"""
 Distributed-memory evaluation of expression graphs is accomplished
@@ -78,6 +82,7 @@ nodes that are/are not a dependency of a receive or that feed/do not feed a send
 
 .. autoclass:: DistributedGraphPart
 .. autoclass:: DistributedGraphPartition
+.. autoclass:: verify_distributed_partition
 
 .. currentmodule:: pytato
 
@@ -476,7 +481,7 @@ def _gather_distributed_comm_info(partition: GraphPartition,
 # }}}
 
 
-# {{{ find_distributed_partition
+# {{{ helpers for find_distributed_partition
 
 class _DistributedGraphPartitioner(GraphPartitioner):
 
@@ -844,6 +849,99 @@ def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
     result: Array = ary.without_tags(ary.tags_of_type(PartIDTag))
     return result
 
+# }}}
+
+
+# {{{ verify_distributed_partition
+
+@attrs.define(frozen=True)
+class _SummarizedDistributedSend:
+    dest_rank: int
+    src_rank: int
+    comm_tag: CommTagType
+
+    shape: ShapeType
+    dtype: np.dtype
+
+
+@attrs.define(frozen=True)
+class _DistributedPartId:
+    rank: int
+    part_id: PartId
+
+
+@attrs.define(frozen=True)
+class _DistributedName:
+    rank: int
+    name: str
+
+
+@attrs.define(frozen=True)
+class _SummarizedDistributedGraphPart:
+    pid: _DistributedPartId
+    needed_pids: FrozenSet[_DistributedPartId]
+    user_input_names: FrozenSet[_DistributedName]
+    partition_input_names: FrozenSet[_DistributedName]
+    output_names: FrozenSet[_DistributedName]
+    input_name_to_recv_node: Dict[_DistributedName, DistributedRecv]
+    output_name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
+
+    @property
+    def rank(self) -> int:
+        return self.pid.rank
+
+
+def verify_distributed_partition(
+        mpi_communicator: MPI.Comm, partition: DistributedGraphPartition) -> None:
+    """
+    .. warning::
+
+        This is an MPI-collective operation.
+    """
+    # Convert local partition to _SummarizedDistributedGraphPart
+    # Gather those to rank 0.
+
+    # Every node in the graph is a _SummarizedDistributedGraphPart
+
+    # Loop through all receives, assert that combination of (src_rank, dest_rank, tag) is unique.
+    # Loop through all sends, assert that combination of (src_rank, dest_rank, tag) is unique.
+    # Loop through all receives again, making sure there's exactly one matching send.
+    # Loop through all sends again, making sure there's exactly one recv.
+
+    # Add edges between output_names and partition_input_names
+    # Add edges between sends and receives
+    # Add edges for needed_pids
+
+    # Try a topological sort
+
+    all_parts_inputs = [(k, v.src_rank)
+                        for p in partition.parts.values()
+                        for k, v in p.input_name_to_recv_node.items()]
+    all_parts_outputs = [(k, v.dest_rank)
+                            for p in partition.parts.values()
+                            for k, v in p.output_name_to_send_node.items()]
+
+    res = mpi_communicator.gather((all_parts_inputs,
+                                    all_parts_outputs), root=root_rank)
+
+    if mpi_communicator.rank == root_rank:
+        assert len(res) == mpi_communicator.size
+        print(f"{res=}")
+
+        parts_to_needing_parts = {}
+
+        for rank in res:
+            needing_parts = rank[1]
+            for inp in rank[0]:
+                # assert inp not in parts_to_needing_parts
+                parts_to_needing_parts[inp] = needing_parts
+
+        print(f"{parts_to_needing_parts=}")
+        from pytools.graph import compute_topological_order
+        compute_topological_order(parts_to_needing_parts)
+
+# }}}
+
 
 def find_distributed_partition(outputs: DictOfNamedArrays
                                ) -> DistributedGraphPartition:
@@ -1004,7 +1102,9 @@ def find_distributed_partition(outputs: DictOfNamedArrays
     def map_send(send: DistributedSend) -> DistributedSend:
         return send.copy(data=cmac(send.data))
 
-    return _map_distributed_graph_partion_nodes(map_array, map_send, gp)
+    partition = _map_distributed_graph_partion_nodes(map_array, map_send, gp)
+
+    return partition
 
 # }}}
 
@@ -1012,7 +1112,7 @@ def find_distributed_partition(outputs: DictOfNamedArrays
 # {{{ construct tag numbering
 
 def number_distributed_tags(
-        mpi_communicator: Any,
+        mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition,
         base_tag: int) -> Tuple[DistributedGraphPartition, int]:
     """Return a new :class:`~pytato.distributed.DistributedGraphPartition`
@@ -1076,33 +1176,6 @@ def number_distributed_tags(
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
-    if __debug__:
-        all_parts_inputs = [(k, v.src_rank)
-                            for p in partition.parts.values()
-                            for k, v in p.input_name_to_recv_node.items()]
-        all_parts_outputs = [(k, v.dest_rank)
-                             for p in partition.parts.values()
-                             for k, v in p.output_name_to_send_node.items()]
-
-        res = mpi_communicator.gather((all_parts_inputs,
-                                       all_parts_outputs), root=root_rank)
-
-        if mpi_communicator.rank == root_rank:
-            assert len(res) == mpi_communicator.size
-            print(f"{res=}")
-
-            parts_to_needing_parts = {}
-
-            for rank in res:
-                needing_parts = rank[1]
-                for inp in rank[0]:
-                    # assert inp not in parts_to_needing_parts
-                    parts_to_needing_parts[inp] = needing_parts
-
-            print(f"{parts_to_needing_parts=}")
-            from pytools.graph import compute_topological_order
-            compute_topological_order(parts_to_needing_parts)
-
     from attrs import evolve as replace
     return DistributedGraphPartition(
             parts={
@@ -1124,7 +1197,7 @@ def number_distributed_tags(
 
 # {{{ distributed execute
 
-def _post_receive(mpi_communicator: Any,
+def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
                  recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
