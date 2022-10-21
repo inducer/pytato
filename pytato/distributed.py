@@ -861,7 +861,7 @@ class _SummarizedDistributedSend:
     comm_tag: CommTagType
 
     shape: ShapeType
-    dtype: np.dtype
+    dtype: np.dtype[Any]
 
 
 @attrs.define(frozen=True)
@@ -891,54 +891,86 @@ class _SummarizedDistributedGraphPart:
         return self.pid.rank
 
 
-def verify_distributed_partition(
-        mpi_communicator: MPI.Comm, partition: DistributedGraphPartition) -> None:
+def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
+        partition: DistributedGraphPartition) -> None:
     """
     .. warning::
 
         This is an MPI-collective operation.
     """
+    my_rank = mpi_communicator.rank
+    root_rank = 0
+
     # Convert local partition to _SummarizedDistributedGraphPart
-    # Gather those to rank 0.
+    summarized_parts = {}
+
+    for pid, part in partition.parts.items():
+        assert pid == part.pid
+
+        sends = {}
+
+        for name, send in part.output_name_to_send_node.items():
+            n = _DistributedName(my_rank, name)
+            assert n not in sends
+            sends[n] = _SummarizedDistributedSend(my_rank, send.dest_rank,
+                            send.comm_tag, send.data.shape, send.data.dtype)
+
+        summarized_parts[pid] = _SummarizedDistributedGraphPart(
+            _DistributedPartId(my_rank, part.pid),
+            frozenset([_DistributedPartId(my_rank, pid)
+                            for pid in part.needed_pids]),
+            frozenset([_DistributedName(my_rank, name)
+                            for name in part.user_input_names]),
+            frozenset([_DistributedName(my_rank, name)
+                            for name in part.partition_input_names]),
+            frozenset([_DistributedName(my_rank, name)
+                            for name in part.output_names]),
+            {_DistributedName(my_rank, name): recv
+                for name, recv in part.input_name_to_recv_node.items()},
+            sends)
+
+    # Gather the _SummarizedDistributedGraphPart's to rank 0
+    all_summarized_parts = mpi_communicator.gather(summarized_parts, root=root_rank)
 
     # Every node in the graph is a _SummarizedDistributedGraphPart
 
-    # Loop through all receives, assert that combination of (src_rank, dest_rank, tag) is unique.
-    # Loop through all sends, assert that combination of (src_rank, dest_rank, tag) is unique.
-    # Loop through all receives again, making sure there's exactly one matching send.
-    # Loop through all sends again, making sure there's exactly one recv.
+    if mpi_communicator.rank == root_rank:
+        assert all_summarized_parts
+
+        all_recvs: Set[Tuple[int, Any, Hashable]] = set()
+        all_sends: Set[Tuple[Any, int, Hashable]] = set()
+        for rank_parts in all_summarized_parts:
+            for part in rank_parts.values():
+                # Loop through all receives, assert that combination of
+                # (src_rank, dest_rank, tag) is unique.
+                for name, dist_recv in part.input_name_to_recv_node.items():
+                    recv = (dist_recv.src_rank, name.rank, dist_recv.comm_tag)
+                    assert recv not in all_recvs, f"{recv=} --- {all_recvs=}"
+                    all_recvs.add(recv)
+
+                # Loop through all sends, assert that combination of
+                # (src_rank, dest_rank, tag) is unique.
+                for dist_send in part.output_name_to_send_node.values():
+                    s = (dist_send.src_rank, dist_send.dest_rank, dist_send.comm_tag)
+                    assert s not in all_sends, f"{s=} --- {all_sends=}"
+                    all_sends.add(s)
+
+        # Loop through all receives again, making sure there's exactly one
+        # matching send.
+        for r in all_recvs:
+            assert r in all_sends, f"{r=} --- {all_sends=}"
+
+        # Loop through all sends again, making sure there's exactly one recv.
+        for s in all_sends:
+            assert s in all_recvs, f"{s=} --- {all_recvs=}"
 
     # Add edges between output_names and partition_input_names
     # Add edges between sends and receives
     # Add edges for needed_pids
 
+    # Ignore user_input_names
+
     # Try a topological sort
-
-    all_parts_inputs = [(k, v.src_rank)
-                        for p in partition.parts.values()
-                        for k, v in p.input_name_to_recv_node.items()]
-    all_parts_outputs = [(k, v.dest_rank)
-                            for p in partition.parts.values()
-                            for k, v in p.output_name_to_send_node.items()]
-
-    res = mpi_communicator.gather((all_parts_inputs,
-                                    all_parts_outputs), root=root_rank)
-
-    if mpi_communicator.rank == root_rank:
-        assert len(res) == mpi_communicator.size
-        print(f"{res=}")
-
-        parts_to_needing_parts = {}
-
-        for rank in res:
-            needing_parts = rank[1]
-            for inp in rank[0]:
-                # assert inp not in parts_to_needing_parts
-                parts_to_needing_parts[inp] = needing_parts
-
-        print(f"{parts_to_needing_parts=}")
-        from pytools.graph import compute_topological_order
-        compute_topological_order(parts_to_needing_parts)
 
 # }}}
 
@@ -1177,7 +1209,7 @@ def number_distributed_tags(
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
     from attrs import evolve as replace
-    return DistributedGraphPartition(
+    p = DistributedGraphPartition(
             parts={
                 pid: replace(part,
                     input_name_to_recv_node={
@@ -1191,6 +1223,9 @@ def number_distributed_tags(
                 },
             var_name_to_result=partition.var_name_to_result,
             toposorted_part_ids=partition.toposorted_part_ids), next_tag
+
+    verify_distributed_partition(mpi_communicator, p[0])
+    return p
 
 # }}}
 
