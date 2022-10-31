@@ -933,44 +933,71 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
     all_summarized_parts = mpi_communicator.gather(summarized_parts, root=root_rank)
 
     # Every node in the graph is a _SummarizedDistributedGraphPart
+    graph = {}
 
     if mpi_communicator.rank == root_rank:
         assert all_summarized_parts
 
         all_recvs: Set[Tuple[int, Any, Hashable]] = set()
         all_sends: Set[Tuple[Any, int, Hashable]] = set()
+
         for rank_parts in all_summarized_parts:
             for part in rank_parts.values():
+                assert isinstance(part, _SummarizedDistributedGraphPart)
+                graph[part.pid] = set()
+
                 # Loop through all receives, assert that combination of
                 # (src_rank, dest_rank, tag) is unique.
                 for name, dist_recv in part.input_name_to_recv_node.items():
                     recv = (dist_recv.src_rank, name.rank, dist_recv.comm_tag)
-                    assert recv not in all_recvs, f"{recv=} --- {all_recvs=}"
+                    assert recv not in all_recvs, \
+                        f"Duplicate recv: {recv=} --- {all_recvs=}"
                     all_recvs.add(recv)
 
                 # Loop through all sends, assert that combination of
                 # (src_rank, dest_rank, tag) is unique.
                 for dist_send in part.output_name_to_send_node.values():
                     s = (dist_send.src_rank, dist_send.dest_rank, dist_send.comm_tag)
-                    assert s not in all_sends, f"{s=} --- {all_sends=}"
+                    assert s not in all_sends, \
+                        f"Duplicate send: {s=} --- {all_sends=}"
                     all_sends.add(s)
+
+                # Add edges for needed_pids (intra-rank)
+                for p in part.needed_pids:
+                    graph.setdefault(p, set()).add(part.pid)
+
+            # Add edges between output_names and partition_input_names (intra-rank)
+            all_parts_inputs = {p.pid
+                                for p in rank_parts.values()
+                                for k, v in p.input_name_to_recv_node.items()}
+            all_parts_outputs = {k: p.pid
+                                 for p in rank_parts.values()
+                                 for k, v in p.output_name_to_send_node.items()}
+
+            print(f"{all_parts_inputs=}")
+            print(f"{all_parts_outputs=}")
+            print(f"{all_parts_outputs=}")
+
+            for name, pid in all_parts_outputs.items():
+                assert pid in graph
+                graph[pid].add(all_parts_inputs[name])
 
         # Loop through all receives again, making sure there's exactly one
         # matching send.
         for r in all_recvs:
-            assert r in all_sends, f"{r=} --- {all_sends=}"
+            assert r in all_sends, f"Missing send: {r=} --- {all_sends=}"
 
         # Loop through all sends again, making sure there's exactly one recv.
         for s in all_sends:
-            assert s in all_recvs, f"{s=} --- {all_recvs=}"
+            assert s in all_recvs, f"Missing recv: {s=} --- {all_recvs=}"
 
-    # Add edges between output_names and partition_input_names
-    # Add edges between sends and receives
-    # Add edges for needed_pids
+        # Add edges between sends and receives (cross-rank)
 
-    # Ignore user_input_names
+        # Ignore user_input_names
 
-    # Try a topological sort
+        # Try a topological sort
+        from pytools.graph import compute_topological_order
+        compute_topological_order(graph)
 
 # }}}
 
@@ -1197,6 +1224,8 @@ def number_distributed_tags(
     if mpi_communicator.rank == root_rank:
         sym_tag_to_int_tag = {}
         next_tag = base_tag
+        assert isinstance(all_tags, frozenset)
+
         for sym_tag in all_tags:
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
@@ -1237,6 +1266,7 @@ def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
 
+    assert isinstance(recv.comm_tag, int)
     # mypy is right here, size params in 'recv.shape' must be evaluated
     buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[arg-type]
 
