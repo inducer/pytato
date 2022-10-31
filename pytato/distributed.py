@@ -25,7 +25,7 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
-                    List, FrozenSet, Callable, cast, Mapping, Iterable,
+                    List, FrozenSet, Callable, cast, Mapping, Iterable, Sequence,
                     ClassVar, TYPE_CHECKING
                     )  # Mapping required by sphinx
 from immutables import Map
@@ -891,6 +891,13 @@ class _SummarizedDistributedGraphPart:
         return self.pid.rank
 
 
+@attrs.define(frozen=True)
+class _CommIdentifier:
+    source_rank: int
+    dest_rank: int
+    comm_tag: Hashable
+
+
 def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition) -> None:
     """
@@ -902,7 +909,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
     root_rank = 0
 
     # Convert local partition to _SummarizedDistributedGraphPart
-    summarized_parts = {}
+    summarized_parts: \
+            Dict[_DistributedPartId, _SummarizedDistributedGraphPart] = {}
 
     for pid, part in partition.parts.items():
         assert pid == part.pid
@@ -915,89 +923,111 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
             sends[n] = _SummarizedDistributedSend(my_rank, send.dest_rank,
                             send.comm_tag, send.data.shape, send.data.dtype)
 
-        summarized_parts[pid] = _SummarizedDistributedGraphPart(
-            _DistributedPartId(my_rank, part.pid),
-            frozenset([_DistributedPartId(my_rank, pid)
+        dpid = _DistributedPartId(my_rank, part.pid)
+        summarized_parts[dpid] = _SummarizedDistributedGraphPart(
+            pid=dpid,
+            needed_pids=frozenset([_DistributedPartId(my_rank, pid)
                             for pid in part.needed_pids]),
-            frozenset([_DistributedName(my_rank, name)
+            user_input_names=frozenset([_DistributedName(my_rank, name)
                             for name in part.user_input_names]),
-            frozenset([_DistributedName(my_rank, name)
+            partition_input_names=frozenset([_DistributedName(my_rank, name)
                             for name in part.partition_input_names]),
-            frozenset([_DistributedName(my_rank, name)
+            output_names=frozenset([_DistributedName(my_rank, name)
                             for name in part.output_names]),
-            {_DistributedName(my_rank, name): recv
+            input_name_to_recv_node={_DistributedName(my_rank, name): recv
                 for name, recv in part.input_name_to_recv_node.items()},
-            sends)
+            output_name_to_send_node=sends)
 
     # Gather the _SummarizedDistributedGraphPart's to rank 0
-    all_summarized_parts = mpi_communicator.gather(summarized_parts, root=root_rank)
-
-    # Every node in the graph is a _SummarizedDistributedGraphPart
-    graph = {}
+    all_summarized_parts_gathered: Optional[
+            Sequence[Dict[_DistributedPartId, _SummarizedDistributedGraphPart]]] = \
+            mpi_communicator.gather(summarized_parts, root=root_rank)
 
     if mpi_communicator.rank == root_rank:
-        assert all_summarized_parts
+        assert all_summarized_parts_gathered
 
-        all_recvs: Set[Tuple[int, Any, Hashable]] = set()
-        all_sends: Set[Tuple[Any, int, Hashable]] = set()
+        all_summarized_parts = {
+                pid: sumpart
+                for rank_parts in all_summarized_parts_gathered
+                for pid, sumpart in rank_parts.items()}
 
-        for rank_parts in all_summarized_parts:
-            for part in rank_parts.values():
-                assert isinstance(part, _SummarizedDistributedGraphPart)
-                graph[part.pid] = set()
+        # Every node in the graph is a _SummarizedDistributedGraphPart
+        pid_to_needed_pids: Dict[_DistributedPartId, Set[_DistributedPartId]] = {}
 
-                # Loop through all receives, assert that combination of
-                # (src_rank, dest_rank, tag) is unique.
-                for name, dist_recv in part.input_name_to_recv_node.items():
-                    recv = (dist_recv.src_rank, name.rank, dist_recv.comm_tag)
-                    assert recv not in all_recvs, \
-                        f"Duplicate recv: {recv=} --- {all_recvs=}"
-                    all_recvs.add(recv)
+        def add_needed_pid(pid: _DistributedPartId,
+                           needed_pid: _DistributedPartId) -> None:
+            pid_to_needed_pids.setdefault(pid, set()).add(needed_pid)
 
-                # Loop through all sends, assert that combination of
-                # (src_rank, dest_rank, tag) is unique.
-                for dist_send in part.output_name_to_send_node.values():
-                    s = (dist_send.src_rank, dist_send.dest_rank, dist_send.comm_tag)
-                    assert s not in all_sends, \
-                        f"Duplicate send: {s=} --- {all_sends=}"
-                    all_sends.add(s)
+        all_recvs: Set[_CommIdentifier] = set()
+        all_sends: Set[_CommIdentifier] = set()
 
-                # Add edges for needed_pids (intra-rank)
-                for p in part.needed_pids:
-                    graph.setdefault(p, set()).add(part.pid)
+        print(all_summarized_parts)
+        output_to_defining_pid: Dict[_DistributedName, _DistributedPartId] = {}
+        for sumpart in all_summarized_parts.values():
+            for out_name in sumpart.output_names:
+                assert out_name not in output_to_defining_pid
+                output_to_defining_pid[out_name] = sumpart.pid
 
+        comm_id_to_sending_pid: Dict[_CommIdentifier, _DistributedPartId] = {}
+        for sumpart in all_summarized_parts.values():
+            for sumsend in sumpart.output_name_to_send_node.values():
+                comm_id = _CommIdentifier(
+                        source_rank=sumsend.src_rank,
+                        dest_rank=sumsend.dest_rank,
+                        comm_tag=sumsend.comm_tag)
+
+                if comm_id in comm_id_to_sending_pid:
+                    raise ValueError(f"duplicate send for comm id: '{comm_id}'")
+                comm_id_to_sending_pid[comm_id] = sumpart.pid
+
+        for sumpart in all_summarized_parts.values():
+            pid_to_needed_pids[sumpart.pid] = set(sumpart.needed_pids)
+
+            # Loop through all receives, assert that combination of
+            # (src_rank, dest_rank, tag) is unique.
+            for dname, dist_recv in sumpart.input_name_to_recv_node.items():
+                comm_id = _CommIdentifier(
+                        source_rank=dist_recv.src_rank,
+                        dest_rank=dname.rank,
+                        comm_tag=dist_recv.comm_tag)
+                assert comm_id not in all_recvs, \
+                    f"Duplicate recv: '{comm_id}' --- {all_recvs=}"
+                all_recvs.add(comm_id)
+
+                # Add edges between sends and receives (cross-rank)
+                try:
+                    sending_pid = comm_id_to_sending_pid[comm_id]
+                except KeyError:
+                    raise ValueError(f"no matching send for recv on '{comm_id}'")
+
+                add_needed_pid(sumpart.pid, sending_pid)
+
+            # Loop through all sends, assert that combination of
+            # (src_rank, dest_rank, tag) is unique.
+            for dist_send in sumpart.output_name_to_send_node.values():
+                comm_id = _CommIdentifier(
+                        source_rank=dist_send.src_rank,
+                        dest_rank=dist_send.dest_rank,
+                        comm_tag=dist_send.comm_tag)
+                assert comm_id not in all_sends, \
+                    f"Duplicate send: {comm_id=} --- {all_sends=}"
+                all_sends.add(comm_id)
+
+            for dname, dp in output_to_defining_pid.items():
+                print(dname, dp)
             # Add edges between output_names and partition_input_names (intra-rank)
-            all_parts_inputs = {p.pid
-                                for p in rank_parts.values()
-                                for k, v in p.input_name_to_recv_node.items()}
-            all_parts_outputs = {k: p.pid
-                                 for p in rank_parts.values()
-                                 for k, v in p.output_name_to_send_node.items()}
-
-            print(f"{all_parts_inputs=}")
-            print(f"{all_parts_outputs=}")
-            print(f"{all_parts_outputs=}")
-
-            for name, pid in all_parts_outputs.items():
-                assert pid in graph
-                graph[pid].add(all_parts_inputs[name])
-
-        # Loop through all receives again, making sure there's exactly one
-        # matching send.
-        for r in all_recvs:
-            assert r in all_sends, f"Missing send: {r=} --- {all_sends=}"
+            for input_name in sumpart.partition_input_names:
+                defining_pid = output_to_defining_pid[input_name]
+                assert defining_pid.rank == sumpart.pid.rank
+                add_needed_pid(sumpart.pid, defining_pid)
 
         # Loop through all sends again, making sure there's exactly one recv.
         for s in all_sends:
             assert s in all_recvs, f"Missing recv: {s=} --- {all_recvs=}"
 
-        # Add edges between sends and receives (cross-rank)
-
-        # Ignore user_input_names
-
         # Try a topological sort
         from pytools.graph import compute_topological_order
-        compute_topological_order(graph)
+        compute_topological_order(pid_to_needed_pids)
 
 # }}}
 
