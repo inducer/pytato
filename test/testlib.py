@@ -297,8 +297,8 @@ def get_random_pt_dag_with_send_recv_nodes(
 
     def gen_comm(rdagc: RandomDAGContext) -> pt.Array:
         nonlocal comm_tag
-        comm_tag += 1
         inner = make_random_dag(rdagc)
+        comm_tag += 1
         return pt.staple_distributed_send(
                 inner, dest_rank=(rank-1) % size, comm_tag=comm_tag,
                 stapled_to=pt.make_distributed_recv(
