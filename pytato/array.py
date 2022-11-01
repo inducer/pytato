@@ -879,7 +879,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     expr: prim.Expression
     _shape: ShapeType
     _dtype: np.dtype[Any]
-    bindings: Dict[str, Array]
+    bindings: Mapping[str, Array]
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
     _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("expr", "shape", "dtype",
