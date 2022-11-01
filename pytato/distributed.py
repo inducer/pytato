@@ -50,6 +50,10 @@ from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 
 import numpy as np
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 if TYPE_CHECKING:
     import mpi4py.MPI
 
@@ -901,6 +905,9 @@ class _CommIdentifier:
 def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition) -> None:
     """
+    Verify that a :class:`DistributedGraphPartition` is deadlock-free and has
+    exactly one matching recv for each send (and vice-versa).
+
     .. warning::
 
         This is an MPI-collective operation.
@@ -1025,9 +1032,11 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         for s in all_sends:
             assert s in all_recvs, f"Missing recv: {s=} --- {all_recvs=}"
 
-        # Try a topological sort
+        # Do a topological sort to check for any cycles
         from pytools.graph import compute_topological_order
         compute_topological_order(pid_to_needed_pids)
+
+        logger.info("verify_distributed_partition completed successfully.")
 
 # }}}
 
@@ -1260,9 +1269,6 @@ def number_distributed_tags(
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
 
-        # if __debug__:
-        #     print(f"{sym_tag_to_int_tag=}")
-
         mpi_communicator.bcast((sym_tag_to_int_tag, next_tag), root=root_rank)
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
@@ -1283,7 +1289,9 @@ def number_distributed_tags(
             var_name_to_result=partition.var_name_to_result,
             toposorted_part_ids=partition.toposorted_part_ids), next_tag
 
-    verify_distributed_partition(mpi_communicator, p[0])
+    if __debug__:
+        verify_distributed_partition(mpi_communicator, p[0])
+
     return p
 
 # }}}
