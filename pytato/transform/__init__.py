@@ -78,6 +78,9 @@ __doc__ = """
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: materialize_with_mpms
+.. autofunction:: deduplicate_data_wrappers
+.. automodule:: pytato.transform.lower_to_index_lambda
+.. currentmodule:: pytato.transform
 
 Dict representation of DAGs
 ---------------------------
@@ -86,8 +89,6 @@ Dict representation of DAGs
 .. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
-
-.. autofunction:: deduplicate_data_wrappers
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
