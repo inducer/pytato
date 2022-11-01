@@ -996,8 +996,10 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                         source_rank=dist_recv.src_rank,
                         dest_rank=dname.rank,
                         comm_tag=dist_recv.comm_tag)
-                assert comm_id not in all_recvs, \
-                    f"Duplicate recv: '{comm_id}' --- {all_recvs=}"
+
+                if comm_id in all_recvs:
+                    raise ValueError(f"Duplicate recv: '{comm_id}' --- {all_recvs=}")
+
                 all_recvs.add(comm_id)
 
                 # Add edges between sends and receives (cross-rank)
@@ -1015,8 +1017,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                         source_rank=dist_send.src_rank,
                         dest_rank=dist_send.dest_rank,
                         comm_tag=dist_send.comm_tag)
-                assert comm_id not in all_sends, \
-                    f"Duplicate send: {comm_id=} --- {all_sends=}"
+                if comm_id in all_sends:
+                    raise ValueError(f"Duplicate send: {comm_id=} --- {all_sends=}")
                 all_sends.add(comm_id)
 
             # Add edges between output_names and partition_input_names (intra-rank)
@@ -1030,7 +1032,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # Loop through all sends again, making sure there's exactly one recv.
         for s in all_sends:
-            assert s in all_recvs, f"Missing recv: {s=} --- {all_recvs=}"
+            if s not in all_recvs:
+                raise ValueError(f"no matching recv for send: {s=} --- {all_recvs=}")
 
         # Do a topological sort to check for any cycles
         from pytools.graph import compute_topological_order

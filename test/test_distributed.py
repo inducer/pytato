@@ -31,7 +31,8 @@ import os
 
 from pytato.distributed import (staple_distributed_send, make_distributed_recv,
     find_distributed_partition,
-    execute_distributed_partition, number_distributed_tags)
+    execute_distributed_partition, number_distributed_tags,
+    verify_distributed_partition)
 
 from pytato.partition import generate_code_for_partition
 
@@ -308,6 +309,53 @@ def test_deterministic_partitioning():
         assert set(results[:]) == {1}
 
         # }}}
+
+# }}}
+
+
+# {{{ test verify_distributed_partition
+
+def test_verify_distributed_partition():
+    run_test_with_mpi(2, _do_verify_distributed_partition)
+
+
+def _do_verify_distributed_partition(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    import pytest
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    # Test 1: unmatched recv
+    y = make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+
+    outputs = pt.make_dict_of_named_arrays({"out": y})
+    distributed_parts = find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(ValueError):
+            verify_distributed_partition(comm, distributed_parts)
+    else:
+        verify_distributed_partition(comm, distributed_parts)
+
+    # Test 2: unmatched send
+    rng = np.random.default_rng(seed=27)
+
+    x_in = rng.integers(100, size=(4, 4))
+    x = pt.make_data_wrapper(x_in)
+    halo = staple_distributed_send(x,
+                dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
+
+    outputs = pt.make_dict_of_named_arrays({"out": halo})
+    distributed_parts = find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(ValueError):
+            verify_distributed_partition(comm, distributed_parts)
+    else:
+        verify_distributed_partition(comm, distributed_parts)
 
 # }}}
 
