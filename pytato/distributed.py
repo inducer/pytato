@@ -961,7 +961,6 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         all_recvs: Set[_CommIdentifier] = set()
         all_sends: Set[_CommIdentifier] = set()
 
-        print(all_summarized_parts)
         output_to_defining_pid: Dict[_DistributedName, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for out_name in sumpart.output_names:
@@ -1013,10 +1012,11 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                     f"Duplicate send: {comm_id=} --- {all_sends=}"
                 all_sends.add(comm_id)
 
-            for dname, dp in output_to_defining_pid.items():
-                print(dname, dp)
             # Add edges between output_names and partition_input_names (intra-rank)
             for input_name in sumpart.partition_input_names:
+                # Input names from recv nodes have no corresponding output_name
+                if input_name in sumpart.input_name_to_recv_node.keys():
+                    continue
                 defining_pid = output_to_defining_pid[input_name]
                 assert defining_pid.rank == sumpart.pid.rank
                 add_needed_pid(sumpart.pid, defining_pid)
@@ -1260,8 +1260,8 @@ def number_distributed_tags(
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
 
-        if __debug__:
-            print(f"{sym_tag_to_int_tag=}")
+        # if __debug__:
+        #     print(f"{sym_tag_to_int_tag=}")
 
         mpi_communicator.bcast((sym_tag_to_int_tag, next_tag), root=root_rank)
     else:
