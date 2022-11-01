@@ -23,29 +23,24 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from functools import partialmethod
-from typing import Union, Dict, Tuple, Callable, List, Any
+from typing import Union, Dict, Tuple, List, Any
 
-import pymbolic.primitives as prim
-from pymbolic import var
-
-from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
+from pytato.array import (Array, DictOfNamedArrays,
                           DataWrapper, Roll, AxisPermutation,
-                          IndexRemappingBase, Stack, Placeholder, Reshape,
+                          Stack, Placeholder, Reshape,
                           Concatenate, DataInterface, SizeParam,
                           InputArgumentBase, Einsum,
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, BasicIndex,
-                          NormalizedSlice, make_dict_of_named_arrays)
+                          make_dict_of_named_arrays)
 
-from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                INT_CLASSES, IntegralT)
+from pytato.transform.lower_to_index_lambda import lower_to_index_lambda
+
+from pytato.scalar_expr import IntegralScalarExpression
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
 from pytato.target import Target
 from pytato.loopy import LoopyCall
-from pytato.tags import AssumeNonNegative
 from pytools import UniqueNameGenerator
-from immutables import Map
 import loopy as lp
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -199,409 +194,35 @@ class CodeGenPreprocessor(CopyMapper):
                 tags=expr.tags)
 
     def map_stack(self, expr: Stack) -> Array:
-        subscript = tuple(var(f"_{i}")
-                          for i in range(expr.ndim)
-                          if i != expr.axis)
-
-        # I = axis index
-        #
-        # => If(_I == 0,
-        #        _in0[_0, _1, ...],
-        #        If(_I == 1,
-        #            _in1[_0, _1, ...],
-        #            ...
-        #                _inNm1[_0, _1, ...] ...))
-        for i in range(len(expr.arrays) - 1, -1, -1):
-            subarray_expr = var(f"_in{i}")[subscript]
-            if i == len(expr.arrays) - 1:
-                stack_expr = subarray_expr
-            else:
-                from pymbolic.primitives import If, Comparison
-                stack_expr = If(Comparison(var(f"_{expr.axis}"), "==", i),
-                        subarray_expr,
-                        stack_expr)
-
-        bindings = {f"_in{i}": self.rec(array)
-                for i, array in enumerate(expr.arrays)}
-
-        return IndexLambda(expr=stack_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                axes=expr.axes,
-                bindings=bindings,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
     def map_concatenate(self, expr: Concatenate) -> Array:
-        from pymbolic.primitives import If, Comparison, Subscript
-
-        def get_subscript(array_index: int, offset: ScalarExpression) -> Subscript:
-            aggregate = var(f"_in{array_index}")
-            index = [var(f"_{i}") if i != expr.axis else (var(f"_{i}") - offset)
-                     for i in range(len(expr.shape))]
-            return Subscript(aggregate, tuple(index))
-
-        lbounds: List[Any] = [0]
-        ubounds: List[Any] = [expr.arrays[0].shape[expr.axis]]
-
-        for i, array in enumerate(expr.arrays[1:], start=1):
-            ubounds.append(ubounds[i-1]+array.shape[expr.axis])
-            lbounds.append(ubounds[i-1])
-
-        # I = axis index
-        #
-        # => If(0<=_I < arrays[0].shape[axis],
-        #        _in0[_0, _1, ..., _I, ...],
-        #        If(arrays[0].shape[axis]<= _I < (arrays[1].shape[axis]
-        #                                         +arrays[0].shape[axis]),
-        #            _in1[_0, _1, ..., _I-arrays[0].shape[axis], ...],
-        #            ...
-        #                _inNm1[_0, _1, ...] ...))
-        for i in range(len(expr.arrays) - 1, -1, -1):
-            lbound, ubound = lbounds[i], ubounds[i]
-            subarray_expr = get_subscript(i, lbound)
-            if i == len(expr.arrays) - 1:
-                stack_expr = subarray_expr
-            else:
-                stack_expr = If(Comparison(var(f"_{expr.axis}"), ">=", lbound)
-                                and Comparison(var(f"_{expr.axis}"), "<", ubound),
-                                subarray_expr,
-                                stack_expr)
-
-        bindings = {f"_in{i}": self.rec(array)
-                for i, array in enumerate(expr.arrays)}
-
-        return IndexLambda(expr=stack_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=bindings,
-                axes=expr.axes,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
     def map_roll(self, expr: Roll) -> Array:
-        from pytato.utils import dim_to_index_lambda_components
-
-        index_expr = var("_in0")
-        indices = [var(f"_{d}") for d in range(expr.ndim)]
-        axis = expr.axis
-        axis_len_expr, bindings = dim_to_index_lambda_components(
-            expr.shape[axis],
-            UniqueNameGenerator({"_in0"}))
-
-        indices[axis] = (indices[axis] - expr.shift) % axis_len_expr
-
-        if indices:
-            index_expr = index_expr[tuple(indices)]
-
-        bindings["_in0"] = expr.array  # type: ignore
-
-        return IndexLambda(expr=index_expr,
-                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                                       for s in expr.shape),
-                           dtype=expr.dtype,
-                           bindings={name: self.rec(bnd)
-                                     for name, bnd in bindings.items()},
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags)
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
     def map_einsum(self, expr: Einsum) -> Array:
-        import operator
-        from functools import reduce
-        from pytato.scalar_expr import Reduce
-        from pytato.utils import (dim_to_index_lambda_components,
-                                  are_shape_components_equal)
-        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
-        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
-        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
-        args_as_pym_expr: List[prim.Subscript] = []
-        namegen = UniqueNameGenerator(set(bindings))
-        var_to_redn_descr = {}
+    def map_reshape(self, expr: Reshape) -> Array:
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
-        # {{{ add bindings coming from the shape expressions
+    def map_axis_permutation(self, expr: AxisPermutation) -> Array:
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
-        for access_descr, (iarg, arg) in zip(expr.access_descriptors,
-                                            enumerate(expr.args)):
-            subscript_indices = []
-            for iaxis, axis in enumerate(access_descr):
-                if not are_shape_components_equal(
-                            arg.shape[iaxis],
-                            expr._access_descr_to_axis_len()[axis]):
-                    # axis is broadcasted
-                    assert are_shape_components_equal(arg.shape[iaxis], 1)
-                    subscript_indices.append(0)
-                    continue
-
-                if isinstance(axis, EinsumElementwiseAxis):
-                    subscript_indices.append(prim.Variable(f"_{axis.dim}"))
-                else:
-                    assert isinstance(axis, EinsumReductionAxis)
-                    redn_idx_name = f"_r{axis.dim}"
-                    if redn_idx_name not in redn_bounds:
-                        # convert the ShapeComponent to a ScalarExpression
-                        redn_bound, redn_bound_bindings = (
-                            dim_to_index_lambda_components(
-                                arg.shape[iaxis], namegen))
-                        redn_bounds[redn_idx_name] = (0, redn_bound)
-
-                        bindings.update({k: self.rec(v)
-                                         for k, v in redn_bound_bindings.items()})
-                        var_to_redn_descr[redn_idx_name] = (
-                            expr.redn_axis_to_redn_descr[axis])
-
-                    subscript_indices.append(prim.Variable(redn_idx_name))
-
-            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
-                                                   tuple(subscript_indices)))
-
-        # }}}
-
-        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
-                            args_as_pym_expr[0])
-
-        if redn_bounds:
-            from pytato.reductions import SumReductionOperation
-            inner_expr = Reduce(inner_expr,
-                                SumReductionOperation(),
-                                redn_bounds)
-
-        return IndexLambda(expr=inner_expr,
-                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                                       for s in expr.shape),
-                           dtype=expr.dtype,
-                           bindings=bindings,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(var_to_redn_descr),
-                           tags=expr.tags)
-
-    # {{{ index remapping (roll, axis permutation, slice)
-
-    def handle_index_remapping(self,
-            indices_getter: Callable[[CodeGenPreprocessor, Array], SymbolicIndex],
-            expr: IndexRemappingBase) -> Array:
-        indices = indices_getter(self, expr)
-
-        index_expr = var("_in0")
-        if indices:
-            index_expr = index_expr[indices]
-
-        array = self.rec(expr.array)
-
-        return IndexLambda(expr=index_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=dict(_in0=array),
-                axes=expr.axes,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
-
-    def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
-        indices = [None] * expr.ndim
-        for from_index, to_index in enumerate(expr.axis_permutation):
-            indices[to_index] = var(f"_{from_index}")
-        return tuple(indices)
-
-    def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
-        if expr.array.shape == ():
-            # RHS must be a scalar i.e. RHS' indices are empty
-            assert expr.size == 1
-            return ()
-
-        newstrides: List[IntegralT] = [1]  # reshaped array strides
-        for new_axis_len in reversed(expr.shape[1:]):
-            assert isinstance(new_axis_len, INT_CLASSES)
-            newstrides.insert(0, newstrides[0]*new_axis_len)
-
-        flattened_idx = sum(prim.Variable(f"_{i}")*stride
-                            for i, stride in enumerate(newstrides))
-
-        oldstrides: List[IntegralT] = [1]  # input array strides
-        for axis_len in reversed(expr.array.shape[1:]):
-            assert isinstance(axis_len, INT_CLASSES)
-            oldstrides.insert(0, oldstrides[0]*axis_len)
-
-        assert isinstance(expr.array.shape[-1], INT_CLASSES)
-        oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
-        for old_axis_len in reversed(expr.array.shape[:-1]):
-            assert isinstance(old_axis_len, INT_CLASSES)
-            oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
-
-        return tuple(((flattened_idx % sizetill) // stride)
-                     for stride, sizetill in zip(oldstrides, oldsizetills))
-
-    # https://github.com/python/mypy/issues/8619
-    map_axis_permutation = (
-            partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
-    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) #type: ignore # noqa
-
-    # }}}
-
-    def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-        islice_idx = 0
-
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = axis_len
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            else:
-                raise NotImplementedError
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
+    def map_basic_index(self, expr: BasicIndex) -> Array:
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
-                                      ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
-
-        i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
-
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-        islice_idx = 0
-
-        for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            elif isinstance(idx, Array):
-                if isinstance(axis_len, INT_CLASSES):
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
-                    indirect_idx_expr = prim.Subscript(
-                        prim.Variable(bnd_name),
-                        get_indexing_expression(
-                            idx.shape,
-                            (1,)*i_adv_indices[0]+adv_idx_shape))
-
-                    if not idx.tags_of_type(AssumeNonNegative):
-                        # We define "upper" out-of bounds access to be undefined
-                        # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
-
-                    indices.append(indirect_idx_expr)
-                else:
-                    raise NotImplementedError("Advanced indexing over"
-                                              " parametric axis lengths.")
-            else:
-                raise NotImplementedError(f"Indices of type {type(idx)}.")
-
-            if i_idx == i_adv_indices[-1]:
-                islice_idx += len(adv_idx_shape)
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
+                                      ) -> Array:
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 
     def map_non_contiguous_advanced_index(self,
                                           expr: AdvancedIndexInNoncontiguousAxes
-                                          ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
-        i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
-
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-
-        islice_idx = len(adv_idx_shape)
-
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            elif isinstance(idx, Array):
-                if isinstance(axis_len, INT_CLASSES):
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
-
-                    indirect_idx_expr = prim.Subscript(prim.Variable(bnd_name),
-                                                       get_indexing_expression(
-                                                           idx.shape,
-                                                           adv_idx_shape))
-
-                    if not idx.tags_of_type(AssumeNonNegative):
-                        # We define "upper" out-of bounds access to be undefined
-                        # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
-
-                    indices.append(indirect_idx_expr)
-                else:
-                    raise NotImplementedError("Advanced indexing over"
-                                              " parametric axis lengths.")
-            else:
-                raise NotImplementedError(f"Indices of type {type(idx)}.")
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
+                                          ) -> Array:
+        return self.map_index_lambda(lower_to_index_lambda(expr))
 # }}}
 
 
