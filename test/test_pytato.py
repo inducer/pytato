@@ -356,6 +356,8 @@ def test_userscollector():
 
 
 def test_asciidag():
+    pytest.importorskip("asciidag")
+
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
