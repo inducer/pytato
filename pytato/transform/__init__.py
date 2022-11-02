@@ -86,6 +86,7 @@ Dict representation of DAGs
 ---------------------------
 
 .. autoclass:: UsersCollector
+.. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
@@ -1474,13 +1475,16 @@ def reverse_graph(graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]]
         :attr:`UsersCollector.node_to_users`.
     :returns: A :class:`pyrsistent.PMap` representing *graph* with edges reversed.
     """
-    from warnings import warn
-    warn("pytato.transform.reverse_graph is deprecated. "
-         "Use pytools.graph.reverse_graph instead. This will stop working in "
-         "July 2023.", DeprecationWarning, stacklevel=2)
+    result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
 
-    from pytools.graph import reverse_graph as rev_graph
-    return pmap(rev_graph(graph))
+    for node_key, edges in graph.items():
+        # Make sure every node is in the result even if it has no users
+        result.setdefault(node_key, set())
+
+        for other_node_key in edges:
+            result.setdefault(other_node_key, set()).add(node_key)
+
+    return pmap({k: frozenset(v) for k, v in result.items()})
 
 
 def _recursively_get_all_users(
