@@ -28,7 +28,7 @@ from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
                     List, FrozenSet, Callable, cast, Mapping, Iterable,
                     ClassVar
                     )  # Mapping required by sphinx
-from pyrsistent.typing import PMap as PMapT
+from immutables import Map
 
 import attrs
 
@@ -45,7 +45,6 @@ from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
 from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
 from pytato.target import BoundProgram
 from pytato.analysis import DirectPredecessorsGetter
-from pyrsistent import pmap
 from functools import cached_property
 from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 
@@ -665,7 +664,7 @@ class _DominantMaterializedPredecessorsRecorder(CachedWalkMapper):
 
 
 def _linearly_schedule_batches(
-        predecessors: PMapT[Array, FrozenSet[Array]]) -> PMapT[Array, int]:
+        predecessors: Map[Array, FrozenSet[Array]]) -> Map[Array, int]:
     """
     Used by :func:`find_distributed_partition`. Based on the dependencies in
     *predecessors*, each node is assigned a time such that evaluating the array
@@ -700,14 +699,15 @@ def _linearly_schedule_batches(
 
         # }}}
 
-    return pmap(ary_to_time)
+    assert set(ary_to_time.values()) == set(range(current_time))
+    return Map(ary_to_time)
 
 
 def _assign_materialized_arrays_to_part_id(
         materialized_arrays: FrozenSet[Array],
         array_to_output_deps: Mapping[Array, FrozenSet[Array]],
         outputs_to_part_id: Mapping[Array, int]
-) -> PMapT[Array, int]:
+) -> Map[Array, int]:
     """
     Returns a mapping from a materialized array to the part's ID where all the
     inputs of the array expression are available.
@@ -730,12 +730,12 @@ def _assign_materialized_arrays_to_part_id(
              for dep in array_to_output_deps[ary]),
             default=-1) + 1
 
-    return pmap(materialized_array_to_part_id)
+    return Map(materialized_array_to_part_id)
 
 
 def _get_array_to_dominant_materialized_deps(
         outputs: DictOfNamedArrays,
-        materialized_arrays: FrozenSet[Array]) -> PMapT[Array, FrozenSet[Array]]:
+        materialized_arrays: FrozenSet[Array]) -> Map[Array, FrozenSet[Array]]:
     """
     Returns a mapping from each node in the DAG *outputs* to a :class:`frozenset`
     of its dominant materialized predecessors.
@@ -746,7 +746,7 @@ def _get_array_to_dominant_materialized_deps(
     dominant_materialized_deps_recorder = (
         _DominantMaterializedPredecessorsRecorder(dominant_materialized_deps))
     dominant_materialized_deps_recorder(outputs)
-    return pmap(dominant_materialized_deps_recorder.array_to_mat_preds)
+    return Map(dominant_materialized_deps_recorder.array_to_mat_preds)
 
 
 def _get_materialized_arrays_promoted_to_partition_outputs(
@@ -912,9 +912,9 @@ def find_distributed_partition(outputs: DictOfNamedArrays
 
     # {{{ compute a dependency graph between outputs, schedule and partition
 
-    output_to_deps = pmap({partition_out: (dep_mapper(partition_out)
-                                           - frozenset([partition_out]))
-                           for partition_out in partition_outputs})
+    output_to_deps = Map({partition_out: (dep_mapper(partition_out)
+                                          - frozenset([partition_out]))
+                          for partition_out in partition_outputs})
 
     output_to_part_id = _linearly_schedule_batches(output_to_deps)
 
@@ -922,9 +922,9 @@ def find_distributed_partition(outputs: DictOfNamedArrays
 
     # {{{ assign each materialized array a partition ID in which it will be placed
 
-    materialized_array_to_output_deps = pmap({ary: (dep_mapper(ary)
-                                                    - frozenset([ary]))
-                                              for ary in materialized_arrays})
+    materialized_array_to_output_deps = Map({ary: (dep_mapper(ary)
+                                                   - frozenset([ary]))
+                                             for ary in materialized_arrays})
     materialized_ary_to_part_id = _assign_materialized_arrays_to_part_id(
         materialized_arrays,
         materialized_array_to_output_deps,
