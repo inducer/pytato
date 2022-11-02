@@ -1463,26 +1463,6 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 
 # {{{ operations on graphs in dict form
 
-def reverse_graph(graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]]
-                  ) -> PMapT[ArrayOrNames, FrozenSet[ArrayOrNames]]:
-    """
-    Reverses a graph.
-
-    :param graph: A :class:`dict` representation of a directed graph, mapping each
-        node to other nodes to which it is connected by edges. A possible
-        use case for this function is the graph in
-        :attr:`UsersCollector.node_to_users`.
-    :returns: A :class:`pyrsistent.PMap` representing *graph* with edges reversed.
-    """
-    from warnings import warn
-    warn("pytato.transform.reverse_graph is deprecated. "
-         "Use pytools.graph.reverse_graph instead. This will stop working in "
-         "July 2023.", DeprecationWarning, stacklevel=2)
-
-    from pytools.graph import reverse_graph as rev_graph
-    return pmap(rev_graph(graph))
-
-
 def _recursively_get_all_users(
         direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
         node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
