@@ -44,8 +44,6 @@ from pytato.array import (
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
-from pyrsistent import pmap
-from pyrsistent.typing import PMap as PMapT
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
