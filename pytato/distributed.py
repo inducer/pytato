@@ -899,7 +899,7 @@ class _SummarizedDistributedGraphPart:
 class _CommIdentifier:
     src_rank: int
     dest_rank: int
-    comm_tag: Hashable
+    comm_tag: CommTagType
 
 
 def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,

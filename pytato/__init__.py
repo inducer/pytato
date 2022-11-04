@@ -100,6 +100,7 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 find_distributed_partition,
                                 number_distributed_tags,
                                 execute_distributed_partition,
+                                verify_distributed_partition,
                                 )
 
 from pytato.partition import generate_code_for_partition
@@ -153,6 +154,7 @@ __all__ = (
         "find_distributed_partition",
         "number_distributed_tags",
         "execute_distributed_partition",
+        "verify_distributed_partition",
 
         "generate_code_for_partition",
 
