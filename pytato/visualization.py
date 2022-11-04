@@ -242,6 +242,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         info.fields["dest_rank"] = str(expr.send.dest_rank)
 
+        info.fields["comm_tag"] = str(expr.send.comm_tag)
+
         self.nodes[expr] = info
 
 
