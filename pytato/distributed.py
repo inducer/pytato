@@ -838,7 +838,8 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
                     # at stored array the part id changes
                     user_part_id = self.stored_array_to_part_id[expr]
 
-                expr = expr.tagged(PartIDTag(user_part_id))
+                if not isinstance(expr, DistributedRecv):
+                    expr = expr.tagged(PartIDTag(user_part_id))
 
             result = super().rec(expr, user_part_id)
             self._cache[key] = result
@@ -1177,8 +1178,13 @@ def find_distributed_partition(outputs: DictOfNamedArrays
             raise NotImplementedError("find_distributed_partition"
                                       " cannot partition DictOfNamedArrays")
         assert isinstance(expr, Array)
-        tag, = expr.tags_of_type(PartIDTag)
-        assert isinstance(tag, PartIDTag)
+        try:
+            tag, = expr.tags_of_type(PartIDTag)
+        except ValueError:
+            print(f"{expr=}")
+            return None
+
+        # assert isinstance(tag, PartIDTag)
         return tag.part_id
 
     gp = cast(DistributedGraphPartition,
