@@ -860,8 +860,8 @@ def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
 
 @attrs.define(frozen=True)
 class _SummarizedDistributedSend:
-    dest_rank: int
     src_rank: int
+    dest_rank: int
     comm_tag: CommTagType
 
     shape: ShapeType
@@ -897,7 +897,7 @@ class _SummarizedDistributedGraphPart:
 
 @attrs.define(frozen=True)
 class _CommIdentifier:
-    source_rank: int
+    src_rank: int
     dest_rank: int
     comm_tag: Hashable
 
@@ -927,8 +927,12 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         for name, send in part.output_name_to_send_node.items():
             n = _DistributedName(my_rank, name)
             assert n not in sends
-            sends[n] = _SummarizedDistributedSend(my_rank, send.dest_rank,
-                            send.comm_tag, send.data.shape, send.data.dtype)
+            sends[n] = _SummarizedDistributedSend(
+                            src_rank=my_rank,
+                            dest_rank=send.dest_rank,
+                            comm_tag=send.comm_tag,
+                            shape=send.data.shape,
+                            dtype=send.data.dtype)
 
         dpid = _DistributedPartId(my_rank, part.pid)
         summarized_parts[dpid] = _SummarizedDistributedGraphPart(
@@ -978,7 +982,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         for sumpart in all_summarized_parts.values():
             for sumsend in sumpart.output_name_to_send_node.values():
                 comm_id = _CommIdentifier(
-                        source_rank=sumsend.src_rank,
+                        src_rank=sumsend.src_rank,
                         dest_rank=sumsend.dest_rank,
                         comm_tag=sumsend.comm_tag)
 
@@ -993,7 +997,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
             # (src_rank, dest_rank, tag) is unique.
             for dname, dist_recv in sumpart.input_name_to_recv_node.items():
                 comm_id = _CommIdentifier(
-                        source_rank=dist_recv.src_rank,
+                        src_rank=dist_recv.src_rank,
                         dest_rank=dname.rank,
                         comm_tag=dist_recv.comm_tag)
 
@@ -1014,7 +1018,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
             # (src_rank, dest_rank, tag) is unique.
             for dist_send in sumpart.output_name_to_send_node.values():
                 comm_id = _CommIdentifier(
-                        source_rank=dist_send.src_rank,
+                        src_rank=dist_send.src_rank,
                         dest_rank=dist_send.dest_rank,
                         comm_tag=dist_send.comm_tag)
                 if comm_id in all_sends:
