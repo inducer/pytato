@@ -1234,6 +1234,9 @@ def number_distributed_tags(
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
     """
+    if __debug__:
+        verify_distributed_partition(mpi_communicator, partition)
+
     tags = frozenset({
             recv.comm_tag
             for part in partition.parts.values()
@@ -1295,9 +1298,6 @@ def number_distributed_tags(
                 },
             var_name_to_result=partition.var_name_to_result,
             toposorted_part_ids=partition.toposorted_part_ids), next_tag
-
-    if __debug__:
-        verify_distributed_partition(mpi_communicator, p[0])
 
     return p
 
