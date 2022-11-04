@@ -400,7 +400,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 for name, recv in (
                         part.input_name_to_recv_node.items()):
                     node_id = id_gen("recv")
-                    _emit_array(emit, "Recv", {
+                    _emit_array(emit, "DistributedRecv", {
                         "shape": stringify_shape(recv.shape),
                         "dtype": str(recv.dtype),
                         "src_rank": str(recv.src_rank),
@@ -484,7 +484,9 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                     for name, send in (
                             part.output_name_to_send_node.items()):
                         node_id = id_gen("send")
-                        _emit_array(emit, "Send", {
+                        _emit_array(emit, "DistributedSend", {
+                            "shape": str(send.data.shape),
+                            "dtype": str(send.data.dtype),
                             "dest_rank": str(send.dest_rank),
                             "comm_tag": str(send.comm_tag),
                             }, node_id)
