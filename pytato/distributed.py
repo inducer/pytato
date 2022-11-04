@@ -353,7 +353,7 @@ class DistributedGraphPartition(GraphPartition):
     parts: Dict[PartId, DistributedGraphPart]
 
 
-def _map_distributed_graph_partion_nodes(
+def _map_distributed_graph_partition_nodes(
         map_array: Callable[[Array], Array],
         map_send: Callable[[DistributedSend], DistributedSend],
         gp: DistributedGraphPartition) -> DistributedGraphPartition:
@@ -1021,6 +1021,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                         src_rank=dist_send.src_rank,
                         dest_rank=dist_send.dest_rank,
                         comm_tag=dist_send.comm_tag)
+
                 if comm_id in all_sends:
                     raise ValueError(f"Duplicate send: {comm_id=} --- {all_sends=}")
                 all_sends.add(comm_id)
@@ -1207,7 +1208,7 @@ def find_distributed_partition(outputs: DictOfNamedArrays
     def map_send(send: DistributedSend) -> DistributedSend:
         return send.copy(data=cmac(send.data))
 
-    partition = _map_distributed_graph_partion_nodes(map_array, map_send, gp)
+    partition = _map_distributed_graph_partition_nodes(map_array, map_send, gp)
 
     return partition
 
