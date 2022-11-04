@@ -54,6 +54,11 @@ def lower_to_index_lambda(expr: Array) -> IndexLambda:
 
 
 @lower_to_index_lambda.register
+def map_index_lambda(expr: IndexLambda) -> IndexLambda:
+    return expr
+
+
+@lower_to_index_lambda.register
 def map_stack(expr: Stack) -> IndexLambda:
     subscript = tuple(prim.Variable(f"_{i}")
                       for i in range(expr.ndim)
