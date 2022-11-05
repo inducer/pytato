@@ -37,6 +37,7 @@ from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
 from pytato.loopy import LoopyCall
+from pytato.function import Call, NamedCallResult
 
 from pytato.array import (
         Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
@@ -242,6 +243,28 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         info.fields["comm_tag"] = str(expr.send.comm_tag)
 
         self.nodes[expr] = info
+
+    def map_call(self, expr: Call) -> None:
+        for bnd in expr.bindings.values():
+            self.rec(bnd)
+
+        self.nodes[expr] = DotNodeInfo(
+            title=expr.__class__.__name__,
+            edges=dict(expr.bindings),
+            fields={
+                "addr": hex(id(expr)),
+                "tags": stringify_tags(expr.tags),
+            }
+        )
+
+    def map_named_call_result(self, expr: NamedCallResult) -> None:
+        self.rec(expr._container)
+        self.nodes[expr] = DotNodeInfo(
+                title=expr.__class__.__name__,
+                edges={"": expr._container},
+                fields={"addr": hex(id(expr)),
+                        "name": expr.name},
+        )
 
 
 def dot_escape(s: str) -> str:
@@ -551,4 +574,4 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
     from pytools.graphviz import show_dot
     show_dot(dot_code, **kwargs)
 
-# }}}
+# vim:fdm=marker

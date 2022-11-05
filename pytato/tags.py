@@ -11,6 +11,8 @@ Pre-Defined Tags
 .. autoclass:: AssumeNonNegative
 .. autoclass:: ExpandedDimsReshape
 .. autoclass:: FunctionIdentifier
+.. autoclass:: CallImplementationTag
+.. autoclass:: InlineCallTag
 """
 
 from typing import Tuple, Hashable
@@ -131,8 +133,28 @@ class ExpandedDimsReshape(UniqueTag):
 @dataclass(frozen=True)
 class FunctionIdentifier(UniqueTag):
     """
-    A tag that can be attached to a
-    :class:`~pytato.function.FunctionDefinition` node to
-    to describe the function's identifier.
+    A tag that can be attached to a :class:`~pytato.function.FunctionDefinition`
+    node to to describe the function's identifier. One can use this to refer
+    all instances of :class:`~pytato.function.FunctionDefinition`, for example in
+    transformations.transform.calls.concatenate_calls`.
+
+    .. attribute:: identifier
     """
     identifier: Hashable
+
+
+@dataclass(frozen=True)
+class CallImplementationTag(UniqueTag):
+    """
+    A tag that can be attached to a :class:`~pytato.function.Call` node to
+    direct a :class:`~pytato.target.Target` how the call site should be
+    lowered.
+    """
+
+
+@dataclass(frozen=True)
+class InlineCallTag(CallImplementationTag):
+    r"""
+    A :class:`CallImplementationTag` that directs the
+    :class:`pytato.target.Target` to inline the call site.
+    """

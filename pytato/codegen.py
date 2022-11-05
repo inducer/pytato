@@ -23,7 +23,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Union, Dict, Tuple, List, Any
+from typing import Union, Dict, Tuple, List, Any, Optional
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
@@ -102,12 +102,17 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     ======================================  =====================================
     """
 
-    def __init__(self, target: Target) -> None:
+    def __init__(self, target: Target,
+                 kernels_seen: Optional[Dict[str, lp.LoopKernel]] = None
+                 ) -> None:
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
-        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
+        self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
+
+    def clone_for_callee(self) -> CodeGenPreprocessor:
+        return CodeGenPreprocessor(self.target, self.kernels_seen)
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
