@@ -96,6 +96,14 @@ Dict representation of DAGs
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
+
+Transforming call sites
+-----------------------
+
+.. automodule:: pytato.transform.calls
+
+.. currentmodule:: pytato.transform
+
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
