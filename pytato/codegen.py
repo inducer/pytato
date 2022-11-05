@@ -267,6 +267,7 @@ class PreprocessResult:
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays
+    from pytato.transform.calls import inline_calls
 
     check_validity_of_outputs(outputs)
 
@@ -294,12 +295,14 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor(target)
+    new_outputs = inline_calls(outputs)
+    assert isinstance(new_outputs, DictOfNamedArrays)
 
-    new_outputs = copy_dict_of_named_arrays(outputs, mapper)
+    mapper = CodeGenPreprocessor(target)
+    new_outputs = copy_dict_of_named_arrays(new_outputs, mapper)
 
     return PreprocessResult(outputs=new_outputs,
-            compute_order=tuple(output_order),
-            bound_arguments=mapper.bound_arguments)
+                            compute_order=tuple(output_order),
+                            bound_arguments=mapper.bound_arguments)
 
 # vim: fdm=marker
