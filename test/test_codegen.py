@@ -1962,7 +1962,8 @@ def test_function_call(ctx_factory):
         np.testing.assert_allclose(outputs[key], expected[key])
 
 
-def test_nested_function_calls(ctx_factory):
+@pytest.mark.parametrize("should_concatenate_bar", (False, True))
+def test_nested_function_calls(ctx_factory, should_concatenate_bar):
     from functools import partial
 
     ctx = ctx_factory()
@@ -1996,6 +1997,14 @@ def test_nested_function_calls(ctx_factory):
                                            "out2": call_bar(pt.trace_call, x2, y2)}
                                           )
     result = pt.tag_all_calls_to_be_inlined(result)
+    if should_concatenate_bar:
+        from pytato.transform.calls import CallsiteCollector
+        assert len(CallsiteCollector(())(result)) == 4
+        result = pt.concatenate_calls(
+            result,
+            lambda x: pt.tags.FunctionIdentifier("bar") in x.call.function.tags)
+        assert len(CallsiteCollector(())(result)) == 2
+
     expect = pt.make_dict_of_named_arrays({"out1": call_bar(ref_tracer, x1, y1),
                                            "out2": call_bar(ref_tracer, x2, y2)}
                                           )
@@ -2006,6 +2015,109 @@ def test_nested_function_calls(ctx_factory):
     assert result_out.keys() == expect_out.keys()
     for k in expect_out:
         np.testing.assert_allclose(result_out[k], expect_out[k])
+
+
+def test_concatenate_calls_no_nested(ctx_factory):
+    rng = np.random.default_rng(0)
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    def foo(x, y):
+        return 3*x + 4*y + 42*pt.sin(x) + 1729*pt.tan(y)*pt.maximum(x, y)
+
+    x1 = pt.make_placeholder("x1", (10, 4), np.float64)
+    x2 = pt.make_placeholder("x2", (10, 4), np.float64)
+
+    y1 = pt.make_placeholder("y1", (10, 4), np.float64)
+    y2 = pt.make_placeholder("y2", (10, 4), np.float64)
+
+    z1 = pt.make_placeholder("z1", (10, 4), np.float64)
+    z2 = pt.make_placeholder("z2", (10, 4), np.float64)
+
+    result = pt.make_dict_of_named_arrays({"out1": 2*pt.trace_call(foo, 2*x1, 3*x2),
+                                           "out2": 4*pt.trace_call(foo, 4*y1, 9*y2),
+                                           "out3": 6*pt.trace_call(foo, 7*z1, 8*z2)
+                                           })
+
+    concatenated_result = pt.concatenate_calls(
+        result, lambda x: pt.tags.FunctionIdentifier("foo") in x.call.function.tags)
+
+    result = pt.tag_all_calls_to_be_inlined(result)
+    concatenated_result = pt.tag_all_calls_to_be_inlined(concatenated_result)
+
+    assert (pt.analysis.get_num_nodes(pt.inline_calls(result))
+            > pt.analysis.get_num_nodes(pt.inline_calls(concatenated_result)))
+
+    x1_np, x2_np, y1_np, y2_np, z1_np, z2_np = rng.random((6, 10, 4))
+
+    _, out_dict1 = pt.generate_loopy(result)(cq,
+                                             x1=x1_np, x2=x2_np,
+                                             y1=y1_np, y2=y2_np,
+                                             z1=z1_np, z2=z2_np)
+
+    _, out_dict2 = pt.generate_loopy(concatenated_result)(cq,
+                                                          x1=x1_np, x2=x2_np,
+                                                          y1=y1_np, y2=y2_np,
+                                                          z1=z1_np, z2=z2_np)
+    assert out_dict1.keys() == out_dict2.keys()
+
+    for key in out_dict1:
+        np.testing.assert_allclose(out_dict1[key], out_dict2[key])
+
+
+def test_concatenation_via_constant_expressions(ctx_factory):
+
+    from pytato.transform.calls import CallsiteCollector
+
+    rng = np.random.default_rng(0)
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    def resampling(coords, iels):
+        return coords[iels]
+
+    n_el = 1000
+    n_dof = 20
+    n_dim = 3
+
+    n_left_els = 17
+    n_right_els = 29
+
+    coords_dofs_np = rng.random((n_el, n_dim, n_dof), np.float64)
+    left_bnd_iels_np = rng.integers(low=0, high=n_el, size=n_left_els)
+    right_bnd_iels_np = rng.integers(low=0, high=n_el, size=n_right_els)
+
+    coords_dofs = pt.make_data_wrapper(coords_dofs_np)
+    left_bnd_iels = pt.make_data_wrapper(left_bnd_iels_np)
+    right_bnd_iels = pt.make_data_wrapper(right_bnd_iels_np)
+
+    lcoords = pt.trace_call(resampling, coords_dofs, left_bnd_iels)
+    rcoords = pt.trace_call(resampling, coords_dofs, right_bnd_iels)
+
+    result = pt.make_dict_of_named_arrays({"lcoords": lcoords,
+                                           "rcoords": rcoords})
+    result = pt.tag_all_calls_to_be_inlined(result)
+
+    assert len(CallsiteCollector(())(result)) == 2
+    concated_result = pt.concatenate_calls(
+        result,
+        lambda cs: pt.tags.FunctionIdentifier("resampling") in cs.call.function.tags
+    )
+    assert len(CallsiteCollector(())(concated_result)) == 1
+
+    _, out_result = pt.generate_loopy(result)(cq)
+    np.testing.assert_allclose(out_result["lcoords"],
+                               coords_dofs_np[left_bnd_iels_np])
+    np.testing.assert_allclose(out_result["rcoords"],
+                               coords_dofs_np[right_bnd_iels_np])
+
+    _, out_concated_result = pt.generate_loopy(result)(cq)
+    np.testing.assert_allclose(out_concated_result["lcoords"],
+                               coords_dofs_np[left_bnd_iels_np])
+    np.testing.assert_allclose(out_concated_result["rcoords"],
+                               coords_dofs_np[right_bnd_iels_np])
 
 
 if __name__ == "__main__":
