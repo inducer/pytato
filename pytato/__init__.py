@@ -93,6 +93,7 @@ from pytato.visualization import (get_dot_graph, show_dot_graph,
                                   get_dot_graph_from_partition)
 import pytato.analysis as analysis
 import pytato.tags as tags
+import pytato.function as function
 import pytato.transform as transform
 from pytato.distributed.nodes import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
@@ -108,6 +109,7 @@ from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.transform.remove_broadcasts_einsum import (
     rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
+from pytato.function import trace_call
 
 from pytato.partition import generate_code_for_partition
 
@@ -154,6 +156,8 @@ __all__ = (
 
         "broadcast_to", "pad",
 
+        "trace_call",
+
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
 
@@ -174,6 +178,6 @@ __all__ = (
         "unify_axes_tags",
 
         # sub-modules
-        "analysis", "tags", "transform",
+        "analysis", "tags", "transform", "function",
 
 )
