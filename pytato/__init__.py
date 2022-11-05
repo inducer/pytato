@@ -111,6 +111,7 @@ from pytato.transform.remove_broadcasts_einsum import (
     rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
 from pytato.function import trace_call
+from pytato.transform.calls import concatenate_calls
 
 from pytato.partition import generate_code_for_partition
 
@@ -158,6 +159,8 @@ __all__ = (
         "broadcast_to", "pad",
 
         "trace_call",
+
+        "concatenate_calls",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
