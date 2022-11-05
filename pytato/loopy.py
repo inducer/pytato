@@ -93,7 +93,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
-                     self.entrypoint))
+                     self.entrypoint, self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._result_names
@@ -117,19 +117,6 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
-
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-
-        if not isinstance(other, LoopyCall):
-            return False
-
-        if ((self.entrypoint == other.entrypoint)
-             and (self.bindings == other.bindings)
-             and (self.translation_unit == other.translation_unit)):
-            return True
-        return False
 
 
 class LoopyCallResult(NamedArray):
