@@ -325,18 +325,24 @@ def test_toposortmapper():
 def test_userscollector():
     from testlib import RandomDAGContext, make_random_dag
     from pytato.transform import UsersCollector
+    from pytato.analysis import get_nusers
 
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
     y = array+1
 
     uc = UsersCollector()
     uc(y)
+
     assert len(uc.node_to_users) == 2
+    assert uc.node_to_users[y] == set()
+    assert uc.node_to_users[array].pop() == y
+    assert len(uc.node_to_users[array]) == 0
 
     # Test random DAGs
     axis_len = 5
 
     for i in range(100):
+        print(i)
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                 axis_len=axis_len, use_numpy=False)
 
@@ -345,7 +351,13 @@ def test_userscollector():
         uc = UsersCollector()
         uc(dag)
 
-        assert len(uc.node_to_users) > 0
+        nuc = get_nusers(dag)
+
+        assert len(uc.node_to_users) == len(nuc)+1
+        assert uc.node_to_users[dag] == set()
+        assert nuc[dag] == 0
+        for ary, users in uc.node_to_users.items():
+            assert len(users) == nuc[ary]
 
 
 def test_asciidag():
