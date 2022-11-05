@@ -768,6 +768,17 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
     _mapper_method: ClassVar[str]
 
+    def _is_eq_valid(self) -> bool:
+        return self.__class__.__eq__ is AbstractResultWithNamedArrays.__eq__
+
+    def __post_init__(self) -> None:
+        # ensure that a developer does not uses dataclass' "__eq__"
+        # or "__hash__" implementation as they have exponential complexity.
+        assert self._is_eq_valid()
+
+    def __attrs_post_init__(self) -> None:
+        return self.__post_init__()
+
     @abstractmethod
     def __contains__(self, name: object) -> bool:
         pass
@@ -779,6 +790,13 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     @abstractmethod
     def __len__(self) -> int:
         pass
+
+    def __eq__(self, other: Any) -> bool:
+        if self is other:
+            return True
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
 
 @attrs.define(frozen=True, eq=False, init=False)
@@ -807,7 +825,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         object.__setattr__(self, "tags", tags)
 
     def __hash__(self) -> int:
-        return hash(frozenset(self._data.items()))
+        return hash((frozenset(self._data.items()), self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
@@ -825,13 +843,6 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
-
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-
-        from pytato.equality import EqualityComparer
-        return EqualityComparer()(self, other)
 
     def __repr__(self) -> str:
         return "DictOfNamedArrays(" + str(self._data) + ")"
@@ -2535,6 +2546,8 @@ def make_index_lambda(
 # }}}
 
 
+# {{{ dot, vdot
+
 def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     """
     For 1-dimensional arrays *a* and *b* computes their inner product.  See
@@ -2583,6 +2596,10 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
     return pt.dot(pt.conj(a), b)
 
+# }}}
+
+
+# {{{ broadcast_to
 
 def broadcast_to(array: Array, shape: ShapeType) -> Array:
     """
@@ -2610,6 +2627,10 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=Map())
 
+# }}}
+
+
+# {{{ squeeze
 
 def squeeze(array: Array) -> Array:
     """Remove single-dimensional entries from the shape of an array."""
@@ -2619,6 +2640,10 @@ def squeeze(array: Array) -> Array:
             0 if are_shape_components_equal(s_i, 1) else slice(s_i)
             for i, s_i in enumerate(array.shape))]
 
+# }}}
+
+
+# {{{ expand_dims
 
 def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
     """
@@ -2659,5 +2684,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
                    tags=(_get_default_tags()
                          | {ExpandedDimsReshape(tuple(normalized_axis))}),
                    axes=_get_default_axes(len(new_shape)))
+
+# }}}
 
 # vim: foldmethod=marker
