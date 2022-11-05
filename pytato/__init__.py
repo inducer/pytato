@@ -91,6 +91,7 @@ from pytato.target.python.jax import generate_jax
 from pytato.visualization import (get_dot_graph, show_dot_graph,
                                   get_ascii_graph, show_ascii_graph,
                                   get_dot_graph_from_partition)
+from pytato.transform.calls import tag_all_calls_to_be_inlined, inline_calls
 import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.function as function
@@ -163,6 +164,8 @@ __all__ = (
 
         "DistributedGraphPart",
         "DistributedGraphPartition",
+        "tag_all_calls_to_be_inlined", "inline_calls",
+
         "find_distributed_partition",
 
         "number_distributed_tags",
