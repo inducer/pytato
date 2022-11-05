@@ -47,4 +47,7 @@ nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"pyrsistent.typing.(.+)"],
     ["py:class", r"typing_extensions(.+)"],
+    # As of 2022-10-20, it doesn't look like there's sphinx documentation
+    # available.
+    ["py:class", r"immutables\.(.+)"],
 ]
