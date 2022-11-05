@@ -10,9 +10,10 @@ Pre-Defined Tags
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
 .. autoclass:: ExpandedDimsReshape
+.. autoclass:: FunctionIdentifier
 """
 
-from typing import Tuple
+from typing import Tuple, Hashable
 from pytools.tag import Tag, UniqueTag
 from dataclasses import dataclass
 
@@ -125,3 +126,13 @@ class ExpandedDimsReshape(UniqueTag):
         frozenset({ExpandedDimsReshape(new_dims=(0, 2, 4))})
     """
     new_dims: Tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class FunctionIdentifier(UniqueTag):
+    """
+    A tag that can be attached to a
+    :class:`~pytato.function.FunctionDefinition` node to
+    to describe the function's identifier.
+    """
+    identifier: Hashable
