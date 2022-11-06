@@ -960,6 +960,16 @@ def test_derived_class_uses_correct_array_eq():
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
 
 
+def test_lower_to_index_lambda():
+    from pytato.array import IndexLambda, Reshape
+    expr = pt.ones(12).reshape(6, 2).reshape(3, 4)
+    idx_lambda = pt.to_index_lambda(expr)
+    assert isinstance(idx_lambda, IndexLambda)
+    binding, = idx_lambda.bindings.values()
+    # test that it didn't recurse further
+    assert isinstance(binding, Reshape)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
