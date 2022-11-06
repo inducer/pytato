@@ -38,6 +38,7 @@ from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
                           Reshape, Array, DictOfNamedArrays, IndexBase,
                           DataInterface, NormalizedSlice, ShapeComponent,
                           IndexExpr, ArrayOrScalar)
+from immutables import Map
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.utils import are_shape_components_equal
 from pytato.raising import BinaryOpType, C99CallOp
@@ -48,7 +49,6 @@ from pytato.reductions import (ReductionOperation, SumReductionOperation,
                                ProductReductionOperation,
                                MaxReductionOperation, MinReductionOperation,
                                AllReductionOperation, AnyReductionOperation)
-from pyrsistent import pmap
 
 
 T = TypeVar("T")
@@ -598,4 +598,4 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
         program,
         function_name,
         expected_arguments=frozenset(cgen_mapper.arg_names),
-        bound_arguments=pmap(cgen_mapper.bound_arguments))
+        bound_arguments=Map(cgen_mapper.bound_arguments))

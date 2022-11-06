@@ -36,7 +36,6 @@ setup(
     install_requires=[
         "loopy>=2020.2",
         "pytools>=2021.1",
-        "pyrsistent",
         "immutables",
         "attrs",
         ],
