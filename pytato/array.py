@@ -327,7 +327,7 @@ class Axis(Taggable):
     """
     tags: FrozenSet[Tag]
 
-    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Taggable:
+    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Axis:
         from attrs import evolve as replace
         return replace(self, tags=tags)
 
