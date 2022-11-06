@@ -101,6 +101,7 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 number_distributed_tags,
                                 execute_distributed_partition,
                                 )
+from pytato.transform.lower_to_index_lambda import to_index_lambda
 
 from pytato.partition import generate_code_for_partition
 
@@ -155,6 +156,8 @@ __all__ = (
         "execute_distributed_partition",
 
         "generate_code_for_partition",
+
+        "to_index_lambda",
 
         # sub-modules
         "analysis", "tags", "transform",
