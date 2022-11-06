@@ -38,7 +38,7 @@ from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
 from pytools.tag import Tag
-from pyrsistent import PMap, pmap
+from immutables import Map
 import islpy as isl
 
 __doc__ = r"""
@@ -222,7 +222,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     # {{{ perform shape inference here
 
     bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    pmap(bindings))
+                                                    Map(bindings))
 
     # }}}
 
@@ -388,7 +388,7 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: PMap[str, ArrayOrScalar]
+                                         bindings: Map[str, ArrayOrScalar]
                                          ) -> Dict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps

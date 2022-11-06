@@ -31,7 +31,7 @@ from pytato.transform import Mapper
 from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
                           IndexLambda, ReductionDescriptor)
 from pytato.loopy import LoopyCall
-from pyrsistent import PMap
+from immutables import Map
 
 
 __doc__ = """
@@ -76,7 +76,7 @@ class Reprifier(Mapper):
     def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (dict, PMap)):
+        elif isinstance(expr, (dict, Map)):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val in expr.items())
