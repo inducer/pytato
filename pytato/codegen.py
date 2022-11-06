@@ -25,16 +25,11 @@ THE SOFTWARE.
 import dataclasses
 from typing import Union, Dict, Tuple, List, Any
 
-from pytato.array import (Array, DictOfNamedArrays,
-                          DataWrapper, Roll, AxisPermutation,
-                          Stack, Placeholder, Reshape,
-                          Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, Einsum,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, BasicIndex,
+from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
+                          DataInterface, SizeParam, InputArgumentBase,
                           make_dict_of_named_arrays)
 
-from pytato.transform.lower_to_index_lambda import lower_to_index_lambda
+from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 from pytato.scalar_expr import IntegralScalarExpression
 from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
@@ -85,7 +80,7 @@ def _generate_name_for_temp(
 
 # {{{ preprocessing for codegen
 
-class CodeGenPreprocessor(CopyMapper):
+class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):
     """A mapper that preprocesses graphs to simplify code generation.
 
     The following node simplifications are performed:
@@ -102,9 +97,6 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
-
-    # TODO:
-    # Stack -> IndexLambda
 
     def __init__(self, target: Target) -> None:
         super().__init__()
@@ -193,36 +185,6 @@ class CodeGenPreprocessor(CopyMapper):
                 axes=expr.axes,
                 tags=expr.tags)
 
-    def map_stack(self, expr: Stack) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_concatenate(self, expr: Concatenate) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_roll(self, expr: Roll) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_einsum(self, expr: Einsum) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_reshape(self, expr: Reshape) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_axis_permutation(self, expr: AxisPermutation) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_basic_index(self, expr: BasicIndex) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_contiguous_advanced_index(self,
-                                      expr: AdvancedIndexInContiguousAxes
-                                      ) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
-
-    def map_non_contiguous_advanced_index(self,
-                                          expr: AdvancedIndexInNoncontiguousAxes
-                                          ) -> Array:
-        return self.map_index_lambda(lower_to_index_lambda(expr))
 # }}}
 
 
