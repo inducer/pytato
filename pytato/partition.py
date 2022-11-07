@@ -38,6 +38,7 @@ from pytato.array import (
         DictOfNamedArrays, make_placeholder, make_dict_of_named_arrays)
 
 from pytato.target import BoundProgram
+from pymbolic.mapper.optimize import optimize_mapper
 
 
 __doc__ = """
@@ -372,12 +373,18 @@ def find_partition(outputs: DictOfNamedArrays,
     return result
 
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _SeenNodesWalkMapper(CachedWalkMapper):
     def __init__(self) -> None:
         super().__init__()
         self.seen_nodes: Set[ArrayOrNames] = set()
 
-    def visit(self, expr: ArrayOrNames) -> bool:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def visit(self, expr: ArrayOrNames) -> bool:  # type: ignore[override]
         super().visit(expr)
         self.seen_nodes.add(expr)
         return True
