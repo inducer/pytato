@@ -1261,6 +1261,77 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 # }}}
 
 
+# {{{ find_distributed_partition_v0
+
+@attrs.define(frozen=True, eq=True, repr=True)
+class DistributedPartitionId():
+    fed_sends: object
+    feeding_recvs: object
+
+
+def find_distributed_partition_v0(
+        outputs: DictOfNamedArrays) -> DistributedGraphPartition:
+    """Finds a partitioning in a distributed context."""
+
+    from pytato.transform import (UsersCollector, TopoSortMapper,
+                                  reverse_graph, tag_user_nodes)
+
+    gdm = UsersCollector()
+    gdm(outputs)
+
+    graph = gdm.node_to_users
+
+    # type-ignore-reason:
+    # 'graph' also includes DistributedSend nodes, which are not Arrays
+    rev_graph = reverse_graph(graph)  # type: ignore[arg-type]
+
+    # FIXME: Inefficient... too many traversals
+    node_to_feeding_recvs: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in graph:
+        node_to_feeding_recvs.setdefault(node, set())
+        if isinstance(node, DistributedRecv):
+            tag_user_nodes(graph, tag=node,  # type: ignore[arg-type]
+                            starting_point=node,
+                            node_to_tags=node_to_feeding_recvs)
+
+    node_to_fed_sends: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
+    for node in rev_graph:
+        node_to_fed_sends.setdefault(node, set())
+        if isinstance(node, DistributedSend):
+            tag_user_nodes(rev_graph, tag=node,  # type: ignore[arg-type]
+                            starting_point=node,
+                            node_to_tags=node_to_fed_sends)
+
+    def get_part_id(expr: ArrayOrNames) -> DistributedPartitionId:
+        return DistributedPartitionId(frozenset(node_to_fed_sends[expr]),
+                                      frozenset(node_to_feeding_recvs[expr]))
+
+    # {{{ Sanity checks
+
+    if __debug__:
+        for node, _ in node_to_feeding_recvs.items():
+            for n in node_to_feeding_recvs[node]:
+                assert isinstance(n, DistributedRecv)
+
+        for node, _ in node_to_fed_sends.items():
+            for n in node_to_fed_sends[node]:
+                assert isinstance(n, DistributedSend)
+
+        tm = TopoSortMapper()
+        tm(outputs)
+
+        for node in tm.topological_order:
+            get_part_id(node)
+
+    # }}}
+
+    from pytato.partition import find_partition
+    return cast(DistributedGraphPartition,
+            find_partition(outputs, get_part_id, _DistributedGraphPartitioner))
+
+# }}}
+
+
 # {{{ construct tag numbering
 
 def number_distributed_tags(
