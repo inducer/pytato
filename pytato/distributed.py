@@ -47,6 +47,7 @@ from pytato.target import BoundProgram
 from pytato.analysis import DirectPredecessorsGetter
 from functools import cached_property
 from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
+from pymbolic.mapper.optimize import optimize_mapper
 
 import numpy as np
 
@@ -533,6 +534,7 @@ class _MandatoryPartitionOutputsCollector(CombineMapper[FrozenSet[Array]]):
     map_distributed_recv = _map_input_base
 
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _MaterializedArrayCollector(CachedWalkMapper):
     """
     Collects all nodes that have to be materialized during code-generation.
@@ -541,7 +543,12 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         super().__init__()
         self.materialized_arrays: Set[Array] = set()
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
 
@@ -637,6 +644,7 @@ class _DominantMaterializedPredecessorsCollector(Mapper):
         return self.rec(expr.passthrough_data)
 
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _DominantMaterializedPredecessorsRecorder(CachedWalkMapper):
     """
     For each node in an expression graph, this mapper records the dominant
@@ -649,11 +657,16 @@ class _DominantMaterializedPredecessorsRecorder(CachedWalkMapper):
         self.mat_preds_getter = mat_preds_getter
         self.array_to_mat_preds: Dict[Array, FrozenSet[Array]] = {}
 
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
     @cached_property
     def direct_preds_getter(self) -> DirectPredecessorsGetter:
         return DirectPredecessorsGetter()
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         from functools import reduce
         if isinstance(expr, Array):
             self.array_to_mat_preds[expr] = reduce(

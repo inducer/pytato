@@ -645,6 +645,9 @@ def test_rec_get_user_nodes_linear_complexity():
     expected_result = set()
 
     class SubexprRecorder(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr: pt.transform.ArrayOrNames) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             if not isinstance(expr, pt.Placeholder):
                 expected_result.add(expr)
@@ -679,6 +682,9 @@ def test_tag_user_nodes_linear_complexity():
     expected_result = {}
 
     class ExpectedResultComputer(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             expected_result[expr] = {"foo"}
 
@@ -767,6 +773,9 @@ def test_deduplicate_data_wrappers():
         def __init__(self):
             self.count = 0
             super().__init__()
+
+        def get_cache_key(self, expr):
+            return id(expr)
 
         def map_data_wrapper(self, expr):
             self.count += 1

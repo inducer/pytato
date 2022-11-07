@@ -32,11 +32,14 @@ from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 from pytato.scalar_expr import IntegralScalarExpression
-from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
+from pytato.transform import (CopyMapper, CachedWalkMapper,
+                              SubsetDependencyMapper, ArrayOrNames)
 from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
 import loopy as lp
+from pymbolic.mapper.optimize import optimize_mapper
+
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
 
@@ -213,12 +216,18 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 
 # {{{ input naming check
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper):
     def __init__(self) -> None:
         self.name_to_input: Dict[str, InputArgumentBase] = {}
         super().__init__()
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
             if expr.name is not None:
                 try:

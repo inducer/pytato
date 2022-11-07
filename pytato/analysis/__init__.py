@@ -33,6 +33,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           ShapeType)
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
+from pymbolic.mapper.optimize import optimize_mapper
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedRecv, DistributedSendRefHolder
@@ -352,6 +353,7 @@ class DirectPredecessorsGetter(Mapper):
 
 # {{{ NodeCountMapper
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
     Counts the number of nodes in a DAG.
@@ -365,7 +367,12 @@ class NodeCountMapper(CachedWalkMapper):
         super().__init__()
         self.count = 0
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         self.count += 1
 
 
