@@ -356,8 +356,6 @@ def test_userscollector():
         assert len(uc.node_to_users) == len(nuc)+1
         assert uc.node_to_users[dag] == set()
         assert nuc[dag] == 0
-        for ary, users in uc.node_to_users.items():
-            assert len(users) == nuc[ary]
 
 
 def test_asciidag():

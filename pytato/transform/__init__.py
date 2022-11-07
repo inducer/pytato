@@ -1367,6 +1367,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
             self.node_to_users.setdefault(arg, set()).add(expr)
             self.rec(arg)
 
+        self.rec_idx_or_size_tuple(expr, expr.shape)
+
     def map_reshape(self, expr: Reshape) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
@@ -1391,8 +1393,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
-        # no child nodes, nothing to do
-        pass
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
         self.node_to_users.setdefault(expr.array, set()).add(expr)
