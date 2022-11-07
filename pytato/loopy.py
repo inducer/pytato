@@ -149,7 +149,8 @@ class LoopyCallResult(NamedArray):
                                axes=axes,
                                tags=tags)
 
-    def expr(self) -> Array:
+    # type-ignore-reason: incompatible with superclass
+    def expr(self) -> Array:  # type: ignore[override]
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
     @property
