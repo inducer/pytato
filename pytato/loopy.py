@@ -149,6 +149,7 @@ class LoopyCallResult(NamedArray):
                                axes=axes,
                                tags=tags)
 
+    @property
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
