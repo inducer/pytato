@@ -235,6 +235,7 @@ class EqualityComparer:
                         if isinstance(bnd, Array)
                         else bnd == expr2.bindings[name]
                         for name, bnd in expr1.bindings.items())
+                and expr1.tags == expr2.tags
                 )
 
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
@@ -248,7 +249,9 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
-                        for name in expr1._data))
+                        for name in expr1._data)
+                and expr1.tags == expr2.tags
+                )
 
     def map_distributed_send_ref_holder(
             self, expr1: DistributedSendRefHolder, expr2: Any) -> bool:
