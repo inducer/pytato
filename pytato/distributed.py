@@ -25,8 +25,8 @@ THE SOFTWARE.
 """
 
 from typing import (Any, Dict, Hashable, Tuple, Optional, Set,  # noqa: F401
-                    List, FrozenSet, Callable, cast, Mapping, Iterable,
-                    ClassVar
+                    List, FrozenSet, Callable, cast, Mapping, Iterable, Sequence,
+                    ClassVar, TYPE_CHECKING
                     )  # Mapping required by sphinx
 from immutables import Map
 
@@ -50,6 +50,10 @@ from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 from pymbolic.mapper.optimize import optimize_mapper
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import mpi4py.MPI
+
 
 __doc__ = r"""
 Distributed-memory evaluation of expression graphs is accomplished
@@ -1025,7 +1029,7 @@ def find_distributed_partition(outputs: DictOfNamedArrays
 # {{{ construct tag numbering
 
 def number_distributed_tags(
-        mpi_communicator: Any,
+        mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition,
         base_tag: int) -> Tuple[DistributedGraphPartition, int]:
     """Return a new :class:`~pytato.distributed.DistributedGraphPartition`
@@ -1107,7 +1111,7 @@ def number_distributed_tags(
 
 # {{{ distributed execute
 
-def _post_receive(mpi_communicator: Any,
+def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
                  recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
