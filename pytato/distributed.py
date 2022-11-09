@@ -806,10 +806,10 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
                           Any] = {}  # type: ignore[assignment]
 
     # type-ignore-reason: incompatible with super class
-    def cache_key(self,  # type: ignore[override]
-                  expr: ArrayOrNames,
-                  user_part_id: int
-                  ) -> Tuple[ArrayOrNames, int]:
+    def get_cache_key(self,  # type: ignore[override]
+                      expr: ArrayOrNames,
+                      user_part_id: int
+                      ) -> Tuple[ArrayOrNames, int]:
 
         return (expr, user_part_id)
 
@@ -817,7 +817,7 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
     def rec(self,  # type: ignore[override]
             expr: ArrayOrNames,
             user_part_id: int) -> Any:
-        key = self.cache_key(expr, user_part_id)
+        key = self.get_cache_key(expr, user_part_id)
         try:
             return self._cache[key]
         except KeyError:

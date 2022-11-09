@@ -182,12 +182,12 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def __init__(self) -> None:
         self._cache: Dict[CachedMapperT, Any] = {}
 
-    def cache_key(self, expr: CachedMapperT) -> Any:
+    def get_cache_key(self, expr: CachedMapperT) -> Any:
         return expr
 
     # type-ignore-reason: incompatible with super class
     def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
-        key = self.cache_key(expr)
+        key = self.get_cache_key(expr)
         try:
             return self._cache[key]
         except KeyError:
@@ -368,18 +368,18 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                 ],
                           Any] = {}  # type: ignore[assignment]
 
-    def cache_key(self,
-                  expr: ArrayOrNames,
-                  *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
-                                                      Tuple[Any, ...],
-                                                      Tuple[Tuple[str, Any], ...]
-                                                      ]:
+    def get_cache_key(self,
+                      expr: ArrayOrNames,
+                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
+                                                          Tuple[Any, ...],
+                                                          Tuple[Tuple[str, Any], ...]
+                                                          ]:
         return (expr, args, tuple(sorted(kwargs.items())))
 
     def rec(self,
             expr: ArrayOrNames,
             *args: Any, **kwargs: Any) -> Any:
-        key = self.cache_key(expr, *args, **kwargs)
+        key = self.get_cache_key(expr, *args, **kwargs)
         try:
             return self._cache[key]
         except KeyError:
