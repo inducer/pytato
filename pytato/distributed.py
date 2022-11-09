@@ -323,7 +323,7 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
 # }}}
 
 
-# {{{ distributed info collection
+# {{{ distributed graph partition
 
 @attrs.define(frozen=True, slots=False)
 class DistributedGraphPart(GraphPart):
@@ -348,6 +348,10 @@ class DistributedGraphPartition(GraphPartition):
     """
     parts: Dict[PartId, DistributedGraphPart]
 
+# }}}
+
+
+# {{{ _partition_to_distributed_partition
 
 def _map_distributed_graph_partition_nodes(
         map_array: Callable[[Array], Array],
@@ -425,7 +429,7 @@ class _DistributedCommReplacer(CopyMapper):
         return new_send
 
 
-def _gather_distributed_comm_info(partition: GraphPartition,
+def _partition_to_distributed_partition(partition: GraphPartition,
         pid_to_distributed_sends: Dict[PartId, List[DistributedSend]]) -> \
             DistributedGraphPartition:
     var_name_to_result = {}
@@ -481,7 +485,7 @@ def _gather_distributed_comm_info(partition: GraphPartition,
 # }}}
 
 
-# {{{ find_distributed_partition
+# {{{ helpers for find_distributed_partition
 
 class _DistributedGraphPartitioner(GraphPartitioner):
 
@@ -507,7 +511,7 @@ class _DistributedGraphPartitioner(GraphPartitioner):
             -> DistributedGraphPartition:
 
         partition = super().make_partition(outputs)
-        return _gather_distributed_comm_info(partition, self.pid_to_dist_sends)
+        return _partition_to_distributed_partition(partition, self.pid_to_dist_sends)
 
 
 class _MandatoryPartitionOutputsCollector(CombineMapper[FrozenSet[Array]]):
@@ -861,6 +865,10 @@ def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
     result: Array = ary.without_tags(ary.tags_of_type(PartIDTag))
     return result
 
+# }}}
+
+
+# {{{ find_distributed_partition
 
 def find_distributed_partition(outputs: DictOfNamedArrays
                                ) -> DistributedGraphPartition:
