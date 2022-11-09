@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-T = TypeVar("T", bound=ArrayOrNames)
+MappedT = TypeVar("MappedT", bound=ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
@@ -92,7 +92,7 @@ Dict representation of DAGs
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. class:: T
+.. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
 
@@ -101,7 +101,7 @@ Internal stuff that is only here because the documentation tool wants it
     A type variable representing the type of a :class:`CombineMapper`.
 """
 
-logger = logging.getLogger(__file__)
+transform_logger = logging.getLogger(__file__)
 
 
 class UnsupportedArrayError(ValueError):
@@ -127,7 +127,8 @@ class Mapper:
     .. automethod:: __call__
     """
 
-    def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def handle_unsupported_array(self, expr: MappedT,
+                                 *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
         method does not exist in this mapper.
@@ -142,7 +143,7 @@ class Mapper:
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
-    def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def rec(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
         """Call the mapper method of *expr* and return the result."""
         method: Optional[Callable[..., Array]]
 
@@ -164,7 +165,7 @@ class Mapper:
         assert method is not None
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
         """Handle the mapping of *expr*."""
         return self.rec(expr, *args, **kwargs)
 
@@ -1811,11 +1812,11 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
     array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
 
     if data_wrappers_encountered:
-        logger.debug("data wrapper de-duplication: "
-                "%d encountered, %d kept, %d eliminated",
-                data_wrappers_encountered,
-                len(data_wrapper_cache),
-                data_wrappers_encountered - len(data_wrapper_cache))
+        transform_logger.debug("data wrapper de-duplication: "
+                               "%d encountered, %d kept, %d eliminated",
+                               data_wrappers_encountered,
+                               len(data_wrapper_cache),
+                               data_wrappers_encountered - len(data_wrapper_cache))
 
     return array_or_names
 
