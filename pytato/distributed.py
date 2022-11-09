@@ -349,7 +349,7 @@ class DistributedGraphPartition(GraphPartition):
     parts: Dict[PartId, DistributedGraphPart]
 
 
-def _map_distributed_graph_partion_nodes(
+def _map_distributed_graph_partition_nodes(
         map_array: Callable[[Array], Array],
         map_send: Callable[[DistributedSend], DistributedSend],
         gp: DistributedGraphPartition) -> DistributedGraphPartition:
@@ -1021,7 +1021,7 @@ def find_distributed_partition(outputs: DictOfNamedArrays
     def map_send(send: DistributedSend) -> DistributedSend:
         return send.copy(data=cmac(send.data))
 
-    return _map_distributed_graph_partion_nodes(map_array, map_send, gp)
+    return _map_distributed_graph_partition_nodes(map_array, map_send, gp)
 
 # }}}
 
