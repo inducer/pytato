@@ -1082,6 +1082,8 @@ def number_distributed_tags(
     if mpi_communicator.rank == root_rank:
         sym_tag_to_int_tag = {}
         next_tag = base_tag
+        assert isinstance(all_tags, frozenset)
+
         for sym_tag in all_tags:
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
@@ -1116,6 +1118,7 @@ def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
 
+    assert isinstance(recv.comm_tag, int)
     # mypy is right here, size params in 'recv.shape' must be evaluated
     buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[arg-type]
 
