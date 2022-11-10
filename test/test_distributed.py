@@ -166,6 +166,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
         x_comm = pt.transform.materialize_with_mpms(pt_dag)
 
         distributed_partition = pt.find_distributed_partition(x_comm)
+        pt.verify_distributed_partition(comm, distributed_partition)
 
         # Transform symbolic tags into numeric ones for MPI
         distributed_partition, _new_mpi_base_tag = pt.number_distributed_tags(
