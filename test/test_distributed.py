@@ -307,6 +307,124 @@ def test_deterministic_partitioning():
 # }}}
 
 
+# {{{ test verify_distributed_partition
+
+def test_verify_distributed_partition():
+    run_test_with_mpi(2, _do_verify_distributed_partition)
+
+
+def _do_verify_distributed_partition(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    import pytest
+    from pytato.distributed import (DuplicateSendError,
+                DuplicateRecvError, MissingSendError, MissingRecvError)
+    from pytato.partition import PartitionInducedCycleError
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    # {{{ test unmatched recv
+
+    y = pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+
+    outputs = pt.make_dict_of_named_arrays({"out": y})
+    distributed_parts = pt.find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(MissingSendError):
+            pt.verify_distributed_partition(comm, distributed_parts)
+    else:
+        pt.verify_distributed_partition(comm, distributed_parts)
+
+    # }}}
+
+    # {{{ test unmatched send
+
+    x = pt.make_placeholder("x", (4, 4), int)
+    send = pt.staple_distributed_send(x,
+                dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
+
+    outputs = pt.make_dict_of_named_arrays({"out": send})
+    distributed_parts = pt.find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(MissingRecvError):
+            pt.verify_distributed_partition(comm, distributed_parts)
+    else:
+        pt.verify_distributed_partition(comm, distributed_parts)
+
+    # }}}
+
+    # {{{ test duplicate recv
+
+    recv2 = pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+
+    send = pt.staple_distributed_send(recv2, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
+
+    outputs = pt.make_dict_of_named_arrays({"out": x+send})
+    distributed_parts = pt.find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(DuplicateRecvError):
+            pt.verify_distributed_partition(comm, distributed_parts)
+    else:
+        pt.verify_distributed_partition(comm, distributed_parts)
+
+    # }}}
+
+    # {{{ test duplicate send
+
+    send = pt.staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
+
+    send2 = pt.staple_distributed_send(x,
+                dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
+
+    outputs = pt.make_dict_of_named_arrays({"out": send+send2})
+    distributed_parts = pt.find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(DuplicateSendError):
+            pt.verify_distributed_partition(comm, distributed_parts)
+    else:
+        pt.verify_distributed_partition(comm, distributed_parts)
+
+    # }}}
+
+    # {{{ test cycle
+
+    recv = pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+
+    recv2 = pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=43, shape=(4, 4), dtype=int)
+
+    send = pt.staple_distributed_send(recv2, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=recv)
+
+    send2 = pt.staple_distributed_send(recv2, dest_rank=(rank-1) % size, comm_tag=43,
+            stapled_to=recv)
+
+    outputs = pt.make_dict_of_named_arrays({"out": send+send2})
+    distributed_parts = pt.find_distributed_partition(outputs)
+
+    if rank == 0:
+        with pytest.raises(PartitionInducedCycleError):
+            pt.verify_distributed_partition(comm, distributed_parts)
+    else:
+        pt.verify_distributed_partition(comm, distributed_parts)
+
+    # }}}
+
+# }}}
+
+
 if __name__ == "__main__":
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
