@@ -648,6 +648,9 @@ def test_rec_get_user_nodes_linear_complexity():
     expected_result = set()
 
     class SubexprRecorder(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr: pt.transform.ArrayOrNames) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             if not isinstance(expr, pt.Placeholder):
                 expected_result.add(expr)
@@ -682,6 +685,9 @@ def test_tag_user_nodes_linear_complexity():
     expected_result = {}
 
     class ExpectedResultComputer(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             expected_result[expr] = {"foo"}
 
@@ -770,6 +776,9 @@ def test_deduplicate_data_wrappers():
         def __init__(self):
             self.count = 0
             super().__init__()
+
+        def get_cache_key(self, expr):
+            return id(expr)
 
         def map_data_wrapper(self, expr):
             self.count += 1
@@ -961,6 +970,47 @@ def test_derived_class_uses_correct_array_eq():
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
+
+
+def test_lower_to_index_lambda():
+    from pytato.array import IndexLambda, Reshape
+    expr = pt.ones(12).reshape(6, 2).reshape(3, 4)
+    idx_lambda = pt.to_index_lambda(expr)
+    assert isinstance(idx_lambda, IndexLambda)
+    binding, = idx_lambda.bindings.values()
+    # test that it didn't recurse further
+    assert isinstance(binding, Reshape)
+
+
+def test_cached_walk_mapper_with_extra_args():
+    from testlib import RandomDAGContext, make_random_dag
+
+    class MyWalkMapper(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr, passed_number) -> int:
+            return id(expr), passed_number
+
+        def post_visit(self, expr, passed_number):
+            assert passed_number == 42
+
+    my_walk_mapper = MyWalkMapper()
+
+    rdagc = RandomDAGContext(np.random.default_rng(seed=0),
+                             axis_len=4, use_numpy=False)
+
+    dag = make_random_dag(rdagc)
+
+    my_walk_mapper(dag, 42)
+    my_walk_mapper(dag, passed_number=42)
+
+    with pytest.raises(AssertionError):
+        my_walk_mapper(dag, 5)
+
+    with pytest.raises(AssertionError):
+        my_walk_mapper(dag, 7)
+
+    with pytest.raises(TypeError):
+        # passing incorrect argument should raise TypeError while calling post_visit
+        my_walk_mapper(dag, bad_arg_name=7)
 
 
 if __name__ == "__main__":
