@@ -28,6 +28,7 @@ intersphinx_mapping = {
     "https://documen.tician.de/islpy/": None,
     "https://jax.readthedocs.io/en/latest/": None,
     "https://www.attrs.org/en/stable/": None,
+    "https://mpi4py.readthedocs.io/en/latest": None,
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in

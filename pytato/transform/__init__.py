@@ -45,12 +45,13 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
 from immutables import Map
+from pymbolic.mapper.optimize import optimize_mapper
 
 if TYPE_CHECKING:
     from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-T = TypeVar("T", bound=ArrayOrNames)
+MappedT = TypeVar("MappedT", bound=ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
@@ -92,7 +93,7 @@ Dict representation of DAGs
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. class:: T
+.. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
 
@@ -101,7 +102,7 @@ Internal stuff that is only here because the documentation tool wants it
     A type variable representing the type of a :class:`CombineMapper`.
 """
 
-logger = logging.getLogger(__file__)
+transform_logger = logging.getLogger(__file__)
 
 
 class UnsupportedArrayError(ValueError):
@@ -127,7 +128,8 @@ class Mapper:
     .. automethod:: __call__
     """
 
-    def handle_unsupported_array(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def handle_unsupported_array(self, expr: MappedT,
+                                 *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
         method does not exist in this mapper.
@@ -142,7 +144,7 @@ class Mapper:
         raise ValueError("%s encountered invalid foreign object: %s"
                 % (type(self).__name__, repr(expr)))
 
-    def rec(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def rec(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
         """Call the mapper method of *expr* and return the result."""
         method: Optional[Callable[..., Array]]
 
@@ -164,7 +166,7 @@ class Mapper:
         assert method is not None
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: T, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
         """Handle the mapping of *expr*."""
         return self.rec(expr, *args, **kwargs)
 
@@ -182,12 +184,12 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def __init__(self) -> None:
         self._cache: Dict[CachedMapperT, Any] = {}
 
-    def cache_key(self, expr: CachedMapperT) -> Any:
+    def get_cache_key(self, expr: CachedMapperT) -> Any:
         return expr
 
     # type-ignore-reason: incompatible with super class
     def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
-        key = self.cache_key(expr)
+        key = self.get_cache_key(expr)
         try:
             return self._cache[key]
         except KeyError:
@@ -368,18 +370,18 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                 ],
                           Any] = {}  # type: ignore[assignment]
 
-    def cache_key(self,
-                  expr: ArrayOrNames,
-                  *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
-                                                      Tuple[Any, ...],
-                                                      Tuple[Tuple[str, Any], ...]
-                                                      ]:
+    def get_cache_key(self,
+                      expr: ArrayOrNames,
+                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
+                                                          Tuple[Any, ...],
+                                                          Tuple[Tuple[str, Any], ...]
+                                                          ]:
         return (expr, args, tuple(sorted(kwargs.items())))
 
     def rec(self,
             expr: ArrayOrNames,
             *args: Any, **kwargs: Any) -> Any:
-        key = self.cache_key(expr, *args, **kwargs)
+        key = self.get_cache_key(expr, *args, **kwargs)
         try:
             return self._cache[key]
         except KeyError:
@@ -801,7 +803,7 @@ class WalkMapper(Mapper):
     .. automethod:: post_visit
     """
 
-    def visit(self, expr: Any) -> bool:
+    def visit(self, expr: Any, *args: Any, **kwargs: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
         If this method returns *False*, *expr* is not traversed as a part of
@@ -809,144 +811,149 @@ class WalkMapper(Mapper):
         """
         return True
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: Any, *args: Any, **kwargs: Any) -> None:
         """
         Callback after *expr* has been traversed.
         """
         pass
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]) -> None:
+    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
+                              *args: Any, **kwargs: Any) -> None:
         for comp in situp:
             if isinstance(comp, Array):
-                self.rec(comp)
+                self.rec(comp, *args, **kwargs)
 
-    def map_index_lambda(self, expr: IndexLambda) -> None:
-        if not self.visit(expr):
+    def map_index_lambda(self, expr: IndexLambda, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for _, child in sorted(expr.bindings.items()):
-            self.rec(child)
+            self.rec(child, *args, **kwargs)
 
-        self.rec_idx_or_size_tuple(expr.shape)
+        self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_placeholder(self, expr: Placeholder) -> None:
-        if not self.visit(expr):
+    def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         self.rec_idx_or_size_tuple(expr.shape)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
     map_data_wrapper = map_placeholder
     map_size_param = map_placeholder
 
-    def _map_index_remapping_base(self, expr: IndexRemappingBase) -> None:
-        if not self.visit(expr):
+    def _map_index_remapping_base(self, expr: IndexRemappingBase,
+                                  *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.rec(expr.array)
-        self.post_visit(expr)
+        self.rec(expr.array, *args, **kwargs)
+        self.post_visit(expr, *args, **kwargs)
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_index_base(self, expr: IndexBase) -> None:
-        if not self.visit(expr):
+    def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.rec(expr.array)
+        self.rec(expr.array, *args, **kwargs)
 
-        self.rec_idx_or_size_tuple(expr.indices)
+        self.rec_idx_or_size_tuple(expr.indices, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_basic_index(self, expr: BasicIndex) -> None:
-        return self._map_index_base(expr)
+    def map_basic_index(self, expr: BasicIndex, *args: Any, **kwargs: Any) -> None:
+        return self._map_index_base(expr, *args, **kwargs)
 
     def map_contiguous_advanced_index(self,
-                                      expr: AdvancedIndexInContiguousAxes
-                                      ) -> None:
-        return self._map_index_base(expr)
+                                      expr: AdvancedIndexInContiguousAxes,
+                                      *args: Any, **kwargs: Any) -> None:
+        return self._map_index_base(expr, *args, **kwargs)
 
     def map_non_contiguous_advanced_index(self,
-                                          expr: AdvancedIndexInNoncontiguousAxes
-                                          ) -> None:
-        return self._map_index_base(expr)
+                                          expr: AdvancedIndexInNoncontiguousAxes,
+                                          *args: Any, **kwargs: Any) -> None:
+        return self._map_index_base(expr, *args, **kwargs)
 
-    def map_stack(self, expr: Stack) -> None:
-        if not self.visit(expr):
+    def map_stack(self, expr: Stack, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for child in expr.arrays:
-            self.rec(child)
+            self.rec(child, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_concatenate(self, expr: Concatenate) -> None:
-        if not self.visit(expr):
+    def map_concatenate(self, expr: Concatenate, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for child in expr.arrays:
-            self.rec(child)
+            self.rec(child, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_einsum(self, expr: Einsum) -> None:
-        if not self.visit(expr):
+    def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for child in expr.args:
-            self.rec(child)
+            self.rec(child, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        if not self.visit(expr):
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays,
+                                 *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for child in expr._data.values():
-            self.rec(child)
+            self.rec(child, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
     def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> None:
-        if not self.visit(expr):
+            self, expr: DistributedSendRefHolder,
+            *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.rec(expr.send.data)
-        self.rec(expr.passthrough_data)
+        self.rec(expr.send.data, *args, **kwargs)
+        self.rec(expr.passthrough_data, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
-        if not self.visit(expr):
+    def map_distributed_recv(self, expr: DistributedRecv,
+                             *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.rec_idx_or_size_tuple(expr.shape)
+        self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_named_array(self, expr: NamedArray) -> None:
-        if not self.visit(expr):
+    def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.rec(expr._container)
+        self.rec(expr._container, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
-    def map_loopy_call(self, expr: LoopyCall) -> None:
-        if not self.visit(expr):
+    def map_loopy_call(self, expr: LoopyCall, *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr, *args, **kwargs):
             return
 
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
-                self.rec(child)
+                self.rec(child, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
 # }}}
 
@@ -961,27 +968,26 @@ class CachedWalkMapper(WalkMapper):
     """
 
     def __init__(self) -> None:
-        self._visited_ids: Set[int] = set()
+        self._visited_nodes: Set[Any] = set()
 
-    # type-ignore reason: CachedWalkMapper.rec's type does not match
-    # WalkMapper.rec's type
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
-        # Why choose id(x) as the cache key?
-        # - Some downstream users (NamesValidityChecker) of this mapper rely on
-        #   structurally equal objects being walked separately (e.g. to detect
-        #   separate instances of Placeholder with the same name).
+    def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
 
-        if id(expr) in self._visited_ids:
+    def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any
+            ) -> None:
+        cache_key = self.get_cache_key(expr, *args, **kwargs)
+        if cache_key in self._visited_nodes:
             return
 
-        super().rec(expr)
-        self._visited_ids.add(id(expr))
+        super().rec(expr, *args, **kwargs)
+        self._visited_nodes.add(cache_key)
 
 # }}}
 
 
 # {{{ TopoSortMapper
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class TopoSortMapper(CachedWalkMapper):
     """A mapper that creates a list of nodes in topological order.
 
@@ -992,7 +998,12 @@ class TopoSortMapper(CachedWalkMapper):
         super().__init__()
         self.topological_order: List[Array] = []
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         self.topological_order.append(expr)
 
 # }}}
@@ -1811,11 +1822,11 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
     array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
 
     if data_wrappers_encountered:
-        logger.debug("data wrapper de-duplication: "
-                "%d encountered, %d kept, %d eliminated",
-                data_wrappers_encountered,
-                len(data_wrapper_cache),
-                data_wrappers_encountered - len(data_wrapper_cache))
+        transform_logger.debug("data wrapper de-duplication: "
+                               "%d encountered, %d kept, %d eliminated",
+                               data_wrappers_encountered,
+                               len(data_wrapper_cache),
+                               data_wrappers_encountered - len(data_wrapper_cache))
 
     return array_or_names
 
