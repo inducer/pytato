@@ -48,7 +48,7 @@ def run_test_with_mpi(num_ranks, f, *args):
         "-x", "RUN_WITHIN_MPI=1",
         "--oversubscribe",
         "-x", f"INVOCATION_INFO={invocation_info}",
-        sys.executable, __file__])
+        sys.executable, "-m", "mpi4py", __file__])
 
 
 def run_test_with_mpi_inner():
