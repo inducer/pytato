@@ -1253,8 +1253,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         from pytato.partition import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)
-        except CycleError:
-            raise PartitionInducedCycleError
+        except CycleError as err:
+            raise PartitionInducedCycleError(err)
 
         logger.info("verify_distributed_partition completed successfully.")
 

@@ -32,6 +32,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from pytools import memoize_method
+from pytools.graph import CycleError
 from pytato.transform import EdgeCachedMapper, CachedWalkMapper
 from pytato.array import (
         Array, AbstractResultWithNamedArrays, Placeholder,
@@ -209,13 +210,13 @@ class GraphPartitioner(EdgeCachedMapper):
                 pid_to_output_names[pid_dependency].add(var_name)
                 pid_to_input_names[pid_target].add(var_name)
 
-        from pytools.graph import compute_topological_order, CycleError
+        from pytools.graph import compute_topological_order
         try:
             toposorted_part_ids = compute_topological_order(
                     pid_to_needing_pids,
                     lambda x: sorted(pid_to_output_names[x]))
-        except CycleError:
-            raise PartitionInducedCycleError
+        except CycleError as err:
+            raise PartitionInducedCycleError(err)
 
         return GraphPartition(
                     parts={
@@ -311,7 +312,7 @@ class GraphPartition:
 # }}}
 
 
-class PartitionInducedCycleError(Exception):
+class PartitionInducedCycleError(CycleError):
     """Raised by :func:`find_partition` if the partitioning induced a
     cycle in the graph of partitions.
     """
