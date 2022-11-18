@@ -216,7 +216,9 @@ class GraphPartitioner(EdgeCachedMapper):
                     pid_to_needing_pids,
                     lambda x: sorted(pid_to_output_names[x]))
         except CycleError as err:
-            raise PartitionInducedCycleError(err)
+            # type-ignore-reason: Needs a pytools release with
+            # https://github.com/inducer/pytools/pull/158 to pass mypy.
+            raise PartitionInducedCycleError(err)  # type: ignore[no-untyped-call]
 
         return GraphPartition(
                     parts={
