@@ -350,7 +350,7 @@ def test_userscollector():
     axis_len = 5
 
     for i in range(100):
-        print(i)
+        print(i)  # progress indicator
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                 axis_len=axis_len, use_numpy=False)
 
