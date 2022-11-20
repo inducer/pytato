@@ -327,11 +327,19 @@ def test_userscollector():
     from pytato.transform import UsersCollector
     from pytato.analysis import get_nusers
 
+    from pytools.graph import reverse_graph
+
+    # Check that nodes without users are correctly reversed
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
     y = array+1
 
     uc = UsersCollector()
     uc(y)
+
+    rev_graph = reverse_graph(uc.node_to_users)
+    rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+
+    assert dict(reverse_graph(rev_graph2)) == uc.node_to_users
 
     assert len(uc.node_to_users) == 2
     assert uc.node_to_users[y] == set()
@@ -350,6 +358,10 @@ def test_userscollector():
 
         uc = UsersCollector()
         uc(dag)
+
+        rev_graph = reverse_graph(uc.node_to_users)
+        rev_graph2 = reverse_graph(reverse_graph(rev_graph))
+        assert rev_graph2 == rev_graph
 
         nuc = get_nusers(dag)
 
