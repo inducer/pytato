@@ -267,11 +267,6 @@ class GraphPart:
 
         Names of placeholders this part provides as output.
 
-    .. attribute:: distributed_sends
-
-        List of :class:`~pytato.distributed.DistributedSend` instances whose
-        data are in this part.
-
     .. automethod:: all_input_names
     """
     pid: PartId
