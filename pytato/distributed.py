@@ -1254,9 +1254,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         try:
             compute_topological_order(pid_to_needed_pids)
         except CycleError as err:
-            # type-ignore-reason: Needs a pytools release with
-            # https://github.com/inducer/pytools/pull/158 to pass mypy.
-            raise PartitionInducedCycleError(err)  # type: ignore[no-untyped-call]
+            raise PartitionInducedCycleError(err)
 
         logger.info("verify_distributed_partition completed successfully.")
 
