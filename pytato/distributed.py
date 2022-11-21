@@ -1177,11 +1177,17 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         all_recvs: Set[_CommIdentifier] = set()
 
+        # {{{ gather information on who produces output
+
         output_to_defining_pid: Dict[_DistributedName, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for out_name in sumpart.output_names:
                 assert out_name not in output_to_defining_pid
                 output_to_defining_pid[out_name] = sumpart.pid
+
+        # }}}
+
+        # {{{ gather information on senders
 
         comm_id_to_sending_pid: Dict[_CommIdentifier, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
@@ -1195,6 +1201,10 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                     raise DuplicateSendError(
                             f"duplicate send for comm id: '{comm_id}'")
                 comm_id_to_sending_pid[comm_id] = sumpart.pid
+
+        # }}}
+
+        # {{{ add edges to the DAG of distributed graph parts
 
         for sumpart in all_summarized_parts.values():
             pid_to_needed_pids[sumpart.pid] = set(sumpart.needed_pids)
@@ -1229,6 +1239,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 defining_pid = output_to_defining_pid[input_name]
                 assert defining_pid.rank == sumpart.pid.rank
                 add_needed_pid(sumpart.pid, defining_pid)
+
+        # }}}
 
         # Loop through all sends again, making sure there exists a matching recv
         for s in comm_id_to_sending_pid:
