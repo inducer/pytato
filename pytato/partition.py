@@ -216,7 +216,7 @@ class GraphPartitioner(EdgeCachedMapper):
                     pid_to_needing_pids,
                     lambda x: sorted(pid_to_output_names[x]))
         except CycleError as err:
-            raise PartitionInducedCycleError(err)
+            raise PartitionInducedCycleError(err.node)
 
         return GraphPartition(
                     parts={

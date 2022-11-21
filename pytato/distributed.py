@@ -1254,7 +1254,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         try:
             compute_topological_order(pid_to_needed_pids)
         except CycleError as err:
-            raise PartitionInducedCycleError(err)
+            raise PartitionInducedCycleError(err.node)
 
         logger.info("verify_distributed_partition completed successfully.")
 
