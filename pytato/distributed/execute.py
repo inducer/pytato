@@ -88,11 +88,11 @@ def execute_distributed_partition(
 
     from mpi4py import MPI
 
-    if len(partition.parts) != 1:
+    if any(part.name_to_recv_node for part in partition.parts.values()):
         recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
             (name,) + _post_receive(mpi_communicator, recv)
             for part in partition.parts.values()
-            for name, recv in part.input_name_to_recv_node.items()])
+            for name, recv in part.name_to_recv_node.items()])
         recv_names = list(recv_names_tup)
         recv_requests = list(recv_requests_tup)
         recv_buffers = list(recv_buffers_tup)
@@ -100,7 +100,6 @@ def execute_distributed_partition(
         del recv_requests_tup
         del recv_buffers_tup
     else:
-        # Only a single partition, no recv requests exist
         recv_names = []
         recv_requests = []
         recv_buffers = []
@@ -146,7 +145,7 @@ def execute_distributed_partition(
 
         context.update(result_dict)
 
-        for name, send_node in part.output_name_to_send_node.items():
+        for name, send_node in part.name_to_send_node.items():
             # FIXME: pytato shouldn't depend on pyopencl
             if isinstance(context[name], np.ndarray):
                 data = context[name]
@@ -171,8 +170,8 @@ def execute_distributed_partition(
             buf = recv_buffers.pop(idx)
 
             # FIXME: pytato shouldn't depend on pyopencl
-            import pyopencl as cl
-            context[name] = cl.array.to_device(queue, buf, allocator=allocator)
+            import pyopencl.array as cl_array
+            context[name] = cl_array.to_device(queue, buf, allocator=allocator)
             recv_names_completed.add(name)
 
     # {{{ main loop
@@ -182,7 +181,7 @@ def execute_distributed_partition(
                 for pid in pids_to_execute
                 # FIXME: Only O(n**2) altogether. Nobody is going to notice, right?
                 if partition.parts[pid].needed_pids <= pids_executed
-                and (set(partition.parts[pid].input_name_to_recv_node)
+                and (set(partition.parts[pid].name_to_recv_node)
                     <= recv_names_completed)}
         for pid in ready_pids:
             part = partition.parts[pid]

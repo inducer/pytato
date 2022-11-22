@@ -1,4 +1,10 @@
 """
+.. autoclass:: CommunicationOpIdentifier
+.. class:: CommunicationDepGraph
+
+    An alias for
+    ``Mapping[CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]``.
+
 .. currentmodule:: pytato
 
 .. autoclass:: DistributedGraphPart
@@ -33,12 +39,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from functools import reduce
 from typing import (
-        Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable, Callable, List)
+        Sequence, Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable,
+        Callable, List, AbstractSet, TypeVar, TYPE_CHECKING)
 from functools import cached_property
 
 import attrs
 from immutables import Map
+
+from pytools.graph import CycleError
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator
@@ -51,26 +61,61 @@ from pytato.array import (Array,
 from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
                               CachedWalkMapper, CopyMapperWithExtraArgs,
                               CombineMapper)
-from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
+from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.distributed.nodes import (
         DistributedRecv, DistributedSend, DistributedSendRefHolder)
+from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
+
+if TYPE_CHECKING:
+    import mpi4py.MPI as MPI
+
+
+@attrs.define(frozen=True)
+class CommunicationOpIdentifier:
+    """Identifies a communication operation (consisting of a pair of
+    a send and a receive).
+
+    .. attribute:: src_rank
+    .. attribute:: dest_rank
+    .. attribute:: comm_tag
+
+    .. note::
+
+        In :func:`find_distributed_partition`, we use instances of this type as
+        though they identify sends or receives, i.e. just a single end of the
+        communication. Realize that this is only true given the additional
+        context of which rank is the local rank.
+    """
+    src_rank: int
+    dest_rank: int
+    comm_tag: CommTagType
+
+
+CommunicationDepGraph = Mapping[
+        CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]
+
+
+_KeyT = TypeVar("_KeyT")
+_ValueT = TypeVar("_ValueT")
 
 
 # {{{ distributed graph partition
 
 @attrs.define(frozen=True, slots=False)
 class DistributedGraphPart(GraphPart):
-    """For one graph partition, record send/receive information for input/
+    """For one graph part, record send/receive information for input/
     output names.
 
-    .. attribute:: input_name_to_recv_node
-    .. attribute:: output_name_to_send_node
-    .. attribute:: distributed_sends
+    Names that occur as keys in :attr:`name_to_recv_node` and
+    :attr:`name_to_send_node` are usable as input names by other
+    parts, or in the result of the computation.
+
+    .. attribute:: name_to_recv_node
+    .. attribute:: name_to_send_node
     """
-    input_name_to_recv_node: Dict[str, DistributedRecv]
-    output_name_to_send_node: Dict[str, DistributedSend]
-    distributed_sends: List[DistributedSend]
+    name_to_recv_node: Mapping[str, DistributedRecv]
+    name_to_send_node: Mapping[str, DistributedSend]
 
 
 @attrs.define(frozen=True, slots=False)
@@ -85,67 +130,39 @@ class DistributedGraphPartition(GraphPartition):
 # }}}
 
 
-# {{{ _partition_to_distributed_partition
+# {{{ _DistributedInputReplacer
 
-def _map_distributed_graph_partition_nodes(
-        map_array: Callable[[Array], Array],
-        map_send: Callable[[DistributedSend], DistributedSend],
-        gp: DistributedGraphPartition) -> DistributedGraphPartition:
-    """Return a new copy of *gp* with all :class:`~pytato.Array` instances
-    mapped by *map_array* and all :class:`DistributedSend` instances mapped
-    by *map_send*.
-    """
-    from attrs import evolve as replace
-
-    return replace(
-            gp,
-            var_name_to_result={name: map_array(ary)
-                for name, ary in gp.var_name_to_result.items()},
-            parts={
-                pid: replace(part,
-                    input_name_to_recv_node={
-                        in_name: map_array(recv)
-                        for in_name, recv in part.input_name_to_recv_node.items()},
-                    output_name_to_send_node={
-                        out_name: map_send(send)
-                        for out_name, send in part.output_name_to_send_node.items()},
-                    distributed_sends=[
-                        map_send(send) for send in part.distributed_sends]
-                    )
-                for pid, part in gp.parts.items()
-                })
-
-
-class _DistributedCommReplacer(CopyMapper):
-    """Mapper to process a DAG for realization of :class:`DistributedSend`
-    and :class:`DistributedRecv` outside of normal code generation.
-
-    -   Replaces :class:`DistributedRecv` with :class`~pytato.Placeholder`
-        so that received data can be externally supplied, making a note
-        in :attr:`input_name_to_recv_node`.
-
-    -   Makes note of data to be sent from :class:`DistributedSend` nodes
-        in :attr:`output_name_to_send_node`.
+class _DistributedInputReplacer(CopyMapper):
+    """Replaces part inputs with :class:`~pytato.array.Placeholder`
+    instances for their assigned names. Also gathers names for
+    user-supplied inputs needed by the part
     """
 
-    def __init__(self, dist_name_generator: UniqueNameGenerator) -> None:
+    def __init__(self,
+                 roo_ary_to_name: Mapping[Array, str],
+                 part_outputs: AbstractSet[Array],
+                 ) -> None:
         super().__init__()
 
-        self.name_generator = dist_name_generator
+        self.roo_ary_to_name = roo_ary_to_name
+        self.part_outputs = part_outputs
 
-        self.input_name_to_recv_node: Dict[str, DistributedRecv] = {}
-        self.output_name_to_send_node: Dict[str, DistributedSend] = {}
+        self.user_input_names: Set[str] = set()
+        self.partition_input_names: Set[str] = set()
+
+    def map_placeholder(self, expr: Placeholder) -> Array:
+        self.user_input_names.add(expr.name)
+        return expr
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
-        new_name = self.name_generator()
-        self.input_name_to_recv_node[new_name] = expr
-        return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
-                                expr.dtype, tags=expr.tags, axes=expr.axes)
+        name = self.roo_ary_to_name[expr]
+        self.partition_input_names.add(name)
+        return make_placeholder(
+                name, expr.shape, expr.dtype, expr.tags,
+                expr.axes)
 
-    def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder) -> Array:
-        raise ValueError("DistributedSendRefHolder should not occur in partitioned "
-                "graphs")
+    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder) -> Array:
+        return self.rec(expr.passthrough_data)
 
     # Note: map_distributed_send() is not called like other mapped methods in a
     # DAG traversal, since a DistributedSend is not an Array and has no
@@ -159,124 +176,220 @@ class _DistributedCommReplacer(CopyMapper):
                 dest_rank=expr.dest_rank,
                 comm_tag=expr.comm_tag,
                 tags=expr.tags)
-
-        new_name = self.name_generator()
-        self.output_name_to_send_node[new_name] = new_send
-
         return new_send
 
+    # type ignore because no args, kwargs
+    def rec(self, expr: Array) -> Any:  # type: ignore[override]
+        key = self.get_cache_key(expr)
+        try:
+            return self._cache[key]
+        except KeyError:
+            pass
 
-def _partition_to_distributed_partition(partition: GraphPartition,
-        pid_to_distributed_sends: Dict[PartId, List[DistributedSend]]) -> \
-            DistributedGraphPartition:
+        # If the array is an output from the current part, it would
+        # be counterproductive to turn it into a placeholder: we're
+        # the ones who are supposed to compute it!
+        if expr not in self.part_outputs:
+
+            name = self.roo_ary_to_name.get(expr)
+
+            if name is not None:
+                self.partition_input_names.add(name)
+                return make_placeholder(
+                        name, expr.shape, expr.dtype, expr.tags,
+                        expr.axes)
+
+        return super().rec(expr)
+
+# }}}
+
+
+@attrs.define(frozen=True)
+class _PartCommIDs:
+    """A *part*, unlike a *batch*, begins with receives and ends with sends.
+    """
+    recv_ids: FrozenSet[CommunicationOpIdentifier]
+    send_ids: FrozenSet[CommunicationOpIdentifier]
+
+
+# {{{ _make_distributed_partition
+
+def _make_distributed_partition(
+        outputs_per_part: Sequence[AbstractSet[Array]],
+        part_comm_ids: Sequence[_PartCommIDs],
+        roo_ary_to_name: Mapping[Array, str],
+        local_recv_id_to_recv_node: Dict[CommunicationOpIdentifier, DistributedRecv],
+        local_send_id_to_send_node: Dict[CommunicationOpIdentifier, DistributedSend],
+        ) -> DistributedGraphPartition:
     var_name_to_result = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
 
-    dist_name_generator = UniqueNameGenerator(forced_prefix="_pt_dist_")
+    for part_id, part_outputs in enumerate(outputs_per_part):
+        comm_replacer = _DistributedInputReplacer(roo_ary_to_name, part_outputs)
 
-    for part in sorted(partition.parts.values(),
-                       key=lambda k: sorted(k.output_names)):
-        comm_replacer = _DistributedCommReplacer(dist_name_generator)
-        part_results = {
-                var_name: comm_replacer(partition.var_name_to_result[var_name])
-                for var_name in sorted(part.output_names)}
-
-        dist_sends = [
-                comm_replacer.map_distributed_send(send)
-                for send in pid_to_distributed_sends.get(part.pid, [])]
-
-        part_results.update({
-            name: send_node.data
-            for name, send_node in
-            comm_replacer.output_name_to_send_node.items()})
-
-        parts[part.pid] = DistributedGraphPart(
-                pid=part.pid,
-                needed_pids=part.needed_pids,
-                user_input_names=part.user_input_names,
-                partition_input_names=(part.partition_input_names
-                    | frozenset(comm_replacer.input_name_to_recv_node)),
-                output_names=(part.output_names
-                    | frozenset(comm_replacer.output_name_to_send_node)),
-                distributed_sends=dist_sends,
-
-                input_name_to_recv_node=comm_replacer.input_name_to_recv_node,
-                output_name_to_send_node=comm_replacer.output_name_to_send_node)
-
-        for name, val in part_results.items():
+        for val in part_outputs:
+            name = roo_ary_to_name[val]
             assert name not in var_name_to_result
-            var_name_to_result[name] = val
+            var_name_to_result[name] = comm_replacer(val)
+
+        comm_ids = part_comm_ids[part_id]
+
+        name_to_send_node = Map({
+            roo_ary_to_name[local_send_id_to_send_node[send_id].data]:
+            comm_replacer.map_distributed_send(local_send_id_to_send_node[send_id])
+            for send_id in comm_ids.send_ids})
+
+        parts[part_id] = DistributedGraphPart(
+                pid=part_id,
+                needed_pids=frozenset({part_id - 1} if part_id else {}),
+                user_input_names=frozenset(comm_replacer.user_input_names),
+                partition_input_names=frozenset(comm_replacer.partition_input_names),
+                output_names=frozenset({
+                    roo_ary_to_name[output] for output in part_outputs}),
+                name_to_recv_node=Map({
+                    roo_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
+                    local_recv_id_to_recv_node[recv_id]
+                    for recv_id in comm_ids.recv_ids}),
+                name_to_send_node=name_to_send_node)
 
     result = DistributedGraphPartition(
             parts=parts,
             var_name_to_result=var_name_to_result,
-            toposorted_part_ids=partition.toposorted_part_ids)
-
-    if __debug__:
-        # Check disjointness again since we replaced a few nodes.
-        from pytato.partition import _check_partition_disjointness
-        _check_partition_disjointness(result)
+            )
 
     return result
 
 # }}}
 
 
-# {{{ helpers for find_distributed_partition
+# {{{ _LocalSendRecvDepGatherer
 
-class _DistributedGraphPartitioner(GraphPartitioner):
+def _send_to_comm_id(
+        local_rank: int, send: DistributedSend) -> CommunicationOpIdentifier:
+    if local_rank == send.dest_rank:
+        raise NotImplementedError("Self-sends are not currently allowed. "
+                                  f"(tag: '{send.comm_tag}')")
 
-    def __init__(self, get_part_id: Callable[[ArrayOrNames], PartId]) -> None:
-        super().__init__(get_part_id)
-        self.pid_to_dist_sends: Dict[PartId, List[DistributedSend]] = {}
-
-    def map_distributed_send_ref_holder(
-                self, expr: DistributedSendRefHolder, *args: Any) -> Any:
-        send_part_id = self.get_part_id(expr.send.data)
-
-        self.pid_to_dist_sends.setdefault(send_part_id, []).append(
-                DistributedSend(
-                    data=self.rec(expr.send.data),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag,
-                    tags=expr.send.tags))
-
-        return self.rec(expr.passthrough_data)
-
-    def make_partition(self, outputs: DictOfNamedArrays) \
-            -> DistributedGraphPartition:
-
-        partition = super().make_partition(outputs)
-        return _partition_to_distributed_partition(partition, self.pid_to_dist_sends)
+    return CommunicationOpIdentifier(
+        src_rank=local_rank,
+        dest_rank=send.dest_rank,
+        comm_tag=send.comm_tag)
 
 
-class _MandatoryPartitionOutputsCollector(CombineMapper[FrozenSet[Array]]):
-    """
-    Collects all nodes that, after partitioning, are necessarily outputs
-    of the partition to which they belong.
-    """
-    def __init__(self) -> None:
+def _recv_to_comm_id(
+        local_rank: int, recv: DistributedRecv) -> CommunicationOpIdentifier:
+    if local_rank == recv.src_rank:
+        raise NotImplementedError("Self-receives are not currently allowed. "
+                                  f"(tag: '{recv.comm_tag}')")
+
+    return CommunicationOpIdentifier(
+        src_rank=recv.src_rank,
+        dest_rank=local_rank,
+        comm_tag=recv.comm_tag)
+
+
+class _LocalSendRecvDepGatherer(
+        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+    def __init__(self, local_rank: int) -> None:
         super().__init__()
-        self.partition_outputs: Set[Array] = set()
+        self.local_comm_ids_to_needed_comm_ids: \
+                Dict[CommunicationOpIdentifier,
+                     FrozenSet[CommunicationOpIdentifier]] = {}
 
-    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
-        from functools import reduce
+        self.local_recv_id_to_recv_node: \
+                Dict[CommunicationOpIdentifier, DistributedRecv] = {}
+        self.local_send_id_to_send_node: \
+                Dict[CommunicationOpIdentifier, DistributedSend] = {}
+
+        self.local_rank = local_rank
+
+    def combine(
+            self, *args: FrozenSet[CommunicationOpIdentifier]
+            ) -> FrozenSet[CommunicationOpIdentifier]:
         return reduce(frozenset.union, args, frozenset())
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[Array]:
-        return self.combine(frozenset([expr.send.data]),
-                            super().map_distributed_send_ref_holder(expr))
+                                        ) -> FrozenSet[CommunicationOpIdentifier]:
+        send_id = _send_to_comm_id(self.local_rank, expr.send)
 
-    def _map_input_base(self, expr: Array) -> FrozenSet[Array]:
+        if send_id in self.local_send_id_to_send_node:
+            from pytato.distributed.verify import DuplicateSendError
+            raise DuplicateSendError(f"Multiple sends found for '{send_id}'")
+
+        self.local_comm_ids_to_needed_comm_ids[send_id] = \
+                self.rec(expr.send.data)
+
+        self.local_send_id_to_send_node[send_id] = expr.send
+
+        return self.rec(expr.passthrough_data)
+
+    def _map_input_base(self, expr: Array) -> FrozenSet[CommunicationOpIdentifier]:
         return frozenset()
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
-    map_distributed_recv = _map_input_base
 
+    def map_distributed_recv(
+            self, expr: DistributedRecv
+            ) -> FrozenSet[CommunicationOpIdentifier]:
+        recv_id = _recv_to_comm_id(self.local_rank, expr)
+
+        if recv_id in self.local_recv_id_to_recv_node:
+            from pytato.distributed.verify import DuplicateRecvError
+            raise DuplicateRecvError(f"Multiple receives found for '{recv_id}'")
+
+        self.local_comm_ids_to_needed_comm_ids[recv_id] = frozenset()
+
+        self.local_recv_id_to_recv_node[recv_id] = expr
+
+        return frozenset({recv_id})
+
+# }}}
+
+
+# {{{ _schedule_comm_batches
+
+def _schedule_comm_batches(
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph
+        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+    """For each :class:`CommunicationOpIdentifier`, determine the
+    'round'/'batch' during which it will be performed. A 'batch'
+    of communication consists of sends and receives. Computation
+    occurs between batches. (So, from the perspective of the
+    :class:`DistributedGraphPartition`, communication batches
+    sit *between* parts.)
+    """
+    # FIXME: I'm an O(n^2) algorithm.
+
+    comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
+
+    scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
+    comms_to_schedule = set(comm_ids_to_needed_comm_ids)
+
+    all_comm_ids = frozenset(comm_ids_to_needed_comm_ids)
+
+    # FIXME In order for this to work, comm tags must be unique
+    while len(scheduled_comm_ids) < len(all_comm_ids):
+        comm_ids_this_batch = {
+                comm_id for comm_id in comms_to_schedule
+                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
+
+        if not comm_ids_this_batch:
+            raise CycleError("cycle detected in communication graph")
+
+        scheduled_comm_ids.update(comm_ids_this_batch)
+        comms_to_schedule = comms_to_schedule - comm_ids_this_batch
+
+        comm_batches.append(comm_ids_this_batch)
+
+    return comm_batches
+
+# }}}
+
+
+# {{{  _MaterializedArrayCollector
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _MaterializedArrayCollector(CachedWalkMapper):
@@ -309,296 +422,19 @@ class _MaterializedArrayCollector(CachedWalkMapper):
                 else:
                     assert isinstance(subexpr, SCALAR_CLASSES)
 
-        if isinstance(expr, DictOfNamedArrays):
-            for _, subexpr in sorted(expr._data.items()):
-                assert isinstance(subexpr, Array)
-                self.materialized_arrays.add(subexpr)
+# }}}
 
 
-class _DominantMaterializedPredecessorsCollector(Mapper):
-    """
-    A Mapper whose mapper method for a node returns the materialized predecessors
-    just after the point the node is evaluated.
-    """
-    def __init__(self, materialized_arrays: FrozenSet[Array]) -> None:
-        super().__init__()
-        self.materialized_arrays = materialized_arrays
-        self.cache: Dict[ArrayOrNames, FrozenSet[Array]] = {}
+# {{{ _set_dict_union_mpi
 
-    def _combine(self, values: Iterable[Array]) -> FrozenSet[Array]:
-        from functools import reduce
-        return reduce(frozenset.union,
-                      (self.rec(v) for v in values),
-                      frozenset())
-
-    # type-ignore reason: return type not compatible with Mapper.rec's type
-    def rec(self, expr: ArrayOrNames) -> FrozenSet[Array]:  # type: ignore[override]
-        try:
-            return self.cache[expr]
-        except KeyError:
-            result: FrozenSet[Array] = super().rec(expr)
-            self.cache[expr] = result
-            return result
-
-    @cached_property
-    def direct_preds_getter(self) -> DirectPredecessorsGetter:
-        return DirectPredecessorsGetter()
-
-    def _map_generic_node(self, expr: Array) -> FrozenSet[Array]:
-        direct_preds = self.direct_preds_getter(expr)
-
-        if expr in self.materialized_arrays:
-            return frozenset([expr])
-        else:
-            return self._combine(direct_preds)
-
-    map_placeholder = _map_generic_node
-    map_data_wrapper = _map_generic_node
-    map_size_param = _map_generic_node
-
-    map_index_lambda = _map_generic_node
-    map_stack = _map_generic_node
-    map_concatenate = _map_generic_node
-    map_roll = _map_generic_node
-    map_axis_permutation = _map_generic_node
-    map_basic_index = _map_generic_node
-    map_contiguous_advanced_index = _map_generic_node
-    map_non_contiguous_advanced_index = _map_generic_node
-    map_reshape = _map_generic_node
-    map_einsum = _map_generic_node
-    map_distributed_recv = _map_generic_node
-
-    def map_named_array(self, expr: NamedArray) -> FrozenSet[Array]:
-        raise NotImplementedError("only LoopyCallResult named array"
-                                  " supported for now.")
-
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
-                                 ) -> FrozenSet[Array]:
-        raise NotImplementedError("Dict of named arrays not (yet) implemented")
-
-    def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
-        # ``loopy call result` is always materialized. However, make sure to
-        # traverse its arguments.
-        assert expr in self.materialized_arrays
-        return self._map_generic_node(expr)
-
-    def map_distributed_send_ref_holder(self,
-                                        expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[Array]:
-        return self.rec(expr.passthrough_data)
-
-
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _DominantMaterializedPredecessorsRecorder(CachedWalkMapper):
-    """
-    For each node in an expression graph, this mapper records the dominant
-    predecessors of each node of an expression graph into
-    :attr:`array_to_mat_preds`.
-    """
-    def __init__(self, mat_preds_getter: Callable[[Array], FrozenSet[Array]]
-                 ) -> None:
-        super().__init__()
-        self.mat_preds_getter = mat_preds_getter
-        self.array_to_mat_preds: Dict[Array, FrozenSet[Array]] = {}
-
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
-        return id(expr)
-
-    @cached_property
-    def direct_preds_getter(self) -> DirectPredecessorsGetter:
-        return DirectPredecessorsGetter()
-
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
-        from functools import reduce
-        if isinstance(expr, Array):
-            self.array_to_mat_preds[expr] = reduce(
-                frozenset.union,
-                (self.mat_preds_getter(pred)
-                 for pred in self.direct_preds_getter(expr)),
-                frozenset())
-
-
-def _linearly_schedule_batches(
-        predecessors: Map[Array, FrozenSet[Array]]) -> Map[Array, int]:
-    """
-    Used by :func:`find_distributed_partition`. Based on the dependencies in
-    *predecessors*, each node is assigned a time such that evaluating the array
-    at that point in time would not violate dependencies. This "time" or "batch
-    number" is then used as a partition ID.
-    """
-    from functools import reduce
-    current_time = 0
-    ary_to_time = {}
-    scheduled_nodes: Set[Array] = set()
-    all_nodes = frozenset(predecessors)
-
-    # assert that the keys contain all the nodes
-    assert reduce(frozenset.union,
-                  predecessors.values(),
-                  cast(FrozenSet[Array], frozenset())) <= frozenset(predecessors)
-
-    while len(scheduled_nodes) < len(all_nodes):
-        # {{{ eagerly schedule nodes whose predecessors have been scheduled
-
-        nodes_to_schedule = {node
-                             for node, preds in predecessors.items()
-                             if ((node not in scheduled_nodes)
-                                 and (preds <= scheduled_nodes))}
-        for node in nodes_to_schedule:
-            assert node not in ary_to_time
-            ary_to_time[node] = current_time
-
-        scheduled_nodes.update(nodes_to_schedule)
-
-        current_time += 1
-
-        # }}}
-
-    assert set(ary_to_time.values()) == set(range(current_time))
-    return Map(ary_to_time)
-
-
-def _assign_materialized_arrays_to_part_id(
-        materialized_arrays: FrozenSet[Array],
-        array_to_output_deps: Mapping[Array, FrozenSet[Array]],
-        outputs_to_part_id: Mapping[Array, int]
-) -> Map[Array, int]:
-    """
-    Returns a mapping from a materialized array to the part's ID where all the
-    inputs of the array expression are available.
-
-    Invoked as an intermediate step in :func:`find_distributed_partition`.
-
-    .. note::
-
-        In this heuristic we compute the materialized array as soon as its
-        inputs are available. In some cases it might be worth exploring
-        schedules where the evaluation of an array is delayed until one of
-        its users demand it.
-    """
-
-    materialized_array_to_part_id: Dict[Array, int] = {}
-
-    for ary in materialized_arrays:
-        materialized_array_to_part_id[ary] = max(
-            (outputs_to_part_id[dep]
-             for dep in array_to_output_deps[ary]),
-            default=-1) + 1
-
-    return Map(materialized_array_to_part_id)
-
-
-def _get_array_to_dominant_materialized_deps(
-        outputs: DictOfNamedArrays,
-        materialized_arrays: FrozenSet[Array]) -> Map[Array, FrozenSet[Array]]:
-    """
-    Returns a mapping from each node in the DAG *outputs* to a :class:`frozenset`
-    of its dominant materialized predecessors.
-    """
-
-    dominant_materialized_deps = _DominantMaterializedPredecessorsCollector(
-        materialized_arrays)
-    dominant_materialized_deps_recorder = (
-        _DominantMaterializedPredecessorsRecorder(dominant_materialized_deps))
-    dominant_materialized_deps_recorder(outputs)
-    return Map(dominant_materialized_deps_recorder.array_to_mat_preds)
-
-
-def _get_materialized_arrays_promoted_to_partition_outputs(
-        ary_to_dominant_stored_preds: Mapping[Array, FrozenSet[Array]],
-        stored_ary_to_part_id: Mapping[Array, int],
-        materialized_arrays: FrozenSet[Array]
-) -> FrozenSet[Array]:
-    """
-    Returns a :class:`frozenset` of materialized arrays that are used by
-    multiple partitions. Materialized arrays that are used by multiple
-    partitions are special in that they *must* be promoted as the outputs of a
-    partition.
-
-    Invoked as an intermediate step in :func:`find_distributed_partition`.
-
-    :arg ary_to_dominant_stored_preds: A mapping from array to the dominant
-        stored predecessors. A stored array can be either a mandatory partition
-        output or a materialized array as indicated by the user.
-    """
-    materialized_ary_to_part_id_users: Dict[Array, Set[int]] = {}
-
-    for ary in stored_ary_to_part_id:
-        stored_preds = ary_to_dominant_stored_preds[ary]
-        for pred in stored_preds:
-            if pred in materialized_arrays:
-                (materialized_ary_to_part_id_users
-                 .setdefault(pred, set())
-                 .add(stored_ary_to_part_id[ary]))
-
-    return frozenset({ary
-                      for ary, users in materialized_ary_to_part_id_users.items()
-                      if users != {stored_ary_to_part_id[ary]}})
-
-
-@attrs.define(frozen=True, eq=True, repr=True)
-class PartIDTag(UniqueTag):
-    """
-    A tag applicable to a :class:`pytato.Array` recording to which part the
-    array belongs.
-    """
-    part_id: int
-
-
-class _PartIDTagAssigner(CopyMapperWithExtraArgs):
-    """
-    Used by :func:`find_distributed_partition` to assign each array
-    node a :class:`PartIDTag`.
-    """
-    def __init__(self,
-                 stored_array_to_part_id: Mapping[Array, int],
-                 partition_outputs: FrozenSet[Array]) -> None:
-        self.stored_array_to_part_id = stored_array_to_part_id
-        self.partition_outputs = partition_outputs
-
-        # type-ignore reason: incompatible  attribute type wrt base.
-        self._cache: Dict[Tuple[ArrayOrNames, int],
-                          Any] = {}  # type: ignore[assignment]
-
-    # type-ignore-reason: incompatible with super class
-    def get_cache_key(self,  # type: ignore[override]
-                      expr: ArrayOrNames,
-                      user_part_id: int
-                      ) -> Tuple[ArrayOrNames, int]:
-
-        return (expr, user_part_id)
-
-    # type-ignore-reason: incompatible with super class
-    def rec(self,  # type: ignore[override]
-            expr: ArrayOrNames,
-            user_part_id: int) -> Any:
-        key = self.get_cache_key(expr, user_part_id)
-        try:
-            return self._cache[key]
-        except KeyError:
-            if isinstance(expr, Array):
-                if expr in self.stored_array_to_part_id:
-                    assert ((self.stored_array_to_part_id[expr]
-                             == user_part_id)
-                            or expr in self.partition_outputs)
-                    # at stored array the part id changes
-                    user_part_id = self.stored_array_to_part_id[expr]
-
-                expr = expr.tagged(PartIDTag(user_part_id))
-
-            result = super().rec(expr, user_part_id)
-            self._cache[key] = result
-            return result
-
-
-def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
-    assert isinstance(ary, Array)
-
-    # Spurious assignment because of
-    # https://github.com/python/mypy/issues/12626
-    result: Array = ary.without_tags(ary.tags_of_type(PartIDTag))
+def _set_dict_union_mpi(
+        dict_a: Mapping[_KeyT, FrozenSet[_ValueT]],
+        dict_b: Mapping[_KeyT, FrozenSet[_ValueT]],
+        mpi_data_type: MPI.Datatype) -> Mapping[_KeyT, FrozenSet[_ValueT]]:
+    assert mpi_data_type is None
+    result = dict(dict_a)
+    for key, values in dict_b.items():
+        result[key] = result.get(key, frozenset()) | values
     return result
 
 # }}}
@@ -606,11 +442,108 @@ def _remove_part_id_tag(ary: ArrayOrNames) -> Array:
 
 # {{{ find_distributed_partition
 
-def find_distributed_partition(outputs: DictOfNamedArrays
-                               ) -> DistributedGraphPartition:
+def find_distributed_partition(
+        mpi_communicator: MPI.Comm,
+        outputs: DictOfNamedArrays
+        ) -> DistributedGraphPartition:
+    r"""
+    Compute a :class:DistributedGraphPartition` (for use with
+    :func:`execute_distributed_partition`) that evaluates the
+    same result as *outputs*, such that:
+
+    - communication only happens at the beginning and end of
+      each :class:`DistributedGraphPart`, and
+    - the partition introduces no circular dependencies between parts,
+      mediated by either local data flow or off-rank communication.
+
+    .. warning::
+
+        This is an MPI-collective operation.
+
+    The following sections describe the (non-binding, as far as documentation
+    is concerned) algorithm behind the partitioner.
+
+    .. rubric:: Preliminaries
+
+    We identify a communication operation (consisting of a pair of a send
+    and a receive) by a
+    :class:`~pytato.distributed.partition.CommunicationOpIdentifier`. We keep
+    graphs of these in
+    :class:`~pytato.distributed.partition.CommunicationDepGraph`.
+
+    If ``graph`` is a
+    :class:`~pytato.distributed.partition.CommunicationDepGraph`, then ``b in
+    graph[a]`` means that, in order to initiate the communication operation
+    identified by :class:`~pytato.distributed.partition.CommunicationOpIdentifier`
+    ``a``, the communication operation identified by
+    :class:`~pytato.distributed.partition.CommunicationOpIdentifier` ``b`` must
+    be completed.
+
+    I.e. the nodes are "communication operations", i.e. pairs of
+    send/receive. Edges represent (rank-local) data flow between them.
+
+    .. rubric:: Step 1: Build a global graph of data flow between communication
+        operations
+
+    On rank ``i``, collect the receives that have a data flow to that send
+    in a :class:`~pytato.distributed.partition.CommunicationDepGraph`
+    ``local_comm_ids_to_needed_comm_ids data structure``
+
+    Let ``gathered_local_send_to_needed_local_recvs[i]`` be the
+    ``local_comm_ids_to_needed_comm_ids`` gathered on rank ``i``. Since each
+    send is carried out by exactly one rank, :math:`\bigcup_i`
+    ``gathered_local_send_to_needed_local_recvs[i].keys()`` is disjoint, and
+    thus simply combining all the dictionaries by key yields the rank-global
+    graph of data flow between communication operations.
+
+    Using allreduce (with disjoint union of :class:`dict` as the operation) of
+    the local-pieces, this global graph will be conveyed to each rank. Each
+    rank will then have the same global
+    :class:`~pytato.distributed.partition.CommunicationDepGraph`
+    ``comm_ids_to_needed_comm_ids``.
+
+    .. rubric:: Step 2: Collect rank-local sends needed by each receive
+
+    On rank ``i``, do the following:
+
+    For each communicaton operation with destination rank ``i`` (i.e., from
+    the point of view of rank ``i``, a receive), (recursively) find all
+    needed communications with source rank ``i`` (i.e., from the point of
+    view of rank ``i``, a send). Record these in
+    :class:`~pytato.distributed.partition.CommunicationDepGraph`
+    ``local_recv_id_to_needed_local_send_ids``.
+
+    .. rubric:: Step 3: Obtain a rank-local communication dependency graph
+
+    On rank ``i``, do the following:
+
+    Define :class:`~pytato.distributed.partition.CommunicationDepGraph`
+    ``local_comm_to_needed_local_comms`` as the key-wise disjoint union of
+    ``local_comm_ids_to_needed_comm_ids`` and
+    ``local_recv_id_to_needed_local_send_ids``.
+
+    This graph now carries globally valid information on dependencies
+    between communication operations taking place on the local rank.
+
+    .. rubric:: Step 4: Partition the graph of local communication ops
+
+    On rank ``i``, do the following:
+
+    Compute a topological order of ``local_comm_to_needed_local_comms``.
+
+    Starting from a single communication operation, greedily pack additional
+    communication operations into the current part if:
+
+    -  the additional operation is a send
+    -  the additional operation is a receive that does not “need” (according
+        to ``local_recv_id_to_needed_local_send_ids``) a send in the current part.
+        Partitions *outputs* into parts. Between two parts communication
+        statements (sends/receives) are scheduled.
+
     """
-    Partitions *outputs* into parts. Between two parts communication
-    statements (sends/receives) are scheduled.
+    # FIXME: Massage salvageable bits from old docstring into new.
+    """
+    -------
 
     .. note::
 
@@ -654,118 +587,261 @@ def find_distributed_partition(outputs: DictOfNamedArrays
            avoiding re-computations.
     """
     from pytato.transform import SubsetDependencyMapper
-    from pytato.array import make_dict_of_named_arrays
-    from pytato.partition import find_partition
 
-    # {{{ get partitioning helper data corresponding to the DAG
+    import mpi4py.MPI as MPI
 
-    partition_outputs = _MandatoryPartitionOutputsCollector()(outputs)
+    local_rank = mpi_communicator.rank
 
-    # materialized_arrays: "extra" arrays that must be stored in a buffer
+    # {{{ find comm_ids_to_needed_comm_ids
+
+    lsrdg = _LocalSendRecvDepGatherer(local_rank=local_rank)
+    lsrdg(outputs)
+    local_comm_ids_to_needed_comm_ids = \
+            lsrdg.local_comm_ids_to_needed_comm_ids
+
+    set_dict_union_mpi_op = MPI.Op.Create(
+            # type ignore reason: mpi4py misdeclares op functions as returning
+            # None.
+            _set_dict_union_mpi,  # type: ignore[arg-type]
+            commute=True)
+    try:
+        comm_ids_to_needed_comm_ids = mpi_communicator.allreduce(
+                local_comm_ids_to_needed_comm_ids, set_dict_union_mpi_op)
+    finally:
+        set_dict_union_mpi_op.Free()
+
+    # }}}
+
+    # {{{ make batches out of comm_ids_to_needed_comm_ids
+
+    if mpi_communicator.rank == 0:
+        # The comm_batches correspond one-to-one to DistributedGraphParts
+        # in the output.
+        try:
+            comm_batches = _schedule_comm_batches(comm_ids_to_needed_comm_ids)
+        except Exception as exc:
+            mpi_communicator.bcast(exc)
+            raise
+        else:
+            mpi_communicator.bcast(comm_batches)
+    else:
+        comm_batches_or_exc = mpi_communicator.bcast(None)
+        if isinstance(comm_batches_or_exc, Exception):
+            raise comm_batches_or_exc
+
+        comm_batches = cast(
+                Sequence[Sequence[CommunicationOpIdentifier]],
+                comm_batches_or_exc)
+
+    # }}}
+
+    # {{{ create (local) parts out of batch ids
+
+    part_comm_ids: List[_PartCommIDs] = []
+
+    if comm_batches:
+        recv_ids = frozenset()
+        for batch in comm_batches:
+            send_ids = frozenset(
+                comm_id for comm_id in batch
+                if comm_id.src_rank == local_rank)
+            if recv_ids or send_ids:
+                part_comm_ids.append(
+                    _PartCommIDs(
+                        recv_ids=recv_ids,
+                        send_ids=send_ids))
+            # These go into the next part
+            recv_ids = frozenset(
+                comm_id for comm_id in batch
+                if comm_id.dest_rank == local_rank)
+        if recv_ids:
+            part_comm_ids.append(
+                _PartCommIDs(
+                    recv_ids=recv_ids,
+                    send_ids=frozenset()))
+    else:
+        part_comm_ids.append(
+            _PartCommIDs(
+                recv_ids=frozenset(),
+                send_ids=frozenset()))
+
+    nparts = len(part_comm_ids)
+
+    if __debug__:
+        from pytato.distributed.verify import MissingRecvError, MissingSendError
+
+        for part in part_comm_ids:
+            for recv_id in part.recv_ids:
+                if recv_id not in lsrdg.local_recv_id_to_recv_node:
+                    raise MissingRecvError(f"no receive for '{recv_id}'")
+            for send_id in part.send_ids:
+                if send_id not in lsrdg.local_send_id_to_send_node:
+                    raise MissingSendError(f"no send for '{send_id}'")
+
+    comm_id_to_part_id = {
+        comm_id: ipart
+        for ipart, comm_ids in enumerate(part_comm_ids)
+        for comm_id in comm_ids.send_ids | comm_ids.recv_ids}
+
+    # }}}
+
+    # {{{ assign each materialized array to a part
+
     materialized_arrays_collector = _MaterializedArrayCollector()
     materialized_arrays_collector(outputs)
-    materialized_arrays = frozenset(
-        materialized_arrays_collector.materialized_arrays) - partition_outputs
+
+    sent_array_to_send_node = {
+            send.data: send
+            for send in lsrdg.local_send_id_to_send_node.values()}
+    sent_arrays = frozenset(sent_array_to_send_node)
+
+    received_arrays = frozenset(lsrdg.local_recv_id_to_recv_node.values())
+
+    # While sent/received arrays may be marked as materialized, we shouldn't be
+    # including them here because we're using sent/received arrays as anchors
+    # to place *other* materialized data into the batches.
+    materialized_arrays = (
+        frozenset(materialized_arrays_collector.materialized_arrays)
+        - sent_arrays
+        - received_arrays)
+
+    # "moo" for "materialized or output"
+    output_arrays = set(outputs._data.values())
+    moo_arrays = materialized_arrays | output_arrays
+
+    # FIXME: This gathers up materialized_arrays recursively, leading to
+    # result sizes potentially quadratic in the number of materialized arrays.
+    moo_array_dep_mapper = SubsetDependencyMapper(moo_arrays)
+
+    moo_ary_to_first_dep_send_part_id: Dict[Array, int] = {
+        ary: nparts
+        for ary in moo_arrays}
+    for sent_ary in sent_arrays:
+        for ary in moo_array_dep_mapper(sent_ary):
+            moo_ary_to_first_dep_send_part_id[ary] = min(
+                moo_ary_to_first_dep_send_part_id[ary],
+                comm_id_to_part_id[
+                    _send_to_comm_id(local_rank,
+                                     sent_array_to_send_node[sent_ary])])
+
+    if __debug__:
+        recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
+
+        moo_ary_to_last_dep_recv_part_id: Dict[Array, int] = {
+                ary: max(
+                        (comm_id_to_part_id[
+                            _recv_to_comm_id(local_rank,
+                                            cast(DistributedRecv, recvd_ary))]
+                        for recvd_ary in recvd_array_dep_mapper(ary)),
+                        default=-1)
+                for ary in moo_arrays
+                }
+
+        assert all(
+                (
+                    moo_ary_to_last_dep_recv_part_id[ary]
+                    <= moo_ary_to_first_dep_send_part_id[ary])
+                for ary in moo_arrays), \
+            "unable to find suitable part for materialized or output array"
+
+    # FIXME: (Seemingly) arbitrary decision, subject to future investigation.
+    # Evaluation of materialized arrays is pushed as late as possible,
+    # in order to minimize the amount of computation that might prevent
+    # data from being sent.
+    moo_ary_to_part_id: Dict[Array, int] = {
+            ary: min(
+                moo_ary_to_first_dep_send_part_id[ary],
+                nparts-1)
+            for ary in moo_arrays}
 
     # }}}
 
-    dep_mapper = SubsetDependencyMapper(partition_outputs)
+    sent_ary_to_part_id = {
+            sent_ary: (
+                comm_id_to_part_id[
+                    _send_to_comm_id(local_rank, send_node)])
+            for sent_ary, send_node in sent_array_to_send_node.items()}
 
-    # {{{ compute a dependency graph between outputs, schedule and partition
+    recvd_ary_to_part_id: Dict[Array, int] = {
+            recvd_ary: (
+                comm_id_to_part_id[
+                    _recv_to_comm_id(local_rank, recvd_ary)])
+            for recvd_ary in received_arrays}
 
-    output_to_deps = Map({partition_out: (dep_mapper(partition_out)
-                                          - frozenset([partition_out]))
-                          for partition_out in partition_outputs})
+    # "Materialized" arrays are arrays that are tagged with ImplStored,
+    # i.e. "the outside world" (from the perspective of the partitioner)
+    # has decided that these arrays will live in memory.
+    #
+    # In addition, arrays that are sent and received must also live in memory.
+    # So, "stored" = "materialized" ∪ "overall outputs" ∪ "communicated"
+    stored_ary_to_part_id = moo_ary_to_part_id.copy()
+    stored_ary_to_part_id.update(sent_ary_to_part_id)
+    stored_ary_to_part_id.update(recvd_ary_to_part_id)
 
-    output_to_part_id = _linearly_schedule_batches(output_to_deps)
+    assert all(0 <= part_id < nparts
+               for part_id in stored_ary_to_part_id.values())
 
-    # }}}
+    stored_arrays = set(stored_ary_to_part_id)
 
-    # {{{ assign each materialized array a partition ID in which it will be placed
+    # {{{ find which materialized arrays should become part outputs
+    # (because they are used in not just their local part, but also others)
 
-    materialized_array_to_output_deps = Map({ary: (dep_mapper(ary)
-                                                   - frozenset([ary]))
-                                             for ary in materialized_arrays})
-    materialized_ary_to_part_id = _assign_materialized_arrays_to_part_id(
-        materialized_arrays,
-        materialized_array_to_output_deps,
-        output_to_part_id)
+    direct_preds_getter = DirectPredecessorsGetter()
 
-    assert frozenset(materialized_ary_to_part_id) == materialized_arrays
+    def get_stored_predecessors(ary: Array) -> FrozenSet[Array]:
+        if ary in stored_arrays:
+            return frozenset({ary})
+        else:
+            return reduce(frozenset.union,
+                        [get_stored_predecessors(pred)
+                         for pred in direct_preds_getter(ary)],
+                        frozenset())
 
-    # }}}
+    materialized_arrays_promoted_to_part_outputs = {
+                stored_pred
+                for stored_ary in stored_arrays
+                for stored_pred in get_stored_predecessors(stored_ary)
+                if (stored_ary_to_part_id[stored_ary]
+                    != stored_ary_to_part_id[stored_pred])
+                }
 
-    stored_ary_to_part_id = materialized_ary_to_part_id.update(output_to_part_id)
-
-    # {{{ find which materialized arrays have users in multiple parts
-    # (and promote them to part outputs)
-
-    ary_to_dominant_materialized_deps = (
-        _get_array_to_dominant_materialized_deps(outputs,
-                                                      (materialized_arrays
-                                                       | partition_outputs)))
-
-    materialized_arrays_realized_as_partition_outputs = (
-        _get_materialized_arrays_promoted_to_partition_outputs(
-            ary_to_dominant_materialized_deps,
-            stored_ary_to_part_id,
-            materialized_arrays))
-
-    # }}}
-
-    # {{{ tag each node with its part ID
-
-    # Why is this necessary? (I.e. isn't the mapping *stored_ary_to_part_id* enough?)
-    # By assigning tags we also duplicate the non-materialized nodes that are
-    # to be made available in multiple parts. Parts being disjoint is one of
-    # the requirements of *find_partition*.
-    part_id_tag_assigner = _PartIDTagAssigner(
-        stored_ary_to_part_id,
-        partition_outputs | materialized_arrays_realized_as_partition_outputs)
-
-    partitioned_outputs = make_dict_of_named_arrays({
-        name: part_id_tag_assigner(subexpr, stored_ary_to_part_id[subexpr])
-        for name, subexpr in outputs._data.items()})
+    stored_ary_part_outputs = (
+        output_arrays
+        | sent_arrays
+        | materialized_arrays_promoted_to_part_outputs)
 
     # }}}
 
-    def get_part_id(expr: ArrayOrNames) -> int:
-        if not isinstance(expr, Array):
-            raise NotImplementedError("find_distributed_partition"
-                                      " cannot partition DictOfNamedArrays")
-        assert isinstance(expr, Array)
-        tag, = expr.tags_of_type(PartIDTag)
-        assert isinstance(tag, PartIDTag)
-        return tag.part_id
+    out_name_gen = UniqueNameGenerator(forced_prefix="_pt_out_")
+    recv_name_gen = UniqueNameGenerator(forced_prefix="_pt_recv_")
+    # "roo" for "received or output"
+    roo_ary_to_name = {
+        ary: out_name_gen()
+        for ary in materialized_arrays_promoted_to_part_outputs}
+    roo_ary_to_name.update({ary: out_name_gen() for ary in sent_arrays})
+    roo_ary_to_name.update({ary: name for name, ary in outputs._data.items()})
+    roo_ary_to_name.update({recv: recv_name_gen() for recv in received_arrays})
 
-    gp = cast(DistributedGraphPartition,
-                find_partition(partitioned_outputs,
-                               get_part_id,
-                               _DistributedGraphPartitioner))
+    outputs_per_part: List[Set[Array]] = [set() for _pid in range(nparts)]
+    for output_ary in stored_ary_part_outputs:
+        outputs_per_part[stored_ary_to_part_id[output_ary]].add(output_ary)
 
-    # Remove PartIDTag from arrays that may be returned from the evaluation
-    # of the partitioned graph. If we don't, those may end up on inputs to
-    # another graph, which may also get partitioned, which will endlessly
-    # confuse that subsequent partitioning process. In addition, those
-    # tags may cause arrays to look spuriously different, defeating
-    # caching.
-    # See https://github.com/inducer/pytato/issues/307 for further discussion.
+    partition = _make_distributed_partition(
+            outputs_per_part,
+            part_comm_ids,
+            roo_ary_to_name,
+            lsrdg.local_recv_id_to_recv_node,
+            lsrdg.local_send_id_to_send_node)
 
-    # Note that it does not suffice to remove those tags from just, say,
-    # var_name_to_result: This may produce inconsistent Placeholder instances.
-    # For the same reason, we need to use the same mapper for all nodes.
-    from pytato.transform import CachedMapAndCopyMapper
-    cmac = CachedMapAndCopyMapper(_remove_part_id_tag)
+    from pytato.partition import _run_partition_diagnostics
+    _run_partition_diagnostics(outputs, partition)
 
-    def map_array(ary: Array) -> Array:
-        result = cmac(ary)
-        assert isinstance(result, Array)
-        return result
+    if __debug__:
+        # Avoid potentially confusing errors if one rank manages to continue
+        # when another is not able.
+        mpi_communicator.barrier()
 
-    def map_send(send: DistributedSend) -> DistributedSend:
-        return send.copy(data=cmac(send.data))
-
-    return _map_distributed_graph_partition_nodes(map_array, map_send, gp)
+    return partition
 
 # }}}
 
