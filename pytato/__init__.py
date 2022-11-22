@@ -103,6 +103,7 @@ from pytato.distributed import (make_distributed_send, make_distributed_recv,
                                 verify_distributed_partition,
                                 )
 from pytato.transform.lower_to_index_lambda import to_index_lambda
+from pytato.transform.metadata import unify_axes_tags
 
 from pytato.partition import generate_code_for_partition
 
@@ -160,6 +161,8 @@ __all__ = (
         "generate_code_for_partition",
 
         "to_index_lambda",
+
+        "unify_axes_tags",
 
         # sub-modules
         "analysis", "tags", "transform",

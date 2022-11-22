@@ -316,45 +316,55 @@ def get_random_pt_dag_with_send_recv_nodes(
 
 # {{{ tags used only by the regression tests
 
-class FooRednTag(Tag):
+class TestlibTag(Tag):
+    pass
+
+
+class FooRednTag(TestlibTag):
     """
     foo
     """
 
 
-class FooInameTag(Tag):
+class FooInameTag(TestlibTag):
     """
     foo
     """
 
 
-class BarInameTag(Tag):
+class BarInameTag(TestlibTag):
     """
     bar
     """
 
 
-class BazInameTag(Tag):
+class BazInameTag(TestlibTag):
     """
     baz
     """
 
 
-class FooTag(Tag):
+class FooTag(TestlibTag):
     """
     foo
     """
 
 
-class BarTag(Tag):
+class BarTag(TestlibTag):
     """
     bar
     """
 
 
-class BazTag(Tag):
+class BazTag(TestlibTag):
     """
     baz
+    """
+
+
+class QuuxTag(TestlibTag):
+    """
+    quux
     """
 
 # }}}
