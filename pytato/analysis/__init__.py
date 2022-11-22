@@ -36,7 +36,7 @@ from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 
 if TYPE_CHECKING:
-    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
