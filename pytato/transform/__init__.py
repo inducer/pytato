@@ -1545,7 +1545,7 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
     """
 
     @abstractmethod
-    def handle_edge(self, expr: ArrayOrNames, child: ArrayOrNames) -> Any:
+    def handle_edge(self, expr: ArrayOrNames, predecessor: ArrayOrNames) -> Any:
         pass
 
     def rec_idx_or_size_tuple(self,

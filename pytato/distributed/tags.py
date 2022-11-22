@@ -63,11 +63,11 @@ def number_distributed_tags(
     tags = frozenset({
             recv.comm_tag
             for part in partition.parts.values()
-            for recv in part.input_name_to_recv_node.values()
+            for recv in part.name_to_recv_node.values()
             } | {
             send.comm_tag
             for part in partition.parts.values()
-            for send in part.output_name_to_send_node.values()})
+            for send in part.name_to_send_node.values()})
 
     from mpi4py import MPI
 
@@ -110,17 +110,17 @@ def number_distributed_tags(
     return DistributedGraphPartition(
             parts={
                 pid: replace(part,
-                    input_name_to_recv_node={
+                    name_to_recv_node={
                         name: recv.copy(comm_tag=sym_tag_to_int_tag[recv.comm_tag])
-                        for name, recv in part.input_name_to_recv_node.items()},
-                    output_name_to_send_node={
+                        for name, recv in part.name_to_recv_node.items()},
+                    name_to_send_node={
                         name: send.copy(comm_tag=sym_tag_to_int_tag[send.comm_tag])
-                        for name, send in part.output_name_to_send_node.items()},
+                        for name, send in part.name_to_send_node.items()},
                     )
                 for pid, part in partition.parts.items()
                 },
             var_name_to_result=partition.var_name_to_result,
-            toposorted_part_ids=partition.toposorted_part_ids), next_tag
+            ), next_tag
 
 # }}}
 

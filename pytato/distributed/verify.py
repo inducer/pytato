@@ -36,7 +36,8 @@ import numpy as np
 
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.partition import PartId
-from pytato.distributed.partition import DistributedGraphPartition
+from pytato.distributed.partition import (
+        DistributedGraphPartition, CommunicationOpIdentifier)
 from pytato.array import ShapeType
 
 import attrs
@@ -81,19 +82,12 @@ class _SummarizedDistributedGraphPart:
     user_input_names: FrozenSet[_DistributedName]
     partition_input_names: FrozenSet[_DistributedName]
     output_names: FrozenSet[_DistributedName]
-    input_name_to_recv_node: Dict[_DistributedName, DistributedRecv]
-    output_name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
+    name_to_recv_node: Dict[_DistributedName, DistributedRecv]
+    name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
 
     @property
     def rank(self) -> int:
         return self.pid.rank
-
-
-@attrs.define(frozen=True)
-class _CommIdentifier:
-    src_rank: int
-    dest_rank: int
-    comm_tag: CommTagType
 
 # }}}
 
@@ -162,9 +156,9 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                             for name in part.partition_input_names]),
             output_names=frozenset([_DistributedName(my_rank, name)
                             for name in part.output_names]),
-            input_name_to_recv_node={_DistributedName(my_rank, name): recv
-                for name, recv in part.input_name_to_recv_node.items()},
-            output_name_to_send_node={
+            name_to_recv_node={_DistributedName(my_rank, name): recv
+                for name, recv in part.name_to_recv_node.items()},
+            name_to_send_node={
                 _DistributedName(my_rank, name):
                 _SummarizedDistributedSend(
                             src_rank=my_rank,
@@ -172,7 +166,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                             comm_tag=send.comm_tag,
                             shape=send.data.shape,
                             dtype=send.data.dtype)
-                for name, send in part.output_name_to_send_node.items()})
+                for name, send in part.name_to_send_node.items()})
 
     # Gather the _SummarizedDistributedGraphPart's to rank 0
     all_summarized_parts_gathered: Optional[
@@ -194,24 +188,36 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                            needed_pid: _DistributedPartId) -> None:
             pid_to_needed_pids.setdefault(pid, set()).add(needed_pid)
 
-        all_recvs: Set[_CommIdentifier] = set()
+        all_recvs: Set[CommunicationOpIdentifier] = set()
 
         # {{{ gather information on who produces output
 
-        output_to_defining_pid: Dict[_DistributedName, _DistributedPartId] = {}
+        name_to_computing_pid: Dict[_DistributedName, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for out_name in sumpart.output_names:
-                assert out_name not in output_to_defining_pid
-                output_to_defining_pid[out_name] = sumpart.pid
+                assert out_name not in name_to_computing_pid
+                name_to_computing_pid[out_name] = sumpart.pid
+
+        # }}}
+
+        # {{{ gather information on who receives which names
+
+        name_to_receiving_pid: Dict[_DistributedName, _DistributedPartId] = {}
+        for sumpart in all_summarized_parts.values():
+            for recv_name in sumpart.name_to_recv_node:
+                assert recv_name not in name_to_computing_pid
+                assert recv_name not in name_to_receiving_pid
+                name_to_receiving_pid[recv_name] = sumpart.pid
 
         # }}}
 
         # {{{ gather information on senders
 
-        comm_id_to_sending_pid: Dict[_CommIdentifier, _DistributedPartId] = {}
+        comm_id_to_sending_pid: \
+                Dict[CommunicationOpIdentifier, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
-            for sumsend in sumpart.output_name_to_send_node.values():
-                comm_id = _CommIdentifier(
+            for sumsend in sumpart.name_to_send_node.values():
+                comm_id = CommunicationOpIdentifier(
                         src_rank=sumsend.src_rank,
                         dest_rank=sumsend.dest_rank,
                         comm_tag=sumsend.comm_tag)
@@ -230,8 +236,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
             # Loop through all receives, assert that combination of
             # (src_rank, dest_rank, tag) is unique.
-            for dname, dist_recv in sumpart.input_name_to_recv_node.items():
-                comm_id = _CommIdentifier(
+            for dname, dist_recv in sumpart.name_to_recv_node.items():
+                comm_id = CommunicationOpIdentifier(
                         src_rank=dist_recv.src_rank,
                         dest_rank=dname.rank,
                         comm_tag=dist_recv.comm_tag)
@@ -252,12 +258,23 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
             # Add edges between output_names and partition_input_names (intra-rank)
             for input_name in sumpart.partition_input_names:
-                # Input names from recv nodes have no corresponding output_name
-                if input_name in sumpart.input_name_to_recv_node.keys():
-                    continue
-                defining_pid = output_to_defining_pid[input_name]
-                assert defining_pid.rank == sumpart.pid.rank
-                add_needed_pid(sumpart.pid, defining_pid)
+                defining_pid = name_to_computing_pid.get(input_name)
+
+                if defining_pid is None:
+                    defining_pid = name_to_receiving_pid.get(input_name)
+
+                if defining_pid is None:
+                    raise AssertionError(
+                        f"name '{input_name}' in part {sumpart} not defined "
+                        "via output or receive")
+
+                if defining_pid == sumpart.pid:
+                    # Yes, we look at our own sends. But we don't need to
+                    # include an edge for them--it'll look like a cycle.
+                    pass
+                else:
+                    assert defining_pid.rank == sumpart.pid.rank
+                    add_needed_pid(sumpart.pid, defining_pid)
 
         # }}}
 
