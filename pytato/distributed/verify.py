@@ -36,7 +36,8 @@ import numpy as np
 
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.partition import PartId
-from pytato.distributed.partition import DistributedGraphPartition
+from pytato.distributed.partition import (
+        DistributedGraphPartition, CommunicationOpIdentifier)
 from pytato.array import ShapeType
 
 import attrs
@@ -87,13 +88,6 @@ class _SummarizedDistributedGraphPart:
     @property
     def rank(self) -> int:
         return self.pid.rank
-
-
-@attrs.define(frozen=True)
-class _CommIdentifier:
-    src_rank: int
-    dest_rank: int
-    comm_tag: CommTagType
 
 # }}}
 
@@ -194,7 +188,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                            needed_pid: _DistributedPartId) -> None:
             pid_to_needed_pids.setdefault(pid, set()).add(needed_pid)
 
-        all_recvs: Set[_CommIdentifier] = set()
+        all_recvs: Set[CommunicationOpIdentifier] = set()
 
         # {{{ gather information on who produces output
 
@@ -208,10 +202,11 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # {{{ gather information on senders
 
-        comm_id_to_sending_pid: Dict[_CommIdentifier, _DistributedPartId] = {}
+        comm_id_to_sending_pid: \
+                Dict[CommunicationOpIdentifier, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for sumsend in sumpart.output_name_to_send_node.values():
-                comm_id = _CommIdentifier(
+                comm_id = CommunicationOpIdentifier(
                         src_rank=sumsend.src_rank,
                         dest_rank=sumsend.dest_rank,
                         comm_tag=sumsend.comm_tag)
@@ -231,7 +226,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
             # Loop through all receives, assert that combination of
             # (src_rank, dest_rank, tag) is unique.
             for dname, dist_recv in sumpart.input_name_to_recv_node.items():
-                comm_id = _CommIdentifier(
+                comm_id = CommunicationOpIdentifier(
                         src_rank=dist_recv.src_rank,
                         dest_rank=dname.rank,
                         comm_tag=dist_recv.comm_tag)

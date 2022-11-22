@@ -30,7 +30,7 @@ def main():
 
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
-    distributed_parts = find_distributed_partition(outputs)
+    distributed_parts = find_distributed_partition(comm, outputs)
     distributed_parts, _ = number_distributed_tags(
             comm, distributed_parts, base_tag=42)
     prg_per_partition = generate_code_for_partition(distributed_parts)

@@ -87,7 +87,7 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
     # Find the partition
     outputs = pt.make_dict_of_named_arrays({"out": y})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
     prg_per_partition = pt.generate_code_for_partition(distributed_parts)
 
     # Execute the distributed partition
@@ -165,7 +165,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
             {"result": make_random_dag(rdagc_comm)})
         x_comm = pt.transform.materialize_with_mpms(pt_dag)
 
-        distributed_partition = pt.find_distributed_partition(x_comm)
+        distributed_partition = pt.find_distributed_partition(comm, x_comm)
         pt.verify_distributed_partition(comm, distributed_partition)
 
         # Transform symbolic tags into numeric ones for MPI
@@ -232,7 +232,7 @@ def _test_dag_with_no_comm_nodes_inner(ctx_factory):
 
     # }}}
 
-    parts = pt.find_distributed_partition(dag)
+    parts = pt.find_distributed_partition(comm, dag)
     assert len(parts.parts) == 1
     prg_per_partition = pt.generate_code_for_partition(parts)
     out_dict = pt.execute_distributed_partition(
@@ -252,7 +252,11 @@ def test_dag_with_no_comm_nodes():
 
 def _check_deterministic_partition(dag, ref_partition,
                                    iproc, results):
-    partition = pt.find_distributed_partition(dag)
+    import mpi4py.MPI as MPI
+
+    # FIXME: This test is limited to single-rank
+    partition = pt.find_distributed_partition(MPI.COMM_WORLD, dag)
+
     are_equal = int(partition == ref_partition)
     print(iproc, are_equal)
     results[iproc] = are_equal
@@ -275,11 +279,13 @@ def test_deterministic_partitioning():
         results = mp_ctx.Array("i", (0, ) * nprocs)
         print(f"Step {i} {seed}")
 
+        # FIXME: This test no longer makes sense; it does not generate
+        # DAGs on ranks 1..6.
         ref_dag = get_random_pt_dag_with_send_recv_nodes(
             seed, rank=0, size=7,
             convert_dws_to_placeholders=True)
 
-        ref_partition = pt.find_distributed_partition(ref_dag)
+        ref_partition = pt.find_distributed_partition(comm, ref_dag)
 
         # {{{ spawn nprocs-processes and verify they all compare equally
 
@@ -331,7 +337,7 @@ def _do_verify_distributed_partition(ctx_factory):
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
 
     outputs = pt.make_dict_of_named_arrays({"out": y})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
 
     if rank == 0:
         with pytest.raises(MissingSendError):
@@ -348,7 +354,7 @@ def _do_verify_distributed_partition(ctx_factory):
                 dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
 
     outputs = pt.make_dict_of_named_arrays({"out": send})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
 
     if rank == 0:
         with pytest.raises(MissingRecvError):
@@ -368,7 +374,7 @@ def _do_verify_distributed_partition(ctx_factory):
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
 
     outputs = pt.make_dict_of_named_arrays({"out": x+send})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
 
     if rank == 0:
         with pytest.raises(DuplicateRecvError):
@@ -388,7 +394,7 @@ def _do_verify_distributed_partition(ctx_factory):
                 dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
 
     if rank == 0:
         with pytest.raises(DuplicateSendError):
@@ -413,7 +419,7 @@ def _do_verify_distributed_partition(ctx_factory):
             stapled_to=recv)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
 
     if rank == 0:
         with pytest.raises(PartitionInducedCycleError):
