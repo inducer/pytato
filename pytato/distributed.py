@@ -40,7 +40,7 @@ from pytato.array import (Array, _SuppliedShapeAndDtypeMixin,
                           NamedArray)
 from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
                               CachedWalkMapper, CopyMapperWithExtraArgs,
-                              CombineMapper)
+                              CombineMapper, UsersCollector)
 
 from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
 from pytato.target import BoundProgram
@@ -48,6 +48,7 @@ from pytato.analysis import DirectPredecessorsGetter
 from functools import cached_property
 from pytato.scalar_expr import SCALAR_CLASSES, INT_CLASSES
 from pymbolic.mapper.optimize import optimize_mapper
+from immutables import Map
 
 import numpy as np
 
@@ -1084,6 +1085,11 @@ class _SummarizedDistributedGraph:
     input_name_to_recv_node: Dict[_DistributedName, DistributedRecv]
     output_name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
 
+    def __hash__(self) -> int:
+        return (hash(self.rank)
+                ^ hash(Map(self.input_name_to_recv_node))
+                ^ hash(Map(self.output_name_to_send_node)))
+
 
 @attrs.define(frozen=True)
 class _CommIdentifier:
@@ -1112,8 +1118,7 @@ class MissingRecvError(DistributedPartitionVerificationError):
     pass
 
 
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _DistributedDAGGatherer(CachedWalkMapper):
+class _DistributedDAGGatherer(UsersCollector):
     def __init__(self, dist_name_generator: UniqueNameGenerator, my_rank: int) \
             -> None:
         super().__init__()
@@ -1124,17 +1129,15 @@ class _DistributedDAGGatherer(CachedWalkMapper):
         self.input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.output_name_to_send_node: Dict[str, _SummarizedDistributedSend] = {}
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
-        return id(expr)
-
     def map_distributed_recv(  # type: ignore[override]
             self, expr: DistributedRecv) -> None:
+        super().map_distributed_recv(expr)
         new_name = self.name_generator()
         self.input_name_to_recv_node[new_name] = expr
 
     def map_distributed_send_ref_holder(  # type: ignore[override]
             self, expr: DistributedSendRefHolder) -> None:
+        super().map_distributed_send_ref_holder(expr)
         s = _SummarizedDistributedSend(
                             src_rank=self.my_rank,
                             dest_rank=expr.send.dest_rank,
@@ -1146,7 +1149,8 @@ class _DistributedDAGGatherer(CachedWalkMapper):
         self.output_name_to_send_node[new_name] = s
 
     def map_distributed_send(self, expr: DistributedSend) -> None:
-        raise ValueError("Unpartitioned DAG should not have DistributedSend nodes")
+        raise ValueError("Unpartitioned DAG should not have DistributedSend nodes. "
+                         "outside of DistributedSendRefHolder nodes.")
 
 
 def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
@@ -1234,7 +1238,7 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
 
                 add_needed_dag(sumdag, sending_dag)
 
-        print(dags_to_needed_dags)
+        print(f"{dags_to_needed_dags=}")
         from pytools.graph import compute_topological_order
         compute_topological_order(dags_to_needed_dags)
 
