@@ -43,7 +43,8 @@ import numpy as np
 from pytools.tag import Taggable, Tag
 
 from pytato.array import (
-        Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT, _get_default_axes)
+        Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
+        _get_default_axes, ConvertibleToShape, normalize_shape)
 
 CommTagType = Hashable
 
@@ -257,13 +258,16 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
-                          shape: ShapeType, dtype: Any,
+                          shape: ConvertibleToShape, dtype: Any,
                           axes: Optional[AxesT] = None,
                           tags: FrozenSet[Tag] = frozenset()
                           ) -> DistributedRecv:
     """Make a :class:`DistributedRecv` object."""
+    shape = normalize_shape(shape)
+
     if axes is None:
         axes = _get_default_axes(len(shape))
+
     dtype = np.dtype(dtype)
     return DistributedRecv(src_rank, comm_tag, shape, dtype, tags=tags, axes=axes)
 
