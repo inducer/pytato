@@ -308,7 +308,7 @@ def test_deterministic_partitioning():
 # }}}
 
 
-# {{{ test verify_distributed_partition
+# {{{ test verify_distributed_partition and verify_distributed_dag_pre_partition
 
 def test_verify_distributed_partition():
     run_test_with_mpi(2, _do_verify_distributed_partition)
@@ -331,6 +331,13 @@ def _do_verify_distributed_partition(ctx_factory):
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
 
     outputs = pt.make_dict_of_named_arrays({"out": y})
+
+    if rank == 0:
+        with pytest.raises(MissingSendError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
@@ -351,6 +358,13 @@ def _do_verify_distributed_partition(ctx_factory):
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
+        # FIXME: this should raise
+        with pytest.raises(MissingRecvError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
+    if rank == 0:
         with pytest.raises(MissingRecvError):
             pt.verify_distributed_partition(comm, distributed_parts)
     else:
@@ -368,6 +382,13 @@ def _do_verify_distributed_partition(ctx_factory):
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
 
     outputs = pt.make_dict_of_named_arrays({"out": x+send})
+
+    if rank == 0:
+        with pytest.raises(MissingSendError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
@@ -388,6 +409,13 @@ def _do_verify_distributed_partition(ctx_factory):
                 dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
+
+    if rank == 0:
+        with pytest.raises(DuplicateSendError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
@@ -413,6 +441,13 @@ def _do_verify_distributed_partition(ctx_factory):
             stapled_to=recv)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
+
+    if rank == 0:
+        with pytest.raises(MissingSendError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
