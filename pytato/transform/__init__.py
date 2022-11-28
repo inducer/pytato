@@ -30,7 +30,7 @@ import logging
 import numpy as np
 from abc import abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
+                    List, Mapping, Iterable, Tuple, Optional,
                     Hashable)
 
 from pytato.array import (
@@ -41,13 +41,12 @@ from pytato.array import (
         BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
         IndexBase, DataInterface)
 
+from pytato.distributed.nodes import (
+        DistributedSendRefHolder, DistributedRecv, DistributedSend)
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
 from pymbolic.mapper.optimize import optimize_mapper
-
-if TYPE_CHECKING:
-    from pytato.distributed import DistributedSendRefHolder, DistributedRecv
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 MappedT = TypeVar("MappedT", bound=ArrayOrNames)
@@ -334,7 +333,6 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
-        from pytato.distributed import DistributedSend, DistributedSendRefHolder
         return DistributedSendRefHolder(
                 DistributedSend(
                     data=self.rec(expr.send.data),
@@ -344,7 +342,6 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 tags=expr.tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
-        from pytato.distributed import DistributedRecv
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape),
@@ -529,7 +526,6 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
-        from pytato.distributed import DistributedSend, DistributedSendRefHolder
         return DistributedSendRefHolder(
                 DistributedSend(
                     data=self.rec(expr.send.data, *args, **kwargs),
@@ -540,7 +536,6 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: Any, **kwargs: Any) -> Array:
-        from pytato.distributed import DistributedRecv
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
@@ -1204,8 +1199,6 @@ class MPMSMaterializer(Mapper):
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
                                         ) -> MPMSMaterializerAccumulator:
-        from pytato.distributed import (DistributedSendRefHolder,
-                                        DistributedSend)
         rec_passthrough = self.rec(expr.passthrough_data)
         rec_send_data = self.rec(expr.send.data)
         new_expr = DistributedSendRefHolder(
@@ -1347,7 +1340,6 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def __init__(self) -> None:
         super().__init__()
-        from pytato.distributed import DistributedSend
         self.node_to_users: Dict[ArrayOrNames,
                 Set[Union[DistributedSend, ArrayOrNames]]] = {}
 
@@ -1466,7 +1458,7 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
     """
     user_collector = UsersCollector()
     user_collector(expr)
-    return user_collector.node_to_users  # type: ignore
+    return user_collector.node_to_users  # type: ignore[return-value]
 
 # }}}
 
@@ -1695,7 +1687,6 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder, *args: Any) -> \
                 DistributedSendRefHolder:
-        from pytato.distributed import DistributedSendRefHolder
         return DistributedSendRefHolder(
             send=self.handle_edge(expr, expr.send.data),
             passthrough_data=self.handle_edge(expr, expr.passthrough_data),
@@ -1704,7 +1695,6 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 
     def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
             -> Any:
-        from pytato.distributed import DistributedRecv
         return DistributedRecv(
             src_rank=expr.src_rank, comm_tag=expr.comm_tag,
             shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),

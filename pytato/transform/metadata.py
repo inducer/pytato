@@ -48,7 +48,7 @@ from pytato.array import (InputArgumentBase, Stack, Concatenate, IndexLambda,
                           DictOfNamedArrays, NamedArray,
                           AbstractResultWithNamedArrays, ArrayOrScalar,
                           EinsumReductionAxis)
-from pytato.distributed import DistributedRecv, DistributedSendRefHolder
+from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 from pytato.raising import (index_lambda_to_high_level_op,
                             BinaryOp, FullOp, WhereOp,

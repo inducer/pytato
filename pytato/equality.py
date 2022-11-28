@@ -34,7 +34,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall, LoopyCallResult
-    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. autoclass:: EqualityComparer
