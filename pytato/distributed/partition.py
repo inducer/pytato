@@ -357,7 +357,7 @@ class _LocalSendRecvDepGatherer(
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
-            raise ValueError(f"Multiple recveives found for '{recv_id}'")
+            raise ValueError(f"Multiple receives found for '{recv_id}'")
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
