@@ -88,16 +88,21 @@ def execute_distributed_partition(
 
     from mpi4py import MPI
 
-    recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
-        (name,) + _post_receive(mpi_communicator, recv)
-        for part in partition.parts.values()
-        for name, recv in part.input_name_to_recv_node.items()])
-    recv_names = list(recv_names_tup)
-    recv_requests = list(recv_requests_tup)
-    recv_buffers = list(recv_buffers_tup)
-    del recv_names_tup
-    del recv_requests_tup
-    del recv_buffers_tup
+    if any(part.input_name_to_recv_node for part in partition.parts.values()):
+        recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
+            (name,) + _post_receive(mpi_communicator, recv)
+            for part in partition.parts.values()
+            for name, recv in part.input_name_to_recv_node.items()])
+        recv_names = list(recv_names_tup)
+        recv_requests = list(recv_requests_tup)
+        recv_buffers = list(recv_buffers_tup)
+        del recv_names_tup
+        del recv_requests_tup
+        del recv_buffers_tup
+    else:
+        recv_names = []
+        recv_requests = []
+        recv_buffers = []
 
     context: Dict[str, Any] = input_args.copy()
 
