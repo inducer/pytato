@@ -951,23 +951,34 @@ def find_distributed_partition(
     sent_array_dep_mapper = SubsetDependencyMapper(sent_arrays)
     recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
 
-    materialized_ary_to_part_id: Dict[Array, int] = {
-            ary: max(
-                max(
-                    (comm_id_to_part_id[
-                        _send_to_comm_id(local_rank,
-                                         sent_array_to_send_node[sent_array])]
-                    for sent_array in sent_array_dep_mapper(ary)),
-                    default=nparts-1),
+    materialized_ary_to_part_id_range: Dict[Array, Tuple(int, int)] = {
+            ary: (
                 max(
                     (comm_id_to_part_id[
                         _recv_to_comm_id(local_rank,
                                          cast(DistributedRecv, recvd_array))]
                     for recvd_array in recvd_array_dep_mapper(ary)),
-                    default=nparts-1)
+                    default=0),
+                min(
+                    (comm_id_to_part_id[
+                        _send_to_comm_id(local_rank,
+                                         sent_array_to_send_node[sent_array])] + 1
+                    for sent_array in sent_array_dep_mapper(ary)),
+                    default=nparts),
                 )
             for ary in materialized_arrays
             }
+
+    assert all(
+            start < end
+            for start, end
+            in materialized_ary_to_part_id_range.values()), \
+        "unable to find suitable part for materialized array"
+
+    materialized_ary_to_part_id: Dict[Array, int] = {
+            ary: end - 1
+            for ary, (_, end)
+            in materialized_ary_to_part_id_range.items()}
 
     # }}}
 
