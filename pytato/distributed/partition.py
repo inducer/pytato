@@ -948,37 +948,40 @@ def find_distributed_partition(
 
     received_arrays = frozenset(lsrdg.local_recv_id_to_recv_node.values())
 
-    sent_array_dep_mapper = SubsetDependencyMapper(sent_arrays)
+    materialized_array_dep_mapper = SubsetDependencyMapper(materialized_arrays)
     recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
 
-    materialized_ary_to_part_id_range: Dict[Array, Tuple(int, int)] = {
-            ary: (
-                max(
+    materialized_ary_to_part_id_start: Dict[Array, int] = {
+            ary: max(
                     (comm_id_to_part_id[
                         _recv_to_comm_id(local_rank,
-                                         cast(DistributedRecv, recvd_array))]
-                    for recvd_array in recvd_array_dep_mapper(ary)),
-                    default=0),
-                min(
-                    (comm_id_to_part_id[
-                        _send_to_comm_id(local_rank,
-                                         sent_array_to_send_node[sent_array])] + 1
-                    for sent_array in sent_array_dep_mapper(ary)),
-                    default=nparts),
-                )
+                                         cast(DistributedRecv, recvd_ary))]
+                    for recvd_ary in recvd_array_dep_mapper(ary)),
+                    default=0)
             for ary in materialized_arrays
             }
 
+    materialized_ary_to_part_id_end: Dict[Array, int] = {
+        ary: nparts
+        for ary in materialized_arrays}
+    for sent_ary in sent_arrays:
+        for ary in materialized_array_dep_mapper(sent_ary):
+            materialized_ary_to_part_id_end[ary] = min(
+                materialized_ary_to_part_id_end[ary],
+                comm_id_to_part_id[
+                    _send_to_comm_id(local_rank,
+                                     sent_array_to_send_node[sent_ary])] + 1)
+
     assert all(
-            start < end
-            for start, end
-            in materialized_ary_to_part_id_range.values()), \
+            (
+                materialized_ary_to_part_id_start[ary]
+                < materialized_ary_to_part_id_end[ary])
+            for ary in materialized_arrays), \
         "unable to find suitable part for materialized array"
 
     materialized_ary_to_part_id: Dict[Array, int] = {
-            ary: end - 1
-            for ary, (_, end)
-            in materialized_ary_to_part_id_range.items()}
+            ary: materialized_ary_to_part_id_end[ary] - 1
+            for ary in materialized_arrays}
 
     # }}}
 
