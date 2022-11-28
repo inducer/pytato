@@ -171,8 +171,8 @@ def execute_distributed_partition(
             buf = recv_buffers.pop(idx)
 
             # FIXME: pytato shouldn't depend on pyopencl
-            import pyopencl as cl
-            context[name] = cl.array.to_device(queue, buf, allocator=allocator)
+            import pyopencl.array as cl_array
+            context[name] = cl_array.to_device(queue, buf, allocator=allocator)
             recv_names_completed.add(name)
 
     # {{{ main loop
