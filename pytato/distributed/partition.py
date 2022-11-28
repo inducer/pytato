@@ -925,6 +925,8 @@ def find_distributed_partition(
 
     # FIXME?: comm_batches isn't being used for anything
 
+    nparts = max(part_id for part_id in comm_id_to_part_id.values()) + 1
+
     # }}}
 
     # {{{ assign each materialized array to a batch/part
@@ -952,15 +954,17 @@ def find_distributed_partition(
     materialized_ary_to_part_id: Dict[Array, int] = {
             ary: max(
                 max(
-                    comm_id_to_part_id[
+                    (comm_id_to_part_id[
                         _send_to_comm_id(local_rank,
                                          sent_array_to_send_node[sent_array])]
                     for sent_array in sent_array_dep_mapper(ary)),
+                    default=nparts-1),
                 max(
-                    comm_id_to_part_id[
+                    (comm_id_to_part_id[
                         _recv_to_comm_id(local_rank,
                                          cast(DistributedRecv, recvd_array))]
-                    for recvd_array in recvd_array_dep_mapper(ary))
+                    for recvd_array in recvd_array_dep_mapper(ary)),
+                    default=nparts-1)
                 )
             for ary in materialized_arrays
             }
