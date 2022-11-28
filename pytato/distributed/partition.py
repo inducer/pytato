@@ -939,14 +939,15 @@ def find_distributed_partition(
             for send in lsrdg.local_send_id_to_send_node.values()}
     sent_arrays = frozenset(sent_array_to_send_node)
 
-    # While sent arrays are materialized, we shouldn't be including them
-    # here because we're using sent arrays (which need to be materialized
-    # in order to send them) as anchors to place *other* materialized data
-    # into the batches.
-    materialized_arrays = frozenset(
-        materialized_arrays_collector.materialized_arrays) - sent_arrays
-
     received_arrays = frozenset(lsrdg.local_recv_id_to_recv_node.values())
+
+    # While sent/received arrays are materialized, we shouldn't be including them
+    # here because we're using sent/received arrays as anchors to place *other*
+    # materialized data into the batches.
+    materialized_arrays = (
+        frozenset(materialized_arrays_collector.materialized_arrays)
+        - sent_arrays
+        - received_arrays)
 
     materialized_array_dep_mapper = SubsetDependencyMapper(materialized_arrays)
     recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
@@ -990,8 +991,14 @@ def find_distributed_partition(
                 _send_to_comm_id(local_rank, send_node)]
             for sent_ary, send_node in sent_array_to_send_node.items()}
 
+    recvd_ary_to_part_id = {
+            recvd_ary: comm_id_to_part_id[
+                _recv_to_comm_id(local_rank, recvd_ary)]
+            for recvd_ary in received_arrays}
+
     stored_ary_to_part_id = materialized_ary_to_part_id.copy()
     stored_ary_to_part_id.update(sent_ary_to_part_id)
+    stored_ary_to_part_id.update(recvd_ary_to_part_id)
 
     # {{{ find which materialized arrays have users in multiple parts
     # (and promote them to part outputs)
