@@ -175,7 +175,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 base_tag=comm_tag)
 
         # Regression check for https://github.com/inducer/pytato/issues/307
-        from pytato.distributed import PartIDTag
+        from pytato.distributed.partition import PartIDTag
         for ary in distributed_partition.var_name_to_result.values():
             assert not ary.tags_of_type(PartIDTag)
 
@@ -318,7 +318,7 @@ def _do_verify_distributed_partition(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
     import pytest
-    from pytato.distributed import (DuplicateSendError,
+    from pytato.distributed.verify import (DuplicateSendError,
                 DuplicateRecvError, MissingSendError, MissingRecvError)
     from pytato.partition import PartitionInducedCycleError
 

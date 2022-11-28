@@ -47,10 +47,10 @@ from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
 
 from pytato.partition import GraphPartition
-from pytato.distributed import DistributedGraphPart
+from pytato.distributed.partition import DistributedGraphPart
 
 if TYPE_CHECKING:
-    from pytato.distributed import DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedSendRefHolder
 
 
 __doc__ = """

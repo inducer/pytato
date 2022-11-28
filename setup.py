@@ -38,6 +38,7 @@ setup(
         "pytools>=2021.1",
         "immutables",
         "attrs",
+        "bidict",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
