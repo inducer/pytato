@@ -923,6 +923,8 @@ def find_distributed_partition(
     comm_batches, comm_id_to_part_id = _make_local_comm_batches(
             local_rank, local_comm_to_needed_local_comms)
 
+    # FIXME?: comm_batches isn't being used for anything
+
     # }}}
 
     # {{{ assign each materialized array to a batch/part
