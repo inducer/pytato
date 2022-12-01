@@ -150,6 +150,8 @@ class _DistributedCommReplacer(CopyMapper):
         raise ValueError("DistributedSendRefHolder should not occur in partitioned "
                 "graphs")
 
+    # Note: map_distributed_send() is not called recursively, since DistributedSend
+    # is not an Array. It must be called explicitly.
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         new_send = DistributedSend(
                 data=self.rec(expr.data),
