@@ -118,6 +118,14 @@ class DistributedSend(Taggable):
                 f"dest_rank={self.dest_rank}, "
                 f"tags={self.tags}, comm_tag={self.comm_tag})")
 
+    @property
+    def shape(self) -> ShapeType:
+        return self.data.shape
+
+    @property
+    def dtype(self) -> np.dtype[Any]:
+        return self.data.dtype
+
 # }}}
 
 
