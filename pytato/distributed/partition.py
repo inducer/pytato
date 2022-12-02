@@ -124,9 +124,8 @@ class _DistributedCommReplacer(CopyMapper):
         so that received data can be externally supplied, making a note
         in :attr:`input_name_to_recv_node`.
 
-    -   Eliminates :class:`DistributedSendRefHolder` and
-        :class:`DistributedSend` from the DAG, making a note of data
-        to be send in :attr:`output_name_to_send_node`.
+    -   Makes note of data to be sent from :class:`DistributedSend` nodes
+        in :attr:`output_name_to_send_node`.
     """
 
     def __init__(self, dist_name_generator: UniqueNameGenerator) -> None:
