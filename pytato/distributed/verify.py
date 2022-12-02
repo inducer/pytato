@@ -180,10 +180,6 @@ class _DistributedDAGGatherer(UsersCollector):
         new_name = self.name_generator()
         self.output_name_to_send_node[new_name] = s
 
-    def map_distributed_send(self, expr: DistributedSend) -> None:
-        raise ValueError("Unpartitioned DAG should not have DistributedSend nodes. "
-                         "outside of DistributedSendRefHolder nodes.")
-
 
 def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                                          outputs: DictOfNamedArrays) -> None:
