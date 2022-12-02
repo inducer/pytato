@@ -124,9 +124,8 @@ class _DistributedCommReplacer(CopyMapper):
         so that received data can be externally supplied, making a note
         in :attr:`input_name_to_recv_node`.
 
-    -   Eliminates :class:`DistributedSendRefHolder` and
-        :class:`DistributedSend` from the DAG, making a note of data
-        to be send in :attr:`output_name_to_send_node`.
+    -   Makes note of data to be sent from :class:`DistributedSend` nodes
+        in :attr:`output_name_to_send_node`.
     """
 
     def __init__(self, dist_name_generator: UniqueNameGenerator) -> None:
@@ -138,8 +137,6 @@ class _DistributedCommReplacer(CopyMapper):
         self.output_name_to_send_node: Dict[str, DistributedSend] = {}
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
-        # no children, no need to recurse
-
         new_name = self.name_generator()
         self.input_name_to_recv_node[new_name] = expr
         return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
@@ -150,6 +147,12 @@ class _DistributedCommReplacer(CopyMapper):
         raise ValueError("DistributedSendRefHolder should not occur in partitioned "
                 "graphs")
 
+    # Note: map_distributed_send() is not called like other mapped methods in a
+    # DAG traversal, since a DistributedSend is not an Array and has no
+    # '_mapper_method' field. Furthermore, at the point where this mapper is used,
+    # the DistributedSendRefHolders have been removed from the DAG, and hence there
+    # are no more references to the DistributedSends from within the DAG. This
+    # method must therefore be called explicitly.
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         new_send = DistributedSend(
                 data=self.rec(expr.data),
