@@ -138,8 +138,6 @@ class _DistributedCommReplacer(CopyMapper):
         self.output_name_to_send_node: Dict[str, DistributedSend] = {}
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
-        # no children, no need to recurse
-
         new_name = self.name_generator()
         self.input_name_to_recv_node[new_name] = expr
         return make_placeholder(new_name, self.rec_idx_or_size_tuple(expr.shape),
