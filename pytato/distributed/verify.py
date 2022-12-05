@@ -30,17 +30,14 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
+from typing import FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING, Union
 from immutables import Map
-
-import numpy as np
 
 from pytato.distributed.nodes import (CommTagType, DistributedRecv,
                                       DistributedSendRefHolder, DistributedSend)
 from pytato.partition import PartId
 from pytato.distributed.partition import DistributedGraphPartition
-from pytato.array import ShapeType
-from pytato.transform import UsersCollector
+from pytato.transform import UsersCollector, ArrayOrNames
 from pytato import DictOfNamedArrays
 
 from pytools import UniqueNameGenerator
@@ -63,9 +60,6 @@ class _SummarizedDistributedSend:
     src_rank: int
     dest_rank: int
     comm_tag: CommTagType
-
-    shape: ShapeType
-    dtype: np.dtype[Any]
 
 
 @attrs.define(frozen=True)
@@ -325,9 +319,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 _SummarizedDistributedSend(
                             src_rank=my_rank,
                             dest_rank=send.dest_rank,
-                            comm_tag=send.comm_tag,
-                            shape=send.data.shape,
-                            dtype=send.data.dtype)
+                            comm_tag=send.comm_tag)
                 for name, send in part.output_name_to_send_node.items()})
 
     # Gather the _SummarizedDistributedGraphPart's to rank 0
