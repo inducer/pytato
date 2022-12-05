@@ -77,7 +77,7 @@ class _DistributedName:
 @attrs.define(frozen=True)
 class _DistributedNode:
     rank: int
-    node: str
+    node: Union[DistributedSend, ArrayOrNames, _SummarizedDistributedSend]
 
 
 @attrs.define(frozen=True)
@@ -98,7 +98,7 @@ class _SummarizedDistributedGraphPart:
 @attrs.define(frozen=True)
 class _SummarizedDistributedGraph:
     rank: int
-    node_to_users: Dict[ArrayOrNames, Set[ArrayOrNames]]
+    node_to_users: Dict[_DistributedNode, Set[_DistributedNode]]
     input_name_to_recv_node: Dict[_DistributedName, DistributedRecv]
     output_name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
 
@@ -155,21 +155,18 @@ class _DistributedDAGGatherer(UsersCollector):
         self.input_name_to_recv_node: Dict[str, DistributedRecv] = {}
         self.output_name_to_send_node: Dict[str, _SummarizedDistributedSend] = {}
 
-    def map_distributed_recv(  # type: ignore[override]
-            self, expr: DistributedRecv) -> None:
+    def map_distributed_recv(self, expr: DistributedRecv) -> None:
         super().map_distributed_recv(expr)
         new_name = self.name_generator()
         self.input_name_to_recv_node[new_name] = expr
 
-    def map_distributed_send_ref_holder(  # type: ignore[override]
+    def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> None:
         super().map_distributed_send_ref_holder(expr)
         s = _SummarizedDistributedSend(
                             src_rank=self.my_rank,
                             dest_rank=expr.send.dest_rank,
-                            comm_tag=expr.send.comm_tag,
-                            shape=expr.send.data.shape,
-                            dtype=expr.send.data.dtype)
+                            comm_tag=expr.send.comm_tag)
 
         new_name = self.name_generator()
         self.output_name_to_send_node[new_name] = s
@@ -190,9 +187,29 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
     dg = _DistributedDAGGatherer(ung, my_rank)
     dg(outputs)
 
+    def dist_send_to_summarized_dist_send(node:
+            Union[ArrayOrNames, _SummarizedDistributedSend, DistributedSend]) \
+                -> Union[ArrayOrNames, _SummarizedDistributedSend]:
+        if (not isinstance(node, DistributedSend)
+                and not isinstance(node, DistributedSendRefHolder)):
+            return node
+
+        if isinstance(node, DistributedSend):
+            return _SummarizedDistributedSend(
+                                src_rank=my_rank,
+                                dest_rank=node.dest_rank,
+                                comm_tag=node.comm_tag,)
+        elif isinstance(node, DistributedSendRefHolder):
+            return _SummarizedDistributedSend(
+                                src_rank=my_rank,
+                                dest_rank=node.send.dest_rank,
+                                comm_tag=node.send.comm_tag,)
+
     summarized_dag = _SummarizedDistributedGraph(
             rank=my_rank,
-            node_to_users={_DistributedNode(my_rank, k): frozenset((_DistributedNode(my_rank, n) for n in v)) for k, v in dg.node_to_users.items()},
+            node_to_users={_DistributedNode(my_rank, k):
+                set((_DistributedNode(my_rank, dist_send_to_summarized_dist_send(n))
+                for n in v)) for k, v in dg.node_to_users.items()},
             input_name_to_recv_node={_DistributedName(my_rank, name): recv
                 for name, recv in dg.input_name_to_recv_node.items()},
             output_name_to_send_node={
@@ -200,9 +217,7 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                 _SummarizedDistributedSend(
                             src_rank=my_rank,
                             dest_rank=send.dest_rank,
-                            comm_tag=send.comm_tag,
-                            shape=send.shape,
-                            dtype=send.dtype)
+                            comm_tag=send.comm_tag,)
                 for name, send in dg.output_name_to_send_node.items()})
 
     all_outputs = \
@@ -215,20 +230,19 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                 rank: rank_outputs
                 for rank, rank_outputs in enumerate(all_outputs)}
 
-        print(f"{all_summarized_outputs=}")
-
         all_recvs: Set[_CommIdentifier] = set()
 
-        # Every node in the graph is a _SummarizedDistributedGraph
-        dags_to_needed_dags: \
-            Dict[_SummarizedDistributedGraph, Set[_SummarizedDistributedGraph]] = {}
+        send_recv_deps: \
+            Dict[_DistributedNode, Set[_DistributedNode]] = {}
 
-        def add_needed_dag(dag: _SummarizedDistributedGraph,
-                           needed_dag: _SummarizedDistributedGraph) -> None:
-            dags_to_needed_dags.setdefault(dag, set()).add(needed_dag)
+        def add_send_recv_dep(recv: _DistributedNode,
+                           send: _DistributedNode) -> None:
+            send_recv_deps.setdefault(recv, set()).add(send)
 
+        # {{{ gather information on senders
 
-        comm_id_to_sending_node: Dict[_CommIdentifier, _SummarizedDistributedGraph] = {}
+        comm_id_to_sending_node = {}
+
         for sumdag in all_summarized_outputs.values():
             for sumsend in sumdag.output_name_to_send_node.values():
                 comm_id = _CommIdentifier(
@@ -241,9 +255,11 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                             f"duplicate send for comm id: '{comm_id}'")
                 comm_id_to_sending_node[comm_id] = sumsend
 
+        # }}}
 
         for sumdag in all_summarized_outputs.values():
-            dags_to_needed_dags.update(sumdag.node_to_users)
+            send_recv_deps.update(sumdag.node_to_users)
+
             for dname, dist_recv in sumdag.input_name_to_recv_node.items():
                 comm_id = _CommIdentifier(
                         src_rank=dist_recv.src_rank,
@@ -261,11 +277,11 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                 except KeyError:
                     raise MissingSendError(
                         f"no matching send for recv on '{comm_id}'")
-                add_needed_dag(_DistributedNode(comm_id.dest_rank, dist_recv), _DistributedNode(comm_id.dest_rank, sending_node))
-
+                add_send_recv_dep(_DistributedNode(comm_id.dest_rank, dist_recv),
+                                  _DistributedNode(comm_id.src_rank, sending_node))
 
         from pytools.graph import compute_topological_order
-        compute_topological_order(dags_to_needed_dags)
+        compute_topological_order(send_recv_deps)
 
         logger.info("verify_distributed_dag_pre_partition completed successfully.")
 
