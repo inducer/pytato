@@ -220,8 +220,7 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                             comm_tag=send.comm_tag,)
                 for name, send in dg.output_name_to_send_node.items()})
 
-    all_outputs = \
-            mpi_communicator.gather(summarized_dag, root=root_rank)
+    all_outputs = mpi_communicator.gather(summarized_dag, root=root_rank)
 
     if my_rank == root_rank:
         assert all_outputs
@@ -236,7 +235,7 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
             Dict[_DistributedNode, Set[_DistributedNode]] = {}
 
         def add_send_recv_dep(recv: _DistributedNode,
-                           send: _DistributedNode) -> None:
+                              send: _DistributedNode) -> None:
             send_recv_deps.setdefault(recv, set()).add(send)
 
         # {{{ gather information on senders
@@ -277,6 +276,7 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
                 except KeyError:
                     raise MissingSendError(
                         f"no matching send for recv on '{comm_id}'")
+
                 add_send_recv_dep(_DistributedNode(comm_id.dest_rank, dist_recv),
                                   _DistributedNode(comm_id.src_rank, sending_node))
 

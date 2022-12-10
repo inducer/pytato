@@ -31,7 +31,7 @@ def main():
     # Find the partition
     outputs = pt.DictOfNamedArrays({"out": y})
 
-    pt.distributed.verify_distributed_dag_pre_partition(comm, outputs)
+    pt.verify_distributed_dag_pre_partition(comm, outputs)
     distributed_parts = find_distributed_partition(outputs)
     distributed_parts, _ = number_distributed_tags(
             comm, distributed_parts, base_tag=42)
