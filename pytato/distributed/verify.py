@@ -30,14 +30,15 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
+from typing import (Any, FrozenSet, Dict, Set, Optional, Sequence,
+                    TYPE_CHECKING, Mapping)
 
 import numpy as np
 
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.partition import PartId
-from pytato.distributed.partition import DistributedGraphPartition
-from pytato.array import ShapeType
+from pytato.distributed.partition import DistributedGraphPartition, _KeyT, _ValueT
+from pytato.array import ShapeType, DictOfNamedArrays
 
 import attrs
 
@@ -48,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+    from mpi4py import MPI
 
 
 # {{{ data structures
@@ -118,6 +120,57 @@ class MissingSendError(DistributedPartitionVerificationError):
 
 class MissingRecvError(DistributedPartitionVerificationError):
     pass
+
+# }}}
+
+
+# {{{ _dict_union_mpi
+
+def _dict_union_mpi(
+        dict_a: Mapping[_KeyT, _ValueT], dict_b: Mapping[_KeyT, _ValueT],
+        mpi_data_type: MPI.Datatype) -> Mapping[_KeyT, _ValueT]:
+    assert mpi_data_type is None
+    result = dict(dict_a)
+    result.update(dict_b)
+    return result
+
+# }}}
+
+
+# {{{ verify_distributed_dag_pre_partition
+
+def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
+                                         outputs: DictOfNamedArrays) -> None:
+    """
+    .. warning::
+
+        This is an MPI-collective operation.
+    """
+    my_rank = mpi_communicator.rank
+    root_rank = 0
+
+    from pytato.distributed.partition import _LocalSendRecvDepGatherer
+    lsrdg = _LocalSendRecvDepGatherer(local_rank=my_rank)
+    lsrdg(outputs)
+    local_send_id_to_needed_local_recv_ids = \
+            lsrdg.local_send_id_to_needed_local_recv_ids
+
+    from mpi4py import MPI
+    dict_union_mpi_op = MPI.Op.Create(
+            # type ignore reason: mpi4py misdeclares op functions as returning
+            # None.
+            _dict_union_mpi,  # type: ignore[arg-type]
+            commute=True)
+    try:
+        comm_to_needed_comms = mpi_communicator.allreduce(
+                local_send_id_to_needed_local_recv_ids, dict_union_mpi_op)
+    finally:
+        dict_union_mpi_op.Free()
+
+    if my_rank == root_rank:
+        from pytools.graph import compute_topological_order
+        compute_topological_order(comm_to_needed_comms)
+
 
 # }}}
 

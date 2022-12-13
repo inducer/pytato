@@ -100,7 +100,8 @@ from pytato.distributed.nodes import (make_distributed_send, make_distributed_re
 from pytato.distributed.partition import (
         find_distributed_partition, DistributedGraphPart, DistributedGraphPartition)
 from pytato.distributed.tags import number_distributed_tags
-from pytato.distributed.verify import verify_distributed_partition
+from pytato.distributed.verify import (verify_distributed_partition,
+        verify_distributed_dag_pre_partition)
 from pytato.distributed.execute import execute_distributed_partition
 
 from pytato.transform.lower_to_index_lambda import to_index_lambda
@@ -161,6 +162,7 @@ __all__ = (
         "number_distributed_tags",
         "execute_distributed_partition",
         "verify_distributed_partition",
+        "verify_distributed_dag_pre_partition",
 
         "generate_code_for_partition",
 

@@ -33,8 +33,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from functools import reduce
 from typing import (
-        Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable, Callable, List)
+        Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable,
+        Callable, List, TypeVar)
 from functools import cached_property
 
 import attrs
@@ -53,8 +55,30 @@ from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
                               CombineMapper)
 from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
 from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend, DistributedSendRefHolder)
+        DistributedRecv, DistributedSend, DistributedSendRefHolder, CommTagType)
 from pytato.analysis import DirectPredecessorsGetter
+
+
+@attrs.define(frozen=True)
+class CommunicationOpIdentifier:
+    """Identifies a communication operation (consisting of a pair of
+    a send and a receive).
+    .. attribute:: src_rank
+    .. attribute:: dest_rank
+    .. attribute:: comm_tag
+    .. note::
+        In :func:`find_distributed_partition`, we use instances of this type as
+        though they identify sends or receives, i.e. just a single end of the
+        communication. Realize that this is only true given the additional
+        context of which rank is the local rank.
+    """
+    src_rank: int
+    dest_rank: int
+    comm_tag: CommTagType
+
+
+_KeyT = TypeVar("_KeyT")
+_ValueT = TypeVar("_ValueT")
 
 
 # {{{ distributed graph partition
@@ -81,6 +105,82 @@ class DistributedGraphPartition(GraphPartition):
     instances of :class:`DistributedGraphPart`.
     """
     parts: Dict[PartId, DistributedGraphPart]
+
+# }}}
+
+
+# {{{ _LocalSendRecvDepGatherer
+
+def _send_to_comm_id(
+        local_rank: int, send: DistributedSend) -> CommunicationOpIdentifier:
+    return CommunicationOpIdentifier(
+        src_rank=local_rank,
+        dest_rank=send.dest_rank,
+        comm_tag=send.comm_tag)
+
+
+def _recv_to_comm_id(
+        local_rank: int, recv: DistributedRecv) -> CommunicationOpIdentifier:
+    return CommunicationOpIdentifier(
+        src_rank=recv.src_rank,
+        dest_rank=local_rank,
+        comm_tag=recv.comm_tag)
+
+
+class _LocalSendRecvDepGatherer(
+        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+    def __init__(self, local_rank: int) -> None:
+        super().__init__()
+        self.local_send_id_to_needed_local_recv_ids: \
+                Dict[CommunicationOpIdentifier,
+                     FrozenSet[CommunicationOpIdentifier]] = {}
+
+        self.local_recv_id_to_recv_node: \
+                Dict[CommunicationOpIdentifier, DistributedRecv] = {}
+        self.local_send_id_to_send_node: \
+                Dict[CommunicationOpIdentifier, DistributedSend] = {}
+
+        self.local_rank = local_rank
+
+    def combine(
+            self, *args: FrozenSet[CommunicationOpIdentifier]
+            ) -> FrozenSet[CommunicationOpIdentifier]:
+        return reduce(frozenset.union, args, frozenset())
+
+    def map_distributed_send_ref_holder(self,
+                                        expr: DistributedSendRefHolder
+                                        ) -> FrozenSet[CommunicationOpIdentifier]:
+        send_id = _send_to_comm_id(self.local_rank, expr.send)
+
+        if send_id in self.local_send_id_to_needed_local_recv_ids:
+            raise ValueError(f"Multiple sends found for '{send_id}'")
+
+        self.local_send_id_to_needed_local_recv_ids[send_id] = \
+                self.rec(expr.send.data)
+
+        assert send_id not in self.local_send_id_to_send_node
+        self.local_send_id_to_send_node[send_id] = expr.send
+
+        return self.rec(expr.passthrough_data)
+
+    def _map_input_base(self, expr: Array) -> FrozenSet[CommunicationOpIdentifier]:
+        return frozenset()
+
+    map_placeholder = _map_input_base
+    map_data_wrapper = _map_input_base
+    map_size_param = _map_input_base
+
+    def map_distributed_recv(
+            self, expr: DistributedRecv
+            ) -> FrozenSet[CommunicationOpIdentifier]:
+        recv_id = _recv_to_comm_id(self.local_rank, expr)
+
+        if recv_id in self.local_recv_id_to_recv_node:
+            raise ValueError(f"Multiple receives found for '{recv_id}'")
+
+        self.local_recv_id_to_recv_node[recv_id] = expr
+
+        return frozenset({recv_id})
 
 # }}}
 
