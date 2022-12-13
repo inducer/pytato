@@ -416,6 +416,13 @@ def _do_verify_distributed_partition(ctx_factory):
     distributed_parts = pt.find_distributed_partition(outputs)
 
     if rank == 0:
+        from pytools.graph import CycleError
+        with pytest.raises(CycleError):
+            pt.verify_distributed_dag_pre_partition(comm, outputs)
+    else:
+        pt.verify_distributed_dag_pre_partition(comm, outputs)
+
+    if rank == 0:
         with pytest.raises(PartitionInducedCycleError):
             pt.verify_distributed_partition(comm, distributed_parts)
     else:
