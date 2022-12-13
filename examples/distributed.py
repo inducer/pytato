@@ -54,7 +54,10 @@ def main():
 
     final_res = context["out"].get(queue)
 
-    ref_res = comm.bcast(final_res)
+    comm.isend(x_in, dest=(rank-1) % size, tag=42)
+    ref_halo = comm.recv(source=(rank+1) % size, tag=42)
+
+    ref_res = x_in + ref_halo
 
     np.testing.assert_allclose(ref_res, final_res)
 
