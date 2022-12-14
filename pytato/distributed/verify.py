@@ -191,6 +191,8 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
         from pytools.graph import compute_topological_order
         compute_topological_order(comm_to_needed_comms)
 
+        logger.info("verify_distributed_dag_pre_partition completed successfully.")
+
 
 # }}}
 
