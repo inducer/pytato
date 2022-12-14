@@ -37,7 +37,8 @@ import numpy as np
 
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.partition import PartId
-from pytato.distributed.partition import DistributedGraphPartition, _KeyT, _ValueT
+from pytato.distributed.partition import (DistributedGraphPartition,
+        _KeyT, _ValueT, CommunicationOpIdentifier)
 from pytato.array import ShapeType, DictOfNamedArrays
 
 import attrs
@@ -137,17 +138,12 @@ def _dict_union_mpi(
 # }}}
 
 
-# {{{ verify_distributed_dag_pre_partition
+# {{{ _get_comm_to_needed_comms
 
-def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
-                                         outputs: DictOfNamedArrays) -> None:
-    """
-    .. warning::
-
-        This is an MPI-collective operation.
-    """
+def _get_comm_to_needed_comms(mpi_communicator: mpi4py.MPI.Comm,
+        outputs: DictOfNamedArrays) -> \
+        Dict[CommunicationOpIdentifier, FrozenSet[CommunicationOpIdentifier]]:
     my_rank = mpi_communicator.rank
-    root_rank = 0
 
     from pytato.distributed.partition import _LocalSendRecvDepGatherer
     lsrdg = _LocalSendRecvDepGatherer(local_rank=my_rank)
@@ -162,10 +158,34 @@ def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
             _dict_union_mpi,  # type: ignore[arg-type]
             commute=True)
     try:
-        comm_to_needed_comms = mpi_communicator.allreduce(
+        # FIXME: allreduce might not be necessary for all use cases
+        comm_to_needed_comms: \
+            Dict[CommunicationOpIdentifier, FrozenSet[CommunicationOpIdentifier]] = \
+            mpi_communicator.allreduce(
                 local_send_id_to_needed_local_recv_ids, dict_union_mpi_op)
     finally:
         dict_union_mpi_op.Free()
+
+    return comm_to_needed_comms
+
+# }}}
+
+
+# {{{ verify_distributed_dag_pre_partition
+
+def verify_distributed_dag_pre_partition(mpi_communicator: mpi4py.MPI.Comm,
+                                         outputs: DictOfNamedArrays) -> None:
+    """
+    Verify that a global, unpartitioned graph does not contain a cycle.
+
+    .. warning::
+
+        This is an MPI-collective operation.
+    """
+    my_rank = mpi_communicator.rank
+    root_rank = 0
+
+    comm_to_needed_comms = _get_comm_to_needed_comms(mpi_communicator, outputs)
 
     if my_rank == root_rank:
         from pytools.graph import compute_topological_order
