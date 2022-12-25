@@ -2293,7 +2293,7 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
     # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.Comparison(x, which, y),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2353,7 +2353,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalOr((x, y)),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2367,7 +2367,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalAnd((x, y)),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2386,7 +2386,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
-                       dtype=np.dtype(np.bool8),
+                       dtype=np.dtype(np.bool_),
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(x.shape)),
