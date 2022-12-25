@@ -49,4 +49,6 @@ nitpick_ignore_regex = [
     # As of 2022-10-20, it doesn't look like there's sphinx documentation
     # available.
     ["py:class", r"immutables\.(.+)"],
+    # https://github.com/python-attrs/attrs/issues/1073
+    ["py:mod", "attrs"],
 ]
