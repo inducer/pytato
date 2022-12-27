@@ -324,7 +324,10 @@ def test_toposortmapper():
 
 def test_userscollector():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.transform import UsersCollector, reverse_graph
+    from pytato.transform import UsersCollector
+    from pytato.analysis import get_nusers
+
+    from pytools.graph import reverse_graph
 
     # Check that nodes without users are correctly reversed
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
@@ -332,15 +335,22 @@ def test_userscollector():
 
     uc = UsersCollector()
     uc(y)
+
     rev_graph = reverse_graph(uc.node_to_users)
     rev_graph2 = reverse_graph(reverse_graph(rev_graph))
 
     assert dict(reverse_graph(rev_graph2)) == uc.node_to_users
 
+    assert len(uc.node_to_users) == 2
+    assert uc.node_to_users[y] == set()
+    assert uc.node_to_users[array].pop() == y
+    assert len(uc.node_to_users[array]) == 0
+
     # Test random DAGs
     axis_len = 5
 
     for i in range(100):
+        print(i)  # progress indicator
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                 axis_len=axis_len, use_numpy=False)
 
@@ -351,8 +361,13 @@ def test_userscollector():
 
         rev_graph = reverse_graph(uc.node_to_users)
         rev_graph2 = reverse_graph(reverse_graph(rev_graph))
-
         assert rev_graph2 == rev_graph
+
+        nuc = get_nusers(dag)
+
+        assert len(uc.node_to_users) == len(nuc)+1
+        assert uc.node_to_users[dag] == set()
+        assert nuc[dag] == 0
 
 
 def test_asciidag():
