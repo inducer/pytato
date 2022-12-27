@@ -518,7 +518,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
         or the output of :func:`~pytato.partition.find_partition`.
-    :arg kwargs: Passed on to :func:`pymbolic.imperative.utils.show_dot` unmodified.
+    :arg kwargs: Passed on to :func:`pytools.graphviz.show_dot` unmodified.
     """
     dot_code: str
 
@@ -529,7 +529,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
     else:
         dot_code = get_dot_graph(result)
 
-    from pymbolic.imperative.utils import show_dot
+    from pytools.graphviz import show_dot
     show_dot(dot_code, **kwargs)
 
 

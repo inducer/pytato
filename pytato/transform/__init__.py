@@ -46,7 +46,6 @@ from pytato.distributed.nodes import (
 from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
 from pytato.tags import ImplStored
-from immutables import Map
 from pymbolic.mapper.optimize import optimize_mapper
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
@@ -85,7 +84,6 @@ Dict representation of DAGs
 ---------------------------
 
 .. autoclass:: UsersCollector
-.. autofunction:: reverse_graph
 .. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
@@ -1345,10 +1343,11 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.node_to_users: Dict[ArrayOrNames,
                 Set[Union[DistributedSend, ArrayOrNames]]] = {}
 
-    def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+    # type-ignore-reason: incompatible with superclass (args/kwargs, return type)
+    def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
         # Root node has no predecessor
         self.node_to_users[expr] = set()
-        return self.rec(expr, *args)
+        self.rec(expr)
 
     def rec_idx_or_size_tuple(
             self, expr: Array, situp: Tuple[IndexOrShapeExpr, ...]
@@ -1371,6 +1370,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         for arg in expr.args:
             self.node_to_users.setdefault(arg, set()).add(expr)
             self.rec(arg)
+
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_reshape(self, expr: Reshape) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
@@ -1396,8 +1397,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
-        # no child nodes, nothing to do
-        pass
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
         self.node_to_users.setdefault(expr.array, set()).add(expr)
@@ -1442,13 +1442,13 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.rec(child)
 
     def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> None:
+            self, expr: DistributedSendRefHolder) -> None:
         self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
         self.rec(expr.passthrough_data)
         self.node_to_users.setdefault(expr.send.data, set()).add(expr.send)
         self.rec(expr.send.data)
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+    def map_distributed_recv(self, expr: DistributedRecv) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
 
@@ -1465,29 +1465,6 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 
 
 # {{{ operations on graphs in dict form
-
-def reverse_graph(graph: Mapping[ArrayOrNames, FrozenSet[ArrayOrNames]]
-                  ) -> Map[ArrayOrNames, FrozenSet[ArrayOrNames]]:
-    """
-    Reverses a graph.
-
-    :param graph: A :class:`dict` representation of a directed graph, mapping each
-        node to other nodes to which it is connected by edges. A possible
-        use case for this function is the graph in
-        :attr:`UsersCollector.node_to_users`.
-    :returns: A :class:`immutables.Map` representing *graph* with edges reversed.
-    """
-    result: Dict[ArrayOrNames, Set[ArrayOrNames]] = {}
-
-    for node_key, edges in graph.items():
-        # Make sure every node is in the result even if it has no users
-        result.setdefault(node_key, set())
-
-        for other_node_key in edges:
-            result.setdefault(other_node_key, set()).add(node_key)
-
-    return Map({k: frozenset(v) for k, v in result.items()})
-
 
 def _recursively_get_all_users(
         direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
