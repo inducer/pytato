@@ -71,7 +71,7 @@ __doc__ = """
 # {{{ scalar expressions
 
 IntegralT = Union[int, np.integer]
-BoolT = Union[bool, np.bool8]
+BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
 ScalarType = Union[np.number, int, np.bool_, bool, float]

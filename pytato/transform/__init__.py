@@ -1343,10 +1343,11 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.node_to_users: Dict[ArrayOrNames,
                 Set[Union[DistributedSend, ArrayOrNames]]] = {}
 
-    def __call__(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+    # type-ignore-reason: incompatible with superclass (args/kwargs, return type)
+    def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
         # Root node has no predecessor
         self.node_to_users[expr] = set()
-        return self.rec(expr, *args)
+        self.rec(expr)
 
     def rec_idx_or_size_tuple(
             self, expr: Array, situp: Tuple[IndexOrShapeExpr, ...]
@@ -1441,13 +1442,13 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
                 self.rec(child)
 
     def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> None:
+            self, expr: DistributedSendRefHolder) -> None:
         self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
         self.rec(expr.passthrough_data)
         self.node_to_users.setdefault(expr.send.data, set()).add(expr.send)
         self.rec(expr.send.data)
 
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) -> None:
+    def map_distributed_recv(self, expr: DistributedRecv) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
 
