@@ -884,7 +884,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
     return CodeGenState(_t_unit=kernel,
-            results=dict())
+            results={})
 
 
 # {{{ generate_loopy

@@ -94,10 +94,10 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        fields = dict(addr=hex(id(expr)),
-                shape=stringify_shape(expr.shape),
-                dtype=str(expr.dtype),
-                tags=stringify_tags(expr.tags))
+        fields = {"addr": hex(id(expr)),
+                "shape": stringify_shape(expr.shape),
+                "dtype": str(expr.dtype),
+                "tags": stringify_tags(expr.tags)}
 
         edges: Dict[str, ArrayOrNames] = {}
         return DotNodeInfo(title, fields, edges)
@@ -225,8 +225,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
-                fields=dict(addr=hex(id(expr)),
-                            entrypoint=expr.entrypoint),
+                fields={"addr": hex(id(expr)), "entrypoint": expr.entrypoint},
                 edges=edges)
 
     def map_distributed_send_ref_holder(

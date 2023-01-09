@@ -183,7 +183,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
-    result = pt.make_dict_of_named_arrays(dict(x_out=x, y_out=y))
+    result = pt.make_dict_of_named_arrays({"x_out": x, "y_out": y})
 
     # With return_dict.
     prog = pt.generate_loopy(result)

@@ -574,7 +574,7 @@ class Array(Taggable):
             indices = tuple(var(f"_{i}") for i in range(self.ndim))
             expr = op(var("_in0")[indices])
 
-        bindings = dict(_in0=self)
+        bindings = {"_in0": self}
         return IndexLambda(
                 expr,
                 shape=self.shape,
