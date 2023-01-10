@@ -36,7 +36,7 @@ def main():
     z = y+y_plus
 
     # Find the partition
-    outputs = pt.make_dict_of_named_arrays({"out": y})
+    outputs = pt.make_dict_of_named_arrays({"out": z})
     distributed_parts = find_distributed_partition(comm, outputs)
 
     distributed_parts, _ = number_distributed_tags(

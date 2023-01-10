@@ -332,7 +332,6 @@ def _do_verify_distributed_partition(ctx_factory):
     import pytest
     from pytato.distributed.verify import (DuplicateSendError,
                 DuplicateRecvError, MissingSendError, MissingRecvError)
-    from pytato.partition import PartitionInducedCycleError
 
     rank = comm.Get_rank()
     size = comm.Get_size()

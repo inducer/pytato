@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 import logging
 import numpy as np
-from abc import abstractmethod
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional,
                     Hashable)
@@ -71,7 +70,6 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
-.. autoclass:: EdgeCachedMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -1529,179 +1527,6 @@ def tag_user_nodes(
         node_to_tags.setdefault(user, set()).add(tag)
 
     return node_to_tags
-
-# }}}
-
-
-# {{{ EdgeCachedMapper
-
-class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
-    """
-    Mapper class to execute a rewriting method (:meth:`handle_edge`) on each
-    edge in the graph.
-
-    .. automethod:: handle_edge
-    """
-
-    @abstractmethod
-    def handle_edge(self, expr: ArrayOrNames, predecessor: ArrayOrNames) -> Any:
-        pass
-
-    def rec_idx_or_size_tuple(self,
-            expr: Array,
-            situp: Tuple[IndexOrShapeExpr, ...],
-            *args: Any) -> Tuple[IndexOrShapeExpr, ...]:
-        return tuple([
-            self.handle_edge(expr, dim, *args) if isinstance(dim, Array) else dim
-            for dim in situp])
-
-    # {{{ map_xxx methods
-
-    def map_named_array(self, expr: NamedArray, *args: Any) -> NamedArray:
-        return type(expr)(
-            self.handle_edge(expr, expr._container, *args),
-            name=expr.name,
-            axes=expr.axes,
-            tags=expr.tags)
-
-    def map_index_lambda(self, expr: IndexLambda, *args: Any) -> IndexLambda:
-        return IndexLambda(expr=expr.expr,
-                shape=self.rec_idx_or_size_tuple(expr, expr.shape),
-                dtype=expr.dtype,
-                bindings={name: self.handle_edge(expr, child)
-                          for name, child in sorted(expr.bindings.items())},
-                axes=expr.axes,
-                var_to_reduction_descr=expr.var_to_reduction_descr,
-                tags=expr.tags)
-
-    def map_einsum(self, expr: Einsum, *args: Any) -> Einsum:
-        return Einsum(
-                     access_descriptors=expr.access_descriptors,
-                     args=tuple(self.handle_edge(expr, arg, *args)
-                                for arg in expr.args),
-                     axes=expr.axes,
-                     redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                     index_to_access_descr=expr.index_to_access_descr,
-                     tags=expr.tags)
-
-    def map_stack(self, expr: Stack, *args: Any) -> Stack:
-        return Stack(
-                     arrays=tuple(self.handle_edge(expr, ary, *args)
-                                  for ary in expr.arrays),
-                     axis=expr.axis,
-                     axes=expr.axes,
-                     tags=expr.tags)
-
-    def map_concatenate(self, expr: Concatenate, *args: Any) -> Concatenate:
-        return Concatenate(
-                     arrays=tuple(self.handle_edge(expr, ary, *args)
-                                  for ary in expr.arrays),
-                     axis=expr.axis,
-                     axes=expr.axes,
-                     tags=expr.tags)
-
-    def map_roll(self, expr: Roll, *args: Any) -> Roll:
-        return Roll(array=self.handle_edge(expr, expr.array, *args),
-                shift=expr.shift,
-                axis=expr.axis,
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_axis_permutation(self, expr: AxisPermutation, *args: Any) \
-            -> AxisPermutation:
-        return AxisPermutation(
-                array=self.handle_edge(expr, expr.array, *args),
-                axis_permutation=expr.axis_permutation,
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_reshape(self, expr: Reshape, *args: Any) -> Reshape:
-        return Reshape(
-            array=self.handle_edge(expr, expr.array, *args),
-            newshape=self.rec_idx_or_size_tuple(expr, expr.newshape, *args),
-            order=expr.order,
-            axes=expr.axes,
-            tags=expr.tags)
-
-    def map_basic_index(self, expr: BasicIndex, *args: Any) -> BasicIndex:
-        return BasicIndex(
-                array=self.handle_edge(expr, expr.array, *args),
-                indices=tuple(self.handle_edge(expr, idx, *args)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices),
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_contiguous_advanced_index(self,
-            expr: AdvancedIndexInContiguousAxes, *args: Any) \
-                    -> AdvancedIndexInContiguousAxes:
-        return AdvancedIndexInContiguousAxes(
-                array=self.handle_edge(expr, expr.array, *args),
-                indices=tuple(self.handle_edge(expr, idx, *args)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices),
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_non_contiguous_advanced_index(self,
-            expr: AdvancedIndexInNoncontiguousAxes, *args: Any) \
-            -> AdvancedIndexInNoncontiguousAxes:
-        return AdvancedIndexInNoncontiguousAxes(
-                array=self.handle_edge(expr, expr.array, *args),
-                indices=tuple(self.handle_edge(expr, idx, *args)
-                                if isinstance(idx, Array) else idx
-                                for idx in expr.indices),
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_data_wrapper(self, expr: DataWrapper, *args: Any) -> DataWrapper:
-        return DataWrapper(
-                data=expr.data,
-                shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_placeholder(self, expr: Placeholder, *args: Any) -> Placeholder:
-        assert expr.name
-
-        return Placeholder(name=expr.name,
-                shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
-                dtype=expr.dtype,
-                axes=expr.axes,
-                tags=expr.tags)
-
-    def map_size_param(self, expr: SizeParam, *args: Any) -> SizeParam:
-        assert expr.name
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
-
-    def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
-        return LoopyCall(
-            translation_unit=expr.translation_unit,
-            entrypoint=expr.entrypoint,
-            bindings={
-                name: self.handle_edge(expr, child)
-                if isinstance(child, Array) else child
-                for name, child in sorted(expr.bindings.items())},
-            tags=expr.tags,
-            )
-
-    def map_distributed_send_ref_holder(
-            self, expr: DistributedSendRefHolder, *args: Any) -> \
-                DistributedSendRefHolder:
-        return DistributedSendRefHolder(
-            send=self.handle_edge(expr, expr.send.data),
-            passthrough_data=self.handle_edge(expr, expr.passthrough_data),
-            tags=expr.tags
-        )
-
-    def map_distributed_recv(self, expr: DistributedRecv, *args: Any) \
-            -> Any:
-        return DistributedRecv(
-            src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-            shape=self.rec_idx_or_size_tuple(expr, expr.shape, *args),
-            dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
-
-    # }}}
 
 # }}}
 

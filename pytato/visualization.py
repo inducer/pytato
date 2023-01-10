@@ -363,7 +363,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the partitioned computation of *partition*.
 
-    :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
+    :arg partition: Outputs of :func:`~pytato.find_distributed_partition`.
     """
     # Maps each partition to a dict of its arrays with the node info
     part_id_to_node_info: Dict[Hashable, Dict[ArrayOrNames, DotNodeInfo]] = {}
@@ -516,7 +516,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
-        or the output of :func:`~pytato.partition.find_partition`.
+        or the output of :func:`~pytato.find_distributed_partition`.
     :arg kwargs: Passed on to :func:`pytools.graphviz.show_dot` unmodified.
     """
     dot_code: str
