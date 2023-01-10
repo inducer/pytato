@@ -29,7 +29,7 @@ def main():
     y = x+halo
 
     # Find the partition
-    outputs = pt.DictOfNamedArrays({"out": y})
+    outputs = pt.make_dict_of_named_arrays({"out": y})
     distributed_parts = find_distributed_partition(outputs)
     distributed_parts, _ = number_distributed_tags(
             comm, distributed_parts, base_tag=42)
