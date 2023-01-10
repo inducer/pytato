@@ -154,11 +154,6 @@ Reserved Identifiers
         names of :class:`~pytato.array.DataWrapper` arguments that are
         not supplied by the user.
 
-    -   ``_pt_part_ph``: Used to automatically generate identifiers for
-        names of :class:`~pytato.array.Placeholder` that represent data
-        transport across parts of a partitioned DAG
-        (cf. :func:`~pytato.partition.find_partition`).
-
     -   ``_pt_dist``: Used to automatically generate identifiers for
         placeholders at distributed communication boundaries.
 

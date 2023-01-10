@@ -41,9 +41,8 @@ THE SOFTWARE.
 
 from functools import reduce
 from typing import (
-        Sequence, Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable,
-        Callable, List, AbstractSet, TypeVar, TYPE_CHECKING)
-from functools import cached_property
+        Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
+        List, AbstractSet, TypeVar, TYPE_CHECKING)
 
 import attrs
 from immutables import Map
@@ -52,14 +51,11 @@ from pytools.graph import CycleError
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator
-from pytools.tag import UniqueTag
 
 from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.array import (Array,
-                          DictOfNamedArrays, Placeholder, make_placeholder,
-                          NamedArray)
-from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
-                              CachedWalkMapper, CopyMapperWithExtraArgs,
+from pytato.array import (Array, DictOfNamedArrays, Placeholder, make_placeholder)
+from pytato.transform import (ArrayOrNames, CopyMapper,
+                              CachedWalkMapper,
                               CombineMapper)
 from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.distributed.nodes import (
@@ -161,8 +157,11 @@ class _DistributedInputReplacer(CopyMapper):
                 name, expr.shape, expr.dtype, expr.tags,
                 expr.axes)
 
-    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder) -> Array:
-        return self.rec(expr.passthrough_data)
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder) -> Array:
+        result = self.rec(expr.passthrough_data)
+        assert isinstance(result, Array)
+        return result
 
     # Note: map_distributed_send() is not called like other mapped methods in a
     # DAG traversal, since a DistributedSend is not an Array and has no
@@ -171,18 +170,22 @@ class _DistributedInputReplacer(CopyMapper):
     # are no more references to the DistributedSends from within the DAG. This
     # method must therefore be called explicitly.
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
+        new_data = self.rec(expr.data)
+        assert isinstance(new_data, Array)
         new_send = DistributedSend(
-                data=self.rec(expr.data),
+                data=new_data,
                 dest_rank=expr.dest_rank,
                 comm_tag=expr.comm_tag,
                 tags=expr.tags)
         return new_send
 
     # type ignore because no args, kwargs
-    def rec(self, expr: Array) -> Any:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+        assert isinstance(expr, Array)
+
         key = self.get_cache_key(expr)
         try:
-            return self._cache[key]
+            return cast(ArrayOrNames, self._cache[key])
         except KeyError:
             pass
 
@@ -199,7 +202,7 @@ class _DistributedInputReplacer(CopyMapper):
                         name, expr.shape, expr.dtype, expr.tags,
                         expr.axes)
 
-        return super().rec(expr)
+        return cast(ArrayOrNames, super().rec(expr))
 
 # }}}
 
@@ -630,7 +633,7 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[Sequence[CommunicationOpIdentifier]],
+                Sequence[AbstractSet[CommunicationOpIdentifier]],
                 comm_batches_or_exc)
 
     # }}}
@@ -640,7 +643,7 @@ def find_distributed_partition(
     part_comm_ids: List[_PartCommIDs] = []
 
     if comm_batches:
-        recv_ids = frozenset()
+        recv_ids: FrozenSet[CommunicationOpIdentifier] = frozenset()
         for batch in comm_batches:
             send_ids = frozenset(
                 comm_id for comm_id in batch
