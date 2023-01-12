@@ -127,6 +127,11 @@ class DistributedGraphPart:
     :attr:`name_to_send_node` are usable as input names by other
     parts, or in the result of the computation.
 
+    - Names specified in :attr:`name_to_recv_node` *must not* occur in
+      :attr:`output_names`.
+    - Names specified in :attr:`name_to_send_node` *must* occur in
+      :attr:`output_names`.
+
     .. attribute:: pid
 
         An identifier for this part of the graph.
@@ -892,6 +897,11 @@ def find_distributed_partition(
 
     outputs_per_part: List[Set[Array]] = [set() for _pid in range(nparts)]
     for output_ary in stored_ary_part_outputs:
+        if output_ary in received_arrays:
+            # Received arrays already have names and are materialized, must not
+            # make them part outputs.
+            continue
+
         outputs_per_part[stored_ary_to_part_id[output_ary]].add(output_ary)
 
     partition = _make_distributed_partition(
