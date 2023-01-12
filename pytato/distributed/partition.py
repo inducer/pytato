@@ -1,4 +1,21 @@
 """
+Partitioning of graphs in :mod:`pytato` serves to enable
+:ref:`distributed computation <distributed>`, i.e. sending and receiving data
+as part of graph evaluation.
+
+Partitioning of expression graphs is based on a few assumptions:
+
+- We must be able to execute parts in any dependency-respecting order.
+- Parts are compiled at partitioning time, so what inputs they take from memory
+  vs. what they compute is decided at that time.
+- No part may depend on its own outputs as inputs.
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: T
+
+    A type variable for :class:`~pytato.array.AbstractResultWithNamedArrays`.
 .. autoclass:: CommunicationOpIdentifier
 .. class:: CommunicationDepGraph
 
@@ -42,12 +59,13 @@ THE SOFTWARE.
 from functools import reduce
 from typing import (
         Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING)
+        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable)
 
 import attrs
 from immutables import Map
 
 from pytools.graph import CycleError
+from pytools import memoize_method
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator
@@ -57,14 +75,13 @@ from pytato.array import (Array, DictOfNamedArrays, Placeholder, make_placeholde
 from pytato.transform import (ArrayOrNames, CopyMapper,
                               CachedWalkMapper,
                               CombineMapper)
-from pytato.partition import GraphPart, GraphPartition, PartId
 from pytato.distributed.nodes import (
         DistributedRecv, DistributedSend, DistributedSendRefHolder)
 from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
 
 if TYPE_CHECKING:
-    import mpi4py.MPI as MPI
+    import mpi4py.MPI
 
 
 @attrs.define(frozen=True)
@@ -78,10 +95,10 @@ class CommunicationOpIdentifier:
 
     .. note::
 
-        In :func:`find_distributed_partition`, we use instances of this type as
-        though they identify sends or receives, i.e. just a single end of the
-        communication. Realize that this is only true given the additional
-        context of which rank is the local rank.
+        In :func:`~pytato.find_distributed_partition`, we use instances of this
+        type as though they identify sends or receives, i.e. just a single end
+        of the communication. Realize that this is only true given the
+        additional context of which rank is the local rank.
     """
     src_rank: int
     dest_rank: int
@@ -96,10 +113,13 @@ _KeyT = TypeVar("_KeyT")
 _ValueT = TypeVar("_ValueT")
 
 
-# {{{ distributed graph partition
+# {{{ distributed graph part
+
+PartId = Hashable
+
 
 @attrs.define(frozen=True, slots=False)
-class DistributedGraphPart(GraphPart):
+class DistributedGraphPart:
     """For one graph part, record send/receive information for input/
     output names.
 
@@ -107,21 +127,66 @@ class DistributedGraphPart(GraphPart):
     :attr:`name_to_send_node` are usable as input names by other
     parts, or in the result of the computation.
 
+    .. attribute:: pid
+
+        An identifier for this part of the graph.
+
+    .. attribute:: needed_pids
+
+        The IDs of parts that are required to be evaluated before this
+        part can be evaluated.
+
+    .. attribute:: user_input_names
+
+        A :class:`frozenset` of names representing input to the computational
+        graph, i.e. which were *not* introduced by partitioning.
+
+    .. attribute:: partition_input_names
+
+        A :class:`frozenset` of names of placeholders the part requires as
+        input from other parts in the partition.
+
+    .. attribute:: output_names
+
+        Names of placeholders this part provides as output.
+
     .. attribute:: name_to_recv_node
     .. attribute:: name_to_send_node
+
+    .. automethod:: all_input_names
     """
+    pid: PartId
+    needed_pids: FrozenSet[PartId]
+    user_input_names: FrozenSet[str]
+    partition_input_names: FrozenSet[str]
+    output_names: FrozenSet[str]
+
     name_to_recv_node: Mapping[str, DistributedRecv]
     name_to_send_node: Mapping[str, DistributedSend]
 
+    @memoize_method
+    def all_input_names(self) -> FrozenSet[str]:
+        return self.user_input_names | self. partition_input_names
+
+# }}}
+
+
+# {{{ distributed graph partition
 
 @attrs.define(frozen=True, slots=False)
-class DistributedGraphPartition(GraphPartition):
-    """Store information about distributed graph partitions. This
-    has the same attributes as :class:`~pytato.partition.GraphPartition`,
-    however :attr:`~pytato.partition.GraphPartition.parts` now maps to
-    instances of :class:`DistributedGraphPart`.
+class DistributedGraphPartition:
     """
-    parts: Dict[PartId, DistributedGraphPart]
+    .. attribute:: parts
+
+        Mapping from part IDs to instances of :class:`DistributedGraphPart`.
+
+    .. attribute:: var_name_to_result
+
+       Mapping of placeholder names to the respective :class:`pytato.array.Array`
+       they represent.
+    """
+    parts: Mapping[PartId, DistributedGraphPart]
+    var_name_to_result: Mapping[str, Array]
 
 # }}}
 
@@ -433,7 +498,7 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 def _set_dict_union_mpi(
         dict_a: Mapping[_KeyT, FrozenSet[_ValueT]],
         dict_b: Mapping[_KeyT, FrozenSet[_ValueT]],
-        mpi_data_type: MPI.Datatype) -> Mapping[_KeyT, FrozenSet[_ValueT]]:
+        mpi_data_type: mpi4py.MPI.Datatype) -> Mapping[_KeyT, FrozenSet[_ValueT]]:
     assert mpi_data_type is None
     result = dict(dict_a)
     for key, values in dict_b.items():
@@ -446,7 +511,7 @@ def _set_dict_union_mpi(
 # {{{ find_distributed_partition
 
 def find_distributed_partition(
-        mpi_communicator: MPI.Comm,
+        mpi_communicator: mpi4py.MPI.Comm,
         outputs: DictOfNamedArrays
         ) -> DistributedGraphPartition:
     r"""
@@ -836,7 +901,7 @@ def find_distributed_partition(
             lsrdg.local_recv_id_to_recv_node,
             lsrdg.local_send_id_to_send_node)
 
-    from pytato.partition import _run_partition_diagnostics
+    from pytato.distributed.verify import _run_partition_diagnostics
     _run_partition_diagnostics(outputs, partition)
 
     if __debug__:

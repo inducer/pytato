@@ -46,8 +46,8 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
 
-from pytato.partition import GraphPartition, PartId
-from pytato.distributed.partition import DistributedGraphPart
+from pytato.distributed.partition import (
+        DistributedGraphPartition, DistributedGraphPart, PartId)
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedSendRefHolder
@@ -359,7 +359,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def get_dot_graph_from_partition(partition: GraphPartition) -> str:
+def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the partitioned computation of *partition*.
 
@@ -530,7 +530,8 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
+                                 DistributedGraphPartition],
         **kwargs: Any) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
@@ -543,7 +544,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
 
     if isinstance(result, str):
         dot_code = result
-    elif isinstance(result, GraphPartition):
+    elif isinstance(result, DistributedGraphPartition):
         dot_code = get_dot_graph_from_partition(result)
     else:
         dot_code = get_dot_graph(result)
