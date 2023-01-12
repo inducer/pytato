@@ -100,13 +100,12 @@ from pytato.distributed.nodes import (make_distributed_send, make_distributed_re
 from pytato.distributed.partition import (
         find_distributed_partition, DistributedGraphPart, DistributedGraphPartition)
 from pytato.distributed.tags import number_distributed_tags
+from pytato.distributed.execute import (
+        generate_code_for_partition, execute_distributed_partition)
 from pytato.distributed.verify import verify_distributed_partition
-from pytato.distributed.execute import execute_distributed_partition
 
 from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.transform.metadata import unify_axes_tags
-
-from pytato.partition import generate_code_for_partition
 
 __all__ = (
         "dtype",
@@ -159,10 +158,9 @@ __all__ = (
         "find_distributed_partition",
 
         "number_distributed_tags",
+        "generate_code_for_partition",
         "execute_distributed_partition",
         "verify_distributed_partition",
-
-        "generate_code_for_partition",
 
         "to_index_lambda",
 

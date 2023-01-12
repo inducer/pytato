@@ -1,4 +1,6 @@
 """
+.. autoexception:: PartitionInducedCycleError
+
 .. currentmodule:: pytato
 .. autofunction::  verify_distributed_partition
 """
@@ -32,15 +34,17 @@ THE SOFTWARE.
 
 from typing import Any, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
 
+import attrs
 import numpy as np
 
-from pytato.distributed.nodes import CommTagType, DistributedRecv
-from pytato.partition import PartId
-from pytato.distributed.partition import (
-        DistributedGraphPartition, CommunicationOpIdentifier)
-from pytato.array import ShapeType
+from pymbolic.mapper.optimize import optimize_mapper
 
-import attrs
+from pytato.array import DictOfNamedArrays, make_dict_of_named_arrays, Placeholder
+from pytato.transform import ArrayOrNames, CachedWalkMapper
+from pytato.distributed.nodes import CommTagType, DistributedRecv
+from pytato.distributed.partition import (
+        PartId, DistributedGraphPartition, CommunicationOpIdentifier)
+from pytato.array import ShapeType
 
 
 import logging
@@ -94,6 +98,13 @@ class _SummarizedDistributedGraphPart:
 
 # {{{ errors
 
+class PartitionInducedCycleError(AssertionError):
+    """Raised by if the partitioning (e.g. via
+    :func:`~pytato.find_distributed_partition`) erroneously induced a cycle in the
+    graph of partitions.
+    """
+
+
 class DistributedPartitionVerificationError(ValueError):
     pass
 
@@ -112,6 +123,73 @@ class MissingSendError(DistributedPartitionVerificationError):
 
 class MissingRecvError(DistributedPartitionVerificationError):
     pass
+
+# }}}
+
+
+# {{{ _check_partition_disjointness
+
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class _SeenNodesWalkMapper(CachedWalkMapper):
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_nodes: Set[ArrayOrNames] = set()
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def visit(self, expr: ArrayOrNames) -> bool:  # type: ignore[override]
+        super().visit(expr)
+        self.seen_nodes.add(expr)
+        return True
+
+
+def _check_partition_disjointness(partition: DistributedGraphPartition) -> None:
+    part_id_to_nodes: Dict[PartId, Set[ArrayOrNames]] = {}
+
+    for part in partition.parts.values():
+        mapper = _SeenNodesWalkMapper()
+        for out_name in part.output_names:
+            mapper(partition.var_name_to_result[out_name])
+
+        # FIXME This check won't do much unless we successfully visit
+        # all the nodes, but we're not currently checking that.
+        for my_node in mapper.seen_nodes:
+            for other_part_id, other_node_set in part_id_to_nodes.items():
+                # Placeholders represent values computed in one partition
+                # and used in one or more other ones. As a result, the
+                # same placeholder may occur in more than one partition.
+                if not (isinstance(my_node, Placeholder)
+                       or my_node not in other_node_set):
+                    raise RuntimeError(
+                        "Partitions not disjoint: "
+                        f"{my_node.__class__.__name__} (id={hex(id(my_node))}) "
+                        f"in both '{part.pid}' and '{other_part_id}'"
+                        f"{part.output_names=} "
+                        f"{partition.parts[other_part_id].output_names=} ")
+
+        part_id_to_nodes[part.pid] = mapper.seen_nodes
+
+# }}}
+
+
+# {{{ _run_partition_diagnostics
+
+def _run_partition_diagnostics(
+        outputs: DictOfNamedArrays, gp: DistributedGraphPartition) -> None:
+    if __debug__:
+        _check_partition_disjointness(gp)
+
+    from pytato.analysis import get_num_nodes
+    num_nodes_per_part = [get_num_nodes(make_dict_of_named_arrays(
+            {x: gp.var_name_to_result[x] for x in part.output_names}))
+            for part in gp.parts.values()]
+
+    logger.info(f"find_partition: Split {get_num_nodes(outputs)} nodes into "
+        f"{len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
+        "partition.")
 
 # }}}
 
@@ -286,7 +364,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         # Do a topological sort to check for any cycles
 
         from pytools.graph import compute_topological_order, CycleError
-        from pytato.partition import PartitionInducedCycleError
+        from pytato.distributed.verify import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)
         except CycleError:

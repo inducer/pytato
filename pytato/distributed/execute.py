@@ -30,9 +30,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, TYPE_CHECKING
+from typing import Any, Dict, Hashable, Tuple, Optional, TYPE_CHECKING, Mapping
 
 
+from pytato.array import make_dict_of_named_arrays
 from pytato.target import BoundProgram
 from pytato.scalar_expr import INT_CLASSES
 
@@ -42,7 +43,7 @@ import numpy as np
 from pytato.distributed.nodes import (
         DistributedRecv, DistributedSend)
 from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart)
+        DistributedGraphPartition, DistributedGraphPart, PartId)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -50,6 +51,28 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+
+
+# {{{ generate_code_for_partition
+
+def generate_code_for_partition(partition: DistributedGraphPartition) \
+        -> Mapping[PartId, BoundProgram]:
+    """Return a mapping of partition identifiers to their
+       :class:`pytato.target.BoundProgram`."""
+    from pytato import generate_loopy
+    part_id_to_prg = {}
+
+    for part in sorted(partition.parts.values(),
+                       key=lambda part_: sorted(part_.output_names)):
+        d = make_dict_of_named_arrays(
+                    {var_name: partition.var_name_to_result[var_name]
+                        for var_name in part.output_names
+                     })
+        part_id_to_prg[part.pid] = generate_loopy(d)
+
+    return part_id_to_prg
+
+# }}}
 
 
 # {{{ distributed execute
