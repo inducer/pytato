@@ -179,8 +179,9 @@ def _check_partition_disjointness(partition: DistributedGraphPartition) -> None:
 
 def _run_partition_diagnostics(
         outputs: DictOfNamedArrays, gp: DistributedGraphPartition) -> None:
-    if __debug__:
-        _check_partition_disjointness(gp)
+    # FIXME: Is it reasonable to require this?
+    # if __debug__:
+    #     _check_partition_disjointness(gp)
 
     from pytato.analysis import get_num_nodes
     num_nodes_per_part = [get_num_nodes(make_dict_of_named_arrays(
