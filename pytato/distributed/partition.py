@@ -124,7 +124,7 @@ class DistributedGraphPart:
     output names.
 
     Names that occur as keys in :attr:`name_to_recv_node` and
-    :attr:`name_to_send_node` are usable as input names by other
+    :attr:`name_to_send_nodes` are usable as input names by other
     parts, or in the result of the computation.
 
     - Names specified in :attr:`name_to_recv_node` *must not* occur in
@@ -156,7 +156,7 @@ class DistributedGraphPart:
         Names of placeholders this part provides as output.
 
     .. attribute:: name_to_recv_node
-    .. attribute:: name_to_send_node
+    .. attribute:: name_to_send_nodes
 
     .. automethod:: all_input_names
     """
@@ -167,7 +167,7 @@ class DistributedGraphPart:
     output_names: FrozenSet[str]
 
     name_to_recv_node: Mapping[str, DistributedRecv]
-    name_to_send_node: Mapping[str, DistributedSend]
+    name_to_send_nodes: Mapping[str, Sequence[DistributedSend]]
 
     @memoize_method
     def all_input_names(self) -> FrozenSet[str]:
@@ -307,10 +307,13 @@ def _make_distributed_partition(
 
         comm_ids = part_comm_ids[part_id]
 
-        name_to_send_node = Map({
-            roo_ary_to_name[local_send_id_to_send_node[send_id].data]:
-            comm_replacer.map_distributed_send(local_send_id_to_send_node[send_id])
-            for send_id in comm_ids.send_ids})
+        name_to_send_nodes = {}
+        for send_id in comm_ids.send_ids:
+            send_node = local_send_id_to_send_node[send_id]
+            name = roo_ary_to_name[send_node.data]
+            name_to_send_nodes.setdefault(name, []).append(
+                comm_replacer.map_distributed_send(send_node))
+        name_to_send_nodes = Map(name_to_send_nodes)
 
         parts[part_id] = DistributedGraphPart(
                 pid=part_id,
@@ -323,7 +326,7 @@ def _make_distributed_partition(
                     roo_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
                     for recv_id in comm_ids.recv_ids}),
-                name_to_send_node=name_to_send_node)
+                name_to_send_nodes=name_to_send_nodes)
 
     result = DistributedGraphPartition(
             parts=parts,
@@ -763,77 +766,68 @@ def find_distributed_partition(
     materialized_arrays_collector = _MaterializedArrayCollector()
     materialized_arrays_collector(outputs)
 
-    sent_array_to_send_node = {
-            send.data: send
-            for send in lsrdg.local_send_id_to_send_node.values()}
-    sent_arrays = frozenset(sent_array_to_send_node)
+    sent_arrays = frozenset({
+        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values()})
 
     received_arrays = frozenset(lsrdg.local_recv_id_to_recv_node.values())
 
-    # While sent/received arrays may be marked as materialized, we shouldn't be
-    # including them here because we're using sent/received arrays as anchors
-    # to place *other* materialized data into the batches.
+    # While receive nodes may be marked as materialized, we shouldn't be
+    # including them here because we're using them (along with the send nodes)
+    # as anchors to place *other* materialized data into the batches.
+    # (Sent *arrays* are OK to include here because they are distinct from send
+    # *nodes*.)
     materialized_arrays = (
         frozenset(materialized_arrays_collector.materialized_arrays)
-        - sent_arrays
         - received_arrays)
 
-    # "moo" for "materialized or output"
+    # "mso" for "materialized/sent/output"
     output_arrays = set(outputs._data.values())
-    moo_arrays = materialized_arrays | output_arrays
+    mso_arrays = materialized_arrays | sent_arrays | output_arrays
 
     # FIXME: This gathers up materialized_arrays recursively, leading to
     # result sizes potentially quadratic in the number of materialized arrays.
-    moo_array_dep_mapper = SubsetDependencyMapper(moo_arrays)
+    mso_array_dep_mapper = SubsetDependencyMapper(mso_arrays)
 
-    moo_ary_to_first_dep_send_part_id: Dict[Array, int] = {
+    mso_ary_to_first_dep_send_part_id: Dict[Array, int] = {
         ary: nparts
-        for ary in moo_arrays}
-    for sent_ary in sent_arrays:
-        for ary in moo_array_dep_mapper(sent_ary):
-            moo_ary_to_first_dep_send_part_id[ary] = min(
-                moo_ary_to_first_dep_send_part_id[ary],
-                comm_id_to_part_id[
-                    _send_to_comm_id(local_rank,
-                                     sent_array_to_send_node[sent_ary])])
+        for ary in mso_arrays}
+    for send_id, send_node in lsrdg.local_send_id_to_send_node.items():
+        for ary in mso_array_dep_mapper(send_node.data):
+            mso_ary_to_first_dep_send_part_id[ary] = min(
+                mso_ary_to_first_dep_send_part_id[ary],
+                comm_id_to_part_id[send_id])
 
     if __debug__:
         recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
 
-        moo_ary_to_last_dep_recv_part_id: Dict[Array, int] = {
+        mso_ary_to_last_dep_recv_part_id: Dict[Array, int] = {
                 ary: max(
                         (comm_id_to_part_id[
                             _recv_to_comm_id(local_rank,
                                             cast(DistributedRecv, recvd_ary))]
                         for recvd_ary in recvd_array_dep_mapper(ary)),
                         default=-1)
-                for ary in moo_arrays
+                for ary in mso_arrays
                 }
 
         assert all(
                 (
-                    moo_ary_to_last_dep_recv_part_id[ary]
-                    <= moo_ary_to_first_dep_send_part_id[ary])
-                for ary in moo_arrays), \
+                    mso_ary_to_last_dep_recv_part_id[ary]
+                    <= mso_ary_to_first_dep_send_part_id[ary])
+                for ary in mso_arrays), \
             "unable to find suitable part for materialized or output array"
 
     # FIXME: (Seemingly) arbitrary decision, subject to future investigation.
     # Evaluation of materialized arrays is pushed as late as possible,
     # in order to minimize the amount of computation that might prevent
     # data from being sent.
-    moo_ary_to_part_id: Dict[Array, int] = {
+    mso_ary_to_part_id: Dict[Array, int] = {
             ary: min(
-                moo_ary_to_first_dep_send_part_id[ary],
+                mso_ary_to_first_dep_send_part_id[ary],
                 nparts-1)
-            for ary in moo_arrays}
+            for ary in mso_arrays}
 
     # }}}
-
-    sent_ary_to_part_id = {
-            sent_ary: (
-                comm_id_to_part_id[
-                    _send_to_comm_id(local_rank, send_node)])
-            for sent_ary, send_node in sent_array_to_send_node.items()}
 
     recvd_ary_to_part_id: Dict[Array, int] = {
             recvd_ary: (
@@ -847,8 +841,7 @@ def find_distributed_partition(
     #
     # In addition, arrays that are sent and received must also live in memory.
     # So, "stored" = "materialized" ∪ "overall outputs" ∪ "communicated"
-    stored_ary_to_part_id = moo_ary_to_part_id.copy()
-    stored_ary_to_part_id.update(sent_ary_to_part_id)
+    stored_ary_to_part_id = mso_ary_to_part_id.copy()
     stored_ary_to_part_id.update(recvd_ary_to_part_id)
 
     assert all(0 <= part_id < nparts

@@ -67,7 +67,8 @@ def number_distributed_tags(
             } | {
             send.comm_tag
             for part in partition.parts.values()
-            for send in part.name_to_send_node.values()})
+            for sends in part.name_to_send_nodes.values()
+            for send in sends})
 
     from mpi4py import MPI
 
@@ -113,9 +114,11 @@ def number_distributed_tags(
                     name_to_recv_node={
                         name: recv.copy(comm_tag=sym_tag_to_int_tag[recv.comm_tag])
                         for name, recv in part.name_to_recv_node.items()},
-                    name_to_send_node={
-                        name: send.copy(comm_tag=sym_tag_to_int_tag[send.comm_tag])
-                        for name, send in part.name_to_send_node.items()},
+                    name_to_send_nodes={
+                        name: [
+                            send.copy(comm_tag=sym_tag_to_int_tag[send.comm_tag])
+                            for send in sends]
+                        for name, sends in part.name_to_send_nodes.items()},
                     )
                 for pid, part in partition.parts.items()
                 },

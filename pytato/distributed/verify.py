@@ -32,7 +32,7 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
+from typing import Any, List, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
 
 import attrs
 import numpy as np
@@ -87,7 +87,7 @@ class _SummarizedDistributedGraphPart:
     partition_input_names: FrozenSet[_DistributedName]
     output_names: FrozenSet[_DistributedName]
     name_to_recv_node: Dict[_DistributedName, DistributedRecv]
-    name_to_send_node: Dict[_DistributedName, _SummarizedDistributedSend]
+    name_to_send_nodes: Dict[_DistributedName, List[_SummarizedDistributedSend]]
 
     @property
     def rank(self) -> int:
@@ -236,15 +236,16 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                             for name in part.output_names]),
             name_to_recv_node={_DistributedName(my_rank, name): recv
                 for name, recv in part.name_to_recv_node.items()},
-            name_to_send_node={
-                _DistributedName(my_rank, name):
-                _SummarizedDistributedSend(
-                            src_rank=my_rank,
-                            dest_rank=send.dest_rank,
-                            comm_tag=send.comm_tag,
-                            shape=send.data.shape,
-                            dtype=send.data.dtype)
-                for name, send in part.name_to_send_node.items()})
+            name_to_send_nodes={
+                _DistributedName(my_rank, name): [
+                    _SummarizedDistributedSend(
+                                src_rank=my_rank,
+                                dest_rank=send.dest_rank,
+                                comm_tag=send.comm_tag,
+                                shape=send.data.shape,
+                                dtype=send.data.dtype)
+                    for send in sends]
+                for name, sends in part.name_to_send_nodes.items()})
 
     # Gather the _SummarizedDistributedGraphPart's to rank 0
     all_summarized_parts_gathered: Optional[
@@ -294,16 +295,17 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         comm_id_to_sending_pid: \
                 Dict[CommunicationOpIdentifier, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
-            for sumsend in sumpart.name_to_send_node.values():
-                comm_id = CommunicationOpIdentifier(
-                        src_rank=sumsend.src_rank,
-                        dest_rank=sumsend.dest_rank,
-                        comm_tag=sumsend.comm_tag)
+            for sumsends in sumpart.name_to_send_nodes.values():
+                for sumsend in sumsends:
+                    comm_id = CommunicationOpIdentifier(
+                            src_rank=sumsend.src_rank,
+                            dest_rank=sumsend.dest_rank,
+                            comm_tag=sumsend.comm_tag)
 
-                if comm_id in comm_id_to_sending_pid:
-                    raise DuplicateSendError(
-                            f"duplicate send for comm id: '{comm_id}'")
-                comm_id_to_sending_pid[comm_id] = sumpart.pid
+                    if comm_id in comm_id_to_sending_pid:
+                        raise DuplicateSendError(
+                                f"duplicate send for comm id: '{comm_id}'")
+                    comm_id_to_sending_pid[comm_id] = sumpart.pid
 
         # }}}
 

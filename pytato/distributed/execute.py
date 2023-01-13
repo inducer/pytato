@@ -168,13 +168,14 @@ def execute_distributed_partition(
 
         context.update(result_dict)
 
-        for name, send_node in part.name_to_send_node.items():
-            # FIXME: pytato shouldn't depend on pyopencl
-            if isinstance(context[name], np.ndarray):
-                data = context[name]
-            else:
-                data = context[name].get(queue)
-            send_requests.append(_mpi_send(mpi_communicator, send_node, data))
+        for name, send_nodes in part.name_to_send_nodes.items():
+            for send_node in send_nodes:
+                # FIXME: pytato shouldn't depend on pyopencl
+                if isinstance(context[name], np.ndarray):
+                    data = context[name]
+                else:
+                    data = context[name].get(queue)
+                send_requests.append(_mpi_send(mpi_communicator, send_node, data))
 
         pids_executed.add(part.pid)
         pids_to_execute.remove(part.pid)

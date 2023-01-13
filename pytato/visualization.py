@@ -480,17 +480,18 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
                 deferred_send_edges = []
                 if isinstance(part, DistributedGraphPart):
-                    for name, send in (
-                            part.name_to_send_node.items()):
-                        node_id = id_gen("send")
-                        _emit_array(emit, "DistributedSend", {
-                            "dest_rank": str(send.dest_rank),
-                            "comm_tag": str(send.comm_tag),
-                            }, node_id)
+                    for name, sends in (
+                            part.name_to_send_nodes.items()):
+                        for send in sends:
+                            node_id = id_gen("send")
+                            _emit_array(emit, "DistributedSend", {
+                                "dest_rank": str(send.dest_rank),
+                                "comm_tag": str(send.comm_tag),
+                                }, node_id)
 
-                        deferred_send_edges.append(
-                                f"{array_to_id[send.data]} -> {node_id}"
-                                f'[style=dotted, label="{dot_escape(name)}"]')
+                            deferred_send_edges.append(
+                                    f"{array_to_id[send.data]} -> {node_id}"
+                                    f'[style=dotted, label="{dot_escape(name)}"]')
 
                 # }}}
 
