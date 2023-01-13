@@ -32,6 +32,7 @@ __doc__ = """
 .. autoclass:: LoopyTarget
 .. autoclass:: LoopyPyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
+.. autoclass:: ImplSubstitution
 """
 
 import sys
@@ -43,8 +44,16 @@ from typing import Any, Mapping, Optional, Callable, Dict, TYPE_CHECKING
 from immutables import Map
 
 from pytato.target import Target, BoundProgram
+from pytato.tags import ImplementationStrategy
 
 import loopy
+
+
+class ImplSubstitution(ImplementationStrategy):
+    """
+    An :class:`~pytato.tags.ImplementationStrategy` that lowers the array
+    expression as a :class:`loopy.SubstitutionRule` invocation.
+    """
 
 
 # set in doc/conf.py
