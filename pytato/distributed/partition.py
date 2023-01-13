@@ -205,12 +205,12 @@ class _DistributedInputReplacer(CopyMapper):
     """
 
     def __init__(self,
-                 roo_ary_to_name: Mapping[Array, str],
-                 part_outputs: AbstractSet[Array],
+                 recvd_ary_to_name: Mapping[Array, str],
+                 part_outputs: Mapping[str, Array],
                  ) -> None:
         super().__init__()
 
-        self.roo_ary_to_name = roo_ary_to_name
+        self.recvd_ary_to_name = recvd_ary_to_name
         self.part_outputs = part_outputs
 
         self.user_input_names: Set[str] = set()
@@ -221,7 +221,7 @@ class _DistributedInputReplacer(CopyMapper):
         return expr
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
-        name = self.roo_ary_to_name[expr]
+        name = self.recvd_ary_to_name[expr]
         self.partition_input_names.add(name)
         return make_placeholder(
                 name, expr.shape, expr.dtype, expr.tags,
@@ -262,9 +262,9 @@ class _DistributedInputReplacer(CopyMapper):
         # If the array is an output from the current part, it would
         # be counterproductive to turn it into a placeholder: we're
         # the ones who are supposed to compute it!
-        if expr not in self.part_outputs:
+        if expr not in self.part_outputs.values():
 
-            name = self.roo_ary_to_name.get(expr)
+            name = self.recvd_ary_to_name.get(expr)
 
             if name is not None:
                 self.partition_input_names.add(name)
@@ -288,9 +288,10 @@ class _PartCommIDs:
 # {{{ _make_distributed_partition
 
 def _make_distributed_partition(
-        outputs_per_part: Sequence[AbstractSet[Array]],
+        outputs_per_part: Sequence[Mapping[str, Array]],
         part_comm_ids: Sequence[_PartCommIDs],
-        roo_ary_to_name: Mapping[Array, str],
+        recvd_ary_to_name: Mapping[Array, str],
+        sent_ary_to_name: Mapping[Array, str],
         local_recv_id_to_recv_node: Dict[CommunicationOpIdentifier, DistributedRecv],
         local_send_id_to_send_node: Dict[CommunicationOpIdentifier, DistributedSend],
         ) -> DistributedGraphPartition:
@@ -298,10 +299,9 @@ def _make_distributed_partition(
     parts: Dict[PartId, DistributedGraphPart] = {}
 
     for part_id, part_outputs in enumerate(outputs_per_part):
-        comm_replacer = _DistributedInputReplacer(roo_ary_to_name, part_outputs)
+        comm_replacer = _DistributedInputReplacer(recvd_ary_to_name, part_outputs)
 
-        for val in part_outputs:
-            name = roo_ary_to_name[val]
+        for name, val in part_outputs.items():
             assert name not in var_name_to_result
             var_name_to_result[name] = comm_replacer(val)
 
@@ -310,7 +310,7 @@ def _make_distributed_partition(
         name_to_send_nodes = {}
         for send_id in comm_ids.send_ids:
             send_node = local_send_id_to_send_node[send_id]
-            name = roo_ary_to_name[send_node.data]
+            name = sent_ary_to_name[send_node.data]
             name_to_send_nodes.setdefault(name, []).append(
                 comm_replacer.map_distributed_send(send_node))
         name_to_send_nodes = Map(name_to_send_nodes)
@@ -320,10 +320,9 @@ def _make_distributed_partition(
                 needed_pids=frozenset({part_id - 1} if part_id else {}),
                 user_input_names=frozenset(comm_replacer.user_input_names),
                 partition_input_names=frozenset(comm_replacer.partition_input_names),
-                output_names=frozenset({
-                    roo_ary_to_name[output] for output in part_outputs}),
+                output_names=frozenset(part_outputs.keys()),
                 name_to_recv_node=Map({
-                    roo_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
+                    recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
                     for recv_id in comm_ids.recv_ids}),
                 name_to_send_nodes=name_to_send_nodes)
@@ -871,36 +870,47 @@ def find_distributed_partition(
                     != stored_ary_to_part_id[stored_pred])
                 }
 
-    stored_ary_part_outputs = (
-        output_arrays
-        | sent_arrays
-        | materialized_arrays_promoted_to_part_outputs)
-
     # }}}
 
-    out_name_gen = UniqueNameGenerator(forced_prefix="_pt_out_")
     recv_name_gen = UniqueNameGenerator(forced_prefix="_pt_recv_")
-    # "roo" for "received or output"
-    roo_ary_to_name = {
+    out_name_gen = UniqueNameGenerator(forced_prefix="_pt_out_")
+
+    recvd_ary_to_name = {
+        recv: recv_name_gen()
+        for recv in received_arrays}
+
+    sent_ary_to_name = {
         ary: out_name_gen()
-        for ary in materialized_arrays_promoted_to_part_outputs}
-    roo_ary_to_name.update({ary: out_name_gen() for ary in sent_arrays})
-    roo_ary_to_name.update({ary: name for name, ary in outputs._data.items()})
-    roo_ary_to_name.update({recv: recv_name_gen() for recv in received_arrays})
+        for ary in sent_arrays}
 
-    outputs_per_part: List[Set[Array]] = [set() for _pid in range(nparts)]
-    for output_ary in stored_ary_part_outputs:
-        if output_ary in received_arrays:
-            # Received arrays already have names and are materialized, must not
-            # make them part outputs.
+    outputs_per_part: List[Dict[str, Array]] = [{} for _pid in range(nparts)]
+
+    for name, ary in outputs._data.items():
+        # Received arrays already have names and are materialized, must not
+        # make them part outputs.
+        # TODO: Figure out if this is still needed (here and below)
+        if ary in received_arrays:
             continue
+        pid = stored_ary_to_part_id[ary]
+        outputs_per_part[pid][name] = ary
 
-        outputs_per_part[stored_ary_to_part_id[output_ary]].add(output_ary)
+    for ary in sent_arrays:
+        if ary in received_arrays:
+            continue
+        pid = stored_ary_to_part_id[ary]
+        outputs_per_part[pid][sent_ary_to_name[ary]] = ary
+
+    for ary in materialized_arrays_promoted_to_part_outputs:
+        if ary in received_arrays:
+            continue
+        pid = stored_ary_to_part_id[ary]
+        outputs_per_part[pid][out_name_gen()] = ary
 
     partition = _make_distributed_partition(
             outputs_per_part,
             part_comm_ids,
-            roo_ary_to_name,
+            recvd_ary_to_name,
+            sent_ary_to_name,
             lsrdg.local_recv_id_to_recv_node,
             lsrdg.local_send_id_to_send_node)
 
