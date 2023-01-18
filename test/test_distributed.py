@@ -291,6 +291,53 @@ def test_dag_with_duplicated_output_arrays():
 # }}}
 
 
+# {{{ test DAG with a receive as an output
+
+def _test_dag_with_recv_as_output_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # {{{ construct the DAG
+
+    if comm.rank == 0:
+        rng = default_rng()
+        x_np = rng.random((10, 4))
+        x = pt.make_data_wrapper(x_np)
+        y = 2 * x
+        send = pt.staple_distributed_send(
+            y, dest_rank=1, comm_tag=42,
+            stapled_to=pt.ones(10))
+        dag = pt.make_dict_of_named_arrays({"y": y, "send": send})
+    else:
+        y = pt.make_distributed_recv(
+            src_rank=0, comm_tag=42,
+            shape=(10, 4), dtype=np.float64)
+        dag = pt.make_dict_of_named_arrays({"y": y})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    if comm.rank == 0:
+        comm.bcast(x_np)
+    else:
+        x_np = comm.bcast(None)
+
+    np.testing.assert_allclose(out_dict["y"], 2 * x_np)
+
+
+def test_dag_with_recv_as_outut():
+    run_test_with_mpi(2, _test_dag_with_recv_as_output_inner)
+
+# }}}
+
+
 # {{{ test deterministic partitioning
 
 def _gather_random_dist_partitions(ctx_factory):
