@@ -38,6 +38,9 @@ def run_test_with_mpi(num_ranks, f, *args, extra_env_vars=None):
     import pytest
     pytest.importorskip("mpi4py")
 
+    if extra_env_vars is None:
+        extra_env_vars = {}
+
     from pickle import dumps
     from base64 import b64encode
 
