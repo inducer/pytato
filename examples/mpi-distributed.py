@@ -5,6 +5,7 @@ comm = MPI.COMM_WORLD
 
 import pytato as pt
 import pyopencl as cl
+import pyopencl.array as cl_array
 import numpy as np
 
 from pytato import (find_distributed_partition, generate_code_for_partition,
@@ -14,24 +15,36 @@ from pytato import (find_distributed_partition, generate_code_for_partition,
 
 
 def main():
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+
     rank = comm.Get_rank()
     size = comm.Get_size()
     rng = np.random.default_rng()
 
     x_in = rng.integers(100, size=(4, 4))
-    x = pt.make_data_wrapper(x_in)
+    x_in_dev = cl_array.to_device(queue, x_in)
+    x = pt.make_data_wrapper(x_in_dev)
+
+    if size < 2:
+        raise RuntimeError("it doesn't make sense to run the "
+                           "distributed-memory test single-rank"
+                           # and self-sends aren't supported for now
+                           )
 
     mytag_x = (main, "x")
-    x_plus = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=mytag_x,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=mytag_x, shape=(4, 4), dtype=int))
+    x_plus = staple_distributed_send(x, dest_rank=(rank-1) % size,
+            comm_tag=mytag_x, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=mytag_x, shape=(4, 4),
+                dtype=int))
 
     y = x+x_plus
 
     mytag_y = (main, "y")
-    y_plus = staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=mytag_y,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=mytag_y, shape=(4, 4), dtype=int))
+    y_plus = staple_distributed_send(y, dest_rank=(rank-1) % size,
+            comm_tag=mytag_y, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=mytag_y, shape=(4, 4),
+                dtype=int))
 
     z = y+y_plus
 
@@ -51,10 +64,6 @@ def main():
         # Sanity check
         from pytato.visualization import get_dot_graph_from_partition
         get_dot_graph_from_partition(distributed_parts)
-
-    # Execute the distributed partition
-    ctx = cl.create_some_context()
-    queue = cl.CommandQueue(ctx)
 
     pt.verify_distributed_partition(comm, distributed_parts)
 
