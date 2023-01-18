@@ -1104,6 +1104,17 @@ def test_unify_axes_tags():
     # }}}
 
 
+def test_rewrite_einsums_with_no_broadcasts():
+    a = pt.make_placeholder("a", (10, 4, 1), np.float64)
+    b = pt.make_placeholder("b", (10, 1, 4), np.float64)
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+    assert pt.analysis.is_einsum_similar_to_subscript(new_expr, "ij,ik,ijk->i")
+    assert pt.analysis.is_einsum_similar_to_subscript(new_expr.args[2], "ij,ik->ijk")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

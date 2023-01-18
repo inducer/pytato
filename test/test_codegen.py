@@ -1780,6 +1780,25 @@ def test_lp_substitution_result(ctx_factory):
     np.testing.assert_allclose(np.einsum("ij,j->i", 2*a_np, 3*x_np), pt_eval_out)
 
 
+def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng()
+
+    a = pt.make_data_wrapper(rng.random((10, 4, 1)))
+    b = pt.make_data_wrapper(rng.random((10, 1, 4)))
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+
+    _, (ref_out,) = pt.generate_loopy(expr)(cq)
+    _, (out,) = pt.generate_loopy(new_expr)(cq)
+
+    np.testing.assert_allclose(ref_out, out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
