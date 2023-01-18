@@ -21,19 +21,26 @@ def main():
     x_in = rng.integers(100, size=(4, 4))
     x = pt.make_data_wrapper(x_in)
 
-    mytag_x = (main, "x")
-    x_plus = staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=mytag_x,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=mytag_x, shape=(4, 4), dtype=int))
+    if size > 1:
+        mytag_x = (main, "x")
+        x_plus = staple_distributed_send(x, dest_rank=(rank-1) % size,
+                comm_tag=mytag_x, stapled_to=make_distributed_recv(
+                    src_rank=(rank+1) % size, comm_tag=mytag_x, shape=(4, 4),
+                    dtype=int))
 
-    y = x+x_plus
+        y = x+x_plus
 
-    mytag_y = (main, "y")
-    y_plus = staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=mytag_y,
-            stapled_to=make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=mytag_y, shape=(4, 4), dtype=int))
+        mytag_y = (main, "y")
+        y_plus = staple_distributed_send(y, dest_rank=(rank-1) % size,
+                comm_tag=mytag_y, stapled_to=make_distributed_recv(
+                    src_rank=(rank+1) % size, comm_tag=mytag_y, shape=(4, 4),
+                    dtype=int))
 
-    z = y+y_plus
+        z = y+y_plus
+    else:
+        # Self-sends aren't currently supported
+        y = x+x
+        z = y+y
 
     # Find the partition
     outputs = pt.make_dict_of_named_arrays({"out": z})
@@ -61,7 +68,11 @@ def main():
     context = execute_distributed_partition(distributed_parts, prg_per_partition,
                                              queue, comm)
 
-    final_res = context["out"].get(queue)
+    # FIXME?
+    if comm.size > 1:
+        final_res = context["out"].get(queue)
+    else:
+        final_res = context["out"]
 
     comm.isend(x_in, dest=(rank-1) % size, tag=42)
     ref_x_plus = comm.recv(source=(rank+1) % size, tag=42)
