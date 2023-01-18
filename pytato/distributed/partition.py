@@ -307,13 +307,12 @@ def _make_distributed_partition(
 
         comm_ids = part_comm_ids[part_id]
 
-        name_to_send_nodes = {}
+        name_to_send_nodes: Dict[str, List[DistributedSend]] = {}
         for send_id in comm_ids.send_ids:
             send_node = local_send_id_to_send_node[send_id]
             name = sent_ary_to_name[send_node.data]
             name_to_send_nodes.setdefault(name, []).append(
                 comm_replacer.map_distributed_send(send_node))
-        name_to_send_nodes = Map(name_to_send_nodes)
 
         parts[part_id] = DistributedGraphPart(
                 pid=part_id,
@@ -325,7 +324,7 @@ def _make_distributed_partition(
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
                     for recv_id in comm_ids.recv_ids}),
-                name_to_send_nodes=name_to_send_nodes)
+                name_to_send_nodes=Map(name_to_send_nodes))
 
     result = DistributedGraphPartition(
             parts=parts,
@@ -875,11 +874,11 @@ def find_distributed_partition(
     recv_name_gen = UniqueNameGenerator(forced_prefix="_pt_recv_")
     out_name_gen = UniqueNameGenerator(forced_prefix="_pt_out_")
 
-    recvd_ary_to_name = {
+    recvd_ary_to_name: Dict[Array, str] = {
         recv: recv_name_gen()
         for recv in received_arrays}
 
-    sent_ary_to_name = {
+    sent_ary_to_name: Dict[Array, str] = {
         ary: out_name_gen()
         for ary in sent_arrays}
 
