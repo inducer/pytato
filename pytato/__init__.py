@@ -104,6 +104,8 @@ from pytato.distributed.verify import verify_distributed_partition
 from pytato.distributed.execute import execute_distributed_partition
 
 from pytato.transform.lower_to_index_lambda import to_index_lambda
+from pytato.transform.remove_broadcasts_einsum import (
+    rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
 
 from pytato.partition import generate_code_for_partition
@@ -165,6 +167,8 @@ __all__ = (
         "generate_code_for_partition",
 
         "to_index_lambda",
+
+        "rewrite_einsums_with_no_broadcasts",
 
         "unify_axes_tags",
 
