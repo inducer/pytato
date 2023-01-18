@@ -129,7 +129,7 @@ class DistributedGraphPart:
 
     - Names specified in :attr:`name_to_recv_node` *must not* occur in
       :attr:`output_names`.
-    - Names specified in :attr:`name_to_send_node` *must* occur in
+    - Names specified in :attr:`name_to_send_nodes` *must* occur in
       :attr:`output_names`.
 
     .. attribute:: pid
