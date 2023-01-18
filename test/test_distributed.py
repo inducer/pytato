@@ -298,8 +298,6 @@ def test_deterministic_partitioning(seed):
             partitions_across_seeds.append(load(inf))
             os.unlink(partitions_dump_fn)
 
-    pu.db
-
     assert is_single_valued(partitions_across_seeds)
 
 # }}}
