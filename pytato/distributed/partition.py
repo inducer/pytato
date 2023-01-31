@@ -783,11 +783,13 @@ def find_distributed_partition(
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
     # as anchors to place *other* materialized data into the batches.
-    # (Sent *arrays* are OK to include here because they are distinct from send
-    # *nodes*.)
+    # We could allow sent *arrays* to be included here because they are distinct
+    # from send *nodes*, but we choose to exclude them in order to simplify the
+    # processing below.
     materialized_arrays = (
         frozenset(materialized_arrays_collector.materialized_arrays)
-        - received_arrays)
+        - received_arrays
+        - sent_arrays)
 
     # "mso" for "materialized/sent/output"
     output_arrays = set(outputs._data.values())
@@ -863,62 +865,62 @@ def find_distributed_partition(
 
     direct_preds_getter = DirectPredecessorsGetter()
 
-    def get_stored_predecessors(ary: Array) -> FrozenSet[Array]:
-        stored_preds = set()
+    def get_materialized_predecessors(ary: Array) -> FrozenSet[Array]:
+        materialized_preds = set()
         for pred in direct_preds_getter(ary):
-            if pred in stored_arrays:
-                stored_preds.add(pred)
+            if pred in materialized_arrays:
+                materialized_preds.add(pred)
             else:
-                stored_preds = stored_preds | get_stored_predecessors(pred)
-        return frozenset(stored_preds)
+                materialized_preds |= get_materialized_predecessors(pred)
+        return frozenset(materialized_preds)
 
     materialized_arrays_promoted_to_part_outputs = {
-                stored_pred
+                materialized_pred
                 for stored_ary in stored_arrays
-                for stored_pred in get_stored_predecessors(stored_ary)
+                for materialized_pred in get_materialized_predecessors(stored_ary)
                 if (stored_ary_to_part_id[stored_ary]
-                    != stored_ary_to_part_id[stored_pred])
+                    != stored_ary_to_part_id[materialized_pred])
                 }
 
     # }}}
 
-    recv_name_gen = UniqueNameGenerator(forced_prefix="_pt_recv_")
-    out_name_gen = UniqueNameGenerator(forced_prefix="_pt_out_")
+    # Don't be tempted to put outputs in _array_names; the mapping from output array
+    # to name may not be unique
+    _array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
+    _array_names: Dict[Array, str] = {}
+
+    def gen_array_name(ary: Array) -> str:
+        name = _array_names.get(ary)
+        if name is not None:
+            return name
+        else:
+            name = _array_name_gen()
+            _array_names[ary] = name
+            return name
 
     recvd_ary_to_name: Dict[Array, str] = {
-        recv: recv_name_gen()
-        for recv in received_arrays}
-
-    sent_ary_to_name: Dict[Array, str] = {
-        ary: out_name_gen()
-        for ary in sent_arrays}
-
-    mptpo_ary_to_name: Dict[Array, str] = {
-        ary: out_name_gen()
-        for ary in materialized_arrays_promoted_to_part_outputs}
+        ary: gen_array_name(ary)
+        for ary in received_arrays}
 
     outputs_per_part: List[Dict[str, Array]] = [{} for _pid in range(nparts)]
 
     for name, ary in outputs._data.items():
-        # Received arrays already have names and are materialized, must not
-        # make them part outputs.
-        # TODO: Figure out if this is still needed (here and below)
-        if ary in received_arrays:
-            continue
         pid = stored_ary_to_part_id[ary]
         outputs_per_part[pid][name] = ary
 
+    sent_ary_to_name: Dict[Array, str] = {}
     for ary in sent_arrays:
-        if ary in received_arrays:
-            continue
         pid = stored_ary_to_part_id[ary]
-        outputs_per_part[pid][sent_ary_to_name[ary]] = ary
+        name = gen_array_name(ary)
+        sent_ary_to_name[ary] = name
+        outputs_per_part[pid][name] = ary
 
+    mptpo_ary_to_name: Dict[Array, str] = {}
     for ary in materialized_arrays_promoted_to_part_outputs:
-        if ary in received_arrays:
-            continue
         pid = stored_ary_to_part_id[ary]
-        outputs_per_part[pid][mptpo_ary_to_name[ary]] = ary
+        name = gen_array_name(ary)
+        mptpo_ary_to_name[ary] = name
+        outputs_per_part[pid][name] = ary
 
     partition = _make_distributed_partition(
             outputs_per_part,
