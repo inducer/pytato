@@ -333,7 +333,7 @@ def _test_dag_with_recv_as_output_inner(ctx_factory):
     np.testing.assert_allclose(out_dict["y"], 2 * x_np)
 
 
-def test_dag_with_recv_as_outut():
+def test_dag_with_recv_as_output():
     run_test_with_mpi(2, _test_dag_with_recv_as_output_inner)
 
 # }}}
