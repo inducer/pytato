@@ -216,18 +216,15 @@ class _DistributedInputReplacer(CopyMapper):
         self.part_outputs = part_outputs
 
         self.user_input_names: Set[str] = set()
-        self.partition_input_names: Set[str] = set()
+        self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
-    def map_placeholder(self, expr: Placeholder) -> Array:
+    def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
         return expr
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Placeholder:
         name = self.recvd_ary_to_name[expr]
-        self.partition_input_names.add(name)
-        return make_placeholder(
-                name, expr.shape, expr.dtype, expr.tags,
-                expr.axes)
+        return self._get_placeholder_for(name, expr)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
@@ -267,21 +264,23 @@ class _DistributedInputReplacer(CopyMapper):
         if expr not in self.part_outputs.values():
 
             name = self.recvd_ary_to_name.get(expr)
-
             if name is not None:
-                self.partition_input_names.add(name)
-                return make_placeholder(
-                        name, expr.shape, expr.dtype, expr.tags,
-                        expr.axes)
+                return self._get_placeholder_for(name, expr)
 
             name = self.mptpo_ary_to_name.get(expr)
             if name is not None:
-                self.partition_input_names.add(name)
-                return make_placeholder(
-                        name, expr.shape, expr.dtype, expr.tags,
-                        expr.axes)
+                return self._get_placeholder_for(name, expr)
 
         return cast(ArrayOrNames, super().rec(expr))
+
+    def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
+        placeholder = self.partition_input_name_to_placeholder.get(name)
+        if placeholder is None:
+            placeholder = make_placeholder(
+                    name, expr.shape, expr.dtype, expr.tags,
+                    expr.axes)
+            self.partition_input_name_to_placeholder[name] = placeholder
+        return placeholder
 
 # }}}
 
@@ -329,7 +328,8 @@ def _make_distributed_partition(
                 pid=part_id,
                 needed_pids=frozenset({part_id - 1} if part_id else {}),
                 user_input_names=frozenset(comm_replacer.user_input_names),
-                partition_input_names=frozenset(comm_replacer.partition_input_names),
+                partition_input_names=frozenset(
+                    comm_replacer.partition_input_name_to_placeholder.keys()),
                 output_names=frozenset(part_outputs.keys()),
                 name_to_recv_node=Map({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
