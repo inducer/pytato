@@ -206,11 +206,13 @@ class _DistributedInputReplacer(CopyMapper):
 
     def __init__(self,
                  recvd_ary_to_name: Mapping[Array, str],
+                 mptpo_ary_to_name: Mapping[Array, str],
                  part_outputs: Mapping[str, Array],
                  ) -> None:
         super().__init__()
 
         self.recvd_ary_to_name = recvd_ary_to_name
+        self.mptpo_ary_to_name = mptpo_ary_to_name
         self.part_outputs = part_outputs
 
         self.user_input_names: Set[str] = set()
@@ -272,6 +274,13 @@ class _DistributedInputReplacer(CopyMapper):
                         name, expr.shape, expr.dtype, expr.tags,
                         expr.axes)
 
+            name = self.mptpo_ary_to_name.get(expr)
+            if name is not None:
+                self.partition_input_names.add(name)
+                return make_placeholder(
+                        name, expr.shape, expr.dtype, expr.tags,
+                        expr.axes)
+
         return cast(ArrayOrNames, super().rec(expr))
 
 # }}}
@@ -292,6 +301,7 @@ def _make_distributed_partition(
         part_comm_ids: Sequence[_PartCommIDs],
         recvd_ary_to_name: Mapping[Array, str],
         sent_ary_to_name: Mapping[Array, str],
+        mptpo_ary_to_name: Mapping[Array, str],
         local_recv_id_to_recv_node: Dict[CommunicationOpIdentifier, DistributedRecv],
         local_send_id_to_send_node: Dict[CommunicationOpIdentifier, DistributedSend],
         ) -> DistributedGraphPartition:
@@ -299,7 +309,8 @@ def _make_distributed_partition(
     parts: Dict[PartId, DistributedGraphPart] = {}
 
     for part_id, part_outputs in enumerate(outputs_per_part):
-        comm_replacer = _DistributedInputReplacer(recvd_ary_to_name, part_outputs)
+        comm_replacer = _DistributedInputReplacer(
+            recvd_ary_to_name, mptpo_ary_to_name, part_outputs)
 
         for name, val in part_outputs.items():
             assert name not in var_name_to_result
@@ -853,13 +864,13 @@ def find_distributed_partition(
     direct_preds_getter = DirectPredecessorsGetter()
 
     def get_stored_predecessors(ary: Array) -> FrozenSet[Array]:
-        if ary in stored_arrays:
-            return frozenset({ary})
-        else:
-            return reduce(frozenset.union,
-                        [get_stored_predecessors(pred)
-                         for pred in direct_preds_getter(ary)],
-                        frozenset())
+        stored_preds = set()
+        for pred in direct_preds_getter(ary):
+            if pred in stored_arrays:
+                stored_preds.add(pred)
+            else:
+                stored_preds = stored_preds | get_stored_predecessors(pred)
+        return frozenset(stored_preds)
 
     materialized_arrays_promoted_to_part_outputs = {
                 stored_pred
@@ -882,6 +893,10 @@ def find_distributed_partition(
         ary: out_name_gen()
         for ary in sent_arrays}
 
+    mptpo_ary_to_name: Dict[Array, str] = {
+        ary: out_name_gen()
+        for ary in materialized_arrays_promoted_to_part_outputs}
+
     outputs_per_part: List[Dict[str, Array]] = [{} for _pid in range(nparts)]
 
     for name, ary in outputs._data.items():
@@ -903,13 +918,14 @@ def find_distributed_partition(
         if ary in received_arrays:
             continue
         pid = stored_ary_to_part_id[ary]
-        outputs_per_part[pid][out_name_gen()] = ary
+        outputs_per_part[pid][mptpo_ary_to_name[ary]] = ary
 
     partition = _make_distributed_partition(
             outputs_per_part,
             part_comm_ids,
             recvd_ary_to_name,
             sent_ary_to_name,
+            mptpo_ary_to_name,
             lsrdg.local_recv_id_to_recv_node,
             lsrdg.local_send_id_to_send_node)
 
