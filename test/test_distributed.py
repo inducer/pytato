@@ -306,7 +306,7 @@ def _test_dag_with_recv_as_output_inner(ctx_factory):
     if comm.rank == 0:
         rng = default_rng()
         x_np = rng.random((10, 4))
-        x = pt.make_data_wrapper(x_np)
+        x = pt.make_data_wrapper(cla.to_device(queue, x_np))
         y = 2 * x
         send = pt.staple_distributed_send(
             y, dest_rank=1, comm_tag=42,
@@ -330,7 +330,7 @@ def _test_dag_with_recv_as_output_inner(ctx_factory):
     else:
         x_np = comm.bcast(None)
 
-    np.testing.assert_allclose(out_dict["y"], 2 * x_np)
+    np.testing.assert_allclose(out_dict["y"].get(), 2 * x_np)
 
 
 def test_dag_with_recv_as_output():
