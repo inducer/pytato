@@ -76,6 +76,7 @@ __doc__ = """
 .. autofunction:: materialize_with_mpms
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
+.. automodule:: pytato.transform.remove_broadcasts_einsum
 .. currentmodule:: pytato.transform
 
 Dict representation of DAGs

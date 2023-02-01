@@ -1685,6 +1685,53 @@ def test_two_rolls(ctx_factory):
     np.testing.assert_allclose(np_out, pt_out)
 
 
+def test_lp_substitution_result(ctx_factory):
+    from pytato.target.loopy import ImplSubstitution
+
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    rng = np.random.default_rng(0)
+
+    a_np = rng.random((10, 5))
+    x_np = rng.random((5, ))
+
+    a = pt.make_data_wrapper(a_np)
+    x = pt.make_data_wrapper(x_np)
+
+    twice_a = 2*a
+    thrice_x = 3*x
+    twice_a = twice_a.tagged(ImplSubstitution())
+    thrice_x = thrice_x.tagged(ImplSubstitution())
+
+    out = pt.einsum("ij,j->i", twice_a, thrice_x)
+    pt_prg = pt.generate_loopy(out)
+
+    assert len(pt_prg.program.default_entrypoint.substitutions) == 2
+    _, (pt_eval_out,) = pt_prg(cq)
+
+    np.testing.assert_allclose(np.einsum("ij,j->i", 2*a_np, 3*x_np), pt_eval_out)
+
+
+def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng()
+
+    a = pt.make_data_wrapper(rng.random((10, 4, 1)))
+    b = pt.make_data_wrapper(rng.random((10, 1, 4)))
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+
+    _, (ref_out,) = pt.generate_loopy(expr)(cq)
+    _, (out,) = pt.generate_loopy(new_expr)(cq)
+
+    np.testing.assert_allclose(ref_out, out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
