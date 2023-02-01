@@ -39,7 +39,7 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
                           SizeParam, Placeholder, NamedArray, DataWrapper,
-                          ReductionDescriptor)
+                          ReductionDescriptor, InputArgumentBase)
 
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstitution
@@ -990,6 +990,18 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
+
+    # optimization: remove any ImplStored tags on outputs to avoid redundant
+    # store-load operations (see https://github.com/inducer/pytato/issues/415)
+    orig_outputs = DictOfNamedArrays(
+        {name: (output.without_tags(ImplStored(),
+                                    verify_existence=False)
+                if not isinstance(output,
+                                  InputArgumentBase)
+                else output)
+         for name, output in orig_outputs._data.items()},
+        tags=orig_outputs.tags)
+
     del result
 
     if cl_device is not None:
@@ -1004,6 +1016,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
+
     compute_order = preproc_result.compute_order
 
     if options is None:
