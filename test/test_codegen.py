@@ -1799,6 +1799,41 @@ def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
     np.testing.assert_allclose(ref_out, out)
 
 
+def test_no_redundant_stores_with_impl_stored(ctx_factory):
+    # See <https://github.com/inducer/pytato/issues/415>
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10, 4))
+
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    y = 2*x
+    y = y.tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy(y)
+
+    assert len(prg.program.default_entrypoint.temporary_variables) == 0
+    np.testing.assert_allclose(prg(cq, x=x_np)[1][0], 2*x_np)
+
+
+def test_placeholders_do_not_diverge_after_removing_impl_stored(ctx_factory):
+    # Note: An earlier attempt at fixing
+    # <https://github.com/inducer/pytato/issues/415> would create multiple
+    # instances of placeholders in the graph leading to incoherent codes.
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10,))
+
+    x = pt.make_placeholder("x", 10, np.float64).tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy({"out1": 3*x, "out2": x})
+    _, out = prg(cq, x=x_np)
+    np.testing.assert_allclose(out["out1"], 3*x_np)
+    np.testing.assert_allclose(out["out2"], x_np)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
