@@ -57,9 +57,10 @@ THE SOFTWARE.
 """
 
 from functools import reduce
+import collections
 from typing import (
-        Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable)
+        Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
+        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional)
 
 import attrs
 from immutables import Map
@@ -111,6 +112,58 @@ CommunicationDepGraph = Mapping[
 
 _KeyT = TypeVar("_KeyT")
 _ValueT = TypeVar("_ValueT")
+
+
+# {{{ crude ordered set
+
+class _OrderedSet(collections.abc.MutableSet[Any]):
+    def __init__(self, items: Optional[Iterable[Any]] = None):
+        # Could probably also use a valueless dictionary; not sure if it matters
+        self._items: Set[Any] = set()
+        self._items_ordered: List[Any] = []
+        if items is not None:
+            for item in items:
+                self.add(item)
+
+    def add(self, item: Any) -> None:
+        if item not in self._items:
+            self._items.add(item)
+            self._items_ordered.append(item)
+
+    def discard(self, item: Any) -> None:
+        # Not currently needed
+        raise NotImplementedError
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self._items_ordered)
+
+    def __contains__(self, item: Any) -> bool:
+        return item in self._items
+
+    def __and__(self, other: AbstractSet[Any]) -> _OrderedSet:
+        result = _OrderedSet()
+        for item in self._items_ordered:
+            if item in other:
+                result.add(item)
+        return result
+
+    def __or__(self, other: AbstractSet[Any]) -> _OrderedSet:
+        result = _OrderedSet(self._items_ordered)
+        for item in other:
+            result.add(item)
+        return result
+
+    def __sub__(self, other: AbstractSet[Any]) -> _OrderedSet:
+        result = _OrderedSet()
+        for item in self._items_ordered:
+            if item not in other:
+                result.add(item)
+        return result
+
+# }}}
 
 
 # {{{ distributed graph part
@@ -483,7 +536,7 @@ class _MaterializedArrayCollector(CachedWalkMapper):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.materialized_arrays: Set[Array] = set()
+        self.materialized_arrays: _OrderedSet = _OrderedSet()
 
     # type-ignore-reason: dropped the extra `*args, **kwargs`.
     def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
@@ -775,10 +828,13 @@ def find_distributed_partition(
     materialized_arrays_collector = _MaterializedArrayCollector()
     materialized_arrays_collector(outputs)
 
-    sent_arrays = frozenset({
-        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values()})
+    # The sets of arrays below must have a deterministic order in order to ensure
+    # that the resulting partition is also deterministic
 
-    received_arrays = frozenset(lsrdg.local_recv_id_to_recv_node.values())
+    sent_arrays = _OrderedSet(
+        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
+
+    received_arrays = _OrderedSet(lsrdg.local_recv_id_to_recv_node.values())
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
@@ -787,17 +843,17 @@ def find_distributed_partition(
     # from send *nodes*, but we choose to exclude them in order to simplify the
     # processing below.
     materialized_arrays = (
-        frozenset(materialized_arrays_collector.materialized_arrays)
+        materialized_arrays_collector.materialized_arrays
         - received_arrays
         - sent_arrays)
 
     # "mso" for "materialized/sent/output"
-    output_arrays = set(outputs._data.values())
+    output_arrays = _OrderedSet(outputs._data.values())
     mso_arrays = materialized_arrays | sent_arrays | output_arrays
 
     # FIXME: This gathers up materialized_arrays recursively, leading to
     # result sizes potentially quadratic in the number of materialized arrays.
-    mso_array_dep_mapper = SubsetDependencyMapper(mso_arrays)
+    mso_array_dep_mapper = SubsetDependencyMapper(frozenset(mso_arrays))
 
     mso_ary_to_first_dep_send_part_id: Dict[Array, int] = {
         ary: nparts
@@ -809,7 +865,7 @@ def find_distributed_partition(
                 comm_id_to_part_id[send_id])
 
     if __debug__:
-        recvd_array_dep_mapper = SubsetDependencyMapper(received_arrays)
+        recvd_array_dep_mapper = SubsetDependencyMapper(frozenset(received_arrays))
 
         mso_ary_to_last_dep_recv_part_id: Dict[Array, int] = {
                 ary: max(
@@ -858,21 +914,21 @@ def find_distributed_partition(
     assert all(0 <= part_id < nparts
                for part_id in stored_ary_to_part_id.values())
 
-    stored_arrays = set(stored_ary_to_part_id)
+    stored_arrays = _OrderedSet(stored_ary_to_part_id)
 
     # {{{ find which materialized arrays should become part outputs
     # (because they are used in not just their local part, but also others)
 
     direct_preds_getter = DirectPredecessorsGetter()
 
-    def get_materialized_predecessors(ary: Array) -> FrozenSet[Array]:
-        materialized_preds = set()
+    def get_materialized_predecessors(ary: Array) -> _OrderedSet:
+        materialized_preds = _OrderedSet()
         for pred in direct_preds_getter(ary):
             if pred in materialized_arrays:
                 materialized_preds.add(pred)
             else:
                 materialized_preds |= get_materialized_predecessors(pred)
-        return frozenset(materialized_preds)
+        return materialized_preds
 
     materialized_arrays_promoted_to_part_outputs = {
                 materialized_pred
