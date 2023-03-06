@@ -155,7 +155,7 @@ def _process_jax_bnd_arg(arg: Any) -> Any:
     elif isinstance(arg, np.ndarray):
         return jax.device_put(arg)
 
-    elif isinstance(arg, jax.numpy.ndarray):
+    elif isinstance(arg, jax.Array):
         return arg
     else:
         raise TypeError("Data in a bound argument can be one of"
