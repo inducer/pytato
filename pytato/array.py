@@ -82,6 +82,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: squeeze
 .. autofunction:: expand_dims
 .. automodule:: pytato.cmath
+.. automodule:: pytato.pad
 .. automodule:: pytato.reductions
 
 .. currentmodule:: pytato.array
