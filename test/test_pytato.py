@@ -326,7 +326,10 @@ def test_toposortmapper():
 
 def test_userscollector():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.transform import UsersCollector, reverse_graph
+    from pytato.transform import UsersCollector
+    from pytato.analysis import get_nusers
+
+    from pytools.graph import reverse_graph
 
     # Check that nodes without users are correctly reversed
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
@@ -334,15 +337,22 @@ def test_userscollector():
 
     uc = UsersCollector()
     uc(y)
+
     rev_graph = reverse_graph(uc.node_to_users)
     rev_graph2 = reverse_graph(reverse_graph(rev_graph))
 
-    assert reverse_graph(rev_graph2) == uc.node_to_users
+    assert dict(reverse_graph(rev_graph2)) == uc.node_to_users
+
+    assert len(uc.node_to_users) == 2
+    assert uc.node_to_users[y] == set()
+    assert uc.node_to_users[array].pop() == y
+    assert len(uc.node_to_users[array]) == 0
 
     # Test random DAGs
     axis_len = 5
 
     for i in range(100):
+        print(i)  # progress indicator
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                 axis_len=axis_len, use_numpy=False)
 
@@ -353,11 +363,18 @@ def test_userscollector():
 
         rev_graph = reverse_graph(uc.node_to_users)
         rev_graph2 = reverse_graph(reverse_graph(rev_graph))
-
         assert rev_graph2 == rev_graph
+
+        nuc = get_nusers(dag)
+
+        assert len(uc.node_to_users) == len(nuc)+1
+        assert uc.node_to_users[dag] == set()
+        assert nuc[dag] == 0
 
 
 def test_asciidag():
+    pytest.importorskip("asciidag")
+
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
@@ -649,6 +666,9 @@ def test_rec_get_user_nodes_linear_complexity():
     expected_result = set()
 
     class SubexprRecorder(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr: pt.transform.ArrayOrNames) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             if not isinstance(expr, pt.Placeholder):
                 expected_result.add(expr)
@@ -683,6 +703,9 @@ def test_tag_user_nodes_linear_complexity():
     expected_result = {}
 
     class ExpectedResultComputer(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr) -> int:
+            return id(expr)
+
         def post_visit(self, expr):
             expected_result[expr] = {"foo"}
 
@@ -702,9 +725,10 @@ def test_basic_index_equality_traverses_underlying_arrays():
 
 def test_idx_lambda_to_hlo():
     from pytato.raising import index_lambda_to_high_level_op
+    from immutables import Map
     from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
                                 C99CallOp, BroadcastOp)
-    from pyrsistent import pmap
+
     from pytato.reductions import (SumReductionOperation,
                                    ProductReductionOperation)
 
@@ -744,12 +768,12 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
             == ReduceOp(SumReductionOperation(),
                         b,
-                        pmap({1: "_r0"})))
+                        Map({1: "_r0"})))
     assert (index_lambda_to_high_level_op(pt.prod(a))
             == ReduceOp(ProductReductionOperation(),
                         a,
-                        {0: "_r0",
-                         1: "_r1"}))
+                        Map({0: "_r0",
+                             1: "_r1"})))
     assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
     assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
                                                                         (b, a))
@@ -770,6 +794,9 @@ def test_deduplicate_data_wrappers():
         def __init__(self):
             self.count = 0
             super().__init__()
+
+        def get_cache_key(self, expr):
+            return id(expr)
 
         def map_data_wrapper(self, expr):
             self.count += 1
@@ -1024,6 +1051,137 @@ def test_derived_class_uses_correct_array_eq():
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
+
+
+def test_lower_to_index_lambda():
+    from pytato.array import IndexLambda, Reshape
+    expr = pt.ones(12).reshape(6, 2).reshape(3, 4)
+    idx_lambda = pt.to_index_lambda(expr)
+    assert isinstance(idx_lambda, IndexLambda)
+    binding, = idx_lambda.bindings.values()
+    # test that it didn't recurse further
+    assert isinstance(binding, Reshape)
+
+
+def test_cached_walk_mapper_with_extra_args():
+    from testlib import RandomDAGContext, make_random_dag
+
+    class MyWalkMapper(pt.transform.CachedWalkMapper):
+        def get_cache_key(self, expr, passed_number) -> int:
+            return id(expr), passed_number
+
+        def post_visit(self, expr, passed_number):
+            assert passed_number == 42
+
+    my_walk_mapper = MyWalkMapper()
+
+    rdagc = RandomDAGContext(np.random.default_rng(seed=0),
+                             axis_len=4, use_numpy=False)
+
+    dag = make_random_dag(rdagc)
+
+    my_walk_mapper(dag, 42)
+    my_walk_mapper(dag, passed_number=42)
+
+    with pytest.raises(AssertionError):
+        my_walk_mapper(dag, 5)
+
+    with pytest.raises(AssertionError):
+        my_walk_mapper(dag, 7)
+
+    with pytest.raises(TypeError):
+        # passing incorrect argument should raise TypeError while calling post_visit
+        my_walk_mapper(dag, bad_arg_name=7)
+
+
+def test_unify_axes_tags():
+    from pytato.array import EinsumReductionAxis
+    from testlib import FooTag, BarTag, BazTag, QuuxTag, TestlibTag
+
+    # {{{ 1. broadcasting + expand_dims
+
+    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = x.with_tagged_axis(0, FooTag())
+    x = x.with_tagged_axis(1, BarTag())
+
+    y = pt.expand_dims(x, (2, 3)) + x
+
+    y_unified = pt.unify_axes_tags(y)
+    assert (y_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[2].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (y_unified.axes[3].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+
+    # }}}
+
+    # {{{ 2. back-propagation + einsum
+
+    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = x.with_tagged_axis(0, FooTag())
+
+    y = pt.make_placeholder("y", (10, 4), "float64")
+    y = y.with_tagged_axis(1, BarTag())
+
+    z = pt.einsum("ij, ij -> i", x, y)
+    z_unified = pt.unify_axes_tags(z)
+
+    assert (z_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (z_unified.args[0].axes[1].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (z_unified.args[1].axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (z_unified.redn_axis_to_redn_descr[EinsumReductionAxis(0)]
+            .tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+
+    # }}}
+
+    # {{{ 3. advanced indexing
+
+    idx1 = pt.make_placeholder("idx1", (42, 1), "int32")
+    idx1 = idx1.with_tagged_axis(0, FooTag())
+
+    idx2 = pt.make_placeholder("idx2", (1, 1729), "int32")
+    idx2 = idx2.with_tagged_axis(1, BarTag())
+
+    u = pt.make_placeholder("u", (4, 5, 6, 7, 8, 9), "float32")
+    u = u.with_tagged_axis(0, BazTag())
+    u = u.with_tagged_axis(1, QuuxTag())
+    u = u.with_tagged_axis(2, QuuxTag())
+    u = u.with_tagged_axis(5, QuuxTag())
+
+    y = u[:, 1:4, 2*idx1, 0, 3*idx2, :]
+
+    y_unified = pt.unify_axes_tags(y)
+
+    assert (y_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([BazTag()]))
+    assert (y_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset())
+    assert (y_unified.axes[2].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[3].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (y_unified.axes[4].tags_of_type(TestlibTag)
+            == frozenset([QuuxTag()]))
+
+    # }}}
+
+
+def test_rewrite_einsums_with_no_broadcasts():
+    a = pt.make_placeholder("a", (10, 4, 1), np.float64)
+    b = pt.make_placeholder("b", (10, 1, 4), np.float64)
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+    assert pt.analysis.is_einsum_similar_to_subscript(new_expr, "ij,ik,ijk->i")
+    assert pt.analysis.is_einsum_similar_to_subscript(new_expr.args[2], "ij,ik->ijk")
 
 
 if __name__ == "__main__":

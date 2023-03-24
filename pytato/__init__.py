@@ -93,14 +93,20 @@ from pytato.visualization import (get_dot_graph, show_dot_graph,
 import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.transform as transform
-from pytato.distributed import (make_distributed_send, make_distributed_recv,
+from pytato.distributed.nodes import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
                                 DistributedSendRefHolder,
-                                staple_distributed_send,
-                                find_distributed_partition,
-                                number_distributed_tags,
-                                execute_distributed_partition,
-                                )
+                                staple_distributed_send)
+from pytato.distributed.partition import (
+        find_distributed_partition, DistributedGraphPart, DistributedGraphPartition)
+from pytato.distributed.tags import number_distributed_tags
+from pytato.distributed.verify import verify_distributed_partition
+from pytato.distributed.execute import execute_distributed_partition
+
+from pytato.transform.lower_to_index_lambda import to_index_lambda
+from pytato.transform.remove_broadcasts_einsum import (
+    rewrite_einsums_with_no_broadcasts)
+from pytato.transform.metadata import unify_axes_tags
 
 from pytato.partition import generate_code_for_partition
 
@@ -150,11 +156,21 @@ __all__ = (
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
 
+        "DistributedGraphPart",
+        "DistributedGraphPartition",
         "find_distributed_partition",
+
         "number_distributed_tags",
         "execute_distributed_partition",
+        "verify_distributed_partition",
 
         "generate_code_for_partition",
+
+        "to_index_lambda",
+
+        "rewrite_einsums_with_no_broadcasts",
+
+        "unify_axes_tags",
 
         # sub-modules
         "analysis", "tags", "transform",

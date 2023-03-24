@@ -183,7 +183,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
-    result = pt.make_dict_of_named_arrays(dict(x_out=x, y_out=y))
+    result = pt.make_dict_of_named_arrays({"x_out": x, "y_out": y})
 
     # With return_dict.
     prog = pt.generate_loopy(result)
@@ -1750,6 +1750,88 @@ def test_two_rolls(ctx_factory):
                                        )(cq, x=x_in)
     np_out = np.roll(x_in, -2, 0) + np.roll(x_in, -1, 0)
     np.testing.assert_allclose(np_out, pt_out)
+
+
+def test_lp_substitution_result(ctx_factory):
+    from pytato.target.loopy import ImplSubstitution
+
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    rng = np.random.default_rng(0)
+
+    a_np = rng.random((10, 5))
+    x_np = rng.random((5, ))
+
+    a = pt.make_data_wrapper(a_np)
+    x = pt.make_data_wrapper(x_np)
+
+    twice_a = 2*a
+    thrice_x = 3*x
+    twice_a = twice_a.tagged(ImplSubstitution())
+    thrice_x = thrice_x.tagged(ImplSubstitution())
+
+    out = pt.einsum("ij,j->i", twice_a, thrice_x)
+    pt_prg = pt.generate_loopy(out)
+
+    assert len(pt_prg.program.default_entrypoint.substitutions) == 2
+    _, (pt_eval_out,) = pt_prg(cq)
+
+    np.testing.assert_allclose(np.einsum("ij,j->i", 2*a_np, 3*x_np), pt_eval_out)
+
+
+def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng()
+
+    a = pt.make_data_wrapper(rng.random((10, 4, 1)))
+    b = pt.make_data_wrapper(rng.random((10, 1, 4)))
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+
+    _, (ref_out,) = pt.generate_loopy(expr)(cq)
+    _, (out,) = pt.generate_loopy(new_expr)(cq)
+
+    np.testing.assert_allclose(ref_out, out)
+
+
+def test_no_redundant_stores_with_impl_stored(ctx_factory):
+    # See <https://github.com/inducer/pytato/issues/415>
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10, 4))
+
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    y = 2*x
+    y = y.tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy(y)
+
+    assert len(prg.program.default_entrypoint.temporary_variables) == 0
+    np.testing.assert_allclose(prg(cq, x=x_np)[1][0], 2*x_np)
+
+
+def test_placeholders_do_not_diverge_after_removing_impl_stored(ctx_factory):
+    # Note: An earlier attempt at fixing
+    # <https://github.com/inducer/pytato/issues/415> would create multiple
+    # instances of placeholders in the graph leading to incoherent codes.
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10,))
+
+    x = pt.make_placeholder("x", 10, np.float64).tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy({"out1": 3*x, "out2": x})
+    _, out = prg(cq, x=x_np)
+    np.testing.assert_allclose(out["out1"], 3*x_np)
+    np.testing.assert_allclose(out["out2"], x_np)
 
 
 if __name__ == "__main__":

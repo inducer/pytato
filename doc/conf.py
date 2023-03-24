@@ -26,9 +26,9 @@ intersphinx_mapping = {
     "https://documen.tician.de/loopy/": None,
     "https://documen.tician.de/sumpy/": None,
     "https://documen.tician.de/islpy/": None,
-    "https://pyrsistent.readthedocs.io/en/latest/": None,
     "https://jax.readthedocs.io/en/latest/": None,
     "https://www.attrs.org/en/stable/": None,
+    "https://mpi4py.readthedocs.io/en/latest": None,
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in
@@ -45,6 +45,10 @@ sys._BUILDING_SPHINX_DOCS = True
 
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
-    ["py:class", r"pyrsistent.typing.(.+)"],
     ["py:class", r"typing_extensions(.+)"],
+    # As of 2022-10-20, it doesn't look like there's sphinx documentation
+    # available.
+    ["py:class", r"immutables\.(.+)"],
+    # https://github.com/python-attrs/attrs/issues/1073
+    ["py:mod", "attrs"],
 ]

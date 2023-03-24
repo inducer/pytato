@@ -37,7 +37,8 @@ from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
                           AxisPermutation, Einsum,
                           Reshape, Array, DictOfNamedArrays, IndexBase,
                           DataInterface, NormalizedSlice, ShapeComponent,
-                          IndexExpr, ArrayOrScalar)
+                          IndexExpr, ArrayOrScalar, NamedArray)
+from immutables import Map
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.utils import are_shape_components_equal
 from pytato.raising import BinaryOpType, C99CallOp
@@ -48,7 +49,6 @@ from pytato.reductions import (ReductionOperation, SumReductionOperation,
                                ProductReductionOperation,
                                MaxReductionOperation, MinReductionOperation,
                                AllReductionOperation, AnyReductionOperation)
-from pyrsistent import pmap
 
 
 T = TypeVar("T")
@@ -499,6 +499,10 @@ class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
 
         return self._record_line_and_return_lhs(lhs, rhs)
 
+    def map_named_array(self, expr: NamedArray) -> str:
+        # type-ignore-reason: CachedMapper.rec's types are imprecise
+        return self.rec(expr.expr)  # type: ignore[no-any-return]
+
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> str:
         lhs = self.vng("_pt_tmp")
 
@@ -598,4 +602,4 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
         program,
         function_name,
         expected_arguments=frozenset(cgen_mapper.arg_names),
-        bound_arguments=pmap(cgen_mapper.bound_arguments))
+        bound_arguments=Map(cgen_mapper.bound_arguments))

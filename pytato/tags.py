@@ -10,6 +10,7 @@ Pre-Defined Tags
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
 .. autoclass:: CreatedAt
+.. autoclass:: ExpandedDimsReshape
 """
 
 from typing import Tuple

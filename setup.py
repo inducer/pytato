@@ -35,10 +35,10 @@ setup(
     python_requires="~=3.8",
     install_requires=[
         "loopy>=2020.2",
-        "pytools>=2022.1.8",
-        "pyrsistent",
+        "pytools>=2022.1.13",
         "immutables",
         "attrs",
+        "bidict",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",

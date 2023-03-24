@@ -81,6 +81,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: vdot
 .. autofunction:: broadcast_to
 .. autofunction:: squeeze
+.. autofunction:: expand_dims
 .. automodule:: pytato.cmath
 .. automodule:: pytato.reductions
 
@@ -335,7 +336,7 @@ class Axis(Taggable):
     """
     tags: FrozenSet[Tag]
 
-    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Taggable:
+    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Axis:
         from attrs import evolve as replace
         return replace(self, tags=tags)
 
@@ -584,7 +585,7 @@ class Array(Taggable):
             indices = tuple(var(f"_{i}") for i in range(self.ndim))
             expr = op(var("_in0")[indices])
 
-        bindings = dict(_in0=self)
+        bindings = {"_in0": self}
         return IndexLambda(
                 expr,
                 shape=self.shape,
@@ -778,6 +779,17 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
     _mapper_method: ClassVar[str]
 
+    def _is_eq_valid(self) -> bool:
+        return self.__class__.__eq__ is AbstractResultWithNamedArrays.__eq__
+
+    def __post_init__(self) -> None:
+        # ensure that a developer does not uses dataclass' "__eq__"
+        # or "__hash__" implementation as they have exponential complexity.
+        assert self._is_eq_valid()
+
+    def __attrs_post_init__(self) -> None:
+        return self.__post_init__()
+
     @abstractmethod
     def __contains__(self, name: object) -> bool:
         pass
@@ -789,6 +801,13 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     @abstractmethod
     def __len__(self) -> int:
         pass
+
+    def __eq__(self, other: Any) -> bool:
+        if self is other:
+            return True
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer()(self, other)
 
 
 @attrs.define(frozen=True, eq=False, init=False)
@@ -817,7 +836,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         object.__setattr__(self, "tags", tags)
 
     def __hash__(self) -> int:
-        return hash(frozenset(self._data.items()))
+        return hash((frozenset(self._data.items()), self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
@@ -835,13 +854,6 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
-
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-
-        from pytato.equality import EqualityComparer
-        return EqualityComparer()(self, other)
 
     def __repr__(self) -> str:
         return "DictOfNamedArrays(" + str(self._data) + ")"
@@ -889,7 +901,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     expr: prim.Expression
     _shape: ShapeType
     _dtype: np.dtype[Any]
-    bindings: Dict[str, Array]
+    bindings: Mapping[str, Array]
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
     _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("expr", "shape", "dtype",
@@ -2379,7 +2391,7 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
     # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.Comparison(x, which, y),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2439,7 +2451,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalOr((x, y)),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2453,7 +2465,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalAnd((x, y)),
-                                     lambda x, y: np.dtype(np.bool8)
+                                     lambda x, y: np.dtype(np.bool_)
                                      )  # type: ignore[return-value]
 
 
@@ -2472,7 +2484,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
-                       dtype=np.dtype(np.bool8),
+                       dtype=np.dtype(np.bool_),
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(x.shape)),
@@ -2632,6 +2644,8 @@ def make_index_lambda(
 # }}}
 
 
+# {{{ dot, vdot
+
 def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     """
     For 1-dimensional arrays *a* and *b* computes their inner product.  See
@@ -2680,6 +2694,10 @@ def vdot(a: Array, b: Array) -> ArrayOrScalar:
 
     return pt.dot(pt.conj(a), b)
 
+# }}}
+
+
+# {{{ broadcast_to
 
 def broadcast_to(array: Array, shape: ShapeType) -> Array:
     """
@@ -2707,6 +2725,10 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=Map())
 
+# }}}
+
+
+# {{{ squeeze
 
 def squeeze(array: Array) -> Array:
     """Remove single-dimensional entries from the shape of an array."""
@@ -2716,6 +2738,10 @@ def squeeze(array: Array) -> Array:
             0 if are_shape_components_equal(s_i, 1) else slice(s_i)
             for i, s_i in enumerate(array.shape))]
 
+# }}}
+
+
+# {{{ expand_dims
 
 def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
     """
@@ -2756,5 +2782,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
                    tags=(_get_default_tags()
                          | {ExpandedDimsReshape(tuple(normalized_axis))}),
                    axes=_get_default_axes(len(new_shape)))
+
+# }}}
 
 # vim: foldmethod=marker

@@ -46,11 +46,11 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
 
-from pytato.partition import GraphPartition
-from pytato.distributed import DistributedGraphPart
+from pytato.partition import GraphPartition, PartId
+from pytato.distributed.partition import DistributedGraphPart
 
 if TYPE_CHECKING:
-    from pytato.distributed import DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedSendRefHolder
 
 
 __doc__ = """
@@ -121,11 +121,12 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
-        fields = dict(addr=hex(id(expr)),
-                created_at=stringify_created_at(expr.tags),
-                shape=stringify_shape(expr.shape),
-                dtype=str(expr.dtype),
-                tags=stringify_tags(expr.tags))
+        fields = {"addr": hex(id(expr)),
+                "shape": stringify_shape(expr.shape),
+                "dtype": str(expr.dtype),
+                "tags": stringify_tags(expr.tags),
+                "created_at": stringify_created_at(expr.tags),
+                }
 
         edges: Dict[str, ArrayOrNames] = {}
         return DotNodeInfo(title, fields, edges)
@@ -253,8 +254,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         self.nodes[expr] = DotNodeInfo(
                 title=type(expr).__name__,
-                fields=dict(addr=hex(id(expr)),
-                            entrypoint=expr.entrypoint),
+                fields={"addr": hex(id(expr)), "entrypoint": expr.entrypoint},
                 edges=edges)
 
     def map_distributed_send_ref_holder(
@@ -269,6 +269,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         info.edges["sent"] = expr.send.data
 
         info.fields["dest_rank"] = str(expr.send.dest_rank)
+
+        info.fields["comm_tag"] = str(expr.send.comm_tag)
 
         self.nodes[expr] = info
 
@@ -413,15 +415,29 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
     with emit.block("digraph computation"):
         emit("node [shape=rectangle]")
-        array_to_id: Dict[ArrayOrNames, str] = {}
+        placeholder_to_id: Dict[ArrayOrNames, str] = {}
+        part_id_to_array_to_id: Dict[PartId, Dict[ArrayOrNames, str]] = {}
 
         # First pass: generate names for all nodes
         for part in partition.parts.values():
+            array_to_id = {}
             for array, _ in part_id_to_node_info[part.pid].items():
-                array_to_id[array] = id_gen("array")
+                if isinstance(array, Placeholder):
+                    # Placeholders are only emitted once
+                    if array in placeholder_to_id:
+                        node_id = placeholder_to_id[array]
+                    else:
+                        node_id = id_gen("array")
+                        placeholder_to_id[array] = node_id
+                else:
+                    node_id = id_gen("array")
+                array_to_id[array] = node_id
+            part_id_to_array_to_id[part.pid] = array_to_id
 
         # Second pass: emit the graph.
         for part in partition.parts.values():
+            array_to_id = part_id_to_array_to_id[part.pid]
+
             # {{{ emit receives nodes if distributed
 
             if isinstance(part, DistributedGraphPart):
@@ -429,7 +445,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                 for name, recv in (
                         part.input_name_to_recv_node.items()):
                     node_id = id_gen("recv")
-                    _emit_array(emit, "Recv", {
+                    _emit_array(emit, "DistributedRecv", {
                         "shape": stringify_shape(recv.shape),
                         "dtype": str(recv.dtype),
                         "src_rank": str(recv.src_rank),
@@ -446,7 +462,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
             input_arrays: List[Array] = []
             internal_arrays: List[ArrayOrNames] = []
 
-            for array, _ in part_node_to_info.items():
+            for array in part_node_to_info.keys():
                 if isinstance(array, InputArgumentBase):
                     input_arrays.append(array)
                 else:
@@ -480,7 +496,13 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                             pass
                         else:
                             # placeholder for a value from a different partition
-                            tgt = array_to_id[
+                            computing_pid = None
+                            for other_part in partition.parts.values():
+                                if array.name in other_part.output_names:
+                                    computing_pid = other_part.pid
+                                    break
+                            assert computing_pid is not None
+                            tgt = part_id_to_array_to_id[computing_pid][
                                     partition.var_name_to_result[array.name]]
                             emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
                             emitted_placeholders.add(array)
@@ -513,7 +535,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                     for name, send in (
                             part.output_name_to_send_node.items()):
                         node_id = id_gen("send")
-                        _emit_array(emit, "Send", {
+                        _emit_array(emit, "DistributedSend", {
                             "dest_rank": str(send.dest_rank),
                             "comm_tag": str(send.comm_tag),
                             }, node_id)
@@ -547,7 +569,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
         or the output of :func:`~pytato.partition.find_partition`.
-    :arg kwargs: Passed on to :func:`pymbolic.imperative.utils.show_dot` unmodified.
+    :arg kwargs: Passed on to :func:`pytools.graphviz.show_dot` unmodified.
     """
     dot_code: str
 
@@ -558,7 +580,7 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
     else:
         dot_code = get_dot_graph(result)
 
-    from pymbolic.imperative.utils import show_dot
+    from pytools.graphviz import show_dot
     show_dot(dot_code, **kwargs)
 
 

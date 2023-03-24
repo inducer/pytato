@@ -38,7 +38,7 @@ from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
 from pytools.tag import Tag
-from pyrsistent import PMap, pmap
+from immutables import Map
 import islpy as isl
 
 __doc__ = r"""
@@ -93,7 +93,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
-                     self.entrypoint))
+                     self.entrypoint, self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._result_names
@@ -117,19 +117,6 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
-
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-
-        if not isinstance(other, LoopyCall):
-            return False
-
-        if ((self.entrypoint == other.entrypoint)
-             and (self.bindings == other.bindings)
-             and (self.translation_unit == other.translation_unit)):
-            return True
-        return False
 
 
 class LoopyCallResult(NamedArray):
@@ -162,6 +149,7 @@ class LoopyCallResult(NamedArray):
                                axes=axes,
                                tags=tags)
 
+    @property
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
@@ -235,7 +223,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     # {{{ perform shape inference here
 
     bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    pmap(bindings))
+                                                    Map(bindings))
 
     # }}}
 
@@ -401,7 +389,7 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: PMap[str, ArrayOrScalar]
+                                         bindings: Map[str, ArrayOrScalar]
                                          ) -> Dict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps

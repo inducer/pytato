@@ -29,7 +29,7 @@ def main():
     y = x+halo
 
     # Find the partition
-    outputs = pt.DictOfNamedArrays({"out": y})
+    outputs = pt.make_dict_of_named_arrays({"out": y})
     distributed_parts = find_distributed_partition(outputs)
     distributed_parts, _ = number_distributed_tags(
             comm, distributed_parts, base_tag=42)
@@ -52,7 +52,10 @@ def main():
 
     final_res = context["out"].get(queue)
 
-    ref_res = comm.bcast(final_res)
+    comm.isend(x_in, dest=(rank-1) % size, tag=42)
+    ref_halo = comm.recv(source=(rank+1) % size, tag=42)
+
+    ref_res = x_in + ref_halo
 
     np.testing.assert_allclose(ref_res, final_res)
 

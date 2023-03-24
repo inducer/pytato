@@ -39,15 +39,16 @@ from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
                           SizeParam, Placeholder, NamedArray, DataWrapper,
-                          ReductionDescriptor)
+                          ReductionDescriptor, InputArgumentBase)
 
 from pytato.target import BoundProgram
-from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget
+from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstitution
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.loopy import LoopyCall
-from pytato.tags import ImplStored, Named, PrefixNamed
+from pytato.tags import (ImplStored, ImplInlined, Named, PrefixNamed,
+                         ImplementationStrategy)
 from pytools.tag import Tag
 import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
@@ -64,8 +65,7 @@ __doc__ = """
 .. autoclass:: ImplementedResult
 .. autoclass:: StoredResult
 .. autoclass:: InlinedResult
-..
-    .. autoclass:: SubstitutionRuleResult
+.. autoclass:: SubstitutionRuleResult
 .. autoclass:: CodeGenState
 .. autoclass:: CodeGenMapper
 .. autoclass:: InlinedExpressionGenMapper
@@ -261,10 +261,25 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-# class SubstitutionRuleResult(ImplementedResult):
-#     # TODO: implement
-#     pass
+@dataclasses.dataclass(frozen=True, eq=True)
+class SubstitutionRuleResult(ImplementedResult):
+    """
+    An array expression generated as a
+    :class:`loopy.kernel.data.SubstitutionRule`.
 
+    See also: :class:`pytato.target.loopy.ImplSubstitution`.
+    """
+    subst_name: str
+    num_args: int
+    depends_on: FrozenSet[str]
+
+    def to_loopy_expression(self,
+                            indices: SymbolicIndex,
+                            expr_context: PersistentExpressionContext
+                            ) -> ScalarExpression:
+        assert len(indices) == self.num_args
+        expr_context.update_depends_on(self.depends_on)
+        return prim.Call(prim.Variable(self.subst_name), indices)
 # }}}
 
 
@@ -403,6 +418,24 @@ class CodeGenMapper(Mapper):
                                   frozenset([add_store(name, expr,
                                                        result, state,
                                                        self, True)]))
+        elif expr.tags_of_type(ImplInlined):
+            # inlined results are automatically handled
+            pass
+        elif expr.tags_of_type(ImplSubstitution):
+            subst_name = _generate_name_for_temp(expr, state.var_name_gen,
+                                           default_prefix="_pt_subst")
+
+            add_substitution(subst_name, expr, result, state, self)
+            result = SubstitutionRuleResult(subst_name, expr.ndim,
+                                            prstnt_ctx.depends_on)
+        elif expr.tags_of_type(ImplementationStrategy):
+            raise NotImplementedError(
+                "Implementation strategy: "
+                f"'{next(iter(expr.tags_of_type(ImplementationStrategy)))}'."
+            )
+        else:
+            # default is inlining
+            pass
         # }}}
 
         state.results[expr] = result
@@ -859,6 +892,31 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     return insn_id
 
 
+def add_substitution(subst_name: str, expr: Array, result: ImplementedResult,
+                     state: CodeGenState, cgen_mapper: CodeGenMapper) -> None:
+    """Add a :class:`~loopy.kernel.data.SubstitutionRule` to the kernel being built
+    in *state*. The substitution rule that will be introduced with take the indices
+    of array expression *expr*'s as arguments and return the value for the index.
+    """
+    # Get expression.
+    indices = tuple(prim.Variable(f"_{idim}") for idim in range(expr.ndim))
+    loopy_expr_context = PersistentExpressionContext(state)
+    loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
+
+    # Make the substitution rule
+    subst_rule = lp.SubstitutionRule(subst_name,
+                                     tuple(f"_{idim}" for idim in range(expr.ndim)),
+                                     loopy_expr)
+
+    # Update the kernel.
+    kernel = state.kernel
+    kernel = kernel.copy(
+        substitutions={**kernel.substitutions,
+                       **{subst_name: subst_rule}})
+
+    state.update_kernel(kernel)
+
+
 def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
                         state: CodeGenState) -> lp.TemporaryVariable:
     # always allocating to global address space to avoid stack overflow
@@ -884,7 +942,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
     return CodeGenState(_t_unit=kernel,
-            results=dict())
+            results={})
 
 
 # {{{ generate_loopy
@@ -932,6 +990,18 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
+
+    # optimization: remove any ImplStored tags on outputs to avoid redundant
+    # store-load operations (see https://github.com/inducer/pytato/issues/415)
+    orig_outputs = DictOfNamedArrays(
+        {name: (output.without_tags(ImplStored(),
+                                    verify_existence=False)
+                if not isinstance(output,
+                                  InputArgumentBase)
+                else output)
+         for name, output in orig_outputs._data.items()},
+        tags=orig_outputs.tags)
+
     del result
 
     if cl_device is not None:
@@ -946,6 +1016,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
+
     compute_order = preproc_result.compute_order
 
     if options is None:
