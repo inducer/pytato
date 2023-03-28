@@ -1808,7 +1808,7 @@ def _get_default_axes(ndim: int) -> AxesT:
     return tuple(Axis(frozenset()) for _ in range(ndim))
 
 
-@dataclass(frozen=True, eq=True)
+@attrs.define(frozen=True, eq=True)
 class _PytatoFrameSummary:
     """Class to store a single call frame."""
     filename: str
@@ -1820,12 +1820,12 @@ class _PytatoFrameSummary:
         key_builder.rec(key_hash,
                 (self.__class__.__module__, self.__class__.__qualname__))
 
-        from dataclasses import fields
+        from attrs import fields
         # Fields are ordered consistently, so ordered hashing is OK.
         #
         # No need to dispatch to superclass: fields() automatically gives us
         # fields from the entire class hierarchy.
-        for f in fields(self):
+        for f in fields(self.__class__):
             key_builder.rec(key_hash, getattr(self, f.name))
 
     def short_str(self, maxlen: int = 100) -> str:
@@ -1840,7 +1840,7 @@ class _PytatoFrameSummary:
         return f"{self.filename}:{self.lineno}, in {self.name}(): {self.line}"
 
 
-@dataclass(frozen=True, eq=True)
+@attrs.define(frozen=True, eq=True)
 class _PytatoStackSummary:
     """Class to store a list of :class:`_PytatoFrameSummary` call frames."""
     frames: Tuple[_PytatoFrameSummary, ...]
@@ -1849,19 +1849,18 @@ class _PytatoStackSummary:
         frames = [FrameSummary(f.filename, f.lineno, f.name, line=f.line)
                   for f in self.frames]
 
-        # type-ignore-reason: from_list also takes List[FrameSummary]
-        return StackSummary.from_list(frames)  # type: ignore[arg-type]
+        return StackSummary.from_list(frames)
 
     def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
         key_builder.rec(key_hash,
                 (self.__class__.__module__, self.__class__.__qualname__))
 
-        from dataclasses import fields
+        from attrs import fields
         # Fields are ordered consistently, so ordered hashing is OK.
         #
         # No need to dispatch to superclass: fields() automatically gives us
         # fields from the entire class hierarchy.
-        for f in fields(self):
+        for f in fields(self.__class__):
             key_builder.rec(key_hash, getattr(self, f.name))
 
     def short_str(self, maxlen: int = 100) -> str:
