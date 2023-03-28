@@ -30,19 +30,17 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
-
-import numpy as np
-
-from pytato.distributed.nodes import CommTagType, DistributedRecv
-from pytato.partition import PartId
-from pytato.distributed.partition import DistributedGraphPartition
-from pytato.array import ShapeType
+import logging
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Sequence, Set
 
 import attrs
+import numpy as np
 
+from pytato.array import ShapeType
+from pytato.distributed.nodes import CommTagType, DistributedRecv
+from pytato.distributed.partition import DistributedGraphPartition
+from pytato.partition import PartId
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -268,7 +266,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # Do a topological sort to check for any cycles
 
-        from pytools.graph import compute_topological_order, CycleError
+        from pytools.graph import CycleError, compute_topological_order
+
         from pytato.partition import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)

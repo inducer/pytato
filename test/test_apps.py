@@ -25,25 +25,23 @@ THE SOFTWARE.
 """
 
 import sys
+
 import numpy as np
 import numpy.linalg as la
-
 import pyopencl as cl
-
-import pytato as pt
 from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
-from pytato.transform import CopyMapper, WalkMapper
-
-from pyopencl.tools import (  # noqa: F401
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-
+from pyopencl.tools import \
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests  # noqa: F401
 from pytools.tag import Tag, tag_dataclass
 
+import pytato as pt
+from pytato.transform import CopyMapper, WalkMapper
 
 # {{{ Trace an FFT
 
 # A failed-for-now experiment: Trace through an FFT to generate code.
 # It might as well live on as a reasonably complex test.
+
 
 @tag_dataclass
 class FFTIntermediate(Tag):

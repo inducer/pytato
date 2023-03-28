@@ -4,8 +4,9 @@ An example to demonstrate the behavior of
 partitioning routine is to recompute expressions that appear in the multiple
 partitions but are not materialized.
 """
-import pytato as pt
 import numpy as np
+
+import pytato as pt
 
 size = 2
 rank = 0

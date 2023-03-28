@@ -12,10 +12,10 @@ Pre-Defined Tags
 .. autoclass:: ExpandedDimsReshape
 """
 
-from typing import Tuple
-from pytools.tag import Tag, UniqueTag
 from dataclasses import dataclass
+from typing import Tuple
 
+from pytools.tag import Tag, UniqueTag
 
 # {{{ pre-defined tag: ImplementationStrategy
 

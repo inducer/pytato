@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 
 from typing import List, Tuple
+
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
 from pytato.transform import CopyMapper, MappedT
 from pytato.utils import are_shape_components_equal

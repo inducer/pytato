@@ -31,10 +31,9 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, Tuple, FrozenSet, Any
+from typing import TYPE_CHECKING, Any, FrozenSet, Tuple
 
 from pytato.distributed.partition import DistributedGraphPartition
-
 
 if TYPE_CHECKING:
     import mpi4py.MPI

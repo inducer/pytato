@@ -27,26 +27,27 @@ THE SOFTWARE.
 """
 
 import logging
-import numpy as np
 from abc import abstractmethod
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional,
-                    Hashable)
-
-from pytato.array import (
-        Array, IndexLambda, Placeholder, Stack, Roll,
-        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
-        AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase,
-        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase, DataInterface)
-
-from pytato.distributed.nodes import (
-        DistributedSendRefHolder, DistributedRecv, DistributedSend)
-from pytato.loopy import LoopyCall, LoopyCallResult
 from dataclasses import dataclass
-from pytato.tags import ImplStored
+from typing import (Any, Callable, Dict, FrozenSet, Generic, Hashable,
+                    Iterable, List, Mapping, Optional, Set, Tuple, TypeVar,
+                    Union)
+
+import numpy as np
 from pymbolic.mapper.optimize import optimize_mapper
+
+from pytato.array import (AbstractResultWithNamedArrays,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes, Array,
+                          AxisPermutation, BasicIndex, Concatenate,
+                          DataInterface, DataWrapper, DictOfNamedArrays,
+                          Einsum, IndexBase, IndexLambda, IndexRemappingBase,
+                          InputArgumentBase, NamedArray, Placeholder, Reshape,
+                          Roll, SizeParam, Stack)
+from pytato.distributed.nodes import (DistributedRecv, DistributedSend,
+                                      DistributedSendRefHolder)
+from pytato.loopy import LoopyCall, LoopyCallResult
+from pytato.tags import ImplStored
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 MappedT = TypeVar("MappedT", bound=ArrayOrNames)
@@ -1712,8 +1713,8 @@ class EdgeCachedMapper(CachedMapper[ArrayOrNames]):
 def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     import sys
     if "pyopencl" in sys.modules:
-        from pyopencl.array import Array as CLArray
         from pyopencl import MemoryObjectHolder
+        from pyopencl.array import Array as CLArray
         try:
             from pyopencl import SVMPointer
         except ImportError:

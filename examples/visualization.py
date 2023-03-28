@@ -2,12 +2,12 @@
 """Demonstrates graph visualization with Graphviz."""
 
 import logging
-import numpy as np
 import shutil
 import subprocess
 
-import pytato as pt
+import numpy as np
 
+import pytato as pt
 
 logger = logging.getLogger(__name__)
 

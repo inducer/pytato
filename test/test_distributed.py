@@ -21,14 +21,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pyopencl as cl
-import numpy as np
-import pytato as pt
-import sys
 import os
+import sys
 
+import numpy as np
+import pyopencl as cl
+from pyopencl.tools import \
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests  # noqa
+
+import pytato as pt
 
 # {{{ mpi test infrastructure
 
@@ -36,8 +37,8 @@ def run_test_with_mpi(num_ranks, f, *args):
     import pytest
     pytest.importorskip("mpi4py")
 
-    from pickle import dumps
     from base64 import b64encode
+    from pickle import dumps
 
     invocation_info = b64encode(dumps((f, args))).decode()
     from subprocess import check_call
@@ -52,8 +53,8 @@ def run_test_with_mpi(num_ranks, f, *args):
 
 
 def run_test_with_mpi_inner():
-    from pickle import loads
     from base64 import b64decode
+    from pickle import loads
     f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
 
     f(cl.create_some_context, *args)
@@ -214,8 +215,8 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 # {{{ test DAG with no comm nodes
 
 def _test_dag_with_no_comm_nodes_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -261,6 +262,7 @@ def _check_deterministic_partition(dag, ref_partition,
 def test_deterministic_partitioning():
     import multiprocessing as mp
     import os
+
     from testlib import get_random_pt_dag_with_send_recv_nodes
 
     original_hash_seed = os.environ.pop("PYTHONHASHSEED", None)
@@ -318,8 +320,10 @@ def _do_verify_distributed_partition(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
     import pytest
-    from pytato.distributed.verify import (DuplicateSendError,
-                DuplicateRecvError, MissingSendError, MissingRecvError)
+
+    from pytato.distributed.verify import (DuplicateRecvError,
+                                           DuplicateSendError,
+                                           MissingRecvError, MissingSendError)
     from pytato.partition import PartitionInducedCycleError
 
     rank = comm.Get_rank()

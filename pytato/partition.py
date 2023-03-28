@@ -24,22 +24,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Any, Callable, Dict, Union, Set, List, Hashable, Tuple, TypeVar,
-        FrozenSet, Mapping, Optional, Type)
+import logging
+from typing import (Any, Callable, Dict, FrozenSet, Hashable, List, Mapping,
+                    Optional, Set, Tuple, Type, TypeVar, Union)
+
 import attrs
 
-import logging
 logger = logging.getLogger(__name__)
 
-from pytools import memoize_method
-from pytato.transform import EdgeCachedMapper, CachedWalkMapper
-from pytato.array import (
-        Array, AbstractResultWithNamedArrays, Placeholder,
-        DictOfNamedArrays, make_placeholder, make_dict_of_named_arrays)
-
-from pytato.target import BoundProgram
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import memoize_method
 
+from pytato.array import (AbstractResultWithNamedArrays, Array,
+                          DictOfNamedArrays, Placeholder,
+                          make_dict_of_named_arrays, make_placeholder)
+from pytato.target import BoundProgram
+from pytato.transform import CachedWalkMapper, EdgeCachedMapper
 
 __doc__ = """
 Partitioning of graphs in :mod:`pytato` currently mainly serves to enable
@@ -209,7 +209,7 @@ class GraphPartitioner(EdgeCachedMapper):
                 pid_to_output_names[pid_dependency].add(var_name)
                 pid_to_input_names[pid_target].add(var_name)
 
-        from pytools.graph import compute_topological_order, CycleError
+        from pytools.graph import CycleError, compute_topological_order
         try:
             toposorted_part_ids = compute_topological_order(
                     pid_to_needing_pids,

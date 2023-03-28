@@ -29,25 +29,21 @@ THE SOFTWARE.
 import contextlib
 import dataclasses
 import html
-
-from typing import (TYPE_CHECKING, Callable, Dict, Union, Iterator, List,
-        Mapping, Hashable, Any, FrozenSet)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, FrozenSet, Hashable,
+                    Iterator, List, Mapping, Union)
 
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
 from pytools.codegen import CodeGenerator as CodeGeneratorBase
-from pytato.loopy import LoopyCall
+from pytools.tag import Tag
 
-from pytato.array import (
-        Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays,
-        IndexBase)
-
+from pytato.array import (AbstractResultWithNamedArrays, Array, DataWrapper,
+                          DictOfNamedArrays, Einsum, IndexBase, IndexLambda,
+                          InputArgumentBase, Placeholder, ShapeType, Stack)
 from pytato.codegen import normalize_outputs
-from pytato.transform import CachedMapper, ArrayOrNames
-
-from pytato.partition import GraphPartition, PartId
 from pytato.distributed.partition import DistributedGraphPart
+from pytato.loopy import LoopyCall
+from pytato.partition import GraphPartition, PartId
+from pytato.transform import ArrayOrNames, CachedMapper
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedSendRefHolder
@@ -615,8 +611,9 @@ def get_ascii_graph(result: Union[Array, DictOfNamedArrays],
 
     input_node = Node("Inputs", parents=[asciidag_nodes[v] for v in input_arrays])
 
-    from asciidag.graph import Graph  # type: ignore[import]
     from io import StringIO
+
+    from asciidag.graph import Graph  # type: ignore[import]
 
     f = StringIO()
     graph = Graph(fh=f, use_color=use_color)

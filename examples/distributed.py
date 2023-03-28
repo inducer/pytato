@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
 from mpi4py import MPI  # pylint: disable=import-error
+
 comm = MPI.COMM_WORLD
 
-import pytato as pt
-import pyopencl as cl
 import numpy as np
+import pyopencl as cl
 
-from pytato import (find_distributed_partition, generate_code_for_partition,
-        number_distributed_tags,
-        execute_distributed_partition,
-        staple_distributed_send, make_distributed_recv)
+import pytato as pt
+from pytato import (execute_distributed_partition, find_distributed_partition,
+                    generate_code_for_partition, make_distributed_recv,
+                    number_distributed_tags, staple_distributed_send)
 
 
 def main():

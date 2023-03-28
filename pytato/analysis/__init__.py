@@ -25,18 +25,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    TYPE_CHECKING)
-from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
-                          DictOfNamedArrays, NamedArray,
-                          IndexBase, IndexRemappingBase, InputArgumentBase,
-                          ShapeType)
-from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
-from pytato.loopy import LoopyCall
+from typing import (TYPE_CHECKING, Any, Dict, FrozenSet, Mapping, Set, Tuple,
+                    Union)
+
 from pymbolic.mapper.optimize import optimize_mapper
 
+from pytato.array import (Array, Concatenate, DictOfNamedArrays, Einsum,
+                          IndexBase, IndexLambda, IndexRemappingBase,
+                          InputArgumentBase, NamedArray, ShapeType, Stack)
+from pytato.loopy import LoopyCall
+from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
+
 if TYPE_CHECKING:
-    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.distributed.nodes import (DistributedRecv,
+                                          DistributedSendRefHolder)
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
@@ -228,8 +230,8 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     would compute the same result as *expr*.
     """
 
-    from pytato.array import (EinsumElementwiseAxis, EinsumReductionAxis,
-                              EinsumAxisDescriptor)
+    from pytato.array import (EinsumAxisDescriptor, EinsumElementwiseAxis,
+                              EinsumReductionAxis)
 
     if not isinstance(expr, Einsum):
         raise TypeError(f"{expr} expected to be Einsum, got {type(expr)}.")
@@ -307,7 +309,7 @@ class DirectPredecessorsGetter(Mapper):
                 | self._get_preds_from_shape(expr.shape))
 
     def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
-        from pytato.loopy import LoopyCallResult, LoopyCall
+        from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
         return (frozenset(ary

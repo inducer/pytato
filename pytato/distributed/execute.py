@@ -30,21 +30,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, TYPE_CHECKING
-
-
-from pytato.target import BoundProgram
-from pytato.scalar_expr import INT_CLASSES
+import logging
+from typing import TYPE_CHECKING, Any, Dict, Hashable, Optional, Tuple
 
 import numpy as np
 
+from pytato.distributed.nodes import DistributedRecv, DistributedSend
+from pytato.distributed.partition import (DistributedGraphPart,
+                                          DistributedGraphPartition)
+from pytato.scalar_expr import INT_CLASSES
+from pytato.target import BoundProgram
 
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend)
-from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart)
-
-import logging
 logger = logging.getLogger(__name__)
 
 

@@ -33,29 +33,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (
-        Tuple, Any, Mapping, FrozenSet, Set, Dict, cast, Iterable, Callable, List)
 from functools import cached_property
+from typing import (Any, Callable, Dict, FrozenSet, Iterable, List, Mapping,
+                    Set, Tuple, cast)
 
 import attrs
 from immutables import Map
-
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator
 from pytools.tag import UniqueTag
 
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.array import (Array,
-                          DictOfNamedArrays, Placeholder, make_placeholder,
-                          NamedArray)
-from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
-                              CachedWalkMapper, CopyMapperWithExtraArgs,
-                              CombineMapper)
-from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend, DistributedSendRefHolder)
 from pytato.analysis import DirectPredecessorsGetter
-
+from pytato.array import (Array, DictOfNamedArrays, NamedArray, Placeholder,
+                          make_placeholder)
+from pytato.distributed.nodes import (DistributedRecv, DistributedSend,
+                                      DistributedSendRefHolder)
+from pytato.partition import (GraphPart, GraphPartition, GraphPartitioner,
+                              PartId)
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.transform import (ArrayOrNames, CachedWalkMapper, CombineMapper,
+                              CopyMapper, CopyMapperWithExtraArgs, Mapper)
 
 # {{{ distributed graph partition
 
@@ -293,8 +290,8 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 
     # type-ignore-reason: dropped the extra `*args, **kwargs`.
     def post_visit(self, expr: Any) -> None:  # type: ignore[override]
-        from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
+        from pytato.tags import ImplStored
 
         if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
             self.materialized_arrays.add(expr)
@@ -653,9 +650,9 @@ def find_distributed_partition(outputs: DictOfNamedArrays
         2. Tagging nodes with :class:~pytato.tags.ImplStored` would help in
            avoiding re-computations.
     """
-    from pytato.transform import SubsetDependencyMapper
     from pytato.array import make_dict_of_named_arrays
     from pytato.partition import find_partition
+    from pytato.transform import SubsetDependencyMapper
 
     # {{{ get partitioning helper data corresponding to the DAG
 
