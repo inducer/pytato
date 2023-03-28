@@ -122,11 +122,11 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def get_common_dot_info(self, expr: Array) -> DotNodeInfo:
         title = type(expr).__name__
         fields = {"addr": hex(id(expr)),
-                "shape": stringify_shape(expr.shape),
-                "dtype": str(expr.dtype),
-                "tags": stringify_tags(expr.tags),
-                "created_at": stringify_created_at(expr.tags),
-                }
+                  "shape": stringify_shape(expr.shape),
+                  "dtype": str(expr.dtype),
+                  "tags": stringify_tags(expr.tags),
+                  "created_at": stringify_created_at(expr.tags),
+                  }
 
         edges: Dict[str, ArrayOrNames] = {}
         return DotNodeInfo(title, fields, edges)
