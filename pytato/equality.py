@@ -247,7 +247,7 @@ class EqualityComparer:
                         if isinstance(bnd, Array)
                         else bnd == expr2.bindings[name]
                         for name, bnd in expr1.bindings.items())
-                and expr1.tags == expr2.tags
+                and Taggable.__eq__(expr1, expr2)
                 )
 
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
@@ -262,7 +262,7 @@ class EqualityComparer:
                 and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
                         for name in expr1._data)
-                and expr1.tags == expr2.tags
+                and Taggable.__eq__(expr1, expr2)
                 )
 
     def map_distributed_send_ref_holder(
