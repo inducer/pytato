@@ -15,6 +15,7 @@ from pytato.transform import Mapper
 
 # {{{ tools for comparison to numpy
 
+
 class NumpyBasedEvaluator(Mapper):
     """
     Mapper to return the result according to an eager evaluation array package

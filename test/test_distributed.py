@@ -33,6 +33,7 @@ import pytato as pt
 
 # {{{ mpi test infrastructure
 
+
 def run_test_with_mpi(num_ranks, f, *args):
     import pytest
     pytest.importorskip("mpi4py")

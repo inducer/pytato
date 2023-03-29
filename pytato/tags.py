@@ -19,6 +19,7 @@ from pytools.tag import Tag, UniqueTag
 
 # {{{ pre-defined tag: ImplementationStrategy
 
+
 @dataclass(frozen=True)
 class ImplementationStrategy(UniqueTag):
     """

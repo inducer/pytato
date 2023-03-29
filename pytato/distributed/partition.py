@@ -56,6 +56,7 @@ from pytato.transform import (ArrayOrNames, CachedWalkMapper, CombineMapper,
 
 # {{{ distributed graph partition
 
+
 @attrs.define(frozen=True, slots=False)
 class DistributedGraphPart(GraphPart):
     """For one graph partition, record send/receive information for input/

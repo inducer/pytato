@@ -46,6 +46,7 @@ from pytato.target import BoundProgram, Target
 
 # {{{ abstract types
 
+
 class PythonTarget(Target, ABC):
     """
     A target that generates code for a python program, typically by invoking
