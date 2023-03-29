@@ -25,21 +25,23 @@ THE SOFTWARE.
 """
 
 
-import numpy as np
-import attrs
-import loopy as lp
-import pymbolic.primitives as prim
-from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
-                    Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
-from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam, AxesT)
-from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
-                                EvaluationMapper, IntegralT)
+from typing import (Any, ClassVar, Dict, FrozenSet, Iterable, Iterator,
+                    Mapping, Optional, Sequence, Tuple, Union)
+
+import attrs
+import islpy as isl
+import loopy as lp
+import numpy as np
+import pymbolic.primitives as prim
+from immutables import Map
 from pytools import memoize_method
 from pytools.tag import Tag
-from immutables import Map
-import islpy as isl
+
+from pytato.array import (AbstractResultWithNamedArrays, Array, ArrayOrScalar,
+                          AxesT, NamedArray, ShapeType, SizeParam)
+from pytato.scalar_expr import (EvaluationMapper, IntegralT, ScalarExpression,
+                                SubstitutionMapper)
 
 __doc__ = r"""
 .. currentmodule:: pytato.loopy
@@ -375,8 +377,9 @@ def _pt_var_to_global_namespace(name: Optional[str]) -> str:
 
 
 def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
-    from pytato.utils import dim_to_index_lambda_components
     from pymbolic.mapper.substitutor import substitute
+
+    from pytato.utils import dim_to_index_lambda_components
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
     assert all(isinstance(dim_bnd, SizeParam)
                 for dim_bnd in dim_bnds.values())
@@ -392,9 +395,11 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                                          bindings: Map[str, ArrayOrScalar]
                                          ) -> Dict[str, ArrayOrScalar]:
     from functools import reduce
-    from loopy.symbolic import get_dependencies as lpy_get_deps
+
     from loopy.kernel.array import ArrayBase
+    from loopy.symbolic import get_dependencies as lpy_get_deps
     from pymbolic.mapper.substitutor import make_subst_func
+
     from pytato.transform import SizeParamGatherer
 
     get_size_param_deps = SizeParamGatherer()

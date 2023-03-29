@@ -26,19 +26,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pymbolic.primitives as prim
+from typing import Any, Dict, List, Tuple, TypeVar
 
-from typing import List, Any, Dict, Tuple, TypeVar
+import pymbolic.primitives as prim
 from immutables import Map
 from pytools import UniqueNameGenerator
-from pytato.array import (Array, IndexLambda, Stack, Concatenate,
-                          Einsum, Reshape, Roll, AxisPermutation,
-                          BasicIndex, AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          NormalizedSlice, ShapeType,
-                          AbstractResultWithNamedArrays)
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES, IntegralT
+
+from pytato.array import (AbstractResultWithNamedArrays,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes, Array,
+                          AxisPermutation, BasicIndex, Concatenate, Einsum,
+                          IndexLambda, NormalizedSlice, Reshape, Roll,
+                          ShapeType, Stack)
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
+from pytato.scalar_expr import INT_CLASSES, IntegralT, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
 
@@ -116,7 +117,7 @@ class ToIndexLambdaMixin:
             if i == len(expr.arrays) - 1:
                 stack_expr = subarray_expr
             else:
-                from pymbolic.primitives import If, Comparison
+                from pymbolic.primitives import Comparison, If
                 stack_expr = If(Comparison(prim.Variable(f"_{expr.axis}"), "==", i),
                         subarray_expr,
                         stack_expr)
@@ -133,7 +134,7 @@ class ToIndexLambdaMixin:
                            tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> IndexLambda:
-        from pymbolic.primitives import If, Comparison, Subscript
+        from pymbolic.primitives import Comparison, If, Subscript
 
         def get_subscript(array_index: int, offset: ScalarExpression) -> Subscript:
             aggregate = prim.Variable(f"_in{array_index}")
@@ -183,10 +184,11 @@ class ToIndexLambdaMixin:
     def map_einsum(self, expr: Einsum) -> IndexLambda:
         import operator
         from functools import reduce
-        from pytato.scalar_expr import Reduce
-        from pytato.utils import (dim_to_index_lambda_components,
-                                  are_shape_components_equal)
+
         from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
+        from pytato.scalar_expr import Reduce
+        from pytato.utils import (are_shape_components_equal,
+                                  dim_to_index_lambda_components)
 
         bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
         redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
@@ -279,8 +281,8 @@ class ToIndexLambdaMixin:
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
                                       ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
+        from pytato.utils import (get_indexing_expression,
+                                  get_shape_after_broadcasting)
 
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
@@ -343,8 +345,8 @@ class ToIndexLambdaMixin:
 
     def map_non_contiguous_advanced_index(
             self, expr: AdvancedIndexInNoncontiguousAxes) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
+        from pytato.utils import (get_indexing_expression,
+                                  get_shape_after_broadcasting)
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, INT_CLASSES)))

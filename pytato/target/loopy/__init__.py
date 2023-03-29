@@ -36,17 +36,16 @@ __doc__ = """
 """
 
 import sys
-import numpy as np
 from dataclasses import dataclass, field
 from functools import cached_property
-
-from typing import Any, Mapping, Optional, Callable, Dict, TYPE_CHECKING
-from immutables import Map
-
-from pytato.target import Target, BoundProgram
-from pytato.tags import ImplementationStrategy
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Optional
 
 import loopy
+import numpy as np
+from immutables import Map
+
+from pytato.tags import ImplementationStrategy
+from pytato.target import BoundProgram, Target
 
 
 class ImplSubstitution(ImplementationStrategy):

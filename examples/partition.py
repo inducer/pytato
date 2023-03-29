@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
-import pytato as pt
-import pyopencl as cl
-import numpy as np
-from pytato.partition import (execute_partition,
-                              generate_code_for_partition, find_partition)
-
-from pytato.transform import TopoSortMapper
-
 from dataclasses import dataclass
+
+import numpy as np
+import pyopencl as cl
+
+import pytato as pt
+from pytato.partition import (execute_partition, find_partition,
+                              generate_code_for_partition)
+from pytato.transform import TopoSortMapper
 
 
 @dataclass(frozen=True, eq=True)

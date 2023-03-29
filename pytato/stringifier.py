@@ -24,15 +24,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-
 from typing import Any, Dict, Tuple
-from pytato.transform import Mapper
-from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
-                          IndexLambda, ReductionDescriptor)
-from pytato.loopy import LoopyCall
+
+import numpy as np
 from immutables import Map
 
+from pytato.array import (Array, Axis, DataWrapper, DictOfNamedArrays,
+                          IndexLambda, ReductionDescriptor)
+from pytato.loopy import LoopyCall
+from pytato.transform import Mapper
 
 __doc__ = """
 .. currentmodule:: pytato.stringifier

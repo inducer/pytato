@@ -22,24 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
+                    Tuple, TypeVar, Union)
+
 import islpy as isl
+import numpy as np
 import pymbolic.primitives as prim
-
-from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
-                    Optional, Iterable, TypeVar)
-from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
-                          DtypeOrScalar, ArrayOrScalar, BasicIndex,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any)
-from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                SCALAR_CLASSES, INT_CLASSES, BoolT)
-from pytools import UniqueNameGenerator
-from pytato.transform import Mapper
 from immutables import Map
+from pytools import UniqueNameGenerator
 
+from pytato.array import (AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes, Array,
+                          ArrayOrScalar, BasicIndex, ConvertibleToIndexExpr,
+                          DtypeOrScalar, IndexExpr, IndexLambda,
+                          NormalizedSlice, ShapeComponent, ShapeType,
+                          SizeParam, _dtype_any)
+from pytato.scalar_expr import (INT_CLASSES, SCALAR_CLASSES, BoolT,
+                                IntegralScalarExpression, ScalarExpression)
+from pytato.transform import Mapper
 
 __doc__ = """
 Helper routines
@@ -67,7 +67,7 @@ def partition(pred: Callable[[Tpart], bool],
     """
     # Inspired from https://docs.python.org/3/library/itertools.html
     # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
-    from itertools import tee, filterfalse
+    from itertools import filterfalse, tee
     t1, t2 = tee(iterable)
     return list(filterfalse(pred, t1)), list(filter(pred, t2))
 
@@ -365,6 +365,7 @@ def _is_non_negative(expr: ShapeComponent) -> BoolT:
 
     assert isinstance(expr, Array) and expr.shape == ()
     from pytato.transform import InputGatherer
+
     # type-ignore reason: passed Set[Optional[str]]; function expects Set[str]
     space = _create_size_param_space({expr.name  # type: ignore
                                       for expr in InputGatherer()(expr)})
@@ -471,8 +472,8 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 
 def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
-    from pytato.diagnostic import CannotBroadcastError
     from pytato.array import _get_default_axes, _get_default_tags
+    from pytato.diagnostic import CannotBroadcastError
 
     # {{{ handle ellipsis
 

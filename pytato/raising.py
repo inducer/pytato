@@ -1,18 +1,18 @@
+from dataclasses import dataclass
+from enum import Enum, auto, unique
+from typing import List, Mapping, Sequence, Tuple
+
 import numpy as np
 import pymbolic.primitives as p
-
-from enum import Enum, auto, unique
-from typing import List, Tuple, Mapping, Sequence
-from pytato.array import IndexLambda, ArrayOrScalar, Array, ShapeType
-from pytato.diagnostic import UnknownIndexLambdaExpr
-from pytato.utils import (get_indexing_expression,
-                          get_shape_after_broadcasting,
-                          are_shape_components_equal)
-from pytato.scalar_expr import ScalarType, ScalarExpression, Reduce, SCALAR_CLASSES
-from pytato.reductions import ReductionOperation
-from dataclasses import dataclass
 from immutables import Map
 
+from pytato.array import Array, ArrayOrScalar, IndexLambda, ShapeType
+from pytato.diagnostic import UnknownIndexLambdaExpr
+from pytato.reductions import ReductionOperation
+from pytato.scalar_expr import (SCALAR_CLASSES, Reduce, ScalarExpression,
+                                ScalarType)
+from pytato.utils import (are_shape_components_equal, get_indexing_expression,
+                          get_shape_after_broadcasting)
 
 __doc__ = """
 

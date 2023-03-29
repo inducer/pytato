@@ -35,16 +35,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Hashable, FrozenSet, Optional, Any, cast, ClassVar, Tuple
+from typing import Any, ClassVar, FrozenSet, Hashable, Optional, Tuple, cast
 
 import attrs
 import numpy as np
+from pytools.tag import Tag, Taggable
 
-from pytools.tag import Taggable, Tag
-
-from pytato.array import (
-        Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
-        _get_default_axes, ConvertibleToShape, normalize_shape)
+from pytato.array import (Array, AxesT, ConvertibleToShape, ShapeType,
+                          _get_default_axes, _SuppliedShapeAndDtypeMixin,
+                          normalize_shape)
 
 CommTagType = Hashable
 

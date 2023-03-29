@@ -158,26 +158,25 @@ Internal stuff that is only here because the documentation tool wants it
 
 # }}}
 
-from abc import ABC, abstractmethod
-from functools import partialmethod, cached_property
 import operator
-import attrs
-from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
-        FrozenSet)
+import re
+from abc import ABC, abstractmethod
+from functools import cached_property, partialmethod
+from typing import (TYPE_CHECKING, Any, Callable, ClassVar, Dict, FrozenSet,
+                    Iterator, List, Mapping, Optional, Protocol, Sequence,
+                    Tuple, TypeVar, Union, cast)
 
+import attrs
 import numpy as np
 import pymbolic.primitives as prim
+from immutables import Map
 from pymbolic import var
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
-                                ScalarExpression, IntegralT,
-                                INT_CLASSES, get_reduction_induction_variables)
-import re
-from immutables import Map
+from pytato.scalar_expr import (INT_CLASSES, SCALAR_CLASSES, IntegralT,
+                                ScalarExpression, ScalarType,
+                                get_reduction_induction_variables)
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -254,8 +253,8 @@ def normalize_shape(
 
         return s
 
-    from numbers import Number
     import collections
+    from numbers import Number
 
     if isinstance(shape, (Array, Number)):
         shape = shape,
@@ -1068,6 +1067,7 @@ class Einsum(Array):
         associated with *redn_axis* tagged with *tag*.
         """
         from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+
         # {{{ sanity checks
 
         if isinstance(redn_axis, str):
@@ -1554,8 +1554,8 @@ class AdvancedIndexInContiguousAxes(IndexBase):
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert any(isinstance(idx, Array) for idx in self.indices)
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  _normalized_slice_len, partition)
+        from pytato.utils import (_normalized_slice_len,
+                                  get_shape_after_broadcasting, partition)
 
         i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
                                                                 self.indices[idx],
@@ -1597,8 +1597,8 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  _normalized_slice_len, partition)
+        from pytato.utils import (_normalized_slice_len,
+                                  get_shape_after_broadcasting, partition)
 
         i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
                                                                 self.indices[idx],
@@ -2289,6 +2289,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
+
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
@@ -2605,8 +2606,8 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
     """
     Returns *array* broadcasted to *shape*.
     """
-    from pytato.utils import (get_indexing_expression,
-                              are_shape_components_equal)
+    from pytato.utils import (are_shape_components_equal,
+                              get_indexing_expression)
 
     if len(shape) < array.ndim:
         raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")

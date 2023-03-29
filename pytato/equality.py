@@ -24,17 +24,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
-from pytato.array import (AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, AxisPermutation,
-                          BasicIndex, Concatenate, DataWrapper, Einsum,
-                          IndexBase, IndexLambda, NamedArray,
-                          Reshape, Roll, Stack, AbstractResultWithNamedArrays,
-                          Array, DictOfNamedArrays, Placeholder, SizeParam)
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Union
+
+from pytato.array import (AbstractResultWithNamedArrays,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes, Array,
+                          AxisPermutation, BasicIndex, Concatenate,
+                          DataWrapper, DictOfNamedArrays, Einsum, IndexBase,
+                          IndexLambda, NamedArray, Placeholder, Reshape, Roll,
+                          SizeParam, Stack)
 
 if TYPE_CHECKING:
+    from pytato.distributed.nodes import (DistributedRecv,
+                                          DistributedSendRefHolder)
     from pytato.loopy import LoopyCall, LoopyCallResult
-    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. autoclass:: EqualityComparer
