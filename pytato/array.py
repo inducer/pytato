@@ -180,7 +180,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable
+from pytools.tag import Tag, Taggable, ToTagSetConvertible
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
@@ -688,6 +688,12 @@ class Array(Taggable):
     def __repr__(self) -> str:
         from pytato.stringifier import Reprifier
         return Reprifier()(self)
+
+    def tagged(self, tags: ToTagSetConvertible) -> Array:
+        from pytato.equality import preprocess_tags_for_equality
+        from pytools.tag import normalize_tags
+        new_tags = preprocess_tags_for_equality(normalize_tags(tags))
+        return super().tagged(new_tags)
 
 # }}}
 
