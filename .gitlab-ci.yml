@@ -18,7 +18,7 @@ Python 3 POCL Examples:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
-  - export EXTRA_INSTALL="pyopencl mpi4py"
+  - export EXTRA_INSTALL="pyopencl mpi4py pytest"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
   - ". ./build-py-project-and-run-examples.sh"
   tags:
