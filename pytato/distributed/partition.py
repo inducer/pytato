@@ -104,7 +104,7 @@ def _map_distributed_graph_partition_nodes(
             parts={
                 pid: replace(part,
                     input_name_to_recv_node={
-                        in_name: map_array(recv)
+                        in_name: cast(DistributedRecv, map_array(recv))
                         for in_name, recv in part.input_name_to_recv_node.items()},
                     output_name_to_send_node={
                         out_name: map_send(send)
