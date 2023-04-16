@@ -304,8 +304,8 @@ class NormalizedSlice:
     .. attribute:: start
 
         An instance of :class:`ShapeComponent`. Normalized to satisfy the
-        relation ``-1 <= start <= axis_len``, where ``axis_len`` is the length of the
-        axis being sliced.
+        relation ``0 <= start <= (axis_len-1)``, where ``axis_len`` is the
+        length of the axis being sliced.
 
     .. attribute:: stop
 
