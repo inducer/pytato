@@ -49,8 +49,11 @@ from pytato.tags import ImplStored
 from pymbolic.mapper.optimize import optimize_mapper
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-MappedT = TypeVar("MappedT", bound=ArrayOrNames)
+MappedT = TypeVar("MappedT",
+                  Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
+CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
+                            Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = FrozenSet[Array]
@@ -180,20 +183,26 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """
 
     def __init__(self) -> None:
-        self._cache: Dict[CachedMapperT, Any] = {}
+        self._cache: Dict[Any, CachedMapperT] = {}
 
-    def get_cache_key(self, expr: CachedMapperT) -> Any:
+    def get_cache_key(self, expr: ArrayOrNames) -> Any:
         return expr
 
     # type-ignore-reason: incompatible with super class
-    def rec(self, expr: CachedMapperT) -> Any:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> CachedMapperT:  # type: ignore[override]
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
         except KeyError:
-            result = super().rec(expr)  # type: ignore[type-var]
+            result = super().rec(expr)
             self._cache[key] = result
-            return result
+            # type-ignore-reason: Mapper.rec has imprecise func. signature
+            return result  # type: ignore[no-any-return]
+
+    # type-ignore-reason: incompatible with super class
+    def __call__(self, expr: ArrayOrNames  # type: ignore[override]
+                 ) -> CachedMapperT:
+        return self.rec(expr)
 
 # }}}
 
@@ -210,9 +219,23 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
 
+    # type-ignore-reason: specialized variant of super-class' rec method
+    def rec(self,  # type: ignore[override]
+            expr: CopyMapperResultT) -> CopyMapperResultT:
+        # type-ignore-reason: CachedMapper.rec's return type is imprecise
+        return super().rec(expr)  # type: ignore[return-value]
+
+    # type-ignore-reason: specialized variant of super-class' rec method
+    def __call__(self,  # type: ignore[override]
+                 expr: CopyMapperResultT) -> CopyMapperResultT:
+        return self.rec(expr)
+
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
                               ) -> Tuple[IndexOrShapeExpr, ...]:
-        return tuple(self.rec(s) if isinstance(s, Array) else s for s in situp)
+        # type-ignore-reason: apparently mypy cannot substitute typevars
+        # here.
+        return tuple(self.rec(s) if isinstance(s, Array) else s  # type: ignore[misc]
+                     for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         bindings: Dict[str, Array] = {
@@ -319,8 +342,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                          )
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
+        rec_container = self.rec(expr._container)
+        assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                loopy_call=self.rec(expr._container),
+                loopy_call=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)
@@ -364,7 +389,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                 Tuple[Any, ...],
                                 Tuple[Tuple[str, Any], ...]
                                 ],
-                          Any] = {}  # type: ignore[assignment]
+                          ArrayOrNames] = {}
 
     def get_cache_key(self,
                       expr: ArrayOrNames,
@@ -375,23 +400,30 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         return (expr, args, tuple(sorted(kwargs.items())))
 
     def rec(self,
-            expr: ArrayOrNames,
-            *args: Any, **kwargs: Any) -> Any:
+            expr: CopyMapperResultT,
+            *args: Any, **kwargs: Any) -> CopyMapperResultT:
         key = self.get_cache_key(expr, *args, **kwargs)
         try:
-            return self._cache[key]
+            # type-ignore-reason: self._cache has ArrayOrNames as its values
+            return self._cache[key]  # type: ignore[return-value]
         except KeyError:
             result = Mapper.rec(self, expr,
                                 *args,
                                 **kwargs)
             self._cache[key] = result
-            return result
+            # type-ignore-reason: Mapper.rec is imprecise
+            return result  # type: ignore[no-any-return]
 
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any
                               ) -> Tuple[IndexOrShapeExpr, ...]:
-        return tuple(self.rec(s, *args, **kwargs) if isinstance(s, Array) else s
-                     for s in situp)
+        # type-ignore-reason: apparently mypy cannot substitute typevars
+        # here.
+        return tuple(
+            self.rec(s, *args, **kwargs)  # type: ignore[misc]
+            if isinstance(s, Array)
+            else s
+            for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda,
                          *args: Any, **kwargs: Any) -> Array:
@@ -510,8 +542,10 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_loopy_call_result(self, expr: LoopyCallResult,
                               *args: Any, **kwargs: Any) -> Array:
+        rec_loopy_call = self.rec(expr._container, *args, **kwargs)
+        assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                loopy_call=self.rec(expr._container, *args, **kwargs),
+                loopy_call=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)
@@ -1018,11 +1052,11 @@ class CachedMapAndCopyMapper(CopyMapper):
     # type-ignore-reason:incompatible with Mapper.rec()
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
         if expr in self._cache:
-            return self._cache[expr]  # type: ignore[no-any-return]
+            return self._cache[expr]
 
         result = super().rec(self.map_fn(expr))
         self._cache[expr] = result
-        return result  # type: ignore[no-any-return]
+        return result
 
     # type-ignore-reason: Mapper.__call__ returns Any
     def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]

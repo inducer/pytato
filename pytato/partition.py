@@ -161,7 +161,10 @@ class GraphPartitioner(EdgeCachedMapper):
                                       tags=child.tags,
                                       axes=child.axes)
 
-                self.var_name_to_result[ph_name] = self.rec(child)
+                # type-ignore-reason: mypy is right, types of self.rec are
+                # imprecise (TODO)
+                self.var_name_to_result[ph_name] = (
+                    self.rec(child))  # type: ignore[assignment]
 
                 self._seen_node_to_placeholder[child] = ph
 
