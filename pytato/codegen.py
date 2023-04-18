@@ -83,7 +83,8 @@ def _generate_name_for_temp(
 
 # {{{ preprocessing for codegen
 
-class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):
+# type-ignore-reason: incompatible 'rec' types between ToIndexLambdaMixin, CopyMapper
+class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     """A mapper that preprocesses graphs to simplify code generation.
 
     The following node simplifications are performed:

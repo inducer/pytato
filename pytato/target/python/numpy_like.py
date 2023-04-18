@@ -31,7 +31,7 @@ from typing import (Callable, Union, Optional, Mapping, Dict, TypeVar, Iterable,
                     cast, List, Set, Tuple, Type)
 
 from pytools import UniqueNameGenerator
-from pytato.transform import CachedMapper, ArrayOrNames
+from pytato.transform import CachedMapper
 from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
                           Placeholder, SizeParam, Roll,
                           AxisPermutation, Einsum,
@@ -164,7 +164,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[Type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
+class NumpyCodegenMapper(CachedMapper[str]):
     """
     .. note::
 
@@ -408,7 +408,7 @@ class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
         )
 
         if last_non_trivial_index == -1:
-            return self.rec(expr.array)  # type: ignore[no-any-return]
+            return self.rec(expr.array)
 
         lhs = self.vng("_pt_tmp")
 
@@ -500,8 +500,7 @@ class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
         return self._record_line_and_return_lhs(lhs, rhs)
 
     def map_named_array(self, expr: NamedArray) -> str:
-        # type-ignore-reason: CachedMapper.rec's types are imprecise
-        return self.rec(expr.expr)  # type: ignore[no-any-return]
+        return self.rec(expr.expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> str:
         lhs = self.vng("_pt_tmp")
