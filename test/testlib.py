@@ -6,10 +6,11 @@ import operator
 import pyopencl as cl
 import numpy as np
 import pytato as pt
-from pytato.transform import Mapper
+from pytato.transform import Mapper, CombineMapper
 from pytato.array import (Array, Placeholder, Stack, Roll,
                           AxisPermutation, DataWrapper, Reshape,
-                          Concatenate)
+                          Concatenate, DictOfNamedArrays, IndexBase,
+                          SizeParam)
 from pytools.tag import Tag
 
 
@@ -366,6 +367,140 @@ class QuuxTag(TestlibTag):
     """
     quux
     """
+
+# }}}
+
+
+# {{{ utilities for test_push_indirections_*
+
+class _IndexeeArraysMaterializedChecker(CombineMapper[bool]):
+    def combine(self, *args: bool) -> bool:
+        return all(args)
+
+    def map_placeholder(self, expr: Placeholder) -> bool:
+        return True
+
+    def map_data_wrapper(self, expr: DataWrapper) -> bool:
+        return True
+
+    def map_size_param(self, expr: SizeParam) -> bool:
+        return True
+
+    def _map_index_base(self, expr: IndexBase) -> bool:
+        from pytato.transform.indirections import _is_materialized
+        return self.combine(
+            _is_materialized(expr.array) or isinstance(expr.array, IndexBase),
+            self.rec(expr.array)
+        )
+
+
+def are_all_indexees_materialized_nodes(
+        expr: Union[Array, DictOfNamedArrays]) -> bool:
+    """
+    Returns *True* only if all indexee arrays are either materialized nodes,
+    OR, other indexing nodes that have materialized indexees.
+    """
+    return _IndexeeArraysMaterializedChecker()(expr)
+
+
+class _IndexerArrayDatawrapperChecker(CombineMapper[bool]):
+    def combine(self, *args: bool) -> bool:
+        return all(args)
+
+    def map_placeholder(self, expr: Placeholder) -> bool:
+        return True
+
+    def map_data_wrapper(self, expr: DataWrapper) -> bool:
+        return True
+
+    def map_size_param(self, expr: SizeParam) -> bool:
+        return True
+
+    def _map_index_base(self, expr: IndexBase) -> bool:
+        return self.combine(
+            *[isinstance(idx, DataWrapper)
+              for idx in expr.indices
+              if isinstance(idx, Array)],
+            super()._map_index_base(expr),
+        )
+
+
+def are_all_indexer_arrays_datawrappers(
+        expr: Union[Array, DictOfNamedArrays]) -> bool:
+    """
+    Returns *True* only if all indexer arrays are instances of
+    :class:`~pytato.array.DataWrapper`.
+    """
+    return _IndexerArrayDatawrapperChecker()(expr)
+
+# }}}
+
+
+# {{{ auto_test_vs_ref
+
+class AutoTestFailureException(RuntimeError):
+    """
+    Raised by :func:`auto_test_vs_ref` when the expressions do NOT match.
+    """
+
+
+def auto_test_vs_ref(cl_ctx: "cl.Context",
+                     actual: Union[Array, DictOfNamedArrays],
+                     desired: Union[Array, DictOfNamedArrays],
+                     *,
+                     rtol: float = 1e-07,
+                     atol: float = 0) -> None:
+    import pyopencl.array as cla
+    import loopy as lp
+    from pytato.transform import InputGatherer
+
+    if isinstance(desired, Array):
+        if not isinstance(actual, Array):
+            raise AutoTestFailureException("'actual' is not an 'Array'")
+
+        desired = pt.make_dict_of_named_arrays({"_pt_out": desired})
+        actual = pt.make_dict_of_named_arrays({"_pt_out": actual})
+    else:
+        assert isinstance(desired, DictOfNamedArrays)
+        if not isinstance(actual, DictOfNamedArrays):
+            raise AutoTestFailureException("'actual' is not"
+                                           " a 'DictOfNamedArrays'")
+
+    cq = cl.CommandQueue(cl_ctx)
+
+    if (any(isinstance(inp, Placeholder)
+            for inp in InputGatherer()(actual))
+            or any(isinstance(inp, Placeholder)
+                   for inp in InputGatherer()(desired))):
+        raise NotImplementedError("Expression graphs with placeholders not"
+                                  " yet supported in auto_test_vs_ref.")
+
+    actual_prg = pt.generate_loopy(actual, options=lp.Options(return_dict=True))
+    desired_prg = pt.generate_loopy(desired, options=lp.Options(return_dict=True))
+
+    _, actual_out_dict = actual_prg(cq)
+    _, desired_out_dict = desired_prg(cq)
+
+    if set(actual_out_dict) != set(desired_out_dict):
+        raise AutoTestFailureException(
+            "Different outputs obtained from the 2 expressions. "
+            f" '{set(actual_out_dict.keys())}' vs '{set(desired_out_dict.keys())}'"
+        )
+
+    for output_name, desired_out in desired_out_dict.items():
+        actual_out = actual_out_dict[output_name]
+
+        if isinstance(desired_out, cla.Array):
+            desired_out = desired_out.get()
+        if isinstance(actual_out, cla.Array):
+            actual_out = actual_out.get()
+
+        try:
+            np.testing.assert_allclose(actual_out, desired_out,
+                                       rtol=rtol, atol=atol)
+        except AssertionError as e:
+            raise AutoTestFailureException(
+                f"While comparing '{output_name}': \n{e.args[0]}")
 
 # }}}
 
