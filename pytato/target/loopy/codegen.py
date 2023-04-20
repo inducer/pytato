@@ -46,6 +46,7 @@ from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstituti
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
+from pytato.function import Call, NamedCallResult
 from pytato.loopy import LoopyCall
 from pytato.tags import (ImplStored, ImplInlined, Named, PrefixNamed,
                          ImplementationStrategy)
@@ -575,6 +576,19 @@ class CodeGenMapper(Mapper):
 
         state.update_kernel(kernel)
 
+    def map_named_call_result(self, expr: NamedCallResult,
+                              state: CodeGenState) -> None:
+        raise NotImplementedError("LoopyTarget does not support outlined calls"
+                                  " (yet). As a fallback, the call"
+                                  " could be inlined using"
+                                  " pt.mark_all_calls_to_be_inlined.")
+
+    def map_call(self, expr: Call, state: CodeGenState) -> None:
+        raise NotImplementedError("LoopyTarget does not support outlined calls"
+                                  " (yet). As a fallback, the call"
+                                  " could be inlined using"
+                                  " pt.mark_all_calls_to_be_inlined.")
+
 # }}}
 
 
@@ -972,35 +986,29 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     .. note::
 
-        :mod:`pytato` metadata :math:`\mapsto` :mod:`loopy` metadata semantics:
+        - :mod:`pytato` metadata :math:`\mapsto` :mod:`loopy` metadata semantics:
 
-        - Inames that index over an :class:`~pytato.array.Array`'s axis in the
-          allocation instruction are tagged with the corresponding
-          :class:`~pytato.array.Axis`'s tags. The caller may choose to not
-          propagate axis tags of type *axis_tag_t_to_not_propagate*.
-        - :attr:`pytato.Array.tags` of inputs/outputs in *outputs*
-          would be copied over to the tags of the corresponding
-          :class:`loopy.ArrayArg`. The caller may choose to not
-          propagate array tags of type *array_tag_t_to_not_propagate*.
-        - Arrays tagged with :class:`pytato.tags.ImplStored` would have their
-          tags copied over to the tags of corresponding
-          :class:`loopy.TemporaryVariable`. The caller may choose to not
-          propagate array tags of type *array_tag_t_to_not_propagate*.
+            - Inames that index over an :class:`~pytato.array.Array`'s axis in the
+              allocation instruction are tagged with the corresponding
+              :class:`~pytato.array.Axis`'s tags. The caller may choose to not
+              propagate axis tags of type *axis_tag_t_to_not_propagate*.
+            - :attr:`pytato.Array.tags` of inputs/outputs in *outputs*
+              would be copied over to the tags of the corresponding
+              :class:`loopy.ArrayArg`. The caller may choose to not
+              propagate array tags of type *array_tag_t_to_not_propagate*.
+            - Arrays tagged with :class:`pytato.tags.ImplStored` would have their
+              tags copied over to the tags of corresponding
+              :class:`loopy.TemporaryVariable`. The caller may choose to not
+              propagate array tags of type *array_tag_t_to_not_propagate*.
+
+    .. warning::
+
+        Currently only :class:`~pytato.function.Call` nodes that are tagged with
+        :class:`pytato.tags.InlineCallTag` can be lowered to :mod:`loopy` IR.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
-
-    # optimization: remove any ImplStored tags on outputs to avoid redundant
-    # store-load operations (see https://github.com/inducer/pytato/issues/415)
-    orig_outputs = DictOfNamedArrays(
-        {name: (output.without_tags(ImplStored(),
-                                    verify_existence=False)
-                if not isinstance(output,
-                                  InputArgumentBase)
-                else output)
-         for name, output in orig_outputs._data.items()},
-        tags=orig_outputs.tags)
 
     del result
 
@@ -1016,6 +1024,18 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
+
+    # optimization: remove any ImplStored tags on outputs to avoid redundant
+    # store-load operations (see https://github.com/inducer/pytato/issues/415)
+    # (This must be done after all the calls have been inlined)
+    outputs = DictOfNamedArrays(
+        {name: (output.without_tags(ImplStored(),
+                                    verify_existence=False)
+                if not isinstance(output,
+                                  InputArgumentBase)
+                else output)
+         for name, output in outputs._data.items()},
+        tags=outputs.tags)
 
     compute_order = preproc_result.compute_order
 

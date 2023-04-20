@@ -5,11 +5,16 @@ Array Expressions
 
 .. automodule:: pytato.array
 
+Functions in Pytato IR
+----------------------
+
+.. automodule:: pytato.function
 
 Raising :class:`~pytato.array.IndexLambda` nodes
 ------------------------------------------------
 
 .. automodule:: pytato.raising
+
 
 Calling :mod:`loopy` kernels in an array expression
 ---------------------------------------------------
