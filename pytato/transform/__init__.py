@@ -1050,16 +1050,18 @@ class CachedMapAndCopyMapper(CopyMapper):
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
     # type-ignore-reason:incompatible with Mapper.rec()
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+    def rec(self, expr: MappedT) -> MappedT:  # type: ignore[override]
         if expr in self._cache:
-            return self._cache[expr]
+            # type-ignore-reason: parametric Mapping types aren't a thing
+            return self._cache[expr]  # type: ignore[return-value]
 
         result = super().rec(self.map_fn(expr))
         self._cache[expr] = result
-        return result
+        # type-ignore-reason: map_fn has imprecise types
+        return result  # type: ignore[return-value]
 
     # type-ignore-reason: Mapper.__call__ returns Any
-    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+    def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
         return self.rec(expr)
 
 # }}}
@@ -1283,9 +1285,9 @@ def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 
-def map_and_copy(expr: ArrayOrNames,
+def map_and_copy(expr: MappedT,
                  map_fn: Callable[[ArrayOrNames], ArrayOrNames]
-                 ) -> ArrayOrNames:
+                 ) -> MappedT:
     """
     Returns a copy of *expr* with every array expression reachable from *expr*
     mapped via *map_fn*.
