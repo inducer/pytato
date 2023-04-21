@@ -183,9 +183,9 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """
 
     def __init__(self) -> None:
-        self._cache: Dict[Any, CachedMapperT] = {}
+        self._cache: Dict[Hashable, CachedMapperT] = {}
 
-    def get_cache_key(self, expr: ArrayOrNames) -> Any:
+    def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
         return expr
 
     # type-ignore-reason: incompatible with super class
@@ -389,7 +389,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                 Tuple[Any, ...],
                                 Tuple[Tuple[str, Any], ...]
                                 ],
-                          ArrayOrNames] = {}
+                          ArrayOrNames] = {}  # type: ignore[assignment]
 
     def get_cache_key(self,
                       expr: ArrayOrNames,
