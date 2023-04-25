@@ -15,20 +15,20 @@ version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
 intersphinx_mapping = {
-    "https://docs.python.org/3/": None,
-    "https://numpy.org/doc/stable/": None,
-    "https://documen.tician.de/boxtree/": None,
-    "https://documen.tician.de/meshmode/": None,
-    "https://documen.tician.de/modepy/": None,
-    "https://documen.tician.de/pyopencl/": None,
-    "https://documen.tician.de/pytools/": None,
-    "https://documen.tician.de/pymbolic/": None,
-    "https://documen.tician.de/loopy/": None,
-    "https://documen.tician.de/sumpy/": None,
-    "https://documen.tician.de/islpy/": None,
-    "https://jax.readthedocs.io/en/latest/": None,
-    "https://www.attrs.org/en/stable/": None,
-    "https://mpi4py.readthedocs.io/en/latest": None,
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "meshmode": ("https://documen.tician.de/meshmode/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "sumpy": ("https://documen.tician.de/sumpy/", None),
+    "islpy": ("https://documen.tician.de/islpy/", None),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "attrs": ("https://www.attrs.org/en/stable/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in
