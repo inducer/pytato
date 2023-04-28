@@ -207,8 +207,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ sanity checks
 
-    if any([arg.is_input and arg.is_output
-            for arg in translation_unit[entrypoint].args]):
+    if any(arg.is_input and arg.is_output
+            for arg in translation_unit[entrypoint].args):
         # Pytato DAG cannot have stateful nodes.
         raise ValueError("Cannot call a kernel with side-effects.")
 

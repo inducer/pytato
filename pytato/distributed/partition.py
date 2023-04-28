@@ -50,7 +50,7 @@ from pytato.array import (Array,
                           NamedArray)
 from pytato.transform import (ArrayOrNames, CopyMapper, Mapper,
                               CachedWalkMapper, CopyMapperWithExtraArgs,
-                              CombineMapper)
+                              CombineMapper, CopyMapperResultT)
 from pytato.partition import GraphPart, GraphPartition, PartId, GraphPartitioner
 from pytato.distributed.nodes import (
         DistributedRecv, DistributedSend, DistributedSendRefHolder)
@@ -104,7 +104,7 @@ def _map_distributed_graph_partition_nodes(
             parts={
                 pid: replace(part,
                     input_name_to_recv_node={
-                        in_name: map_array(recv)
+                        in_name: cast(DistributedRecv, map_array(recv))
                         for in_name, recv in part.input_name_to_recv_node.items()},
                     output_name_to_send_node={
                         out_name: map_send(send)
@@ -233,10 +233,12 @@ class _DistributedGraphPartitioner(GraphPartitioner):
     def map_distributed_send_ref_holder(
                 self, expr: DistributedSendRefHolder, *args: Any) -> Any:
         send_part_id = self.get_part_id(expr.send.data)
+        rec_send_data = self.rec(expr.send.data)
+        assert isinstance(rec_send_data, Array)
 
         self.pid_to_dist_sends.setdefault(send_part_id, []).append(
                 DistributedSend(
-                    data=self.rec(expr.send.data),
+                    data=rec_send_data,
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag,
                     tags=expr.send.tags))
@@ -560,7 +562,7 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
 
         # type-ignore reason: incompatible  attribute type wrt base.
         self._cache: Dict[Tuple[ArrayOrNames, int],
-                          Any] = {}  # type: ignore[assignment]
+                          ArrayOrNames] = {}  # type: ignore[assignment]
 
     # type-ignore-reason: incompatible with super class
     def get_cache_key(self,  # type: ignore[override]
@@ -572,11 +574,12 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
 
     # type-ignore-reason: incompatible with super class
     def rec(self,  # type: ignore[override]
-            expr: ArrayOrNames,
-            user_part_id: int) -> Any:
+            expr: CopyMapperResultT,
+            user_part_id: int) -> CopyMapperResultT:
         key = self.get_cache_key(expr, user_part_id)
         try:
-            return self._cache[key]
+            # type-ignore-reason: parametric dicts are not a thing in typing module
+            return self._cache[key]  # type: ignore[return-value]
         except KeyError:
             if isinstance(expr, Array):
                 if expr in self.stored_array_to_part_id:
@@ -591,6 +594,12 @@ class _PartIDTagAssigner(CopyMapperWithExtraArgs):
             result = super().rec(expr, user_part_id)
             self._cache[key] = result
             return result
+
+    # type-ignore-reason: incompatible with super class
+    def __call__(self,  # type: ignore[override]
+                 expr: CopyMapperResultT,
+                 user_part_id: int) -> CopyMapperResultT:
+        return self.rec(expr, user_part_id)
 
 
 def _remove_part_id_tag(ary: ArrayOrNames) -> Array:

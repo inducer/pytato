@@ -96,8 +96,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-
-    # type-ignore-reason: mypy is right i.e. CopyMapper.__call__ is imprecise
-    return mapper(expr)  # type: ignore[no-any-return]
+    return mapper(expr)
 
 # vim:fdm=marker

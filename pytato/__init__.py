@@ -80,6 +80,7 @@ from pytato.reductions import sum, amax, amin, prod, any, all
 from pytato.cmath import (abs, sin, cos, tan, arcsin, arccos, arctan, sinh,
                           cosh, tanh, exp, log, log10, isnan, sqrt, conj,
                           arctan2, real, imag)
+from pytato.pad import pad
 
 
 from pytato.loopy import LoopyCall
@@ -151,7 +152,7 @@ __all__ = (
 
         "dot", "vdot", "squeeze",
 
-        "broadcast_to",
+        "broadcast_to", "pad",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",

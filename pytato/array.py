@@ -83,6 +83,7 @@ These functions generally follow the interface of the corresponding functions in
 .. autofunction:: squeeze
 .. autofunction:: expand_dims
 .. automodule:: pytato.cmath
+.. automodule:: pytato.pad
 .. automodule:: pytato.reductions
 
 .. currentmodule:: pytato.array
@@ -174,7 +175,7 @@ import attrs
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
-        FrozenSet)
+        FrozenSet, Collection)
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -312,8 +313,8 @@ class NormalizedSlice:
     .. attribute:: start
 
         An instance of :class:`ShapeComponent`. Normalized to satisfy the
-        relation ``-1 <= start <= axis_len``, where ``axis_len`` is the length of the
-        axis being sliced.
+        relation ``0 <= start <= (axis_len-1)``, where ``axis_len`` is the
+        length of the axis being sliced.
 
     .. attribute:: stop
 
@@ -2735,12 +2736,27 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
 
 # {{{ squeeze
 
-def squeeze(array: Array) -> Array:
-    """Remove single-dimensional entries from the shape of an array."""
+def squeeze(array: Array, axis: Optional[Collection[int]] = None) -> Array:
+    """
+    Remove single-dimensional entries from the shape of an array.
+
+    :arg axis: Subset of 1-long axes of *array* that must be removed. If *None*
+        all 1-long axes are removed.
+    """
     from pytato.utils import are_shape_components_equal
 
+    one_d_axes = frozenset({idim
+                            for idim in range(array.ndim)
+                            if are_shape_components_equal(array.shape[idim], 1)})
+    if axis is None:
+        axis = one_d_axes
+    else:
+        axis = frozenset(axis)
+        if not (axis <= one_d_axes):
+            raise ValueError("cannot squeeze an axis which is not 1-long")
+
     return array[tuple(
-            0 if are_shape_components_equal(s_i, 1) else slice(s_i)
+            0 if i in axis else slice(s_i)
             for i, s_i in enumerate(array.shape))]
 
 # }}}
