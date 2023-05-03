@@ -46,8 +46,8 @@ from pytato.array import (
 from pytato.codegen import normalize_outputs
 from pytato.transform import CachedMapper, ArrayOrNames
 
-from pytato.partition import GraphPartition, PartId
-from pytato.distributed.partition import DistributedGraphPart
+from pytato.distributed.partition import (
+        DistributedGraphPartition, DistributedGraphPart, PartId)
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedSendRefHolder
@@ -359,11 +359,11 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
     return emit.get()
 
 
-def get_dot_graph_from_partition(partition: GraphPartition) -> str:
+def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the partitioned computation of *partition*.
 
-    :arg partition: Outputs of :func:`~pytato.partition.find_partition`.
+    :arg partition: Outputs of :func:`~pytato.find_distributed_partition`.
     """
     # Maps each partition to a dict of its arrays with the node info
     part_id_to_node_info: Dict[Hashable, Dict[ArrayOrNames, DotNodeInfo]] = {}
@@ -371,7 +371,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper()
         for out_name in part.output_names:
-            mapper(partition.var_name_to_result[out_name])
+            mapper(partition.name_to_output[out_name])
 
         part_id_to_node_info[part.pid] = mapper.nodes
 
@@ -411,7 +411,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
             if isinstance(part, DistributedGraphPart):
                 part_dist_recv_var_name_to_node_id = {}
                 for name, recv in (
-                        part.input_name_to_recv_node.items()):
+                        part.name_to_recv_node.items()):
                     node_id = id_gen("recv")
                     _emit_array(emit, "DistributedRecv", {
                         "shape": stringify_shape(recv.shape),
@@ -471,7 +471,7 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
                                     break
                             assert computing_pid is not None
                             tgt = part_id_to_array_to_id[computing_pid][
-                                    partition.var_name_to_result[array.name]]
+                                    partition.name_to_output[array.name]]
                             emit(f"{tgt} -> {array_to_id[array]} [style=dashed]")
                             emitted_placeholders.add(array)
 
@@ -500,17 +500,18 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
 
                 deferred_send_edges = []
                 if isinstance(part, DistributedGraphPart):
-                    for name, send in (
-                            part.output_name_to_send_node.items()):
-                        node_id = id_gen("send")
-                        _emit_array(emit, "DistributedSend", {
-                            "dest_rank": str(send.dest_rank),
-                            "comm_tag": str(send.comm_tag),
-                            }, node_id)
+                    for name, sends in (
+                            part.name_to_send_nodes.items()):
+                        for send in sends:
+                            node_id = id_gen("send")
+                            _emit_array(emit, "DistributedSend", {
+                                "dest_rank": str(send.dest_rank),
+                                "comm_tag": str(send.comm_tag),
+                                }, node_id)
 
-                        deferred_send_edges.append(
-                                f"{array_to_id[send.data]} -> {node_id}"
-                                f'[style=dotted, label="{dot_escape(name)}"]')
+                            deferred_send_edges.append(
+                                    f"{array_to_id[send.data]} -> {node_id}"
+                                    f'[style=dotted, label="{dot_escape(name)}"]')
 
                 # }}}
 
@@ -530,20 +531,21 @@ def get_dot_graph_from_partition(partition: GraphPartition) -> str:
     return emit.get()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays, GraphPartition],
+def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
+                                 DistributedGraphPartition],
         **kwargs: Any) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
         :func:`pytato.generate_loopy`) or the output of :func:`get_dot_graph`,
-        or the output of :func:`~pytato.partition.find_partition`.
+        or the output of :func:`~pytato.find_distributed_partition`.
     :arg kwargs: Passed on to :func:`pytools.graphviz.show_dot` unmodified.
     """
     dot_code: str
 
     if isinstance(result, str):
         dot_code = result
-    elif isinstance(result, GraphPartition):
+    elif isinstance(result, DistributedGraphPartition):
         dot_code = get_dot_graph_from_partition(result)
     else:
         dot_code = get_dot_graph(result)

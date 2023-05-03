@@ -25,17 +25,7 @@ Stringifying Expression Graphs
 
 .. _partitioning:
 
-Partitioning Array Expression Graphs
-====================================
-
-.. automodule:: pytato.partition
-
 .. _distributed:
-
-Support for Distributed-Memory/Message Passing
-==============================================
-
-.. automodule:: pytato.distributed
 
 Utilities and Diagnostics
 =========================

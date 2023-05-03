@@ -19,6 +19,7 @@ Here's an example usage:
 
     array
     dag
+    distributed
     codegen
     internal
     design

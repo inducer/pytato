@@ -1,12 +1,22 @@
 """
+Nodes
+-----
+The following nodes represent communication in the DAG:
+
 .. currentmodule:: pytato
 .. autoclass:: DistributedSend
 .. autoclass:: DistributedSendRefHolder
 .. autoclass:: DistributedRecv
 
-.. autofunction:: make_distributed_send
+These functions aid in creating communication nodes:
+
 .. autofunction:: staple_distributed_send
 .. autofunction:: make_distributed_recv
+
+For completeness, individual (non-held/"stapled") :class:`DistributedSend` nodes
+can be made via this function:
+
+.. autofunction:: make_distributed_send
 """
 
 from __future__ import annotations
@@ -53,6 +63,8 @@ CommTagType = Hashable
 
 class DistributedSend(Taggable):
     """Class representing a distributed send operation.
+    See :class:`DistributedSendRefHolder` for a way to ensure that nodes
+    of this type remain part of a DAG.
 
     .. attribute:: data
 
