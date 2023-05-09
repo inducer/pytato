@@ -80,6 +80,7 @@ __doc__ = """
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
+.. automodule:: pytato.transform.einsum_distributive_law
 .. currentmodule:: pytato.transform
 
 Dict representation of DAGs
