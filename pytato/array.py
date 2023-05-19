@@ -1893,7 +1893,11 @@ def _get_default_tags(existing_tags: Optional[FrozenSet[Tag]] = None) \
     import traceback
     from pytato.tags import CreatedAt
 
-    if __debug__ and (
+    from pytato import DEBUG_ENABLED
+
+    # This has a significant overhead, so only enable it when PYTATO_DEBUG is
+    # enabled.
+    if DEBUG_ENABLED and (
             existing_tags is None
             or not any(isinstance(tag, CreatedAt) for tag in existing_tags)):
         frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
