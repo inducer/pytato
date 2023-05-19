@@ -21,9 +21,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import pytest
+from pytools.graph import CycleError
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+import pytest  # noqa
 import pyopencl as cl
+import pyopencl.array as cla
 import numpy as np
 import pytato as pt
 import sys
@@ -32,23 +36,32 @@ import os
 
 # {{{ mpi test infrastructure
 
-def run_test_with_mpi(num_ranks, f, *args):
-    import pytest
+def run_test_with_mpi(num_ranks, f, *args, extra_env_vars=None):
     pytest.importorskip("mpi4py")
+
+    if extra_env_vars is None:
+        extra_env_vars = {}
 
     from pickle import dumps
     from base64 import b64encode
 
-    invocation_info = b64encode(dumps((f, args))).decode()
     from subprocess import check_call
+
+    env_vars = {
+            "RUN_WITHIN_MPI": "1",
+            "INVOCATION_INFO": b64encode(dumps((f, args))).decode(),
+            }
+    env_vars.update(extra_env_vars)
 
     # NOTE: CI uses OpenMPI; -x to pass env vars. MPICH uses -env
     check_call([
         "mpiexec", "-np", str(num_ranks),
-        "-x", "RUN_WITHIN_MPI=1",
         "--oversubscribe",
-        "-x", f"INVOCATION_INFO={invocation_info}",
-        sys.executable, "-m", "mpi4py", __file__])
+        ] + [
+            item
+            for env_name, env_val in env_vars.items()
+            for item in ["-x", f"{env_name}={env_val}"]
+        ] + [sys.executable, "-m", "mpi4py", __file__])
 
 
 def run_test_with_mpi_inner():
@@ -87,7 +100,7 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
     # Find the partition
     outputs = pt.make_dict_of_named_arrays({"out": y})
-    distributed_parts = pt.find_distributed_partition(outputs)
+    distributed_parts = pt.find_distributed_partition(comm, outputs)
     prg_per_partition = pt.generate_code_for_partition(distributed_parts)
 
     # Execute the distributed partition
@@ -165,7 +178,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
             {"result": make_random_dag(rdagc_comm)})
         x_comm = pt.transform.materialize_with_mpms(pt_dag)
 
-        distributed_partition = pt.find_distributed_partition(x_comm)
+        distributed_partition = pt.find_distributed_partition(comm, x_comm)
         pt.verify_distributed_partition(comm, distributed_partition)
 
         # Transform symbolic tags into numeric ones for MPI
@@ -173,11 +186,6 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
                 comm,
                 distributed_partition,
                 base_tag=comm_tag)
-
-        # Regression check for https://github.com/inducer/pytato/issues/307
-        from pytato.distributed.partition import PartIDTag
-        for ary in distributed_partition.var_name_to_result.values():
-            assert not ary.tags_of_type(PartIDTag)
 
         prg_per_partition = pt.generate_code_for_partition(distributed_partition)
 
@@ -232,7 +240,7 @@ def _test_dag_with_no_comm_nodes_inner(ctx_factory):
 
     # }}}
 
-    parts = pt.find_distributed_partition(dag)
+    parts = pt.find_distributed_partition(comm, dag)
     assert len(parts.parts) == 1
     prg_per_partition = pt.generate_code_for_partition(parts)
     out_dict = pt.execute_distributed_partition(
@@ -248,62 +256,371 @@ def test_dag_with_no_comm_nodes():
 # }}}
 
 
+# {{{ test DAG with duplicated output arrays
+
+def _test_dag_with_duplicated_output_arrays_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    rng = default_rng()
+    x_np = rng.random((10, 4))
+    x = pt.make_data_wrapper(x_np)
+
+    # {{{ construct the DAG
+
+    y = 2 * x
+    out = 4 * y
+    dag = pt.make_dict_of_named_arrays({"out1": out, "out2": out})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    np.testing.assert_allclose(out_dict["out1"], 8 * x_np)
+    np.testing.assert_allclose(out_dict["out2"], 8 * x_np)
+
+
+def test_dag_with_duplicated_output_arrays():
+    run_test_with_mpi(2, _test_dag_with_duplicated_output_arrays_inner)
+
+# }}}
+
+
+# {{{ test DAG with a receive as an output
+
+def _test_dag_with_recv_as_output_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # {{{ construct the DAG
+
+    if comm.rank == 0:
+        rng = default_rng()
+        x_np = rng.random((10, 4))
+        x = pt.make_data_wrapper(cla.to_device(queue, x_np))
+        y = 2 * x
+        send = pt.staple_distributed_send(
+            y, dest_rank=1, comm_tag=42,
+            stapled_to=pt.ones(10))
+        dag = pt.make_dict_of_named_arrays({"y": y, "send": send})
+    else:
+        y = pt.make_distributed_recv(
+            src_rank=0, comm_tag=42,
+            shape=(10, 4), dtype=np.float64)
+        dag = pt.make_dict_of_named_arrays({"y": y})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    if comm.rank == 0:
+        comm.bcast(x_np)
+    else:
+        x_np = comm.bcast(None)
+
+    np.testing.assert_allclose(out_dict["y"].get(), 2 * x_np)
+
+
+def test_dag_with_recv_as_output():
+    run_test_with_mpi(2, _test_dag_with_recv_as_output_inner)
+
+# }}}
+
+
+# {{{ test DAG with a materialized array promoted to a part output
+
+def _test_dag_with_materialized_array_promoted_to_part_output_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # {{{ construct the DAG
+
+    if comm.rank == 0:
+        rng = default_rng()
+        x_np = rng.random((10, 4))
+        x = pt.make_data_wrapper(cla.to_device(queue, x_np))
+        y = 2 * x
+        # Force y to be materialized
+        from pytato.tags import ImplStored
+        y = y.tagged(ImplStored())
+        z = 2 * y
+        send = pt.staple_distributed_send(
+            z, dest_rank=1, comm_tag=42,
+            stapled_to=pt.ones(10))
+        w = pt.make_distributed_recv(
+            src_rank=1, comm_tag=43,
+            shape=(10, 4), dtype=np.float64)
+        q = y + w
+        dag = pt.make_dict_of_named_arrays({"q": q, "send": send})
+    else:
+        z = pt.make_distributed_recv(
+            src_rank=0, comm_tag=42,
+            shape=(10, 4), dtype=np.float64)
+        w = 2 * z
+        send = pt.staple_distributed_send(
+            w, dest_rank=0, comm_tag=43,
+            stapled_to=pt.ones(10))
+        q = z/2 + w
+        dag = pt.make_dict_of_named_arrays({"q": q, "send": send})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    if comm.rank == 0:
+        # Is this too fragile?
+        # part 0 should return a materialized array and a send
+        assert len(parts.parts[0].output_names) == 2
+        # part 1 should take a materialized array and a recv
+        assert len(parts.parts[1].partition_input_names) == 2
+
+    if comm.rank == 0:
+        comm.bcast(x_np)
+    else:
+        x_np = comm.bcast(None)
+
+    np.testing.assert_allclose(out_dict["q"].get(), 10 * x_np)
+
+
+def test_dag_with_materialized_array_promoted_to_part_output():
+    run_test_with_mpi(
+        2, _test_dag_with_materialized_array_promoted_to_part_output_inner)
+
+# }}}
+
+
+# {{{ test DAG with multiple send nodes per sent array
+
+def _test_dag_with_multiple_send_nodes_per_sent_array_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # {{{ construct the DAG
+
+    if comm.rank == 0:
+        rng = default_rng()
+        x_np = rng.random((10, 4))
+        x = pt.make_data_wrapper(cla.to_device(queue, x_np))
+        y = 2 * x
+        send1 = pt.staple_distributed_send(
+            y, dest_rank=1, comm_tag=42,
+            stapled_to=pt.ones(10))
+        send2 = pt.staple_distributed_send(
+            y, dest_rank=2, comm_tag=42,
+            stapled_to=pt.ones(10))
+        z = 4 * y
+        dag = pt.make_dict_of_named_arrays({"z": z, "send1": send1, "send2": send2})
+    else:
+        y = pt.make_distributed_recv(
+            src_rank=0, comm_tag=42,
+            shape=(10, 4), dtype=np.float64)
+        z = 4 * y
+        dag = pt.make_dict_of_named_arrays({"z": z})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    pt.verify_distributed_partition(comm, parts)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    if comm.rank == 0:
+        comm.bcast(x_np)
+    else:
+        x_np = comm.bcast(None)
+
+    np.testing.assert_allclose(out_dict["z"].get(), 8 * x_np)
+
+
+def test_dag_with_multiple_send_nodes_per_sent_array():
+    run_test_with_mpi(3, _test_dag_with_multiple_send_nodes_per_sent_array_inner)
+
+# }}}
+
+
+# {{{ test DAG with periodic communication
+
+def _test_dag_with_periodic_communication_inner(ctx_factory):
+    from numpy.random import default_rng
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    # {{{ construct the DAG
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+    rng = default_rng()
+    x_np = rng.random((10, 4))
+    x = pt.make_data_wrapper(cla.to_device(queue, x_np))
+
+    x_plus = pt.staple_distributed_send(x, dest_rank=(rank-1) % size, comm_tag=42,
+            stapled_to=pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=42, shape=(10, 4),
+                dtype=np.float64))
+
+    y = x + x_plus
+
+    y_plus = pt.staple_distributed_send(y, dest_rank=(rank-1) % size, comm_tag=43,
+            stapled_to=pt.make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=43, shape=(10, 4),
+                dtype=np.float64))
+
+    z = y + y_plus
+
+    dag = pt.make_dict_of_named_arrays({"z": z})
+
+    # }}}
+
+    parts = pt.find_distributed_partition(comm, dag)
+    pt.verify_distributed_partition(comm, parts)
+    prg_per_partition = pt.generate_code_for_partition(parts)
+    out_dict = pt.execute_distributed_partition(
+            parts, prg_per_partition, queue, comm)
+
+    comm.isend(x_np, dest=(rank-1) % size, tag=44)
+    ref_x_plus_np = comm.recv(source=(rank+1) % size, tag=44)
+
+    ref_y_np = x_np + ref_x_plus_np
+
+    comm.isend(ref_y_np, dest=(rank-1) % size, tag=45)
+    ref_y_plus_np = comm.recv(source=(rank+1) % size, tag=45)
+
+    ref_res = ref_y_np + ref_y_plus_np
+
+    np.testing.assert_allclose(out_dict["z"].get(), ref_res)
+
+
+@pytest.mark.parametrize("num_ranks", [2, 3])
+def test_dag_with_periodic_communication(num_ranks):
+    run_test_with_mpi(num_ranks, _test_dag_with_periodic_communication_inner)
+
+# }}}
+
+
 # {{{ test deterministic partitioning
 
-def _check_deterministic_partition(dag, ref_partition,
-                                   iproc, results):
-    partition = pt.find_distributed_partition(dag)
-    are_equal = int(partition == ref_partition)
-    print(iproc, are_equal)
-    results[iproc] = are_equal
+def _gather_random_dist_partitions(ctx_factory):
+    import mpi4py.MPI as MPI
 
+    comm = MPI.COMM_WORLD
 
-def test_deterministic_partitioning():
-    import multiprocessing as mp
-    import os
+    seed = int(os.environ["PYTATO_DAG_SEED"])
     from testlib import get_random_pt_dag_with_send_recv_nodes
+    dag = get_random_pt_dag_with_send_recv_nodes(
+        seed, rank=comm.rank, size=comm.size,
+        convert_dws_to_placeholders=True)
 
-    original_hash_seed = os.environ.pop("PYTHONHASHSEED", None)
+    my_partition = pt.find_distributed_partition(comm, dag)
 
-    nprocs = 4
+    all_partitions = comm.gather(my_partition)
 
-    mp_ctx = mp.get_context("spawn")
+    from pickle import dump
+    if comm.rank == 0:
+        with open(os.environ["PYTATO_PARTITIONS_DUMP_FN"], "wb") as outf:
+            dump(all_partitions, outf)
 
-    ntests = 10
-    for i in range(ntests):
-        seed = 120 + i
-        results = mp_ctx.Array("i", (0, ) * nprocs)
-        print(f"Step {i} {seed}")
 
-        ref_dag = get_random_pt_dag_with_send_recv_nodes(
-            seed, rank=0, size=7,
-            convert_dws_to_placeholders=True)
+@pytest.mark.parametrize("seed", list(range(10)))
+def test_deterministic_partitioning(seed):
+    import os
+    from pickle import load
+    from pytools import is_single_valued
 
-        ref_partition = pt.find_distributed_partition(ref_dag)
+    partitions_across_seeds = []
+    partitions_dump_fn = f"tmp-partitions-{os.getpid()}.pkl"
 
-        # {{{ spawn nprocs-processes and verify they all compare equally
+    for hashseed in [234, 241, 9222, 5]:
+        run_test_with_mpi(2, _gather_random_dist_partitions, extra_env_vars={
+            "PYTATO_DAG_SEED": str(seed),
+            "PYTHONHASHSEED": str(hashseed),
+            "PYTATO_PARTITIONS_DUMP_FN": partitions_dump_fn,
+            })
 
-        procs = [mp_ctx.Process(target=_check_deterministic_partition,
-                                args=(ref_dag,
-                                      ref_partition,
-                                      iproc, results))
-                 for iproc in range(nprocs)]
+        with open(partitions_dump_fn, "rb") as inf:
+            partitions_across_seeds.append(load(inf))
+            os.unlink(partitions_dump_fn)
 
-        for iproc, proc in enumerate(procs):
-            # See
-            # https://replit.com/@KaushikKulkarn1/spawningprocswithhashseedv2?v=1#main.py
-            os.environ["PYTHONHASHSEED"] = str(iproc)
-            proc.start()
+    assert is_single_valued(partitions_across_seeds)
 
-        for proc in procs:
-            proc.join()
+# }}}
 
-        if original_hash_seed is not None:
-            os.environ["PYTHONHASHSEED"] = original_hash_seed
 
-        assert set(results[:]) == {1}
+# {{{ test Kaushik's MWE
 
-        # }}}
+def test_kaushik_mwe():
+    run_test_with_mpi(2, _do_test_kaushik_mwe)
+
+
+def _do_test_kaushik_mwe(ctx_factory):
+    # from https://github.com/inducer/pytato/pull/393#issuecomment-1324642248
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    if comm.rank == 0:
+        send_rank = 1
+        recv_rank = 1
+
+        recv = pt.make_distributed_recv(
+                    src_rank=recv_rank, comm_tag=42,
+                    shape=(10,), dtype=np.float64)
+        y = 2*recv
+
+        send = pt.staple_distributed_send(
+            y, dest_rank=send_rank, comm_tag=43,
+            stapled_to=pt.ones(10))
+        out = pt.make_dict_of_named_arrays({"out": send})
+    elif comm.rank == 1:
+        send_rank = 0
+        recv_rank = 0
+        x = pt.make_data_wrapper(np.ones(10))
+
+        send = pt.staple_distributed_send(
+            2*x, dest_rank=send_rank, comm_tag=42,
+            stapled_to=pt.zeros(10))
+        recv = pt.make_distributed_recv(
+                    src_rank=recv_rank, comm_tag=43,
+                    shape=(10,), dtype=np.float64)
+        out = pt.make_dict_of_named_arrays({"out1": send, "out2": recv})
+    else:
+        raise AssertionError()
+
+    distributed_parts = pt.find_distributed_partition(comm, out)
+
+    pt.verify_distributed_partition(comm, distributed_parts)
+    prg_per_partition = pt.generate_code_for_partition(distributed_parts)
+
+    # Execute the distributed partition
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    pt.execute_distributed_partition(distributed_parts, prg_per_partition,
+                                            queue, comm,
+                                            input_args={})
 
 # }}}
 
@@ -317,10 +634,8 @@ def test_verify_distributed_partition():
 def _do_verify_distributed_partition(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
-    import pytest
     from pytato.distributed.verify import (DuplicateSendError,
                 DuplicateRecvError, MissingSendError, MissingRecvError)
-    from pytato.partition import PartitionInducedCycleError
 
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -331,15 +646,12 @@ def _do_verify_distributed_partition(ctx_factory):
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
 
     outputs = pt.make_dict_of_named_arrays({"out": y})
-    distributed_parts = pt.find_distributed_partition(outputs)
-
-    if rank == 0:
-        with pytest.raises(MissingSendError):
-            pt.verify_distributed_partition(comm, distributed_parts)
-    else:
-        pt.verify_distributed_partition(comm, distributed_parts)
+    with pytest.raises(MissingSendError):
+        pt.find_distributed_partition(comm, outputs)
 
     # }}}
+
+    comm.barrier()
 
     # {{{ test unmatched send
 
@@ -348,35 +660,29 @@ def _do_verify_distributed_partition(ctx_factory):
                 dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
 
     outputs = pt.make_dict_of_named_arrays({"out": send})
-    distributed_parts = pt.find_distributed_partition(outputs)
-
-    if rank == 0:
-        with pytest.raises(MissingRecvError):
-            pt.verify_distributed_partition(comm, distributed_parts)
-    else:
-        pt.verify_distributed_partition(comm, distributed_parts)
+    with pytest.raises(MissingRecvError):
+        pt.find_distributed_partition(comm, outputs)
 
     # }}}
+
+    comm.barrier()
 
     # {{{ test duplicate recv
 
     recv2 = pt.make_distributed_recv(
-                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int)
+                src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=float)
 
     send = pt.staple_distributed_send(recv2, dest_rank=(rank-1) % size, comm_tag=42,
             stapled_to=pt.make_distributed_recv(
                 src_rank=(rank+1) % size, comm_tag=42, shape=(4, 4), dtype=int))
 
     outputs = pt.make_dict_of_named_arrays({"out": x+send})
-    distributed_parts = pt.find_distributed_partition(outputs)
-
-    if rank == 0:
-        with pytest.raises(DuplicateRecvError):
-            pt.verify_distributed_partition(comm, distributed_parts)
-    else:
-        pt.verify_distributed_partition(comm, distributed_parts)
+    with pytest.raises(DuplicateRecvError):
+        pt.find_distributed_partition(comm, outputs)
 
     # }}}
+
+    comm.barrier()
 
     # {{{ test duplicate send
 
@@ -388,15 +694,12 @@ def _do_verify_distributed_partition(ctx_factory):
                 dest_rank=(rank-1) % size, comm_tag=42, stapled_to=x)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
-    distributed_parts = pt.find_distributed_partition(outputs)
-
-    if rank == 0:
-        with pytest.raises(DuplicateSendError):
-            pt.verify_distributed_partition(comm, distributed_parts)
-    else:
-        pt.verify_distributed_partition(comm, distributed_parts)
+    with pytest.raises(DuplicateSendError):
+        pt.find_distributed_partition(comm, outputs)
 
     # }}}
+
+    comm.barrier()
 
     # {{{ test cycle
 
@@ -413,13 +716,10 @@ def _do_verify_distributed_partition(ctx_factory):
             stapled_to=recv)
 
     outputs = pt.make_dict_of_named_arrays({"out": send+send2})
-    distributed_parts = pt.find_distributed_partition(outputs)
 
-    if rank == 0:
-        with pytest.raises(PartitionInducedCycleError):
-            pt.verify_distributed_partition(comm, distributed_parts)
-    else:
-        pt.verify_distributed_partition(comm, distributed_parts)
+    print(f"BEGIN {comm.rank}")
+    with pytest.raises(CycleError):
+        pt.find_distributed_partition(comm, outputs)
 
     # }}}
 
