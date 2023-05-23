@@ -90,7 +90,9 @@ from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.target.python.jax import generate_jax
 from pytato.visualization import (get_dot_graph, show_dot_graph,
                                   get_ascii_graph, show_ascii_graph,
-                                  get_dot_graph_from_partition)
+                                  get_dot_graph_from_partition,
+                                  show_fancy_placeholder_data_flow,
+                                  )
 import pytato.analysis as analysis
 import pytato.tags as tags
 import pytato.transform as transform
@@ -133,6 +135,7 @@ __all__ = (
 
         "get_dot_graph", "show_dot_graph", "get_ascii_graph",
         "show_ascii_graph", "get_dot_graph_from_partition",
+        "show_fancy_placeholder_data_flow",
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan", "sqrt", "conj", "arctan2",
