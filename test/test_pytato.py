@@ -35,6 +35,7 @@ import pytato as pt
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from testlib import RandomDAGContext, make_random_dag
 
 
 def test_matmul_input_validation():
@@ -1113,6 +1114,35 @@ def test_rewrite_einsums_with_no_broadcasts():
     new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr, "ij,ik,ijk->i")
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr.args[2], "ij,ik->ijk")
+
+
+def test_dot_visualizers():
+    a = pt.make_placeholder("A", shape=(10, 4), dtype=np.float64)
+    x1 = pt.make_placeholder("x1", shape=4, dtype=np.float64)
+    x2 = pt.make_placeholder("x2", shape=4, dtype=np.float64)
+
+    y = a @ (2*x1 + 3*x2)
+
+    axis_len = 5
+
+    graphs = [y]
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+        graphs.append(make_random_dag(rdagc))
+
+    # {{{ ensure that the generated output is valid dot-lang
+
+    # TODO: Verify the soundness of the generated svg file
+
+    for graph in graphs:
+        # plot to .svg file to avoid dep on a webbrowser or X-window system
+        pt.show_dot_graph(graph, output_to="svg")
+
+    pt.show_fancy_placeholder_data_flow(y, output_to="svg")
+
+    # }}}
 
 
 if __name__ == "__main__":
