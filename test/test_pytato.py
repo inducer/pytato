@@ -35,6 +35,7 @@ import pytato as pt
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from pytato.transform import CopyMapper, PostMapEqualNodeReuser, WalkMapper
 
 
 def test_matmul_input_validation():
@@ -1113,6 +1114,43 @@ def test_rewrite_einsums_with_no_broadcasts():
     new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr, "ij,ik,ijk->i")
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr.args[2], "ij,ik->ijk")
+
+
+# {{{ test_post_map_equal_node_reuser
+
+class _NodeInstanceCounter(WalkMapper):
+    def __init__(self):
+        self.ids = set()
+
+    def visit(self, expr):
+        self.ids.add(id(expr))
+        return True
+
+
+def test_post_map_equal_node_reuser_intestine():
+    def construct_bad_intestine_graph(depth=10):
+        if depth == 0:
+            return pt.make_placeholder("x", shape=(10,), dtype=float)
+
+        return (
+                2 * construct_bad_intestine_graph(depth-1)
+                + 3 * construct_bad_intestine_graph(depth-1))
+
+    def count_node_instances(graph):
+        nic = _NodeInstanceCounter()
+        nic(graph)
+        return len(nic.ids)
+
+    graph = construct_bad_intestine_graph()
+    assert count_node_instances(graph) == 4093
+
+    graph_cm = CopyMapper()(graph)
+    assert count_node_instances(graph_cm) == 31
+
+    graph_penr = PostMapEqualNodeReuser()(graph)
+    assert count_node_instances(graph_penr) == 31
+
+# }}}
 
 
 if __name__ == "__main__":

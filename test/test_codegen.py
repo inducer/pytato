@@ -1556,7 +1556,7 @@ def test_zero_size_cl_array_dedup(ctx_factory):
     x4 = pt.make_data_wrapper(x_cl2)
 
     out = pt.make_dict_of_named_arrays({"out1": 2*x1,
-                                        "out2": 2*x2,
+                                        "out2": 3*x2,
                                         "out3": x3 + x4
                                         })
 
