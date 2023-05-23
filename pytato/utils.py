@@ -33,7 +33,7 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes,
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any)
+                          _dtype_any, Einsum)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES, INT_CLASSES, BoolT)
 from pytools import UniqueNameGenerator
@@ -50,6 +50,7 @@ Helper routines
 .. autofunction:: get_shape_after_broadcasting
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
+.. autofunction:: get_einsum_subscript_str
 """
 
 
@@ -595,5 +596,46 @@ def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
 
     return np.find_common_type(array_types=array_types,
                                scalar_types=scalar_types)
+
+
+def get_einsum_subscript_str(expr: Einsum) -> str:
+    """
+    Returns the index subscript expression that was used in constructing *expr*
+    using the :func:`pytato.einsum` routine.
+
+
+    .. testsetup::
+
+        >>> import pytato as pt
+        >>> import numpy as np
+        >>> from pytato.utils import get_einsum_subscript_str
+
+    .. doctest::
+
+        >>> A = pt.make_placeholder("A", (10, 6), np.float64)
+        >>> B = pt.make_placeholder("B", (6, 5), np.float64)
+        >>> C = pt.make_placeholder("B", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> get_einsum_subscript_str(ABC)
+        'ij,jk,kl->il'
+    """
+    from pytato.array import EinsumElementwiseAxis
+
+    acc_descr_to_index = {
+        acc_descr: idx
+        for idx, acc_descr in expr.index_to_access_descr.items()
+    }
+
+    output_subscripts = "".join(
+        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
+         for idim in range(expr.ndim)]
+    )
+    arg_subscripts: List[str] = []
+
+    for acc_descrs in expr.access_descriptors:
+        arg_subscripts.append("".join(acc_descr_to_index[acc_descr]
+                                      for acc_descr in acc_descrs))
+
+    return f"{','.join(arg_subscripts)}->{output_subscripts}"
 
 # vim: fdm=marker
