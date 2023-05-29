@@ -1,6 +1,5 @@
 - arg: ignored-modules
   val:
-  - asciidag
   - matplotlib
   - ipykernel
   - ply

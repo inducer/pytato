@@ -371,37 +371,6 @@ def test_userscollector():
         assert nuc[dag] == 0
 
 
-def test_asciidag():
-    pytest.importorskip("asciidag")
-
-    n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
-    stack = pt.stack([array, 2*array, array + 6])
-    y = stack @ stack.T
-
-    from pytato import get_ascii_graph
-
-    res = get_ascii_graph(y, use_color=False)
-
-    ref_str = r"""* Inputs
-*-.   Placeholder
-|\ \
-* | | IndexLambda
-| |/
-|/|
-| * IndexLambda
-|/
-*   Stack
-|\
-* | AxisPermutation
-|/
-* Einsum
-* Outputs
-"""
-
-    assert res == ref_str
-
-
 def test_linear_complexity_inequality():
     # See https://github.com/inducer/pytato/issues/163
     import pytato as pt
