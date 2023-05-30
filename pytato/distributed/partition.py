@@ -249,7 +249,9 @@ class DistributedGraphPartition:
     .. attribute:: name_to_output
 
        Mapping of placeholder names to the respective :class:`pytato.array.Array`
-       they represent.
+       they represent. This is where the actual expressions are stored, for
+       all parts. Observe that the :class:`DistributedGraphPart`, for the most
+       part, only stores names.
     """
     parts: Mapping[PartId, DistributedGraphPart]
     name_to_output: Mapping[str, Array]
