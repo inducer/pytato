@@ -55,6 +55,8 @@ __doc__ = """
 """
 
 
+# {{{ NUserCollector
+
 class NUserCollector(Mapper):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
@@ -172,6 +174,8 @@ class NUserCollector(Mapper):
                 self.nusers[dim] += 1
                 self.rec(dim)
 
+# }}}
+
 
 def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
     """
@@ -184,6 +188,8 @@ def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
     nuser_collector(outputs)
     return nuser_collector.nusers
 
+
+# {{{ is_einsum_similar_to_subscript
 
 def _get_indices_from_input_subscript(subscript: str,
                                       is_output: bool,
@@ -211,8 +217,6 @@ def _get_indices_from_input_subscript(subscript: str,
                              f" '{subscript}'.")
 
         # }}}
-
-    # {{{
 
     if is_output:
         if len(normalized_indices) != len(set(normalized_indices)):
@@ -276,6 +280,8 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
         # }}}
 
     return True
+
+# }}}
 
 
 # {{{ DirectPredecessorsGetter
@@ -446,3 +452,5 @@ def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
     return cscm.count
 
 # }}}
+
+# vim: fdm=marker
