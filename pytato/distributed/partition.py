@@ -251,10 +251,19 @@ class DistributedGraphPartition:
        Mapping of placeholder names to the respective :class:`pytato.array.Array`
        they represent. This is where the actual expressions are stored, for
        all parts. Observe that the :class:`DistributedGraphPart`, for the most
-       part, only stores names.
+       part, only stores names. These "outputs" may be 'part outputs' (i.e.
+       data computed in one part for use by another, effectively tempoarary
+       variables), or 'overall outputs' of the comutation.
+
+    .. attribute:: overall_output_names
+
+        The names of the outputs (in :attr:`name_to_output`) that were given to
+        :func:`find_distributed_partition` to specify the overall computaiton.
+
     """
     parts: Mapping[PartId, DistributedGraphPart]
     name_to_output: Mapping[str, Array]
+    overall_output_names: Sequence[str]
 
 # }}}
 
@@ -367,6 +376,7 @@ def _make_distributed_partition(
         sptpo_ary_to_name: Mapping[Array, str],
         local_recv_id_to_recv_node: Dict[CommunicationOpIdentifier, DistributedRecv],
         local_send_id_to_send_node: Dict[CommunicationOpIdentifier, DistributedSend],
+        overall_output_names: Sequence[str],
         ) -> DistributedGraphPartition:
     name_to_output = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
@@ -404,6 +414,7 @@ def _make_distributed_partition(
     result = DistributedGraphPartition(
             parts=parts,
             name_to_output=name_to_output,
+            overall_output_names=overall_output_names,
             )
 
     return result
@@ -969,7 +980,8 @@ def find_distributed_partition(
             sent_ary_to_name,
             sptpo_ary_to_name,
             lsrdg.local_recv_id_to_recv_node,
-            lsrdg.local_send_id_to_send_node)
+            lsrdg.local_send_id_to_send_node,
+            tuple(outputs))
 
     from pytato.distributed.verify import _run_partition_diagnostics
     _run_partition_diagnostics(outputs, partition)
