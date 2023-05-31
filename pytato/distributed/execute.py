@@ -231,7 +231,7 @@ def execute_distributed_partition(
             assert count == 0
             assert name not in context
 
-    return context
+    return {name: context[name] for name in partition.overall_output_names}
 
 # }}}
 
