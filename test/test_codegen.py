@@ -1854,15 +1854,16 @@ def test_pad(ctx_factory):
         np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
 
 
-def test_function_call(ctx_factory):
+def test_function_call(ctx_factory, visualize=False):
+    from functools import partial
     cl_ctx = ctx_factory()
     cq = cl.CommandQueue(cl_ctx)
 
     def f(x):
         return 2*x
 
-    def g(x):
-        return 2*x, 3*x
+    def g(tracer, x):
+        return tracer(f, x), 3*x
 
     def h(x, y):
         return {"twice": 2*x+y, "thrice": 3*x+y}
@@ -1870,7 +1871,7 @@ def test_function_call(ctx_factory):
     def build_expression(tracer):
         x = pt.arange(500, dtype=np.float32)
         twice_x = tracer(f, x)
-        twice_x_2, thrice_x_2 = tracer(g, x)
+        twice_x_2, thrice_x_2 = tracer(partial(g, tracer), x)
 
         result = tracer(h, x, 2*x)
         twice_x_3 = result["twice"]
@@ -1881,13 +1882,19 @@ def test_function_call(ctx_factory):
                 "baz": 65 * twice_x,
                 "quux": 7 * twice_x_2}
 
-    result1 = pt.tag_all_calls_to_be_inlined(
+    result_with_functions = pt.tag_all_calls_to_be_inlined(
         pt.make_dict_of_named_arrays(build_expression(pt.trace_call)))
-    result2 = pt.make_dict_of_named_arrays(
+    result_without_functions = pt.make_dict_of_named_arrays(
         build_expression(lambda fn, *args: fn(*args)))
 
-    _, outputs = pt.generate_loopy(result1)(cq, out_host=True)
-    _, expected = pt.generate_loopy(result2)(cq, out_host=True)
+    # test that visualizing graphs with functions works
+    dot = pt.get_dot_graph(result_with_functions)
+
+    if visualize:
+        pt.show_dot_graph(dot)
+
+    _, outputs = pt.generate_loopy(result_with_functions)(cq, out_host=True)
+    _, expected = pt.generate_loopy(result_without_functions)(cq, out_host=True)
 
     assert len(outputs) == len(expected)
 
