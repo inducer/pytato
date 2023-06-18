@@ -35,7 +35,7 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
                           _dtype_any, Einsum)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                SCALAR_CLASSES, INT_CLASSES, BoolT)
+                                SCALAR_CLASSES, INT_CLASSES, BoolT, ScalarType)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
 from immutables import Map
@@ -585,17 +585,16 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
     array_types: List[_dtype_any] = []
-    scalar_types: List[_dtype_any] = []
+    scalars: List[ScalarType] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):
             array_types.append(ary_or_scalar.dtype)
         else:
             assert isinstance(ary_or_scalar, SCALAR_CLASSES)
-            scalar_types.append(np.array(ary_or_scalar).dtype)
+            scalars.append(ary_or_scalar)
 
-    return np.find_common_type(array_types=array_types,
-                               scalar_types=scalar_types)
+    return np.result_type(*array_types, *scalars)
 
 
 def get_einsum_subscript_str(expr: Einsum) -> str:

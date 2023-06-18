@@ -1058,8 +1058,7 @@ class Einsum(Array):
 
     @cached_property
     def dtype(self) -> np.dtype[Any]:
-        return np.find_common_type(array_types=[arg.dtype for arg in self.args],
-                                    scalar_types=[])
+        return np.result_type(*[arg.dtype for arg in self.args])
 
     def with_tagged_reduction(self,
                               redn_axis: Union[EinsumReductionAxis, str],
@@ -2427,7 +2426,7 @@ def where(condition: ArrayOrScalar,
 
     x_dtype = x.dtype if isinstance(x, Array) else np.dtype(type(x))
     y_dtype = y.dtype if isinstance(y, Array) else np.dtype(type(y))
-    dtype = np.find_common_type([x_dtype, y_dtype], [])
+    dtype = np.promote_types(x_dtype, y_dtype)
 
     # }}}
 
@@ -2467,7 +2466,8 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
-                     common_dtype.type(np.NaN),
+                     # I don't know why pylint thinks common_dtype is a tuple.
+                     common_dtype.type(np.NaN),  # pylint: disable=no-member
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2485,7 +2485,8 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
-                     common_dtype.type(np.NaN),
+                     # I don't know why pylint thinks common_dtype is a tuple.
+                     common_dtype.type(np.NaN),  # pylint: disable=no-member
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)
