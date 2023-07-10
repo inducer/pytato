@@ -22,7 +22,7 @@ THE SOFTWARE.
 """
 
 import pytest
-from pytools.graph import CycleError
+#from pytools.graph import CycleError
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pytest  # noqa
@@ -117,6 +117,36 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 # }}}
 
+def test_distributed_partioner_counts():
+    """
+    for tree_size in range(1,max_size):
+        tag = (_do_test_distributed_partioner_counts,"item[0]")
+        item = [[]] * tree_size
+        tags = [[]] * tree_size
+        item[0] = x
+        tags[0] = (_do_test_distributed_partioner_counts,"item[0]")
+        for i in range(1,tree_size):
+            row_plus = staple_distributed_send(item[i-1],dest_rank=(rank-1) % size, comm_tag=tags[i-1],
+                    stapled_to=make_distributed_recv(src_rank=(rank+1) % size, comm_tag=tags[i-1],shape=(4,4),dtype=int))
+            item[i] = item[i-1] + row_plus
+            tags[i] = (_do_test_distributed_partioner_counts,"item[{0}]".format(i))
+     """
+    from pytato.distributed.partition import schedule_wrapper
+    max_size = 20
+    countList = np.zeros(max_size-1)
+    newCountList = np.zeros((max_size-1,2))
+    for tree_size in range(1,max_size):
+        counts = 0
+        needed_ids = {i: set() for i in range(tree_size)}
+        for key in needed_ids.keys():
+            needed_ids[key] = {key-1} if key > 0 else set()
+        comm_batches = schedule_wrapper(needed_ids,True,counts)
+        countList[tree_size-1] = counts
+        comm_batches = schedule_wrapper(needed_ids,False,counts)
+        newCountList[tree_size-1] = counts
+        print(counts)
+
+    assert True
 
 # {{{ test based on random dag
 
@@ -727,6 +757,7 @@ def _do_verify_distributed_partition(ctx_factory):
 
 
 if __name__ == "__main__":
+    #test_distributed_partioner_counts()
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
     elif len(sys.argv) > 1:
