@@ -571,13 +571,16 @@ class NodeMaxDepthMapper(CachedWalkMapper):
 
     def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> None:
         """Call the mapper method of *expr* and return the result."""
-        self.depth += 1
-        self.max_depth = max(self.max_depth, self.depth)
-
-        try:
+        if isinstance(expr, DictOfNamedArrays):
             super().rec(expr, *args, **kwargs)
-        finally:
-            self.depth -= 1
+        else:
+            self.depth += 1
+            self.max_depth = max(self.max_depth, self.depth)
+
+            try:
+                super().rec(expr, *args, **kwargs)
+            finally:
+                self.depth -= 1
 
 
 def get_max_node_depth(outputs: Union[Array, DictOfNamedArrays]) -> int:

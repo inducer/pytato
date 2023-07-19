@@ -769,7 +769,10 @@ def test_nodemaxdepthmapper():
     from pytato.analysis import get_max_node_depth
 
     x = pt.make_placeholder("x", shape=(10, 4), dtype=np.float64)
-    for _ in range(9):
+
+    assert get_max_node_depth(x) == 0
+
+    for _ in range(10):
         x = x + 1
 
     assert get_max_node_depth(x) == 10
