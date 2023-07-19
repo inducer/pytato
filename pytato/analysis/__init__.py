@@ -560,8 +560,9 @@ class NodeMaxDepthMapper(CachedWalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self.depth = 0
-        self.max_depth = 0
+        # Want the first rec() call to increment to 0, so start at -1
+        self.depth = -1
+        self.max_depth = -1
 
     # FIXME: Do I need this?
     # type-ignore-reason: dropped the extra `*args, **kwargs`.
