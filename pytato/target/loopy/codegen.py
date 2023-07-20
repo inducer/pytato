@@ -624,12 +624,6 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     def __init__(self, codegen_mapper: CodeGenMapper):
         self.codegen_mapper = codegen_mapper
 
-    def __call__(self, expr: ScalarExpression,
-                 prstnt_ctx: PersistentExpressionContext,
-                 local_ctx: Optional[LocalExpressionContext],
-                 ) -> ScalarExpression:
-        return self.rec(expr, prstnt_ctx, local_ctx)
-
     def map_subscript(self, expr: prim.Subscript,
                       prstnt_ctx: PersistentExpressionContext,
                       local_ctx: LocalExpressionContext,

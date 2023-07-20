@@ -83,11 +83,6 @@ class ToIndexLambdaMixin:
                      else s
                      for s in shape)
 
-    def rec(self, expr: ToIndexLambdaT, *args: Any, **kwargs: Any) -> ToIndexLambdaT:
-        # type-ignore-reason: mypy is right as we are attempting to make
-        # guarantees about other super-classes.
-        return super().rec(expr, *args, **kwargs)  # type: ignore[no-any-return,misc]
-
     def map_index_lambda(self, expr: IndexLambda) -> IndexLambda:
         return IndexLambda(expr=expr.expr,
                            shape=self._rec_shape(expr.shape),
