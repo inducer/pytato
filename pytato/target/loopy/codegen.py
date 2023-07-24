@@ -34,7 +34,7 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
-                    Any, List, Type)
+                    Any, List, Type, TYPE_CHECKING)
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
@@ -623,6 +623,13 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
     def __init__(self, codegen_mapper: CodeGenMapper):
         self.codegen_mapper = codegen_mapper
+
+    if TYPE_CHECKING:
+        def __call__(self, expr: ScalarExpression,
+                     prstnt_ctx: PersistentExpressionContext,
+                     local_ctx: Optional[LocalExpressionContext],
+                     ) -> ScalarExpression:
+            return self.rec(expr, prstnt_ctx, local_ctx)
 
     def map_subscript(self, expr: prim.Subscript,
                       prstnt_ctx: PersistentExpressionContext,

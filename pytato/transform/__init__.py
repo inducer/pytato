@@ -32,7 +32,7 @@ import logging
 import numpy as np
 from immutables import Map
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional,
+                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
                     Hashable)
 
 from pytato.array import (
@@ -215,6 +215,12 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
             # type-ignore-reason: Mapper.rec has imprecise func. signature
             return result  # type: ignore[no-any-return]
 
+    if TYPE_CHECKING:
+        # type-ignore-reason: incompatible with super class
+        def __call__(self, expr: ArrayOrNames  # type: ignore[override]
+                     ) -> CachedMapperT:
+            return self.rec(expr)
+
 # }}}
 
 
@@ -231,6 +237,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
+    if TYPE_CHECKING:
+        # type-ignore-reason: specialized variant of super-class' rec method
+        def rec(self,  # type: ignore[override]
+                expr: CopyMapperResultT) -> CopyMapperResultT:
+            # type-ignore-reason: CachedMapper.rec's return type is imprecise
+            return super().rec(expr)  # type: ignore[return-value]
+
+        __call__ = rec
 
     def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
         """
@@ -1214,6 +1228,9 @@ class CachedMapAndCopyMapper(CopyMapper):
         self._cache[expr] = result
         # type-ignore-reason: map_fn has imprecise types
         return result  # type: ignore[return-value]
+
+    if TYPE_CHECKING:
+        __call__ = rec
 
 # }}}
 
