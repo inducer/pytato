@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 import pymbolic.primitives as prim
 
-from typing import List, Any, Dict, Tuple, TypeVar
+from typing import List, Any, Dict, Tuple, TypeVar, TYPE_CHECKING
 from immutables import Map
 from pytools import UniqueNameGenerator
 from pytato.array import (Array, IndexLambda, Stack, Concatenate,
@@ -82,6 +82,15 @@ class ToIndexLambdaMixin:
         return tuple(self.rec(s) if isinstance(s, Array)
                      else s
                      for s in shape)
+
+    if TYPE_CHECKING:
+        def rec(
+                self, expr: ToIndexLambdaT, *args: Any,
+                **kwargs: Any) -> ToIndexLambdaT:
+            # type-ignore-reason: mypy is right as we are attempting to make
+            # guarantees about other super-classes.
+            return super().rec(  # type: ignore[no-any-return,misc]
+                expr, *args, **kwargs)
 
     def map_index_lambda(self, expr: IndexLambda) -> IndexLambda:
         return IndexLambda(expr=expr.expr,
