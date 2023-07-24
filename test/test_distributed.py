@@ -120,11 +120,11 @@ def _do_test_distributed_execution_basic(ctx_factory):
 # {{{ Scheduler Algorithm update test.
 
 
-def test_distributed_partioner_counts():
-    _do_test_distributed_partioner_counts(1)
+def test_distributed_scheduler_counts():
+    _do_test_distributed_scheduler_counts()
 
 
-def _do_test_distributed_partioner_counts(max_size):
+def _do_test_distributed_scheduler_counts():
     from pytato.distributed.partition import schedule_wrapper
     sizes = np.logspace(0, 5, 10, dtype=int)
     count_list = np.zeros(len(sizes))
