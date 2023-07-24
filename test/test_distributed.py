@@ -117,29 +117,34 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 # }}}
 
+# {{{ Scheduler Algorithm update test.
+
+
 def test_distributed_partioner_counts():
     _do_test_distributed_partioner_counts(1)
 
+
 def _do_test_distributed_partioner_counts(max_size):
-    from pytato.distributed.partition import schedule_wrapper 
-    sizes = np.logspace(0,4,10,dtype=int)
+    from pytato.distributed.partition import schedule_wrapper
+    sizes = np.logspace(0, 5, 10, dtype=int)
     count_list = np.zeros(len(sizes))
-    for i,tree_size in enumerate(sizes):
+    for i, tree_size in enumerate(sizes):
         counts = [0]
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
             needed_ids[key] = set([key-1]) if key > 0 else set()
-        comm_batches = schedule_wrapper(needed_ids,counts)
-        
-        count_list[i] = counts[0] #  python passes by value.
+        _ = schedule_wrapper(needed_ids, counts)
+
+        count_list[i] = counts[0]  # python passes by value.
 
     # Now to do the fitting.
-    coefficients = np.polyfit(sizes,count_list, 4)
-    
+    coefficients = np.polyfit(sizes, count_list, 4)
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
     print(nonlinear_norm_frac)
     assert nonlinear_norm_frac < 0.0001
+# }}}
+
 
 # {{{ test based on random dag
 

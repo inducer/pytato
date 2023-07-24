@@ -510,20 +510,23 @@ class _LocalSendRecvDepGatherer(
 
 # {{{ schedule_wrapper
 
+
 def schedule_wrapper(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph, return_counts: List[int] = [0]):
-    """ Wrapper to enable testing the scheduler. return_counts will hold the 
-        total nodes searched during the sorting followed by the scheduling.
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph, cnts: List[int] = [0]):
+    """ Wrapper to enable testing the scheduler. cnts will hold the total
+    nodes searched during the sorting followed by the scheduling.
     """
-    return _schedule_comm_batches(comm_ids_to_needed_comm_ids,return_counts)
+
+    return _schedule_comm_batches(comm_ids_to_needed_comm_ids, cnts)
 
 # }}}
 
 # {{{ _schedule_comm_batches
 
+
 def _schedule_comm_batches(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ,return_counts:List[int] = None) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph,
+        cnts: List[int] = None) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -537,17 +540,17 @@ def _schedule_comm_batches(
     scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
 
     total_ids = len(comm_ids_to_needed_comm_ids)
-    nodes_visited_in_scheduling = 0
-    sorted_ids,nodes_visited_in_sort = _topo_sort(comm_ids_to_needed_comm_ids)
+    n_visited_in_scheduling = 0
+    sorted_ids, n_visited_in_sort = _topo_sort(comm_ids_to_needed_comm_ids)
     while len(scheduled_comm_ids) < total_ids:
-        batch_ready = False;
-        comm_ids_this_batch = set();
+        batch_ready = False
+        comm_ids_this_batch = set()
         while not batch_ready:
             comm_id = sorted_ids[-1]
-            nodes_visited_in_scheduling += 1
+            n_visited_in_scheduling += 1
             needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
             if (needed_comm_ids > scheduled_comm_ids):
-                batch_ready = True; # batch is done.
+                batch_ready = True  # batch is done.
             else:
                 # Append to batch.
                 comm_id = sorted_ids.pop()
@@ -556,14 +559,14 @@ def _schedule_comm_batches(
                 batch_ready = True
         scheduled_comm_ids.update(comm_ids_this_batch)
         comm_batches.append(comm_ids_this_batch)
-    if return_counts:
-        return_counts[0] = sum([nodes_visited_in_sort,nodes_visited_in_scheduling])
-    
+    if cnts:
+        cnts[0] = sum([n_visited_in_sort, n_visited_in_scheduling])
     return comm_batches
 
 # }}}
 
 # {{{ _topo_sort
+
 
 def _topo_sort(comm_ids_to_needed_comm_ids):
     """
@@ -592,16 +595,17 @@ def _topo_sort(comm_ids_to_needed_comm_ids):
         temp_visit.remove(comm_id)
         locations_visited.add(comm_id)
         sorted_list.append(comm_id)
-        return sorted_list,count
+        return sorted_list, count
 
     num_visited = 0
     for comm_id in comm_ids_to_needed_comm_ids:
-        sorted_list,num_visited = _topo_helper(comm_id)
+        sorted_list, num_visited = _topo_helper(comm_id)
     sorted_list.reverse()
-    return sorted_list,num_visited
+    return sorted_list, num_visited
 # }}}
 
 # {{{  _MaterializedArrayCollector
+
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _MaterializedArrayCollector(CachedWalkMapper):
