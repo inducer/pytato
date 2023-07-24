@@ -22,7 +22,7 @@ THE SOFTWARE.
 """
 
 import pytest
-from pytools.graph import CycleError
+#from pytools.graph import CycleError
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pytest  # noqa
@@ -117,6 +117,31 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 # }}}
 
+def test_distributed_partioner_counts():
+    _do_test_distributed_partioner_counts(1)
+
+def _do_test_distributed_partioner_counts(max_size):
+    from pytato.distributed.partition import schedule_wrapper 
+    sizes = np.logspace(0,4,10,dtype=int)
+    count_list = np.zeros(len(sizes))
+    for i,tree_size in enumerate(sizes):
+        counts = 0
+        needed_ids = {i: set() for i in range(int(tree_size))}
+        for key in needed_ids.keys():
+            needed_ids[key] = set([key-1]) if key > 0 else set()
+        comm_batches = schedule_wrapper(needed_ids,counts)
+        count_list[i] = counts
+        print(counts)
+
+    # Now to do the fitting.
+    print(sizes)
+    print(count_list)
+    coefficients = np.polyfit(sizes,count_list, 4)
+    
+    import numpy.linalg as la
+    nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
+    print(nonlinear_norm_frac)
+    assert nonlinear_norm_frac < 0.01
 
 # {{{ test based on random dag
 
@@ -727,6 +752,7 @@ def _do_verify_distributed_partition(ctx_factory):
 
 
 if __name__ == "__main__":
+    #test_distributed_partioner_counts()
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
     elif len(sys.argv) > 1:

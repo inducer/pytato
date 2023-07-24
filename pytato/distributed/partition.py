@@ -508,12 +508,22 @@ class _LocalSendRecvDepGatherer(
 
 # }}}
 
+# {{{ schedule_wrapper
+
+def schedule_wrapper(
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph, return_counts:int = 0):
+    """ Wrapper to enable testing the scheduler. return_counts will hold the 
+        total nodes searched during the sorting followed by the scheduling.
+    """
+    return _schedule_comm_batches(comm_ids_to_needed_comm_ids,return_counts)
+
+# }}}
 
 # {{{ _schedule_comm_batches
 
 def _schedule_comm_batches(
         comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        ,return_counts:List[int] = 0) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -522,32 +532,73 @@ def _schedule_comm_batches(
     sit *between* parts.)
     """
     # FIXME: I'm an O(n^2) algorithm.
-
     comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
 
     scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
-    comms_to_schedule = set(comm_ids_to_needed_comm_ids)
 
-    all_comm_ids = frozenset(comm_ids_to_needed_comm_ids)
-
-    # FIXME In order for this to work, comm tags must be unique
-    while len(scheduled_comm_ids) < len(all_comm_ids):
-        comm_ids_this_batch = {
-                comm_id for comm_id in comms_to_schedule
-                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
-
-        if not comm_ids_this_batch:
-            raise CycleError("cycle detected in communication graph")
-
+    total_ids = len(comm_ids_to_needed_comm_ids)
+    nodes_visited_in_scheduling = 0
+    sorted_ids,nodes_visited_in_sort = _topo_sort(comm_ids_to_needed_comm_ids)
+    while len(scheduled_comm_ids) < total_ids:
+        batch_ready = False;
+        comm_ids_this_batch = set();
+        while not batch_ready:
+            comm_id = sorted_ids[-1]
+            nodes_visited_in_scheduling += 1
+            needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
+            if not (needed_comm_ids <= scheduled_comm_ids):
+                batch_ready = True; # batch is done.
+            else:
+                # Append to batch.
+                comm_id = sorted_ids.pop()
+                comm_ids_this_batch.add(comm_id)
+            if len(sorted_ids) == 0:
+                batch_ready = True
         scheduled_comm_ids.update(comm_ids_this_batch)
-        comms_to_schedule = comms_to_schedule - comm_ids_this_batch
-
         comm_batches.append(comm_ids_this_batch)
-
+    return_counts = sum([nodes_visited_in_sort,nodes_visited_in_scheduling])
+    
     return comm_batches
 
 # }}}
 
+# {{{ _topo_sort
+
+def _topo_sort(comm_ids_to_needed_comm_ids):
+    """
+    Compute a topological sort of the input graph which specifies
+    the tasks that need to be completed before task_i can be scheduled
+    for every i.
+    """
+    locations_visited = set()
+    temp_visit = set()
+    sorted_list = []
+
+    def _topo_helper(comm_id):
+        """
+        Helper funciton to do depth first search.
+        """
+        if comm_id in locations_visited:
+            return
+        if comm_id in temp_visit:
+            raise CycleError("Cycle detected in communication graph")
+
+        temp_visit.add(comm_id)
+        count = 0
+        for item in comm_ids_to_needed_comm_ids[comm_id]:
+            count += 1
+            _topo_helper(item)
+        temp_visit.remove(comm_id)
+        locations_visited.add(comm_id)
+        sorted_list.append(comm_id)
+        return sorted_list,count
+
+    num_visited = 0
+    for comm_id in comm_ids_to_needed_comm_ids:
+        sorted_list,num_visited = _topo_helper(comm_id)
+    sorted_list.reverse()
+    return sorted_list,num_visited
+# }}}
 
 # {{{  _MaterializedArrayCollector
 
@@ -771,7 +822,6 @@ def find_distributed_partition(
     # {{{ create (local) parts out of batch ids
 
     part_comm_ids: List[_PartCommIDs] = []
-
     if comm_batches:
         recv_ids: FrozenSet[CommunicationOpIdentifier] = frozenset()
         for batch in comm_batches:
