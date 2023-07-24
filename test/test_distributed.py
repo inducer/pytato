@@ -755,7 +755,6 @@ def _do_verify_distributed_partition(ctx_factory):
 
 
 if __name__ == "__main__":
-    #test_distributed_partioner_counts()
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()
     elif len(sys.argv) > 1:
