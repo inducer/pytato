@@ -22,7 +22,7 @@ THE SOFTWARE.
 """
 
 import pytest
-#from pytools.graph import CycleError
+from pytools.graph import CycleError
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 import pytest  # noqa
@@ -125,23 +125,21 @@ def _do_test_distributed_partioner_counts(max_size):
     sizes = np.logspace(0,4,10,dtype=int)
     count_list = np.zeros(len(sizes))
     for i,tree_size in enumerate(sizes):
-        counts = 0
+        counts = [0]
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
             needed_ids[key] = set([key-1]) if key > 0 else set()
         comm_batches = schedule_wrapper(needed_ids,counts)
-        count_list[i] = counts
-        print(counts)
+        
+        count_list[i] = counts[0] #  python passes by value.
 
     # Now to do the fitting.
-    print(sizes)
-    print(count_list)
     coefficients = np.polyfit(sizes,count_list, 4)
     
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
     print(nonlinear_norm_frac)
-    assert nonlinear_norm_frac < 0.01
+    assert nonlinear_norm_frac < 0.0001
 
 # {{{ test based on random dag
 
