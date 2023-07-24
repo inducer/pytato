@@ -511,7 +511,7 @@ class _LocalSendRecvDepGatherer(
 # {{{ schedule_wrapper
 
 def schedule_wrapper(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph, return_counts:int = 0):
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph, return_counts: List[int] = [0]):
     """ Wrapper to enable testing the scheduler. return_counts will hold the 
         total nodes searched during the sorting followed by the scheduling.
     """
@@ -523,7 +523,7 @@ def schedule_wrapper(
 
 def _schedule_comm_batches(
         comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ,return_counts:List[int] = 0) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        ,return_counts:List[int] = None) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -546,7 +546,7 @@ def _schedule_comm_batches(
             comm_id = sorted_ids[-1]
             nodes_visited_in_scheduling += 1
             needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
-            if not (needed_comm_ids <= scheduled_comm_ids):
+            if (needed_comm_ids > scheduled_comm_ids):
                 batch_ready = True; # batch is done.
             else:
                 # Append to batch.
@@ -556,7 +556,8 @@ def _schedule_comm_batches(
                 batch_ready = True
         scheduled_comm_ids.update(comm_ids_this_batch)
         comm_batches.append(comm_ids_this_batch)
-    return_counts = sum([nodes_visited_in_sort,nodes_visited_in_scheduling])
+    if return_counts:
+        return_counts[0] = sum([nodes_visited_in_sort,nodes_visited_in_scheduling])
     
     return comm_batches
 
