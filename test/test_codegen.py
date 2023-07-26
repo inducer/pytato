@@ -59,6 +59,19 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
+def test_ctx_bound_execution(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (5,), np.int64)
+    prog = pt.generate_loopy(
+            x * x, options=lp.Options(no_numpy=True)).bind_to_context(ctx)
+    x_in = np.array([1, 2, 3, 4, 5])
+    x_in_dev = cl_array.to_device(queue, x_in)
+    _, (out,) = prog(queue, x=x_in_dev)
+    assert (out.get() == x_in * x_in).all()
+
+
 def test_named_clash(ctx_factory):
     x = pt.make_placeholder("x", (5,), np.int64)
 
