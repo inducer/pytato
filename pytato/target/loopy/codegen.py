@@ -1053,7 +1053,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         options = lp.Options(**options)
 
     if options.return_dict != result_is_dict:
-        raise ValueError("options.result_is_dict is expected to match "
+        raise ValueError("options.return_dict is expected to match "
                 "whether the returned value is a dictionary")
 
     state = get_initial_codegen_state(target, options, function_name=function_name)
