@@ -342,6 +342,7 @@ class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
+    has_loopy_call: bool
 
     def __init__(self,
                  array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
@@ -349,6 +350,7 @@ class CodeGenMapper(Mapper):
         self.exprgen_mapper = InlinedExpressionGenMapper(self)
         self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
+        self.has_loopy_call = False
 
     def map_size_param(self, expr: SizeParam,
             state: CodeGenState) -> ImplementedResult:
@@ -463,6 +465,7 @@ class CodeGenMapper(Mapper):
         return state.results[expr]
 
     def map_loopy_call(self, expr: LoopyCall, state: CodeGenState) -> None:
+        self.has_loopy_call = True
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
@@ -1083,6 +1086,11 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     # InlinedResult is emitted for both invocations and we would be required to
     # avoid such reduction iname collisions.
     t_unit = lp.make_reduction_inames_unique(state.t_unit)
+
+    # Disable bounds checking if there is no hand-written LoopyCall in the DAG.
+    if not cg_mapper.has_loopy_call:
+        t_unit = lp.set_options(t_unit,
+                                enforce_array_accesses_within_bounds="no_check")
 
     return target.bind_program(
             program=t_unit,
