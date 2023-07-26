@@ -1087,6 +1087,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     # avoid such reduction iname collisions.
     t_unit = lp.make_reduction_inames_unique(state.t_unit)
 
+    # Disable bounds checking if there is no hand-written LoopyCall in the DAG.
     if not cg_mapper.has_loopy_call:
         t_unit = lp.set_options(t_unit,
                                 enforce_array_accesses_within_bounds="no_check")
