@@ -196,9 +196,10 @@ class BoundPyOpenCLProgram(BoundProgram):
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
-        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
-            raise ValueError("Got arguments that were previously bound: "
-                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+        if __debug__:
+            if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+                raise ValueError("Got arguments that were previously bound: "
+                        f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
 
         updated_kwargs = dict(self.get_processed_bound_arguments(queue, allocator))
         updated_kwargs.update(kwargs)
