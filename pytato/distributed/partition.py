@@ -65,7 +65,7 @@ from functools import reduce
 import collections
 from typing import (
         Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional)
+        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
 
 import attrs
 from immutabledict import immutabledict
@@ -512,7 +512,8 @@ class _LocalSendRecvDepGatherer(
 
 
 def schedule_wrapper(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph, cnts: List[int] = [0]):
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph, cnts: List[int] = [0]
+        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """ Wrapper to enable testing the scheduler. cnts will hold the total
     nodes searched during the sorting followed by the scheduling.
     """
@@ -526,7 +527,7 @@ def schedule_wrapper(
 
 def _schedule_comm_batches(
         comm_ids_to_needed_comm_ids: CommunicationDepGraph,
-        cnts: List[int] = None) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        cnts: List[int] = [1]) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -559,7 +560,7 @@ def _schedule_comm_batches(
                 batch_ready = True
         scheduled_comm_ids.update(comm_ids_this_batch)
         comm_batches.append(comm_ids_this_batch)
-    if cnts:
+    if not cnts[0]:
         cnts[0] = sum([n_visited_in_sort, n_visited_in_scheduling])
     return comm_batches
 
@@ -568,27 +569,31 @@ def _schedule_comm_batches(
 # {{{ _topo_sort
 
 
-def _topo_sort(comm_ids_to_needed_comm_ids):
+def _topo_sort(
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph
+        ) -> Tuple[List[CommunicationOpIdentifier], int]:
     """
     Compute a topological sort of the input graph which specifies
     the tasks that need to be completed before task_i can be scheduled
     for every i.
     """
-    locations_visited = set()
-    temp_visit = set()
-    sorted_list = []
+    locations_visited: Set[CommunicationOpIdentifier] = set()
+    temp_visit: Set[CommunicationOpIdentifier] = set()
+    sorted_list: List[CommunicationOpIdentifier] = []
 
-    def _topo_helper(comm_id):
+    def _topo_helper(
+            comm_id: CommunicationOpIdentifier
+            ) -> Tuple[List[CommunicationOpIdentifier], int]:
         """
         Helper funciton to do depth first search.
         """
+        count = 0
         if comm_id in locations_visited:
-            return
+            return sorted_list, count
         if comm_id in temp_visit:
             raise CycleError("Cycle detected in communication graph")
 
         temp_visit.add(comm_id)
-        count = 0
         for item in comm_ids_to_needed_comm_ids[comm_id]:
             count += 1
             _topo_helper(item)

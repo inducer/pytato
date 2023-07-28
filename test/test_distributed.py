@@ -126,13 +126,13 @@ def test_distributed_scheduler_counts():
 
 def _do_test_distributed_scheduler_counts():
     from pytato.distributed.partition import schedule_wrapper
-    sizes = np.logspace(0, 5, 10, dtype=int)
+    sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         counts = [0]
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
-            needed_ids[key] = set([key-1]) if key > 0 else set()
+            needed_ids[key] = {key-1} if key > 0 else set()
         _ = schedule_wrapper(needed_ids, counts)
 
         count_list[i] = counts[0]  # python passes by value.
