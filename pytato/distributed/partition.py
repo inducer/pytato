@@ -571,7 +571,7 @@ def _schedule_comm_batches(
 # {{{ _topo_sort
 
 
-template_t = TypeVar('template_t')
+template_t = TypeVar("template_t")
 
 
 def _topo_sort(
