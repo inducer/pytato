@@ -551,13 +551,13 @@ def _schedule_comm_batches(
             comm_id = sorted_ids[-1]
             n_visited_in_scheduling += 1
             needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
-            if (needed_comm_ids > scheduled_comm_ids):
+            if not (needed_comm_ids <= scheduled_comm_ids):
                 batch_ready = True  # batch is done.
             else:
                 # Append to batch.
                 comm_id = sorted_ids.pop()
                 comm_ids_this_batch.add(comm_id)
-            if len(sorted_ids) == 0:
+            if not sorted_ids:
                 batch_ready = True
         scheduled_comm_ids.update(comm_ids_this_batch)
         comm_batches.append(comm_ids_this_batch)
@@ -583,7 +583,7 @@ def _topo_sort(
     temp_visit: Set[CommunicationOpIdentifier] = set()
     sorted_list: List[CommunicationOpIdentifier] = []
 
-    def _topo_helper(
+    def _topo_sort_depth_first_searcher(
             comm_id: CommunicationOpIdentifier
             ) -> Tuple[List[CommunicationOpIdentifier], int]:
         """
@@ -598,7 +598,7 @@ def _topo_sort(
         temp_visit.add(comm_id)
         for item in comm_ids_to_needed_comm_ids[comm_id]:
             count += 1
-            _topo_helper(item)
+            _topo_sort_depth_first_searcher(item)
         temp_visit.remove(comm_id)
         locations_visited.add(comm_id)
         sorted_list.append(comm_id)
@@ -606,7 +606,7 @@ def _topo_sort(
 
     num_visited = 0
     for comm_id in comm_ids_to_needed_comm_ids:
-        sorted_list, num_visited = _topo_helper(comm_id)
+        sorted_list, num_visited = _topo_sort_depth_first_searcher(comm_id)
     sorted_list.reverse()
     return sorted_list, num_visited
 # }}}
