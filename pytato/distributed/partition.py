@@ -571,21 +571,27 @@ def _schedule_comm_batches(
 # {{{ _topo_sort
 
 
+template_t = TypeVar('template_t')
+
+
 def _topo_sort(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ) -> Tuple[List[CommunicationOpIdentifier], int]:
+        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]]
+        ) -> Tuple[List[template_t], int]:
     """
-    Compute a topological sort of the input graph which specifies
-    the tasks that need to be completed before task_i can be scheduled
-    for every i.
+    Compute a topological sort of the input graph. The input graph specifies a
+    mapping of tasks, i to a set of tasks J which need to be completed before
+    task i can be scheduled.
+
+    Output: Sorted list of task. For all indicies i, the prerequisites for the task
+    as specified by the set J, all have indices less than i.
     """
-    locations_visited: Set[CommunicationOpIdentifier] = set()
-    temp_visit: Set[CommunicationOpIdentifier] = set()
-    sorted_list: List[CommunicationOpIdentifier] = []
+    locations_visited: Set[template_t] = set()
+    temp_visit: Set[template_t] = set()
+    sorted_list: List[template_t] = []
 
     def _topo_sort_depth_first_searcher(
-            comm_id: CommunicationOpIdentifier
-            ) -> Tuple[List[CommunicationOpIdentifier], int]:
+            comm_id: template_t
+            ) -> Tuple[List[template_t], int]:
         """
         Helper funciton to do depth first search.
         """
