@@ -134,14 +134,12 @@ def _do_test_distributed_scheduler_counts():
         for key in needed_ids.keys():
             needed_ids[key] = {key-1} if key > 0 else set()
         _ = schedule_wrapper(needed_ids, counts)
-        print(counts)
-        count_list[i] = [key for key in counts][0]  # python passes by value.
+        count_list[i] = list(counts)[0]  # python passes by value.
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
-    print(nonlinear_norm_frac)
     assert nonlinear_norm_frac < 0.0001
 # }}}
 
