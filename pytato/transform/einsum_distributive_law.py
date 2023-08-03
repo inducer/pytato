@@ -220,12 +220,12 @@ class EinsumDistributiveLawMapper(Mapper):
                 raise NotImplementedError(hlo)
         else:
             rec_expr = IndexLambda(
-                expr.expr,
-                expr.shape,
-                expr.dtype,
-                Map({name: self.rec(bnd, None)
-                     for name, bnd in expr.bindings.items()}),
-                expr.var_to_reduction_descr,
+                expr=expr.expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=Map({name: self.rec(bnd, None)
+                              for name, bnd in sorted(expr.bindings.items())}),
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
                 axes=expr.axes,
             )

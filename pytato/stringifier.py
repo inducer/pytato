@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 import numpy as np
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 from pytato.transform import Mapper
 from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
                           IndexLambda, ReductionDescriptor)
@@ -80,9 +80,10 @@ class Reprifier(Mapper):
         elif isinstance(expr, (dict, Map)):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
-                                for key, val in expr.items())
+                                for key, val
+                                in sorted(expr.items(),
+                                          key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-            return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
         elif isinstance(expr, (frozenset, set)):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):

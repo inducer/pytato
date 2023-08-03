@@ -261,9 +261,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                      for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings: Dict[str, Array] = {
+        bindings: Mapping[str, Array] = Map({
                 name: self.rec(subexpr)
-                for name, subexpr in sorted(expr.bindings.items())}
+                for name, subexpr in sorted(expr.bindings.items())})
         return IndexLambda(expr=expr.expr,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
@@ -762,7 +762,8 @@ class CombineMapper(Mapper, Generic[CombineT]):
 
     def map_call(self, expr: Call) -> CombineT:
         return self.combine(self.map_function_definition(expr.function),
-                            *[self.rec(bnd) for bnd in expr.bindings.values()])
+                            *[self.rec(bnd)
+                              for name, bnd in sorted(expr.bindings.items())])
 
     def map_named_call_result(self, expr: NamedCallResult) -> CombineT:
         return self.rec(expr._container)
@@ -1311,8 +1312,8 @@ class MPMSMaterializer(Mapper):
         new_expr = IndexLambda(expr.expr,
                                expr.shape,
                                expr.dtype,
-                               {bnd_name: bnd.expr
-                                for bnd_name, bnd in children_rec.items()},
+                               bindings={bnd_name: bnd.expr
+                                for bnd_name, bnd in sorted(children_rec.items())},
                                axes=expr.axes,
                                var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)
