@@ -1309,11 +1309,11 @@ class MPMSMaterializer(Mapper):
         children_rec = {bnd_name: self.rec(bnd)
                         for bnd_name, bnd in sorted(expr.bindings.items())}
 
-        new_expr = IndexLambda(expr.expr,
-                               expr.shape,
-                               expr.dtype,
-                               bindings={bnd_name: bnd.expr
-                                for bnd_name, bnd in sorted(children_rec.items())},
+        new_expr = IndexLambda(expr=expr.expr,
+                               shape=expr.shape,
+                               dtype=expr.dtype,
+                               bindings=Map({bnd_name: bnd.expr
+                                for bnd_name, bnd in sorted(children_rec.items())}),
                                axes=expr.axes,
                                var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)

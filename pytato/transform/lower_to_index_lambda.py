@@ -96,8 +96,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=expr.expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings={name: self.rec(bnd)
-                                     for name, bnd in expr.bindings.items()},
+                           bindings=Map({name: self.rec(bnd)
+                                         for name, bnd
+                                         in sorted(expr.bindings.items())}),
                            axes=expr.axes,
                            var_to_reduction_descr=expr.var_to_reduction_descr,
                            tags=expr.tags)
@@ -132,7 +133,7 @@ class ToIndexLambdaMixin:
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            var_to_reduction_descr=Map(),
                            tags=expr.tags)
 
@@ -179,7 +180,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=concat_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            axes=expr.axes,
                            var_to_reduction_descr=Map(),
                            tags=expr.tags)
@@ -248,7 +249,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=inner_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            axes=expr.axes,
                            var_to_reduction_descr=Map(var_to_redn_descr),
                            tags=expr.tags)
@@ -274,8 +275,8 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings={name: self.rec(bnd)
-                                     for name, bnd in bindings.items()},
+                           bindings=Map({name: self.rec(bnd)
+                                     for name, bnd in bindings.items()}),
                            axes=expr.axes,
                            var_to_reduction_descr=Map(),
                            tags=expr.tags)
@@ -337,7 +338,7 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
@@ -399,7 +400,7 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
@@ -432,7 +433,7 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=bindings,
+                           bindings=Map(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
@@ -446,7 +447,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings={"_in0": self.rec(expr.array)},
+                           bindings=Map({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
                            var_to_reduction_descr=Map(),
                            tags=expr.tags)
@@ -461,7 +462,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings={"_in0": self.rec(expr.array)},
+                           bindings=Map({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
                            var_to_reduction_descr=Map(),
                            tags=expr.tags)
