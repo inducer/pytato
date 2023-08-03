@@ -368,7 +368,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         rec_container = self.rec(expr._container)
         assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                loopy_call=rec_container,
+                container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)
@@ -594,7 +594,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         rec_loopy_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                loopy_call=rec_loopy_call,
+                container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)

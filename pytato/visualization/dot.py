@@ -184,24 +184,24 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
-        for field in expr._fields:
-            if field in info.fields:
+        for field in attrs.fields(type(expr)):
+            if field.name in info.fields:
                 continue
-            attr = getattr(expr, field)
+            attr = getattr(expr, field.name)
 
             if isinstance(attr, Array):
                 self.rec(attr)
-                info.edges[field] = attr
+                info.edges[field.name] = attr
 
             elif isinstance(attr, AbstractResultWithNamedArrays):
                 self.rec(attr)
-                info.edges[field] = attr
+                info.edges[field.name] = attr
 
             elif isinstance(attr, tuple):
-                info.fields[field] = stringify_shape(attr)
+                info.fields[field.name] = stringify_shape(attr)
 
             else:
-                info.fields[field] = str(attr)
+                info.fields[field.name] = str(attr)
 
         self.node_to_dot[expr] = info
 

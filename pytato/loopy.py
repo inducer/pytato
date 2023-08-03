@@ -33,11 +33,10 @@ from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
                     Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam, AxesT)
+                          NamedArray, ArrayOrScalar, SizeParam)
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from pytools.tag import Tag
 from immutables import Map
 import islpy as isl
 
@@ -59,10 +58,20 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: AxesT
 
     See :class:`pytato.array.AxesT`.
+
+.. class:: ArrayOrScalar
+
+    A :class:`~pytato.Array` or a scalar.
+
+.. currentmodule:: lp
+
+.. class:: TranslationUnit
+
+   See :class:`loopy.TranslationUnit`.
 """
 
 
-@attrs.define(eq=False, frozen=True)
+@attrs.frozen(eq=False)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
@@ -106,11 +115,13 @@ class LoopyCall(AbstractResultWithNamedArrays):
             raise KeyError(name)
 
         # TODO: Attach a filtered set of tags from loopy's arg.
-        return LoopyCallResult(self, name,
+        return LoopyCallResult(container=self,
+                               name=name,
                                axes=_get_default_axes(len(self
                                                           ._entry_kernel
                                                           .arg_dict[name]
-                                                          .shape)))
+                                                          .shape)),
+                               tags=frozenset())
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -119,35 +130,14 @@ class LoopyCall(AbstractResultWithNamedArrays):
         return iter(self._result_names)
 
 
+@attrs.frozen(eq=False, hash=True, cache_hash=True)
 class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
     _mapper_method = "map_loopy_call_result"
-
-    def __init__(self,
-            loopy_call: LoopyCall,
-            name: str,
-            axes: AxesT,
-            tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(loopy_call, name, axes=axes, tags=tags)
-
-    # type-ignore reason: `copy` signature incompatible with super-class
-    def copy(self, *,  # type: ignore[override]
-             loopy_call: Optional[AbstractResultWithNamedArrays] = None,
-             name: Optional[str] = None,
-             axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None) -> LoopyCallResult:
-        loopy_call = self._container if loopy_call is None else loopy_call
-        name = self.name if name is None else name
-        tags = self.tags if tags is None else tags
-        axes = self.axes if axes is None else axes
-        assert isinstance(loopy_call, LoopyCall)
-        return LoopyCallResult(loopy_call=loopy_call,
-                               name=name,
-                               axes=axes,
-                               tags=tags)
+    _container: LoopyCall
 
     @property
     def expr(self) -> Array:

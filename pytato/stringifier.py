@@ -32,6 +32,7 @@ from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
                           IndexLambda, ReductionDescriptor)
 from pytato.loopy import LoopyCall
 from immutables import Map
+import attrs
 
 
 __doc__ = """
@@ -93,7 +94,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        fields = expr._fields
+        fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
@@ -150,8 +151,8 @@ class Reprifier(Mapper):
                 return self.rec(getattr(expr, field), depth+1)
 
         return (f"{type(expr).__name__}("
-                + ", ".join(f"{field}={_get_field_val(field)}"
-                            for field in expr._fields)
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                            for field in attrs.fields(type(expr)))
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:
