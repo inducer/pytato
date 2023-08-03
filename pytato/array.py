@@ -1674,6 +1674,8 @@ class DataWrapper(InputArgumentBase):
         return True
 
     def __hash__(self) -> int:
+        # It would be better to hash the data, but we have no way of getting to
+        # it.
         return id(self)
 
     @property
