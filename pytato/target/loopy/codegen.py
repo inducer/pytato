@@ -402,8 +402,8 @@ class CodeGenMapper(Mapper):
         prstnt_ctx = PersistentExpressionContext(state)
         local_ctx = LocalExpressionContext(
             local_namespace={
-                name: self.rec(subexpr, state)
-                for name, subexpr in expr.bindings.items()},
+                name: self.rec(expr.bindings[name], state)
+                for name in sorted(expr.bindings)},
             num_indices=expr.ndim,
             reduction_bounds={},
             var_to_reduction_descr=expr.var_to_reduction_descr)
