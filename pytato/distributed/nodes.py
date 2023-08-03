@@ -222,7 +222,8 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
                           send_tags: FrozenSet[Tag] = frozenset()) -> \
          DistributedSend:
     """Make a :class:`DistributedSend` object."""
-    return DistributedSend(sent_data, dest_rank, comm_tag, send_tags)
+    return DistributedSend(data=sent_data, dest_rank=dest_rank, comm_tag=comm_tag,
+                           tags=send_tags)
 
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -233,8 +234,9 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
     """Make a :class:`DistributedSend` object wrapped in a
     :class:`DistributedSendRefHolder` object."""
     return DistributedSendRefHolder(
-            DistributedSend(sent_data, dest_rank, comm_tag, send_tags),
-            stapled_to, tags=ref_holder_tags)
+            send=DistributedSend(data=sent_data, dest_rank=dest_rank,
+                                 comm_tag=comm_tag, tags=send_tags),
+            passthrough_data=stapled_to, tags=ref_holder_tags)
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
@@ -249,7 +251,9 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
         axes = _get_default_axes(len(shape))
 
     dtype = np.dtype(dtype)
-    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags=tags, axes=axes)
+    return DistributedRecv(
+            src_rank=src_rank, comm_tag=comm_tag, shape=shape, dtype=dtype,
+            tags=tags, axes=axes)
 
 # }}}
 

@@ -202,10 +202,10 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     expr2 = update_bindings_and_get_broadcasted_expr(a2, "_in1", bindings,
                                                      result_shape)
 
-    return IndexLambda(op(expr1, expr2),
+    return IndexLambda(expr=op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=bindings,
+                       bindings=Map(bindings),
                        tags=_get_default_tags(),
                        var_to_reduction_descr=Map(),
                        axes=_get_default_axes(len(result_shape)))

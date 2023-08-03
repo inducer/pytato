@@ -340,11 +340,12 @@ def trace_call(f: Callable[..., ReturnT],
             raise ValueError(f"Kw argument named '{kw}' not allowed.")
 
     # Get placeholders from the ``args``, ``kwargs``.
-    pl_args = tuple(Placeholder(f"in__pt_{iarg}",  arg.shape, arg.dtype,
+    pl_args = tuple(Placeholder(name=f"in__pt_{iarg}",
+                                shape=arg.shape, dtype=arg.dtype,
                                 axes=arg.axes, tags=arg.tags)
                     for iarg, arg in enumerate(args))
-    pl_kwargs = {kw: Placeholder(f"in_{kw}", arg.shape,
-                                 arg.dtype, axes=arg.axes, tags=arg.tags)
+    pl_kwargs = {kw: Placeholder(name=f"in_{kw}", shape=arg.shape,
+                                 dtype=arg.dtype, axes=arg.axes, tags=arg.tags)
                  for kw, arg in kwargs.items()}
 
     # Pass the placeholders

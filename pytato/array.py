@@ -556,9 +556,9 @@ class Array(Taggable):
             indices = tuple(var(f"_{i}") for i in range(self.ndim))
             expr = op(var("_in0")[indices])
 
-        bindings = {"_in0": self}
+        bindings = Map({"_in0": self})
         return IndexLambda(
-                expr,
+                expr=expr,
                 shape=self.shape,
                 dtype=self.dtype,
                 bindings=bindings,
@@ -2003,7 +2003,7 @@ def make_placeholder(name: str,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return Placeholder(name, shape, dtype, axes=axes,
+    return Placeholder(name=name, shape=shape, dtype=dtype, axes=axes,
                        tags=(tags | _get_default_tags()))
 
 
@@ -2085,7 +2085,8 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
     else:
         fill_value = dtype.type(fill_value)
 
-    return IndexLambda(fill_value, shape, dtype, {},
+    return IndexLambda(expr=fill_value, shape=shape, dtype=dtype,
+                       bindings=Map(),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=Map())
@@ -2130,8 +2131,8 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     if not isinstance(k, INT_CLASSES):
         raise ValueError(f"k must be int, got {type(k)}.")
 
-    return IndexLambda(parse(f"1 if ((_1 - _0) == {k}) else 0"),
-                       shape=(N, M), dtype=dtype, bindings={},
+    return IndexLambda(expr=parse(f"1 if ((_1 - _0) == {k}) else 0"),
+                       shape=(N, M), dtype=dtype, bindings=Map({}),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(2),
                        var_to_reduction_descr=Map())
@@ -2225,8 +2226,8 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     size = max(0, int(ceil((stop-start)/step)))
 
     from pymbolic.primitives import Variable
-    return IndexLambda(start + Variable("_0") * step,
-                       shape=(size,), dtype=dtype, bindings={},
+    return IndexLambda(expr=start + Variable("_0") * step,
+                       shape=(size,), dtype=dtype, bindings=Map(),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(1),
                        var_to_reduction_descr=Map())
@@ -2332,7 +2333,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
     assert isinstance(x, Array)
 
     from pytato.utils import with_indices_for_broadcasted_shape
-    return IndexLambda(with_indices_for_broadcasted_shape(prim.Variable("_in0"),
+    return IndexLambda(expr=with_indices_for_broadcasted_shape(prim.Variable("_in0"),
                                                           x.shape,
                                                           x.shape),
                        shape=x.shape,
@@ -2389,10 +2390,11 @@ def where(condition: ArrayOrScalar,
     expr3 = utils.update_bindings_and_get_broadcasted_expr(y, "_in2", bindings,
                                                            result_shape)
 
-    return IndexLambda(prim.If(expr1, expr2, expr3),
+    return IndexLambda(
+            expr=prim.If(expr1, expr2, expr3),
             shape=result_shape,
             dtype=dtype,
-            bindings=bindings,
+            bindings=Map(bindings),
             tags=_get_default_tags(),
             axes=_get_default_axes(len(result_shape)),
             var_to_reduction_descr=Map())
@@ -2446,7 +2448,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 
 def make_index_lambda(
         expression: Union[str, ScalarExpression],
-        bindings: Dict[str, Array],
+        bindings: Mapping[str, Array],
         shape: ShapeType,
         dtype: Any,
         var_to_reduction_descr: Optional[Mapping[str, ReductionDescriptor]] = None
@@ -2488,7 +2490,7 @@ def make_index_lambda(
     # }}}
 
     return IndexLambda(expr=expression,
-                       bindings=bindings,
+                       bindings=Map(bindings),
                        shape=shape,
                        dtype=dtype,
                        tags=_get_default_tags(),
@@ -2574,7 +2576,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                                                                    shape)),
                        shape=shape,
                        dtype=array.dtype,
-                       bindings={"in": array},
+                       bindings=Map({"in": array}),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=Map())
@@ -2647,7 +2649,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
 
     assert len(new_shape) == output_ndim
 
-    return Reshape(array, tuple(new_shape), "C",
+    return Reshape(array=array, newshape=tuple(new_shape), order="C",
                    tags=(_get_default_tags()
                          | {ExpandedDimsReshape(tuple(normalized_axis))}),
                    axes=_get_default_axes(len(new_shape)))
