@@ -1045,13 +1045,6 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     if options is None:
         options = lp.Options(return_dict=result_is_dict)
-    elif isinstance(options, dict):
-        from warnings import warn
-        warn("Passing a dict for options is deprecated and will stop working in "
-                "2022. Pass an actual loopy.Options object instead.",
-                DeprecationWarning, stacklevel=2)
-        options = lp.Options(**options)
-
     if options.return_dict != result_is_dict:
         raise ValueError("options.return_dict is expected to match "
                 "whether the returned value is a dictionary")
