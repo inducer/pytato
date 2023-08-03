@@ -27,8 +27,8 @@ THE SOFTWARE.
 
 
 from functools import partial
-import dataclasses
 import html
+import attrs
 
 from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
@@ -66,7 +66,7 @@ __doc__ = """
 
 # {{{ _DotEmitter
 
-@dataclasses.dataclass
+@attrs.define
 class _SubgraphTree:
     contents: Optional[List[str]]
     subgraphs: Dict[str, _SubgraphTree]
@@ -141,7 +141,7 @@ class DotEmitter:
 
 # {{{ array -> dot node converter
 
-@dataclasses.dataclass
+@attrs.define
 class _DotNodeInfo:
     title: str
     fields: Dict[str, str]
