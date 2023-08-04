@@ -511,9 +511,12 @@ class _LocalSendRecvDepGatherer(
 # {{{ schedule_wrapper
 
 
+template_t = TypeVar("template_t")
+
+
 def schedule_wrapper(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph, cnts: set[int]
-        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]],
+        cnts: set[int]) -> Sequence[AbstractSet[template_t]]:
     """ Wrapper to enable testing the scheduler. cnts will hold the total
     nodes searched during the sorting followed by the scheduling.
     """
@@ -526,9 +529,9 @@ def schedule_wrapper(
 
 
 def _schedule_comm_batches(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph,
+        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]],
         cnts: Optional[set[int]] = None) \
-        -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        -> Sequence[AbstractSet[template_t]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -536,10 +539,9 @@ def _schedule_comm_batches(
     :class:`DistributedGraphPartition`, communication batches
     sit *between* parts.)
     """
-    # FIXME: I'm an O(n^2) algorithm.
-    comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
+    comm_batches: List[AbstractSet[template_t]] = []
 
-    scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
+    scheduled_comm_ids: Set[template_t] = set()
 
     total_ids = len(comm_ids_to_needed_comm_ids)
     n_visited_in_scheduling = 0
@@ -552,6 +554,7 @@ def _schedule_comm_batches(
             n_visited_in_scheduling += 1
             needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
             if not (needed_comm_ids <= scheduled_comm_ids):
+                # not ( A <= B ) is not equivalent to (A > B) in python sets.
                 batch_ready = True  # batch is done.
             else:
                 # Append to batch.
@@ -569,9 +572,6 @@ def _schedule_comm_batches(
 # }}}
 
 # {{{ _topo_sort
-
-
-template_t = TypeVar("template_t")
 
 
 def _topo_sort(
