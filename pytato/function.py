@@ -276,11 +276,12 @@ class Call(AbstractResultWithNamedArrays):
 
     copy = attrs.evolve
 
-    def __attrs_post_init__(self) -> None:
-        # check that the invocation parameters and the function definition
-        # parameters agree with each other.
-        assert frozenset(self.bindings) == self.function.parameters
-        super().__attrs_post_init__()
+    if __debug__:
+        def __attrs_post_init__(self) -> None:
+            # check that the invocation parameters and the function definition
+            # parameters agree with each other.
+            assert frozenset(self.bindings) == self.function.parameters
+            super().__attrs_post_init__()
 
     def __contains__(self, name: object) -> bool:
         return name in self.function.returns

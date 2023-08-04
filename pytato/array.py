@@ -745,10 +745,11 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     def _is_eq_valid(self) -> bool:
         return self.__class__.__eq__ is AbstractResultWithNamedArrays.__eq__
 
-    def __attrs_post_init__(self) -> None:
-        # ensure that a developer does not uses dataclass' "__eq__"
-        # or "__hash__" implementation as they have exponential complexity.
-        assert self._is_eq_valid()
+    if __debug__:
+        def __attrs_post_init__(self) -> None:
+            # ensure that a developer does not uses dataclass' "__eq__"
+            # or "__hash__" implementation as they have exponential complexity.
+            assert self._is_eq_valid()
 
     @abstractmethod
     def __contains__(self, name: object) -> bool:
@@ -1450,10 +1451,11 @@ class Reshape(IndexRemappingBase):
 
     _mapper_method: ClassVar[str] = "map_reshape"
 
-    def __attrs_post_init__(self) -> None:
-        # FIXME: Get rid of this restriction
-        assert self.order == "C"
-        super().__attrs_post_init__()
+    if __debug__:
+        def __attrs_post_init__(self) -> None:
+            # FIXME: Get rid of this restriction
+            assert self.order == "C"
+            super().__attrs_post_init__()
 
     @property
     def shape(self) -> ShapeType:
