@@ -117,7 +117,7 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 # }}}
 
-# {{{ Scheduler Algorithm update test.
+# {{{ Scheduler Algorithm update tests.
 
 
 def test_distributed_scheduler_counts():
@@ -125,7 +125,7 @@ def test_distributed_scheduler_counts():
 
 
 def _do_test_distributed_scheduler_counts():
-    from pytato.distributed.partition import schedule_wrapper
+    from pytato.distributed.partition import _schedule_task_batches
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
@@ -133,7 +133,64 @@ def _do_test_distributed_scheduler_counts():
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
             needed_ids[key] = {key-1} if key > 0 else set()
-        _ = schedule_wrapper(needed_ids, counts)
+        _ = _schedule_task_batches(needed_ids, counts)
+        count_list[i] = list(counts)[0]  # python passes by value.
+
+    # Now to do the fitting.
+    coefficients = np.polyfit(sizes, count_list, 4)
+    import numpy.linalg as la
+    nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
+    assert nonlinear_norm_frac < 0.0001
+# }}}
+
+# {{{ test scheduling based upon a tree with dependents listed out.
+
+
+def test_distributed_scheduling_o_n_direct_dependents():
+    _do_test_distributed_scheduling_o_n_direct_dependents()
+
+
+def _do_test_distributed_scheduling_o_n_direct_dependents():
+    from pytato.distributed.partition import _schedule_task_batches
+    sizes = np.logspace(0, 4, 10, dtype=int)
+    count_list = np.zeros(len(sizes))
+    for i, tree_size in enumerate(sizes):
+        counts = {0}
+        needed_ids = {i: set() for i in range(int(tree_size))}
+        for key in needed_ids.keys():
+            for j in range(key):
+                needed_ids[key].add(j)
+        _ = _schedule_task_batches(needed_ids, counts)
+        count_list[i] = list(counts)[0]  # python passes by value.
+
+    # Now to do the fitting.
+    coefficients = np.polyfit(sizes, count_list, 4)
+    import numpy.linalg as la
+    nonquadratic_norm_frac = la.norm(coefficients[:-3], 2)/la.norm(coefficients, 2)
+    assert nonquadratic_norm_frac < 0.0001
+# }}}
+
+# {{{ test scheduling constant branching tree
+
+
+def test_distributed_scheduling_constant_look_back_tree():
+    _do_test_distributed_scheduling_constant_look_back_tree()
+
+
+def _do_test_distributed_scheduling_constant_look_back_tree():
+    from pytato.distributed.partition import _schedule_task_batches
+    sizes = np.logspace(0, 6, 10, dtype=int)
+    count_list = np.zeros(len(sizes))
+    branching_factor = 5
+    for i, tree_size in enumerate(sizes):
+        counts = {0}
+        needed_ids = {j: set() for j in range(int(tree_size))}
+        for j in range(1, int(tree_size)):
+            if j < branching_factor:
+                needed_ids[j+1] = {0}
+            else:
+                needed_ids[j] = {j - branching_factor}
+        _ = _schedule_task_batches(needed_ids, counts)
         count_list[i] = list(counts)[0]  # python passes by value.
 
     # Now to do the fitting.

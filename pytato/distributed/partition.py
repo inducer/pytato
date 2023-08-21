@@ -508,114 +508,77 @@ class _LocalSendRecvDepGatherer(
 
 # }}}
 
-# {{{ schedule_wrapper
+
+TaskType = TypeVar("TaskType")
+
+# {{{ _schedule_task_batches
 
 
-template_t = TypeVar("template_t")
-
-
-def schedule_wrapper(
-        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]],
-        cnts: set[int]) -> Sequence[AbstractSet[template_t]]:
-    """ Wrapper to enable testing the scheduler. cnts will hold the total
-    nodes searched during the sorting followed by the scheduling.
-    """
-
-    return _schedule_comm_batches(comm_ids_to_needed_comm_ids, cnts)
-
-# }}}
-
-# {{{ _schedule_comm_batches
-
-
-def _schedule_comm_batches(
-        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]],
+def _schedule_task_batches(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]],
         cnts: Optional[set[int]] = None) \
-        -> Sequence[AbstractSet[template_t]]:
-    """For each :class:`CommunicationOpIdentifier`, determine the
+        -> Sequence[AbstractSet[TaskType]]:
+    """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
-    of communication consists of sends and receives. Computation
-    occurs between batches. (So, from the perspective of the
-    :class:`DistributedGraphPartition`, communication batches
-    sit *between* parts.)
+    of tasks consists of tasks which do not depend on each other.
+    A task may only be in a batch if all of its dependents have already been
+    completed.
     """
-    comm_batches: List[AbstractSet[template_t]] = []
+    depend_list, visits_in_depend = \
+            _calculate_dependency_level(task_ids_to_needed_task_ids)
+    max_level = max(depend_list.values())
+    comm_batches: Sequence[set[TaskType]] \
+            = [set() for _ in range(max_level)]
 
-    scheduled_comm_ids: Set[template_t] = set()
-
-    total_ids = len(comm_ids_to_needed_comm_ids)
-    n_visited_in_scheduling = 0
-    sorted_ids, n_visited_in_sort = _topo_sort(comm_ids_to_needed_comm_ids)
-    while len(scheduled_comm_ids) < total_ids:
-        batch_ready = False
-        comm_ids_this_batch = set()
-        while not batch_ready:
-            comm_id = sorted_ids[-1]
-            n_visited_in_scheduling += 1
-            needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
-            if not (needed_comm_ids <= scheduled_comm_ids):
-                # not ( A <= B ) is not equivalent to (A > B) in python sets.
-                batch_ready = True  # batch is done.
-            else:
-                # Append to batch.
-                comm_id = sorted_ids.pop()
-                comm_ids_this_batch.add(comm_id)
-            if not sorted_ids:
-                batch_ready = True
-        scheduled_comm_ids.update(comm_ids_this_batch)
-        comm_batches.append(comm_ids_this_batch)
+    for comm_id, n_depend in depend_list.items():
+        comm_batches[n_depend - 1].add(comm_id)
     if cnts:
         cnts.clear()
-        cnts.add(sum([n_visited_in_sort, n_visited_in_scheduling]))
+        cnts.add(visits_in_depend[0] + len(depend_list.keys()))
     return comm_batches
 
 # }}}
 
-# {{{ _topo_sort
 
+# {{{ _calculate_dependency_level
 
-def _topo_sort(
-        comm_ids_to_needed_comm_ids: Mapping[template_t, AbstractSet[template_t]]
-        ) -> Tuple[List[template_t], int]:
+def _calculate_dependency_level(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
+                -> Tuple[Mapping[TaskType, int], List[int]]:
+    """ Calculate the minimum dependendency level needed before a task of
+        type TaskType can be scheduled. We assume that any number of tasks
+        can be scheduled at the same time, and that each task has a constant
+        number of direct dependents.
+
+        The minimum dependency level for a task, i, is defined as
+        1 + the maximum dependency level for its children.
     """
-    Compute a topological sort of the input graph. The input graph specifies a
-    mapping of tasks, i to a set of tasks J which need to be completed before
-    task i can be scheduled.
+    known_vals: Dict[TaskType, int] = {}
+    count: List[int] = [0]
+    for comm_id in task_ids_to_needed_task_ids:
+        seen = {comm_id}
+        count[0] += 1
 
-    Output: Sorted list of task. For all indicies i, the prerequisites for the task
-    as specified by the set J, all have indices less than i.
-    """
-    locations_visited: Set[template_t] = set()
-    temp_visit: Set[template_t] = set()
-    sorted_list: List[template_t] = []
-
-    def _topo_sort_depth_first_searcher(
-            comm_id: template_t
-            ) -> Tuple[List[template_t], int]:
-        """
-        Helper funciton to do depth first search.
-        """
-        count = 0
-        if comm_id in locations_visited:
-            return sorted_list, count
-        if comm_id in temp_visit:
-            raise CycleError("Cycle detected in communication graph")
-
-        temp_visit.add(comm_id)
-        for item in comm_ids_to_needed_comm_ids[comm_id]:
-            count += 1
-            _topo_sort_depth_first_searcher(item)
-        temp_visit.remove(comm_id)
-        locations_visited.add(comm_id)
-        sorted_list.append(comm_id)
-        return sorted_list, count
-
-    num_visited = 0
-    for comm_id in comm_ids_to_needed_comm_ids:
-        sorted_list, num_visited = _topo_sort_depth_first_searcher(comm_id)
-    sorted_list.reverse()
-    return sorted_list, num_visited
+        def _internal_dependency_level_dfs(node: TaskType) -> int:
+            count[0] += 1
+            if node in seen:
+                raise CycleError("Cycle detected in your input graph.")
+            seen.add(node)
+            if node in known_vals.keys():
+                return known_vals[node]
+            else:
+                count[0] += len(task_ids_to_needed_task_ids[node])
+                kids = task_ids_to_needed_task_ids[node]
+                answer = 1 + max([_internal_dependency_level_dfs(c) for c in kids])
+                known_vals[node] = answer
+                return answer
+        kids = task_ids_to_needed_task_ids[comm_id]
+        kids_portion: list[int] = [_internal_dependency_level_dfs(c) for c in kids]
+        max_dependent_level: int = max(kids_portion) if len(kids_portion) > 0 else 0
+        known_vals[comm_id] = 1 + max_dependent_level
+    return known_vals, count
 # }}}
+
 
 # {{{  _MaterializedArrayCollector
 
@@ -820,7 +783,7 @@ def find_distributed_partition(
         # The comm_batches correspond one-to-one to DistributedGraphParts
         # in the output.
         try:
-            comm_batches = _schedule_comm_batches(comm_ids_to_needed_comm_ids)
+            comm_batches = _schedule_task_batches(comm_ids_to_needed_comm_ids)
         except Exception as exc:
             mpi_communicator.bcast(exc)
             raise
