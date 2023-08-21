@@ -526,16 +526,17 @@ def _schedule_task_batches(
     """
     depend_list, visits_in_depend = \
             _calculate_dependency_level(task_ids_to_needed_task_ids)
-    max_level = max(depend_list.values())
-    comm_batches: Sequence[set[TaskType]] \
+    max_level = max(depend_list.values(), default=0)
+    task_batches: Sequence[set[TaskType]] \
             = [set() for _ in range(max_level)]
 
-    for comm_id, n_depend in depend_list.items():
-        comm_batches[n_depend - 1].add(comm_id)
+    for task_id, n_depend in depend_list.items():
+        task_batches[n_depend - 1].add(task_id)
     if cnts:
         cnts.clear()
         cnts.add(visits_in_depend[0] + len(depend_list.keys()))
-    return comm_batches
+    print(task_batches)
+    return task_batches
 
 # }}}
 
@@ -555,27 +556,29 @@ def _calculate_dependency_level(
     """
     known_vals: Dict[TaskType, int] = {}
     count: List[int] = [0]
-    for comm_id in task_ids_to_needed_task_ids:
-        seen = {comm_id}
-        count[0] += 1
+    seen: set[TaskType] = set()
 
-        def _internal_dependency_level_dfs(node: TaskType) -> int:
-            count[0] += 1
-            if node in seen:
-                raise CycleError("Cycle detected in your input graph.")
-            seen.add(node)
-            if node in known_vals.keys():
-                return known_vals[node]
-            else:
-                count[0] += len(task_ids_to_needed_task_ids[node])
-                kids = task_ids_to_needed_task_ids[node]
-                answer = 1 + max([_internal_dependency_level_dfs(c) for c in kids])
-                known_vals[node] = answer
-                return answer
-        kids = task_ids_to_needed_task_ids[comm_id]
+    def _internal_dependency_level_dfs(node: TaskType) -> int:
+        """Helper function to do depth first search on a graph."""
+        count[0] += 1
+        if node in seen:
+            raise CycleError("Cycle detected in your input graph.")
+        seen.add(node)
+        if node in known_vals.keys():
+            return known_vals[node]
+        else:
+            count[0] += len(task_ids_to_needed_task_ids[node])
+            kids = task_ids_to_needed_task_ids[node]
+            val = 1 + max([_internal_dependency_level_dfs(c) for c in kids] or [0])
+            known_vals[node] = val
+            return val
+
+    for task_id in task_ids_to_needed_task_ids:
+        seen = {task_id}
+        count[0] += 1
+        kids = task_ids_to_needed_task_ids[task_id]
         kids_portion: list[int] = [_internal_dependency_level_dfs(c) for c in kids]
-        max_dependent_level: int = max(kids_portion) if len(kids_portion) > 0 else 0
-        known_vals[comm_id] = 1 + max_dependent_level
+        known_vals[task_id] = 1 + max(kids_portion, default=0)
     return known_vals, count
 # }}}
 
