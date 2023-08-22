@@ -297,8 +297,8 @@ def get_random_pt_dag_with_send_recv_nodes(
 
     def gen_comm(rdagc: RandomDAGContext) -> pt.Array:
         nonlocal comm_tag
-        comm_tag += 1
         inner = make_random_dag(rdagc)
+        comm_tag += 1
         return pt.staple_distributed_send(
                 inner, dest_rank=(rank-1) % size, comm_tag=comm_tag,
                 stapled_to=pt.make_distributed_recv(
@@ -316,39 +316,55 @@ def get_random_pt_dag_with_send_recv_nodes(
 
 # {{{ tags used only by the regression tests
 
-class FooInameTag(Tag):
+class TestlibTag(Tag):
+    pass
+
+
+class FooRednTag(TestlibTag):
     """
     foo
     """
 
 
-class BarInameTag(Tag):
-    """
-    bar
-    """
-
-
-class BazInameTag(Tag):
-    """
-    baz
-    """
-
-
-class FooTag(Tag):
+class FooInameTag(TestlibTag):
     """
     foo
     """
 
 
-class BarTag(Tag):
+class BarInameTag(TestlibTag):
     """
     bar
     """
 
 
-class BazTag(Tag):
+class BazInameTag(TestlibTag):
     """
     baz
+    """
+
+
+class FooTag(TestlibTag):
+    """
+    foo
+    """
+
+
+class BarTag(TestlibTag):
+    """
+    bar
+    """
+
+
+class BazTag(TestlibTag):
+    """
+    baz
+    """
+
+
+class QuuxTag(TestlibTag):
+    """
+    quux
     """
 
 # }}}

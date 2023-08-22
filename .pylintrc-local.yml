@@ -5,3 +5,11 @@
   - ply
   - pygments.lexers
   - pygments.formatters
+
+# https://github.com/PyCQA/pylint/issues/7623
+- arg: disable
+  val:
+    - unexpected-keyword-arg
+    - too-many-function-args
+    - redundant-keyword-arg
+    - no-value-for-parameter

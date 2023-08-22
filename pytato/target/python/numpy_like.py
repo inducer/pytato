@@ -31,13 +31,14 @@ from typing import (Callable, Union, Optional, Mapping, Dict, TypeVar, Iterable,
                     cast, List, Set, Tuple, Type)
 
 from pytools import UniqueNameGenerator
-from pytato.transform import CachedMapper, ArrayOrNames
+from pytato.transform import CachedMapper
 from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
                           Placeholder, SizeParam, Roll,
                           AxisPermutation, Einsum,
                           Reshape, Array, DictOfNamedArrays, IndexBase,
                           DataInterface, NormalizedSlice, ShapeComponent,
-                          IndexExpr, ArrayOrScalar)
+                          IndexExpr, ArrayOrScalar, NamedArray)
+from immutables import Map
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.utils import are_shape_components_equal
 from pytato.raising import BinaryOpType, C99CallOp
@@ -48,7 +49,6 @@ from pytato.reductions import (ReductionOperation, SumReductionOperation,
                                ProductReductionOperation,
                                MaxReductionOperation, MinReductionOperation,
                                AllReductionOperation, AnyReductionOperation)
-from pyrsistent import pmap
 
 
 T = TypeVar("T")
@@ -96,7 +96,7 @@ def first_true(iterable: Iterable[T], default: T,
 
 
 def _get_einsum_subscripts(einsum: Einsum) -> str:
-    from pytato.array import (ElementwiseAxis, EinsumAxisDescriptor)
+    from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
 
     idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
     idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
@@ -113,7 +113,7 @@ def _get_einsum_subscripts(einsum: Einsum) -> str:
 
         input_specs.append(spec)
 
-    output_spec = "".join(axis_descr_to_idx[ElementwiseAxis(i)]
+    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
                           for i in range(einsum.ndim))
 
     return f"{', '.join(input_specs)} -> {output_spec}"
@@ -164,7 +164,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[Type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
+class NumpyCodegenMapper(CachedMapper[str]):
     """
     .. note::
 
@@ -408,7 +408,7 @@ class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
         )
 
         if last_non_trivial_index == -1:
-            return self.rec(expr.array)  # type: ignore[no-any-return]
+            return self.rec(expr.array)
 
         lhs = self.vng("_pt_tmp")
 
@@ -498,6 +498,9 @@ class NumpyCodegenMapper(CachedMapper[ArrayOrNames]):
                        )
 
         return self._record_line_and_return_lhs(lhs, rhs)
+
+    def map_named_array(self, expr: NamedArray) -> str:
+        return self.rec(expr.expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> str:
         lhs = self.vng("_pt_tmp")
@@ -598,4 +601,4 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
         program,
         function_name,
         expected_arguments=frozenset(cgen_mapper.arg_names),
-        bound_arguments=pmap(cgen_mapper.bound_arguments))
+        bound_arguments=Map(cgen_mapper.bound_arguments))

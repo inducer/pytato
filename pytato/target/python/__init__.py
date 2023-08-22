@@ -35,6 +35,7 @@ __doc__ = """
 .. autoclass:: BoundJAXPythonProgram
 """
 
+import numpy as np
 from dataclasses import dataclass
 from abc import ABC, abstractmethod, abstractproperty
 from functools import cached_property
@@ -147,6 +148,21 @@ class BoundJAXPythonProgram(BoundPythonProgram):
     pass
 
 
+def _process_jax_bnd_arg(arg: Any) -> Any:
+    import jax
+    if np.isscalar(arg):
+        return arg
+    elif isinstance(arg, np.ndarray):
+        return jax.device_put(arg)
+
+    elif isinstance(arg, jax.Array):
+        return arg
+    else:
+        raise TypeError("Data in a bound argument can be one of"
+                        " numpy array, jax device array or scalar."
+                        f" Got {type(arg).__name__}.")
+
+
 class JAXPythonTarget(NumpyLikePythonTarget):
     """
     A target that generates code for a python program by offloading array
@@ -168,7 +184,9 @@ class JAXPythonTarget(NumpyLikePythonTarget):
         return BoundJAXPythonProgram(target=self, program=program,
                                      entrypoint=entrypoint,
                                      expected_arguments=expected_arguments,
-                                     bound_arguments=bound_arguments)
+                                     bound_arguments={
+                                         name: _process_jax_bnd_arg(arg)
+                                         for name, arg in bound_arguments.items()})
 
 # }}}
 

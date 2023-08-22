@@ -11,8 +11,7 @@ from pytato.utils import (get_indexing_expression,
 from pytato.scalar_expr import ScalarType, ScalarExpression, Reduce, SCALAR_CLASSES
 from pytato.reductions import ReductionOperation
 from dataclasses import dataclass
-from pyrsistent import pmap
-from pyrsistent.typing import PMap
+from immutables import Map
 
 
 __doc__ = """
@@ -102,7 +101,7 @@ class ReduceOp(HighLevelOp):
     """
     op: ReductionOperation
     x: Array
-    axes: PMap[int, str]
+    axes: Map[int, str]
 
 # }}}
 
@@ -270,6 +269,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
         else:
             raise UnknownIndexLambdaExpr
 
+        # pylint: disable=no-value-for-parameter
         return BinaryOp(bin_op,
                         *_as_array_or_scalar(children,
                                              expr.bindings,
@@ -294,6 +294,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
 
     if isinstance(expr.expr, p.If):
         try:
+            # pylint: disable=no-value-for-parameter
             return WhereOp(*_as_array_or_scalar((expr.expr.condition,
                                                  expr.expr.then,
                                                  expr.expr.else_),
@@ -318,12 +319,12 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
                                       .expr
                                       .inner_expr
                                       .aggregate.name],
-                        axes=pmap({i: idx.name
-                                   for i, idx in enumerate(expr
-                                                           .expr
-                                                           .inner_expr
-                                                           .index_tuple)
-                                   if idx.name in expr.expr.bounds})
+                        axes=Map({i: idx.name
+                                  for i, idx in enumerate(expr
+                                                          .expr
+                                                          .inner_expr
+                                                          .index_tuple)
+                                  if idx.name in expr.expr.bounds})
                         )
 
     if _is_idx_lambda_broadcast_op(expr):

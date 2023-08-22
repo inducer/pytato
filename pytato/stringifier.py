@@ -26,10 +26,13 @@ THE SOFTWARE.
 
 import numpy as np
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 from pytato.transform import Mapper
-from pytato.array import Array, DataWrapper, DictOfNamedArrays, Axis
+from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
+                          IndexLambda, ReductionDescriptor)
 from pytato.loopy import LoopyCall
+from immutables import Map
+import attrs
 
 
 __doc__ = """
@@ -74,12 +77,13 @@ class Reprifier(Mapper):
     def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, dict):
+        elif isinstance(expr, (dict, Map)):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
-                                for key, val in expr.items())
+                                for key, val
+                                in sorted(expr.items(),
+                                          key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-            return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
         elif isinstance(expr, (frozenset, set)):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
@@ -91,7 +95,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        fields = expr._fields
+        fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
@@ -105,6 +109,14 @@ class Reprifier(Mapper):
         if all(axis == Axis(frozenset()) for axis in expr.axes):
             # prettify: if trivial 'expr.axes' => don't print.
             fields = tuple(field for field in fields if field != "axes")
+
+        if (isinstance(expr, IndexLambda)
+                and all(redn_descr == ReductionDescriptor(frozenset())
+                        for redn_descr in expr.var_to_reduction_descr.values())):
+            # prettify: if trivial 'expr.var_to_reduction_descr' => don't print.
+            fields = tuple(field
+                           for field in fields
+                           if field != "var_to_reduction_descr")
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field}="
@@ -140,8 +152,8 @@ class Reprifier(Mapper):
                 return self.rec(getattr(expr, field), depth+1)
 
         return (f"{type(expr).__name__}("
-                + ", ".join(f"{field}={_get_field_val(field)}"
-                            for field in expr._fields)
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                            for field in attrs.fields(type(expr)))
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:

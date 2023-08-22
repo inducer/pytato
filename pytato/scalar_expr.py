@@ -24,9 +24,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from numbers import Number
 from typing import (
-        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING)
+        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
+        Iterable)
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
@@ -40,7 +40,9 @@ from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
 from pymbolic.mapper.stringifier import (StringifyMapper as
         StringifyMapperBase)
+from pymbolic.mapper import CombineMapper as CombineMapperBase
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
+from immutables import Map
 import pymbolic.primitives as prim
 import numpy as np
 import re
@@ -68,13 +70,11 @@ __doc__ = """
 
 # {{{ scalar expressions
 
-IntegralT = Union[int, np.int8, np.int16, np.int32, np.int64, np.uint8,
-                  np.uint16, np.uint32, np.uint64]
-BoolT = Union[bool, np.bool8]
-INT_CLASSES = (int, np.int8, np.int16, np.int32, np.int64, np.uint8,
-               np.uint16, np.uint32, np.uint64)
+IntegralT = Union[int, np.integer]
+BoolT = Union[bool, np.bool_]
+INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[Number, int, np.bool_, bool, float]
+ScalarType = Union[np.number, int, np.bool_, bool, float]
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
@@ -98,12 +98,24 @@ class WalkMapper(WalkMapperBase):
         self.post_visit(expr)
 
 
+class CombineMapper(CombineMapperBase):
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
+        return self.combine([*(self.rec(bnd, *args, **kwargs)
+                               for _, bnd in sorted(expr.bounds.items())),
+                             self.rec(expr.inner_expr, *args, **kwargs)])
+
+
 class IdentityMapper(IdentityMapperBase):
     pass
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
-    pass
+    def map_reduce(self, expr: Reduce) -> ScalarExpression:
+        return Reduce(self.rec(expr.inner_expr),
+                      op=expr.op,
+                      bounds=Map(
+                          {name: self.rec(bound)
+                           for name, bound in expr.bounds.items()}))
 
 
 IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
@@ -267,5 +279,28 @@ class Reduce(ExpressionBase):
     mapper_method = "map_reduce"
 
 # }}}
+
+
+class InductionVariableCollector(CombineMapper):
+    def combine(self, values: Iterable[FrozenSet[str]]) -> FrozenSet[str]:
+        from functools import reduce
+        return reduce(frozenset.union, values, frozenset())
+
+    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:  # type: ignore[override]
+        return self.combine([frozenset(expr.bounds.keys()),
+                             super().map_reduce(expr)])
+
+    def map_algebraic_leaf(self, expr: prim.Expression) -> FrozenSet[str]:
+        return frozenset()
+
+    def map_constant(self, expr: Any) -> FrozenSet[str]:
+        return frozenset()
+
+
+def get_reduction_induction_variables(expr: prim.Expression) -> FrozenSet[str]:
+    """
+    Returns the induction variables for the reduction nodes.
+    """
+    return InductionVariableCollector()(expr)  # type: ignore[no-any-return]
 
 # vim: foldmethod=marker

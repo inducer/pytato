@@ -26,18 +26,18 @@ THE SOFTWARE.
 
 
 import numpy as np
+import attrs
 import loopy as lp
 import pymbolic.primitives as prim
 from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
-                    Tuple, Iterable, Mapping)
+                    Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam, AxesT)
+                          NamedArray, ArrayOrScalar, SizeParam)
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from pytools.tag import Tag
-from pyrsistent import PMap, pmap
+from immutables import Map
 import islpy as isl
 
 __doc__ = r"""
@@ -58,29 +58,38 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: AxesT
 
     See :class:`pytato.array.AxesT`.
+
+.. class:: ArrayOrScalar
+
+    A :class:`~pytato.Array` or a scalar.
+
+.. currentmodule:: lp
+
+.. class:: TranslationUnit
+
+   See :class:`loopy.TranslationUnit`.
 """
 
 
+@attrs.frozen(eq=False)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
-    _mapper_method = "map_loopy_call"
+    translation_unit: "lp.TranslationUnit"
+    bindings: Dict[str, ArrayOrScalar]
+    entrypoint: str
 
-    def __init__(self,
-            translation_unit: "lp.TranslationUnit",
-            bindings: Dict[str, ArrayOrScalar],
-            entrypoint: str):
-        entry_kernel = translation_unit[entrypoint]
-        super().__init__()
-        self._result_names = frozenset({name
-                              for name, lp_arg in entry_kernel.arg_dict.items()
-                              if lp_arg.is_output})
+    _mapper_method: ClassVar[str] = "map_loopy_call"
 
-        self.translation_unit = translation_unit
-        self.bindings = bindings
-        self.entrypoint = entrypoint
+    copy = attrs.evolve
+
+    @property
+    def _result_names(self) -> FrozenSet[str]:
+        return frozenset({name
+                          for name, lp_arg in self._entry_kernel.arg_dict.items()
+                          if lp_arg.is_output})
 
     @memoize_method
     def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
@@ -93,7 +102,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
-                     self.entrypoint))
+                     self.entrypoint, self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._result_names
@@ -106,11 +115,13 @@ class LoopyCall(AbstractResultWithNamedArrays):
             raise KeyError(name)
 
         # TODO: Attach a filtered set of tags from loopy's arg.
-        return LoopyCallResult(self, name,
+        return LoopyCallResult(container=self,
+                               name=name,
                                axes=_get_default_axes(len(self
                                                           ._entry_kernel
                                                           .arg_dict[name]
-                                                          .shape)))
+                                                          .shape)),
+                               tags=frozenset())
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -118,65 +129,36 @@ class LoopyCall(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
 
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
 
-        if not isinstance(other, LoopyCall):
-            return False
-
-        if ((self.entrypoint == other.entrypoint)
-             and (self.bindings == other.bindings)
-             and (self.translation_unit == other.translation_unit)):
-            return True
-        return False
-
-
+@attrs.frozen(eq=False, hash=True, cache_hash=True)
 class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
     _mapper_method = "map_loopy_call_result"
+    _container: LoopyCall
 
-    def __init__(self,
-            loopy_call: LoopyCall,
-            name: str,
-            axes: AxesT,
-            tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(loopy_call, name, axes=axes, tags=tags)
-
-    # type-ignore reason: `copy` signature incompatible with super-class
-    def copy(self, *,  # type: ignore[override]
-             loopy_call: Optional[AbstractResultWithNamedArrays] = None,
-             name: Optional[str] = None,
-             axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None) -> LoopyCallResult:
-        loopy_call = self._container if loopy_call is None else loopy_call
-        name = self.name if name is None else name
-        tags = self.tags if tags is None else tags
-        axes = self.axes if axes is None else axes
-        assert isinstance(loopy_call, LoopyCall)
-        return LoopyCallResult(loopy_call=loopy_call,
-                               name=name,
-                               axes=axes,
-                               tags=tags)
-
+    @property
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
     @property
     def shape(self) -> ShapeType:
-        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
-                self.name]
-        shape: ShapeType = self._container._to_pytato(  # type:ignore
+        # pylint: disable=E1101
+        # reason: (pylint doesn't respect the asserts)
+        assert isinstance(self._container, LoopyCall)
+        loopy_arg = self._container._entry_kernel.arg_dict[self.name]
+        shape: ShapeType = self._container._to_pytato(  # type:ignore[assignment]
                 loopy_arg.shape)
         return shape
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        loopy_arg = self._container._entry_kernel.arg_dict[  # type:ignore
-                self.name]
+        # pylint: disable=E1101
+        # reason: (pylint doesn't respect the asserts)
+        assert isinstance(self._container, LoopyCall)
+        loopy_arg = self._container._entry_kernel.arg_dict[self.name]
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 
@@ -203,6 +185,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
       to :class:`pytato.array.Array`.
     :arg entrypoint: the entrypoint of the ``translation_unit`` parameter.
     """
+    from pytato.array import _get_default_tags
+
     if entrypoint is None:
         if len(translation_unit.entrypoints) != 1:
             raise ValueError("cannot infer entrypoint")
@@ -213,8 +197,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ sanity checks
 
-    if any([arg.is_input and arg.is_output
-            for arg in translation_unit[entrypoint].args]):
+    if any(arg.is_input and arg.is_output
+            for arg in translation_unit[entrypoint].args):
         # Pytato DAG cannot have stateful nodes.
         raise ValueError("Cannot call a kernel with side-effects.")
 
@@ -229,7 +213,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     # {{{ perform shape inference here
 
     bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    pmap(bindings))
+                                                    Map(bindings))
 
     # }}}
 
@@ -281,7 +265,8 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     translation_unit = translation_unit.with_entrypoints(frozenset())
 
-    return LoopyCall(translation_unit, bindings, entrypoint)
+    return LoopyCall(translation_unit, bindings, entrypoint,
+                     tags=_get_default_tags())
 
 
 # {{{ shape inference
@@ -394,7 +379,7 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: PMap[str, ArrayOrScalar]
+                                         bindings: Map[str, ArrayOrScalar]
                                          ) -> Dict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps

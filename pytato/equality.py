@@ -31,10 +31,12 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
                           IndexBase, IndexLambda, NamedArray,
                           Reshape, Roll, Stack, AbstractResultWithNamedArrays,
                           Array, DictOfNamedArrays, Placeholder, SizeParam)
+from pytato.function import Call, NamedCallResult, FunctionDefinition
+from pytools import memoize_method
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall, LoopyCallResult
-    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. autoclass:: EqualityComparer
@@ -130,7 +132,9 @@ class EqualityComparer:
                         else dim1 == dim2
                         for dim1, dim2 in zip(expr1.shape, expr2.shape))
                 and expr1.tags == expr2.tags
-                and expr1.axes == expr2.axes)
+                and expr1.axes == expr2.axes
+                and expr1.var_to_reduction_descr == expr2.var_to_reduction_descr
+                )
 
     def map_stack(self, expr1: Stack, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -155,6 +159,7 @@ class EqualityComparer:
     def map_roll(self, expr1: Roll, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.axis == expr2.axis
+                and expr1.shift == expr2.shift
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
@@ -212,6 +217,7 @@ class EqualityComparer:
                                               expr2.args))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
+                and expr1.redn_axis_to_redn_descr == expr2.redn_axis_to_redn_descr
                 )
 
     def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:
@@ -231,6 +237,7 @@ class EqualityComparer:
                         if isinstance(bnd, Array)
                         else bnd == expr2.bindings[name]
                         for name, bnd in expr1.bindings.items())
+                and expr1.tags == expr2.tags
                 )
 
     def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
@@ -244,7 +251,9 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
-                        for name in expr1._data))
+                        for name in expr1._data)
+                and expr1.tags == expr2.tags
+                )
 
     def map_distributed_send_ref_holder(
             self, expr1: DistributedSendRefHolder, expr2: Any) -> bool:
@@ -265,6 +274,31 @@ class EqualityComparer:
                 and expr1.dtype == expr2.dtype
                 and expr1.tags == expr2.tags
                 )
+
+    @memoize_method
+    def map_function_definition(self, expr1: FunctionDefinition, expr2: Any
+                                ) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and expr1.parameters == expr2.parameters
+                and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
+                and all(self.rec(expr1.returns[k], expr2.returns[k])
+                        for k in expr1.returns)
+                and expr1.tags == expr2.tags
+                )
+
+    def map_call(self, expr1: Call, expr2: Any) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and self.map_function_definition(expr1.function, expr2.function)
+                and frozenset(expr1.bindings) == frozenset(expr2.bindings)
+                and all(self.rec(bnd,
+                                 expr2.bindings[name])
+                        for name, bnd in expr1.bindings.items())
+                )
+
+    def map_named_call_result(self, expr1: NamedCallResult, expr2: Any) -> bool:
+        return (expr1.__class__ is expr2.__class__
+                and expr1.name == expr2.name
+                and self.rec(expr1._container, expr2._container))
 
 # }}}
 

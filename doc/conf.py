@@ -15,26 +15,40 @@ version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
 intersphinx_mapping = {
-    "https://docs.python.org/3/": None,
-    "https://numpy.org/doc/stable/": None,
-    "https://documen.tician.de/boxtree/": None,
-    "https://documen.tician.de/meshmode/": None,
-    "https://documen.tician.de/modepy/": None,
-    "https://documen.tician.de/pyopencl/": None,
-    "https://documen.tician.de/pytools/": None,
-    "https://documen.tician.de/pymbolic/": None,
-    "https://documen.tician.de/loopy/": None,
-    "https://documen.tician.de/sumpy/": None,
-    "https://documen.tician.de/islpy/": None,
-    "https://pyrsistent.readthedocs.io/en/latest/": None,
-    "https://jax.readthedocs.io/en/latest/": None,
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "meshmode": ("https://documen.tician.de/meshmode/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "sumpy": ("https://documen.tician.de/sumpy/", None),
+    "islpy": ("https://documen.tician.de/islpy/", None),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "attrs": ("https://www.attrs.org/en/stable/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
 }
 
+# Some modules need to import things just so that sphinx can resolve symbols in
+# type annotations. Often, we do not want these imports (e.g. of PyOpenCL) when
+# in normal use (because they would introduce unintended side effects or hard
+# dependencies). This flag exists so that these imports only occur during doc
+# build. Since sphinx appears to resolve type hints lexically (as it should),
+# this needs to be cross-module (since, e.g. an inherited arraycontext
+# docstring can be read by sphinx when building meshmode, a dependent package),
+# this needs a setting of the same name across all packages involved, that's
+# why this name is as global-sounding as it is.
 import sys
-sys.PYTATO_BUILDING_SPHINX_DOCS = True
+sys._BUILDING_SPHINX_DOCS = True
 
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
-    ["py:class", r"pyrsistent.typing.(.+)"],
     ["py:class", r"typing_extensions(.+)"],
+    # As of 2022-10-20, it doesn't look like there's sphinx documentation
+    # available.
+    ["py:class", r"immutables\.(.+)"],
+    # https://github.com/python-attrs/attrs/issues/1073
+    ["py:mod", "attrs"],
 ]

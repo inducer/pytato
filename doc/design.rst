@@ -154,11 +154,6 @@ Reserved Identifiers
         names of :class:`~pytato.array.DataWrapper` arguments that are
         not supplied by the user.
 
-    -   ``_pt_part_ph``: Used to automatically generate identifiers for
-        names of :class:`~pytato.array.Placeholder` that represent data
-        transport across parts of a partitioned DAG
-        (cf. :func:`~pytato.partition.find_partition`).
-
     -   ``_pt_dist``: Used to automatically generate identifiers for
         placeholders at distributed communication boundaries.
 
@@ -230,6 +225,22 @@ Memory layout
 that relies on memory layout information to do its job is undefined in :mod:`pytato`.
 At the most basic level, the attribute :attr:`numpy.ndarray.strides` is not available
 on subclasses of :class:`pytato.Array`.
+
+Dataclasses / :mod:`attrs`
+--------------------------
+
+:mod:`dataclasses` helps us reduce most of the boilerplate involved in
+instantiating a new type. However, :mod:`dataclasses` does not support
+keyword-only argument until Python-3.10. To overcome this, we prefer
+:mod:`attrs` which gives us all the required functionality of
+:mod:`dataclasses` and works with Python-3.8.
+
+
+We have checks in place to avoid developer errors that could happen by using
+the defaults of these libraries. For eg. both :mod:`dataclasses` and
+:mod:`attrs` override the implementation of ``__eq__`` for the class being
+implemented, which could potentially lead lead to an `exponential complex
+operation <https://github.com/inducer/pytato/issues/163>`_.
 
 Lessons learned
 ===============

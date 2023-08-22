@@ -33,11 +33,12 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes,
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any)
+                          _dtype_any, Einsum)
 from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                SCALAR_CLASSES, INT_CLASSES, BoolT)
+                                SCALAR_CLASSES, INT_CLASSES, BoolT, ScalarType)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
+from immutables import Map
 
 
 __doc__ = """
@@ -49,6 +50,7 @@ Helper routines
 .. autofunction:: get_shape_after_broadcasting
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
+.. autofunction:: get_einsum_subscript_str
 """
 
 
@@ -200,11 +202,12 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     expr2 = update_bindings_and_get_broadcasted_expr(a2, "_in1", bindings,
                                                      result_shape)
 
-    return IndexLambda(op(expr1, expr2),
+    return IndexLambda(expr=op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=bindings,
+                       bindings=Map(bindings),
                        tags=_get_default_tags(),
+                       var_to_reduction_descr=Map(),
                        axes=_get_default_axes(len(result_shape)))
 
 
@@ -582,16 +585,56 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
     array_types: List[_dtype_any] = []
-    scalar_types: List[_dtype_any] = []
+    scalars: List[ScalarType] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):
             array_types.append(ary_or_scalar.dtype)
         else:
             assert isinstance(ary_or_scalar, SCALAR_CLASSES)
-            scalar_types.append(np.array(ary_or_scalar).dtype)
+            scalars.append(ary_or_scalar)
 
-    return np.find_common_type(array_types=array_types,
-                               scalar_types=scalar_types)
+    return np.result_type(*array_types, *scalars)
+
+
+def get_einsum_subscript_str(expr: Einsum) -> str:
+    """
+    Returns the index subscript expression that was used in constructing *expr*
+    using the :func:`pytato.einsum` routine.
+
+
+    .. testsetup::
+
+        >>> import pytato as pt
+        >>> import numpy as np
+        >>> from pytato.utils import get_einsum_subscript_str
+
+    .. doctest::
+
+        >>> A = pt.make_placeholder("A", (10, 6), np.float64)
+        >>> B = pt.make_placeholder("B", (6, 5), np.float64)
+        >>> C = pt.make_placeholder("B", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> get_einsum_subscript_str(ABC)
+        'ij,jk,kl->il'
+    """
+    from pytato.array import EinsumElementwiseAxis
+
+    acc_descr_to_index = {
+        acc_descr: idx
+        for idx, acc_descr in expr.index_to_access_descr.items()
+    }
+
+    output_subscripts = "".join(
+        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
+         for idim in range(expr.ndim)]
+    )
+    arg_subscripts: List[str] = []
+
+    for acc_descrs in expr.access_descriptors:
+        arg_subscripts.append("".join(acc_descr_to_index[acc_descr]
+                                      for acc_descr in acc_descrs))
+
+    return f"{','.join(arg_subscripts)}->{output_subscripts}"
 
 # vim: fdm=marker

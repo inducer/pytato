@@ -31,6 +31,7 @@ Pytato-specific exceptions
 .. autoclass:: NameClashError
 .. autoclass:: CannotBroadcastError
 .. autoclass:: UnknownIndexLambdaExpr
+.. autoclass:: CannotBeLoweredToIndexLambda
 """
 
 
@@ -52,3 +53,25 @@ class UnknownIndexLambdaExpr(ValueError):
     inferred.
     """
     pass
+
+
+class InvalidEinsumIndex(ValueError):
+    """
+    Raised when an einsum index was referred by an invalid value.
+    """
+
+
+class NotAReductionAxis(ValueError):
+    """
+    Raised when a :class:`pytato.ReductionDescriptor` was referred by an invalid
+    value.
+    """
+
+
+class CannotBeLoweredToIndexLambda(ValueError):
+    """
+    Raised when a :class:`pytato.Array` was expected to be lowered to an
+    :class:`~pytato.array.IndexLambda`, but it cannot be. For ex. a
+    :class:`pytato.loopy.LoopyCallResult` cannot be lowered to an
+    :class:`~pytato.array.IndexLambda`.
+    """

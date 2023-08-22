@@ -31,11 +31,14 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
                           ShapeType)
+from pytato.function import FunctionDefinition, Call
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
+from pymbolic.mapper.optimize import optimize_mapper
+from pytools import memoize_method
 
 if TYPE_CHECKING:
-    from pytato.distributed import DistributedRecv, DistributedSendRefHolder
+    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
@@ -46,9 +49,13 @@ __doc__ = """
 
 .. autofunction:: get_num_nodes
 
+.. autofunction:: get_num_call_sites
+
 .. autoclass:: DirectPredecessorsGetter
 """
 
+
+# {{{ NUserCollector
 
 class NUserCollector(Mapper):
     """
@@ -167,6 +174,8 @@ class NUserCollector(Mapper):
                 self.nusers[dim] += 1
                 self.rec(dim)
 
+# }}}
+
 
 def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
     """
@@ -179,6 +188,8 @@ def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
     nuser_collector(outputs)
     return nuser_collector.nusers
 
+
+# {{{ is_einsum_similar_to_subscript
 
 def _get_indices_from_input_subscript(subscript: str,
                                       is_output: bool,
@@ -207,8 +218,6 @@ def _get_indices_from_input_subscript(subscript: str,
 
         # }}}
 
-    # {{{
-
     if is_output:
         if len(normalized_indices) != len(set(normalized_indices)):
             repeated_idx = next(idx
@@ -227,7 +236,8 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     would compute the same result as *expr*.
     """
 
-    from pytato.array import ElementwiseAxis, ReductionAxis, EinsumAxisDescriptor
+    from pytato.array import (EinsumElementwiseAxis, EinsumReductionAxis,
+                              EinsumAxisDescriptor)
 
     if not isinstance(expr, Einsum):
         raise TypeError(f"{expr} expected to be Einsum, got {type(expr)}.")
@@ -243,7 +253,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
     for idim, idx in enumerate(_get_indices_from_input_subscript(out_spec,
                                                                  is_output=True)):
-        index_to_descrs[idx] = ElementwiseAxis(idim)
+        index_to_descrs[idx] = EinsumElementwiseAxis(idim)
 
     if len(in_spec.split(",")) != len(expr.args):
         return False
@@ -263,13 +273,15 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
                 if index_to_descrs[idx] != access_descr:
                     return False
             except KeyError:
-                if not isinstance(access_descr, ReductionAxis):
+                if not isinstance(access_descr, EinsumReductionAxis):
                     return False
                 index_to_descrs[idx] = access_descr
 
         # }}}
 
     return True
+
+# }}}
 
 
 # {{{ DirectPredecessorsGetter
@@ -351,6 +363,7 @@ class DirectPredecessorsGetter(Mapper):
 
 # {{{ NodeCountMapper
 
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
     Counts the number of nodes in a DAG.
@@ -364,7 +377,12 @@ class NodeCountMapper(CachedWalkMapper):
         super().__init__()
         self.count = 0
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         self.count += 1
 
 
@@ -380,3 +398,59 @@ def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     return ncm.count
 
 # }}}
+
+
+# {{{ CallSiteCountMapper
+
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class CallSiteCountMapper(CachedWalkMapper):
+    """
+    Counts the number of :class:`~pytato.Call` nodes in a DAG.
+
+    .. attribute:: count
+
+       The number of nodes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.count = 0
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    @memoize_method
+    def map_function_definition(self, /, expr: FunctionDefinition,
+                                *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr):
+            return
+
+        new_mapper = self.clone_for_callee()
+        for subexpr in expr.returns.values():
+            new_mapper(subexpr, *args, **kwargs)
+
+        self.count += new_mapper.count
+
+        self.post_visit(expr, *args, **kwargs)
+
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+        if isinstance(expr, Call):
+            self.count += 1
+
+
+def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
+    """Returns the number of nodes in DAG *outputs*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    cscm = CallSiteCountMapper()
+    cscm(outputs)
+
+    return cscm.count
+
+# }}}
+
+# vim: fdm=marker
