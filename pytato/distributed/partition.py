@@ -535,7 +535,7 @@ def _schedule_task_batches(
         task_batches[n_depend - 1].add(task_id)
     if cnts:
         cnts.clear()
-        cnts.add(visits_in_depend[0] + len(depend_list.keys()))
+        cnts.add(visits_in_depend + len(depend_list.keys()))
     return task_batches
 
 # }}}
@@ -545,7 +545,7 @@ def _schedule_task_batches(
 
 def _calculate_dependency_level(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-                -> Tuple[Mapping[TaskType, int], List[int]]:
+                -> Tuple[Mapping[TaskType, int], int]:
     """ Calculate the minimum dependendency level needed before a task of
         type TaskType can be scheduled. We assume that any number of tasks
         can be scheduled at the same time, and that each task has a constant
@@ -555,19 +555,20 @@ def _calculate_dependency_level(
         1 + the maximum dependency level for its children.
     """
     known_vals: Dict[TaskType, int] = {}
-    count: List[int] = [0]
     seen: set[TaskType] = set()
+    count: int = 0
 
     def _internal_dependency_level_dfs(node: TaskType) -> int:
         """Helper function to do depth first search on a graph."""
-        count[0] += 1
+        nonlocal count
+        count += 1
         if node in seen:
             raise CycleError("Cycle detected in your input graph.")
         seen.add(node)
         if node in known_vals:
             return known_vals[node]
         else:
-            count[0] += len(task_ids_to_needed_task_ids[node])
+            count += len(task_ids_to_needed_task_ids[node])
             kids = task_ids_to_needed_task_ids[node]
             val = 1 + max([_internal_dependency_level_dfs(c) for c in kids] or [0])
             known_vals[node] = val
@@ -575,7 +576,7 @@ def _calculate_dependency_level(
 
     for task_id in task_ids_to_needed_task_ids:
         seen = {task_id}
-        count[0] += 1
+        count += 1
         kids = task_ids_to_needed_task_ids[task_id]
         kids_portion: List[int] = [_internal_dependency_level_dfs(c) for c in kids]
         known_vals[task_id] = 1 + max(kids_portion, default=0)
