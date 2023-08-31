@@ -531,11 +531,11 @@ def _schedule_task_batches(
             = [set() for _ in range(max_level)]
 
     for task_id, n_depend in depend_list.items():
+        # the root has an n_depend value of 1 but it goes in the zeroth batch.
         task_batches[n_depend - 1].add(task_id)
     if cnts:
         cnts.clear()
         cnts.add(visits_in_depend[0] + len(depend_list.keys()))
-    print(task_batches)
     return task_batches
 
 # }}}
@@ -564,7 +564,7 @@ def _calculate_dependency_level(
         if node in seen:
             raise CycleError("Cycle detected in your input graph.")
         seen.add(node)
-        if node in known_vals.keys():
+        if node in known_vals:
             return known_vals[node]
         else:
             count[0] += len(task_ids_to_needed_task_ids[node])
@@ -577,7 +577,7 @@ def _calculate_dependency_level(
         seen = {task_id}
         count[0] += 1
         kids = task_ids_to_needed_task_ids[task_id]
-        kids_portion: list[int] = [_internal_dependency_level_dfs(c) for c in kids]
+        kids_portion: List[int] = [_internal_dependency_level_dfs(c) for c in kids]
         known_vals[task_id] = 1 + max(kids_portion, default=0)
     return known_vals, count
 # }}}
