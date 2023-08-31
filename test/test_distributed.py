@@ -121,10 +121,6 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 
 def test_distributed_scheduler_counts():
-    _do_test_distributed_scheduler_counts()
-
-
-def _do_test_distributed_scheduler_counts():
     from pytato.distributed.partition import _schedule_task_batches
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
@@ -147,10 +143,10 @@ def _do_test_distributed_scheduler_counts():
 
 
 def test_distributed_scheduling_o_n_direct_dependents():
-    _do_test_distributed_scheduling_o_n_direct_dependents()
-
-
-def _do_test_distributed_scheduling_o_n_direct_dependents():
+    """ Check that the temporal complexity of the scheduling algorithm
+    in the case that there are `O(n)` direct dependents for each task
+    is not cubic.
+    """
     from pytato.distributed.partition import _schedule_task_batches
     sizes = np.logspace(0, 4, 10, dtype=int)
     count_list = np.zeros(len(sizes))
@@ -174,10 +170,6 @@ def _do_test_distributed_scheduling_o_n_direct_dependents():
 
 
 def test_distributed_scheduling_constant_look_back_tree():
-    _do_test_distributed_scheduling_constant_look_back_tree()
-
-
-def _do_test_distributed_scheduling_constant_look_back_tree():
     from pytato.distributed.partition import _schedule_task_batches
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
