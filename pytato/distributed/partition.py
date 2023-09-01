@@ -508,12 +508,20 @@ class _LocalSendRecvDepGatherer(
 
 # }}}
 
+# {{{ schedule_wrapper
+
+def schedule_wrapper(
+        comm_ids_to_needed_comm_ids: CommunicationDepGraph,
+        OrigApproach: bool = True, countReturn:Sequence[int]=0):
+    return _schedule_comm_batches(comm_ids_to_needed_comm_ids,OrigApproach,countReturn)
+
+# }}}
 
 # {{{ _schedule_comm_batches
 
 def _schedule_comm_batches(
         comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
+        ,OrigApproach:bool = True,countReturn:Sequence[int]=0) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
     """For each :class:`CommunicationOpIdentifier`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of communication consists of sends and receives. Computation
@@ -522,32 +530,115 @@ def _schedule_comm_batches(
     sit *between* parts.)
     """
     # FIXME: I'm an O(n^2) algorithm.
-
     comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
 
     scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
     comms_to_schedule = set(comm_ids_to_needed_comm_ids)
 
     all_comm_ids = frozenset(comm_ids_to_needed_comm_ids)
+    totalIds = len(comm_ids_to_needed_comm_ids)
+    # Approach 1
+    #OrigApproach = False
+    nodesVisitedInSched = 0
+    if not OrigApproach:
+        sorted_ids,nodesVisitedInSort = _topo_sort(comm_ids_to_needed_comm_ids)
+        while len(scheduled_comm_ids) < totalIds:
+            readyToGo = False;
+            rCount = 0
+            comm_ids_this_batch = set();
+            while not readyToGo:
+                comm_id = sorted_ids[-1]
+                nodesVisitedInSched += 1
+                needed_comm_ids = comm_ids_to_needed_comm_ids[comm_id]
+                if not needed_comm_ids.issubset(scheduled_comm_ids):
+                    readyToGo = True; # batch is done.
+                else:
+                    # Append to batch.
+                    comm_id = sorted_ids.pop()
+                    comm_ids_this_batch.add(comm_id)
+                if len(sorted_ids) == 0:
+                    readyToGo = True
+            scheduled_comm_ids.update(comm_ids_this_batch)
+            comm_batches.append(comm_ids_this_batch)
+            rCount += 1
+        countReturn = [nodesVisitedInSort,nodesVisitedInSched]
+    else:
+        # FIXME In order for this to work, comm tags must be unique
+        while len(scheduled_comm_ids) < totalIds:
+            comm_ids_this_batch = {
+                    comm_id for comm_id in comms_to_schedule
+                    if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
+            nodesVisitedInSched += len(comms_to_schedule)
+            if not comm_ids_this_batch:
+                raise CycleError("cycle detected in communication graph")
 
-    # FIXME In order for this to work, comm tags must be unique
-    while len(scheduled_comm_ids) < len(all_comm_ids):
-        comm_ids_this_batch = {
-                comm_id for comm_id in comms_to_schedule
-                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
+            scheduled_comm_ids.update(comm_ids_this_batch)
+            comms_to_schedule = comms_to_schedule - comm_ids_this_batch
 
-        if not comm_ids_this_batch:
-            raise CycleError("cycle detected in communication graph")
+            comm_batches.append(comm_ids_this_batch)
+        countReturn = nodesVisitedInSched
 
-        scheduled_comm_ids.update(comm_ids_this_batch)
-        comms_to_schedule = comms_to_schedule - comm_ids_this_batch
-
-        comm_batches.append(comm_ids_this_batch)
-
+    print("Original Approach: ",OrigApproach,"Initial Size (n):",totalIds,"Num Visited in Scheduling: ",nodesVisitedInSched)
     return comm_batches
 
 # }}}
 
+# {{{ _topo_sort
+def _vis_comm_graph(comm_ids_to_needed_comm_ids):
+    from pytools import UniqueNameGenerator
+    id_gen = UniqueNameGenerator()
+
+    comm_id_to_node_id = {comm_id: id_gen() for comm_id in comm_ids_to_needed_comm_ids}
+    result = []
+    for comm_id in comm_ids_to_needed_comm_ids:
+        result.append(f'{comm_id_to_node_id[comm_id]} [label="{str(comm_id)}"]')
+
+    for comm_id, needed_comm_ids in comm_ids_to_needed_comm_ids.items():
+        for needed_comm_id in needed_comm_ids:
+            result.append(f"{comm_id_to_node_id[comm_id]} -> {comm_id_to_node_id[needed_comm_id]} ")
+    lines = "\n".join(result)
+    return f"digraph comm {{ {lines} }}"
+
+
+def _topo_sort(comm_ids_to_needed_comm_ids):
+    """
+    Compute a topological sort of the input graph which specifies
+    the tasks that need to be completed before task_i can be scheduled
+    for every i.
+    """
+    from pytato.visualization import show_dot_graph
+    show_dot_graph(_vis_comm_graph(comm_ids_to_needed_comm_ids))
+
+    locations_visited = set()
+    temp_visit = set()
+    L = []
+    totalIds = len(comm_ids_to_needed_comm_ids)
+    numVisited = 0
+    for comm_id in comm_ids_to_needed_comm_ids:
+        L,numVisited = _topo_helper(comm_id,L,locations_visited,temp_visit,comm_ids_to_needed_comm_ids)
+    L.reverse()
+    #print("Initial Size (n): ",totalIds,"Num Visited to TOPO SORT: ",numVisited)
+    return L,numVisited
+
+def _topo_helper(comm_id,L,locations_visited,temp_visit,comm_ids_to_needed_comm_ids):
+    """
+    Helper funciton to do depth first search.
+    """
+    if comm_id in locations_visited:
+        return
+    elif comm_id in temp_visit:
+        raise CycleError("Cycle detected in communication graph")
+
+    temp_visit.add(comm_id)
+    count = 0
+    for item in comm_ids_to_needed_comm_ids[comm_id]:
+        count += 1
+        _topo_helper(item,L,locations_visited,temp_visit,comm_ids_to_needed_comm_ids)
+    temp_visit.remove(comm_id)
+    locations_visited.add(comm_id)
+    L.append(comm_id)
+    return L,count
+# }}}
 
 # {{{  _MaterializedArrayCollector
 
@@ -771,7 +862,6 @@ def find_distributed_partition(
     # {{{ create (local) parts out of batch ids
 
     part_comm_ids: List[_PartCommIDs] = []
-
     if comm_batches:
         recv_ids: FrozenSet[CommunicationOpIdentifier] = frozenset()
         for batch in comm_batches:
