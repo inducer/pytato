@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__copyright__ = """Copyright (C) 2020 Matt Wala"""
+__copyright__ = """
+Copyright (C) 2020 Matt Wala
+Copyright (C) 2023 University of Illinois Board of Trustees
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,7 +35,17 @@ __doc__ = """
 .. autoclass:: LoopyTarget
 .. autoclass:: LoopyPyOpenCLTarget
 .. autoclass:: BoundPyOpenCLProgram
+.. autoclass:: BoundPyOpenCLExecutable
 .. autoclass:: ImplSubstitution
+
+Stuff that's only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. currentmodule:: pyopencl._cl
+
+.. autoclass:: MemoryObject
+
+    See :class:`pyopencl.MemoryObject`.
 """
 
 import sys
@@ -96,13 +109,13 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         :class:`loopy.PyOpenCLTarget`, or *None*.
     """
 
-    def __init__(self, device: Optional["pyopencl.Device"] = None):
+    def __init__(self, device: Optional[pyopencl.Device] = None):
         if device is not None:
             from warnings import warn
             warn("Passing 'device' is deprecated and will stop working in 2023.",
                     DeprecationWarning, stacklevel=2)
 
-    def get_loopy_target(self) -> "loopy.LoopyPyOpenCLTarget":
+    def get_loopy_target(self) -> loopy.LoopyPyOpenCLTarget:
         import loopy as lp
         return lp.PyOpenCLTarget()
 
@@ -120,8 +133,10 @@ class BoundPyOpenCLProgram(BoundProgram):
     .. automethod:: __call__
     .. automethod:: copy
     .. automethod:: with_transformed_program
+    .. automethod:: bind_to_context
     """
-    _processed_bound_args_cache: Dict["pyopencl.Context",
+    program: loopy.TranslationUnit
+    _processed_bound_args_cache: Dict[pyopencl.Context,
                                       Map[str, Any]] = field(default_factory=dict)
 
     def copy(self, *,
@@ -150,11 +165,11 @@ class BoundPyOpenCLProgram(BoundProgram):
         """
         return self.copy(program=f(self.program))
 
-    def get_processed_bound_arguments(self,
-                                      queue: "pyopencl.CommandQueue",
-                                      allocator: Optional[Callable[
-                                          [int], "pyopencl.MemoryObject"]],
-                                      ) -> Map[str, Any]:
+    def _get_processed_bound_arguments(self,
+                                       queue: pyopencl.CommandQueue,
+                                       allocator: Optional[Callable[
+                                           [int], pyopencl.MemoryObject]],
+                                       ) -> Map[str, Any]:
         import pyopencl.array as cla
 
         cache_key = queue.context
@@ -191,16 +206,17 @@ class BoundPyOpenCLProgram(BoundProgram):
         return all(isinstance(arg, np.ndarray) or np.isscalar(arg)
                    for arg in self.bound_arguments.values())
 
-    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore
                  allocator=None, wait_for=None, out_host: Optional[bool] = None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
-        if set(kwargs.keys()) & set(self.bound_arguments.keys()):
-            raise ValueError("Got arguments that were previously bound: "
-                    f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+        if __debug__:
+            if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+                raise ValueError("Got arguments that were previously bound: "
+                        f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
 
-        updated_kwargs = dict(self.get_processed_bound_arguments(queue, allocator))
+        updated_kwargs = dict(self._get_processed_bound_arguments(queue, allocator))
         updated_kwargs.update(kwargs)
 
         # final DAG might be independent of certain placeholders, for ex.
@@ -229,6 +245,90 @@ class BoundPyOpenCLProgram(BoundProgram):
             return self.program
         else:
             return self.program.default_entrypoint
+
+    def bind_to_context(self, context: pyopencl.Context,
+                        allocator: Optional[Callable[
+                            [int], pyopencl.MemoryObject]] = None
+                        ) -> BoundPyOpenCLExecutable:
+        if not self.program.default_entrypoint.options.no_numpy:
+            raise ValueError("numpy compatibility for arguments is not supported "
+                             "for bound-to-context bound programs")
+
+        from pyopencl import CommandQueue
+        with CommandQueue(context) as queue:
+            args = self._get_processed_bound_arguments(queue, allocator=allocator)
+        return BoundPyOpenCLExecutable(
+                program=self.program.executor(context),
+                bound_arguments=args,
+                target=self.target,
+                cl_context=context)
+
+
+@dataclass(init=True, repr=False, eq=False)
+class BoundPyOpenCLExecutable(BoundProgram):
+    """A wrapper around a :mod:`loopy` kernel for execution with
+    :mod:`pyopencl`.  In contrast to :class:`BoundPyOpenCLProgram`, this object
+    is specific to a given :class:`pyopencl.Context`, allowing it to store a
+    :class:`loopy.ExecutorBase` instead of a :class:`loopy.TranslationUnit`, as
+    well as retrieving pre-transferred bound arguments without a cache lookup,
+    permitting more efficient invocation.
+
+    Create these objects using :meth:`BoundPyOpenCLProgram.bind_to_context`.
+
+    .. automethod:: __call__
+    .. automethod:: with_transformed_translation_unit
+    """
+    program: loopy.ExecutorBase
+    cl_context: pyopencl.Context
+
+    def with_transformed_translation_unit(
+            self, f: Callable[[loopy.TranslationUnit],
+                              loopy.TranslationUnit]
+            ) -> BoundPyOpenCLExecutable:
+        """
+        Returns a copy of *self* with an *f*-transformed loopy translation unit.
+        """
+        return BoundPyOpenCLExecutable(
+                program=f(self.program.t_unit).executor(self.cl_context),
+                bound_arguments=self.bound_arguments,
+                target=self.target,
+                cl_context=self.cl_context)
+
+    @cached_property
+    def all_bound_args_on_host(self) -> bool:
+        """
+        Returns *True* only if all bound arguments were on the host.
+        """
+        return all(np.isscalar(arg) for arg in self.bound_arguments.values())
+
+    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+                 allocator=None, wait_for=None,
+                 **kwargs: Any) -> Any:
+        """Convenience function for launching a :mod:`pyopencl` computation."""
+
+        if __debug__:
+            if set(kwargs.keys()) & set(self.bound_arguments.keys()):
+                raise ValueError("Got arguments that were previously bound: "
+                        f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
+
+        updated_kwargs = dict(self.bound_arguments)
+        updated_kwargs.update(kwargs)
+
+        # final DAG might be independent of certain placeholders, for ex.
+        # '0 * x' results in a final loopy t-unit that is independent of the
+        # array 'x', do not pass such inputs
+        arg_dict = self.program.t_unit.default_entrypoint.arg_dict
+        updated_kwargs = {kw: arg
+                          for kw, arg in updated_kwargs.items()
+                          if kw in arg_dict}
+
+        return self.program(queue,
+                            allocator=allocator, wait_for=wait_for,
+                            **updated_kwargs)
+
+    @property
+    def kernel(self) -> "loopy.LoopKernel":
+        return self.program.t_unit.default_entrypoint
 
 
 # vim: foldmethod=marker

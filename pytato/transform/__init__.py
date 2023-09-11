@@ -32,7 +32,7 @@ import logging
 import numpy as np
 from immutables import Map
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional,
+                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
                     Hashable)
 
 from pytato.array import (
@@ -185,9 +185,7 @@ class Mapper:
         assert method is not None
         return method(expr, *args, **kwargs)
 
-    def __call__(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
-        """Handle the mapping of *expr*."""
-        return self.rec(expr, *args, **kwargs)
+    __call__ = rec
 
 # }}}
 
@@ -217,10 +215,11 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
             # type-ignore-reason: Mapper.rec has imprecise func. signature
             return result  # type: ignore[no-any-return]
 
-    # type-ignore-reason: incompatible with super class
-    def __call__(self, expr: ArrayOrNames  # type: ignore[override]
-                 ) -> CachedMapperT:
-        return self.rec(expr)
+    if TYPE_CHECKING:
+        # type-ignore-reason: incompatible with super class
+        def __call__(self, expr: ArrayOrNames  # type: ignore[override]
+                     ) -> CachedMapperT:
+            return self.rec(expr)
 
 # }}}
 
@@ -238,17 +237,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
+    if TYPE_CHECKING:
+        # type-ignore-reason: specialized variant of super-class' rec method
+        def rec(self,  # type: ignore[override]
+                expr: CopyMapperResultT) -> CopyMapperResultT:
+            # type-ignore-reason: CachedMapper.rec's return type is imprecise
+            return super().rec(expr)  # type: ignore[return-value]
 
-    # type-ignore-reason: specialized variant of super-class' rec method
-    def rec(self,  # type: ignore[override]
-            expr: CopyMapperResultT) -> CopyMapperResultT:
-        # type-ignore-reason: CachedMapper.rec's return type is imprecise
-        return super().rec(expr)  # type: ignore[return-value]
-
-    # type-ignore-reason: specialized variant of super-class' rec method
-    def __call__(self,  # type: ignore[override]
-                 expr: CopyMapperResultT) -> CopyMapperResultT:
-        return self.rec(expr)
+        __call__ = rec
 
     def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
         """
@@ -265,9 +261,9 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                      for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings: Dict[str, Array] = {
+        bindings: Mapping[str, Array] = Map({
                 name: self.rec(subexpr)
-                for name, subexpr in sorted(expr.bindings.items())}
+                for name, subexpr in sorted(expr.bindings.items())})
         return IndexLambda(expr=expr.expr,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
@@ -372,7 +368,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         rec_container = self.rec(expr._container)
         assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                loopy_call=rec_container,
+                container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)
@@ -598,7 +594,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         rec_loopy_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                loopy_call=rec_loopy_call,
+                container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags)
@@ -766,7 +762,8 @@ class CombineMapper(Mapper, Generic[CombineT]):
 
     def map_call(self, expr: Call) -> CombineT:
         return self.combine(self.map_function_definition(expr.function),
-                            *[self.rec(bnd) for bnd in expr.bindings.values()])
+                            *[self.rec(bnd)
+                              for name, bnd in sorted(expr.bindings.items())])
 
     def map_named_call_result(self, expr: NamedCallResult) -> CombineT:
         return self.rec(expr._container)
@@ -1233,9 +1230,8 @@ class CachedMapAndCopyMapper(CopyMapper):
         # type-ignore-reason: map_fn has imprecise types
         return result  # type: ignore[return-value]
 
-    # type-ignore-reason: Mapper.__call__ returns Any
-    def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
-        return self.rec(expr)
+    if TYPE_CHECKING:
+        __call__ = rec
 
 # }}}
 
@@ -1313,11 +1309,11 @@ class MPMSMaterializer(Mapper):
         children_rec = {bnd_name: self.rec(bnd)
                         for bnd_name, bnd in sorted(expr.bindings.items())}
 
-        new_expr = IndexLambda(expr.expr,
-                               expr.shape,
-                               expr.dtype,
-                               {bnd_name: bnd.expr
-                                for bnd_name, bnd in children_rec.items()},
+        new_expr = IndexLambda(expr=expr.expr,
+                               shape=expr.shape,
+                               dtype=expr.dtype,
+                               bindings=Map({bnd_name: bnd.expr
+                                for bnd_name, bnd in sorted(children_rec.items())}),
                                axes=expr.axes,
                                var_to_reduction_descr=expr.var_to_reduction_descr,
                                tags=expr.tags)

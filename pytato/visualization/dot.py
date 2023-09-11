@@ -27,8 +27,8 @@ THE SOFTWARE.
 
 
 from functools import partial
-import dataclasses
 import html
+import attrs
 
 from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
@@ -66,7 +66,7 @@ __doc__ = """
 
 # {{{ _DotEmitter
 
-@dataclasses.dataclass
+@attrs.define
 class _SubgraphTree:
     contents: Optional[List[str]]
     subgraphs: Dict[str, _SubgraphTree]
@@ -141,7 +141,7 @@ class DotEmitter:
 
 # {{{ array -> dot node converter
 
-@dataclasses.dataclass
+@attrs.define
 class _DotNodeInfo:
     title: str
     fields: Dict[str, str]
@@ -184,24 +184,24 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
-        for field in expr._fields:
-            if field in info.fields:
+        for field in attrs.fields(type(expr)):
+            if field.name in info.fields:
                 continue
-            attr = getattr(expr, field)
+            attr = getattr(expr, field.name)
 
             if isinstance(attr, Array):
                 self.rec(attr)
-                info.edges[field] = attr
+                info.edges[field.name] = attr
 
             elif isinstance(attr, AbstractResultWithNamedArrays):
                 self.rec(attr)
-                info.edges[field] = attr
+                info.edges[field.name] = attr
 
             elif isinstance(attr, tuple):
-                info.fields[field] = stringify_shape(attr)
+                info.fields[field.name] = stringify_shape(attr)
 
             else:
-                info.fields[field] = str(attr)
+                info.fields[field.name] = str(attr)
 
         self.node_to_dot[expr] = info
 

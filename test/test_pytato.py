@@ -451,33 +451,35 @@ def test_array_dot_repr():
     y = pt.make_placeholder("y", (10, 4), np.int64)
 
     def _assert_stripped_repr(ary: pt.Array, expected_repr: str):
-        expected_str = "".join([c for c in repr(ary) if c not in [" ", "\n"]])
-        result_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
+        expected_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
+        result_str = "".join([c for c in repr(ary)if c not in [" ", "\n"]])
         assert expected_str == result_str
 
     _assert_stripped_repr(
         3*x + 4*y,
         """
 IndexLambda(
+    shape=(10, 4),
+    dtype='int64',
     expr=Sum((Subscript(Variable('_in0'),
                         (Variable('_0'), Variable('_1'))),
               Subscript(Variable('_in1'),
                         (Variable('_0'), Variable('_1'))))),
-    shape=(10, 4),
-    dtype='int64',
-    bindings={'_in0': IndexLambda(expr=Product((3, Subscript(Variable('_in1'),
-                                                             (Variable('_0'),
-                                                              Variable('_1'))))),
+    bindings={'_in0': IndexLambda(
                                   shape=(10, 4),
                                   dtype='int64',
+                                  expr=Product((3, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
                                   bindings={'_in1': Placeholder(shape=(10, 4),
                                                                 dtype='int64',
                                                                 name='x')}),
-              '_in1': IndexLambda(expr=Product((4, Subscript(Variable('_in1'),
-                                                             (Variable('_0'),
-                                                              Variable('_1'))))),
+              '_in1': IndexLambda(
                                   shape=(10, 4),
                                   dtype='int64',
+                                  expr=Product((4, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
                                   bindings={'_in1': Placeholder(shape=(10, 4),
                                                                 dtype='int64',
                                                                 name='y')})})""")
@@ -497,20 +499,20 @@ Roll(
     _assert_stripped_repr(y * pt.not_equal(x, 3),
                           """
 IndexLambda(
+    shape=(10, 4),
+    dtype='int64',
     expr=Product((Subscript(Variable('_in0'),
                             (Variable('_0'), Variable('_1'))),
                   Subscript(Variable('_in1'),
                             (Variable('_0'), Variable('_1'))))),
-    shape=(10, 4),
-    dtype='int64',
     bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
               '_in1': IndexLambda(
+                  shape=(10, 4),
+                  dtype='bool',
                   expr=Comparison(Subscript(Variable('_in0'),
                                             (Variable('_0'), Variable('_1'))),
                                   '!=',
                                   3),
-                  shape=(10, 4),
-                  dtype='bool',
                   bindings={'_in0': Placeholder(shape=(10, 4),
                                                 dtype='int64',
                                                 name='x')})})""")
