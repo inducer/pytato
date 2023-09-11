@@ -1493,8 +1493,6 @@ class Reshape(IndexRemappingBase):
     _mapper_method: ClassVar[str] = "map_reshape"
 
     def __post_init__(self) -> None:
-        # FIXME: Get rid of this restriction
-        assert self.order == "C"
         super().__post_init__()
 
     __attrs_post_init__ = __post_init__
@@ -1958,8 +1956,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
-    :param order: ``"C"`` or ``"F"``. Layout order of the result array. Only
-        ``"C"`` allowed for now.
+    :param order: ``"C"`` or ``"F"``. Layout order of the resulting array. 
 
     .. note::
 
@@ -1978,9 +1975,6 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 
     if not all(isinstance(axis_len, INT_CLASSES) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
-
-    if order != "C":
-        raise NotImplementedError("Reshapes to a 'F'-ordered arrays")
 
     newshape_explicit = []
 
