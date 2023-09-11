@@ -1453,8 +1453,6 @@ class Reshape(IndexRemappingBase):
 
     if __debug__:
         def __attrs_post_init__(self) -> None:
-            # FIXME: Get rid of this restriction
-            assert self.order == "C"
             super().__attrs_post_init__()
 
     @property
