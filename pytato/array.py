@@ -1892,7 +1892,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     for array in arrays[1:]:
         if shape_except_axis(array) != shape_except_axis(arrays[0]):
-            raise ValueError("arrays must have the same shape expect along"
+            raise ValueError("arrays must have the same shape except along"
                     f" dimension #{axis}.")
 
     if not (0 <= axis <= arrays[0].ndim):
