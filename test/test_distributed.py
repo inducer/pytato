@@ -147,7 +147,7 @@ def test_distributed_scheduler_counts():
 def test_distributed_scheduling_alg_can_find_cycle():
     from pytato.distributed.partition import _schedule_task_batches_counted
     sizes = 100
-    my_graph = {i: set([i-1]) for i in range(int(sizes))}
+    my_graph = {i: {i-1} for i in range(int(sizes))}
     my_graph[0] = {}
     my_graph[60].add(95)  # Here is the cycle. 60 - 95 -94 - 93 ... - 60
     with pytest.raises(CycleError):
