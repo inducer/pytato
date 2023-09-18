@@ -51,6 +51,8 @@ __doc__ = """
 
 .. autofunction:: get_num_call_sites
 
+.. autofunction:: get_hash
+
 .. autoclass:: DirectPredecessorsGetter
 """
 
@@ -450,6 +452,38 @@ def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
     cscm(outputs)
 
     return cscm.count
+
+# }}}
+
+
+# {{{ get_hash
+
+class HashMapper(CachedWalkMapper):
+    """
+    A mapper that generates a hash for a given DAG.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        import hashlib
+        self.hash = hashlib.sha256()
+
+    def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+        return expr
+
+    def post_visit(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> None:
+        self.hash.update(str(hash(expr)).encode("ascii"))
+
+
+def get_hash(outputs: Union[Array, DictOfNamedArrays]) -> str:
+    """Returns a hash of the DAG *outputs*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    hm = HashMapper()
+    hm(outputs)
+
+    return hm.hash.hexdigest()
 
 # }}}
 

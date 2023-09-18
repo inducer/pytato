@@ -1116,6 +1116,34 @@ def test_dot_visualizers():
     # }}}
 
 
+def test_get_hash():
+    from pytato.analysis import get_hash
+
+    axis_len = 5
+
+    seen_hashes = set()
+
+    for i in range(100):
+        rdagc1 = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+        rdagc2 = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+        rdagc3 = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+
+        dag1 = make_random_dag(rdagc1)
+        dag2 = make_random_dag(rdagc2)
+        dag3 = make_random_dag(rdagc3)
+
+        h1 = get_hash(dag1)
+        h2 = get_hash(dag2)
+        h3 = get_hash(dag3)
+
+        assert h1 == h2 == h3
+        assert h1 not in seen_hashes
+        seen_hashes.add(h1)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
