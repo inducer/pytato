@@ -511,18 +511,32 @@ class _LocalSendRecvDepGatherer(
 
 TaskType = TypeVar("TaskType")
 
-# {{{ _schedule_task_batches
+# {{{ _test_schedule_task_batches_wrapper
 
 
 def _schedule_task_batches(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]],
-        cnts: Optional[set[int]] = None) \
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
         -> Sequence[AbstractSet[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
     A task may only be in a batch if all of its dependents have already been
     completed.
+    """
+    return _schedule_task_batches_counted(task_ids_to_needed_task_ids)[0]
+# }}}
+
+
+# {{{ _schedule_task_batches_counted
+
+
+def _schedule_task_batches_counted(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
+        -> Tuple[Sequence[AbstractSet[TaskType]], int]:
+    """
+    Static type checkers need the functions to return the same type regardless
+    of the input. The testing code needs to know about the number of tasks visited
+    during the scheduling algorithm's execution. However, nontesting code does not.
     """
     depend_list, visits_in_depend = \
             _calculate_dependency_level(task_ids_to_needed_task_ids)
@@ -533,10 +547,7 @@ def _schedule_task_batches(
     for task_id, n_depend in depend_list.items():
         # the root has an n_depend value of 1 but it goes in the zeroth batch.
         task_batches[n_depend - 1].add(task_id)
-    if cnts:
-        cnts.clear()
-        cnts.add(visits_in_depend + len(depend_list.keys()))
-    return task_batches
+    return task_batches, visits_in_depend + len(depend_list.keys())
 
 # }}}
 

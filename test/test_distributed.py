@@ -121,22 +121,37 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 
 def test_distributed_scheduler_counts():
-    from pytato.distributed.partition import _schedule_task_batches
+    """ Test that the scheduling algorithm runs in `O(n)` time when
+    operating on a DAG which is just a stick with the dependencies
+    implied and not directly listed.
+    """
+    from pytato.distributed.partition import _schedule_task_batches_counted
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
-        counts = {0}
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
             needed_ids[key] = {key-1} if key > 0 else set()
-        _ = _schedule_task_batches(needed_ids, counts)
-        count_list[i] = list(counts)[0]  # python passes by value.
+        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
     assert nonlinear_norm_frac < 0.0001
+# }}}
+
+# {{{
+
+
+def test_distributed_scheduling_alg_can_find_cycle():
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    sizes = 100
+    my_graph = {i: set([i-1]) for i in range(int(sizes))}
+    my_graph[0] = set()
+    my_graph[60].add(95)  # Here is the cycle. 60 - 95 -94 - 93 ... - 60
+    with pytest.raises(CycleError):
+        _schedule_task_batches_counted(my_graph)
 # }}}
 
 # {{{ test scheduling based upon a tree with dependents listed out.
@@ -147,21 +162,20 @@ def test_distributed_scheduling_o_n_direct_dependents():
     in the case that there are `O(n)` direct dependents for each task
     is not cubic.
     """
-    from pytato.distributed.partition import _schedule_task_batches
+    from pytato.distributed.partition import _schedule_task_batches_counted
     sizes = np.logspace(0, 4, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
-        counts = {0}
         needed_ids = {i: set() for i in range(int(tree_size))}
         for key in needed_ids.keys():
             for j in range(key):
                 needed_ids[key].add(j)
-        _ = _schedule_task_batches(needed_ids, counts)
-        count_list[i] = list(counts)[0]  # python passes by value.
+        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
     import numpy.linalg as la
+    # We are expecting less then cubic scaling.
     nonquadratic_norm_frac = la.norm(coefficients[:-3], 2)/la.norm(coefficients, 2)
     assert nonquadratic_norm_frac < 0.0001
 # }}}
@@ -170,20 +184,25 @@ def test_distributed_scheduling_o_n_direct_dependents():
 
 
 def test_distributed_scheduling_constant_look_back_tree():
-    from pytato.distributed.partition import _schedule_task_batches
+    """Test that the scheduling algorithm scales in linear time if the input DAG
+    is a constant look back tree. This tree has a single root and then 5 tendrils
+    off of this root. Along the tendril each node has a direct dependence on the
+    previous one in the tendril but no other direct dependencies. This is intended
+    to confirm that the scheduling algorithm utilizing the minimum number of batch
+    levels possible.
+    """
+    from pytato.distributed.partition import _schedule_task_batches_counted
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     branching_factor = 5
     for i, tree_size in enumerate(sizes):
-        counts = {0}
         needed_ids = {j: set() for j in range(int(tree_size))}
         for j in range(1, int(tree_size)):
             if j < branching_factor:
                 needed_ids[j+1] = {0}
             else:
                 needed_ids[j] = {j - branching_factor}
-        _ = _schedule_task_batches(needed_ids, counts)
-        count_list[i] = list(counts)[0]  # python passes by value.
+        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
