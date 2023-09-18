@@ -1675,10 +1675,17 @@ class DataWrapper(InputArgumentBase):
         #    and valid by returning True
         return True
 
+    @memoize_method
     def __hash__(self) -> int:
-        # It would be better to hash the data, but we have no way of getting to
-        # it.
-        return id(self)
+        import hashlib
+
+        if hasattr(self.data, "get"):
+            d = self.data.get()
+        else:
+            d = self.data
+
+        return hash((hashlib.sha256(d).hexdigest(), self._shape,
+                     self.axes, Taggable.__hash__(self)))
 
     @property
     def shape(self) -> ShapeType:
