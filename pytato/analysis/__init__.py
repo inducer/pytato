@@ -509,25 +509,17 @@ class PytatoKeyBuilder(KeyBuilder):
         else:
             PersistentHashWalkMapper(key_hash)(key)
 
-    def update_for_Product(self, key_hash, key):
-        PersistentHashWalkMapper(key_hash)(key)
-
-    def update_for_Array(self, key_hash, key):
-        self.update_for_ndarray(key_hash, key.get())
-
-    def update_for_int64(self, key_hash, key):
-        self.rec(key_hash, int(key))
-
     def update_for_Reduce(self, key_hash, key):
         self.rec(key_hash, hash(key))
 
-    update_for_Sum = update_for_Product
-    update_for_If = update_for_Product
-    update_for_LogicalOr = update_for_Product
-    update_for_Call = update_for_Product
-    update_for_Comparison = update_for_Product
-    update_for_Quotient = update_for_Product
-    update_for_Power = update_for_Product
+    update_for_Product = update_for_pymbolic_expression
+    update_for_Sum = update_for_pymbolic_expression
+    update_for_If = update_for_pymbolic_expression
+    update_for_LogicalOr = update_for_pymbolic_expression
+    update_for_Call = update_for_pymbolic_expression
+    update_for_Comparison = update_for_pymbolic_expression
+    update_for_Quotient = update_for_pymbolic_expression
+    update_for_Power = update_for_pymbolic_expression
     update_for_PMap = update_for_dict  # noqa: N815
 
 

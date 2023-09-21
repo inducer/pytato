@@ -459,6 +459,9 @@ class Array(Taggable):
     def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
         return attrs.evolve(self, tags=tags)
 
+    def update_persistent_hash(self, key_hash: Any, key_builder: Any) -> None:
+        key_builder.rec(key_hash, hash(self))
+
     if TYPE_CHECKING:
         @property
         def shape(self) -> ShapeType:
