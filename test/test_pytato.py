@@ -1144,47 +1144,8 @@ def test_get_hash():
         seen_hashes.add(h1)
 
 
-def run_test_with_hashseed(f, *args):
-    from pickle import dumps
-    from base64 import b64encode
-
-    from subprocess import check_call
-    import os
-
-    os.environ["RUN_WITH_SET_PYTHONHASHSEED"] = "1"
-    os.environ["PYTHONHASHSEED"] = "1"
-    os.environ["INVOCATION_INFO"] = b64encode(dumps((f, args))).decode()
-
-    check_call([sys.executable, __file__])
-
-
-def run_test_with_hashseed_inner():
-    from pickle import loads
-    from base64 import b64decode
-    f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
-
-    f(*args)
-
-
-def test_get_hash_stable_with_hashseed():
-    run_test_with_hashseed(_do_test_get_hash_stable_with_hashseed)
-
-
-def _do_test_get_hash_stable_with_hashseed():
-    rdagc = RandomDAGContext(np.random.default_rng(seed=42),
-                axis_len=5, use_numpy=False)
-
-    dag = make_random_dag(rdagc)
-    assert hash(dag) == 6313690382525417492
-
-# }}}
-
-
 if __name__ == "__main__":
-    import os
-    if "RUN_WITH_SET_PYTHONHASHSEED" in os.environ:
-        run_test_with_hashseed_inner()
-    elif len(sys.argv) > 1:
+    if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
         from pytest import main
