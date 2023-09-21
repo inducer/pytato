@@ -36,6 +36,11 @@ from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
+from pytools.persistent_dict import KeyBuilder
+
+from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
+
+from immutables import Map
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
@@ -458,20 +463,72 @@ def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
 
 # {{{ get_hash
 
-class HashMapper(CachedWalkMapper):
+class PytatoKeyBuilder(KeyBuilder):
+    """A custom :class:`pytools.persistent_dict.KeyBuilder` subclass
+    for objects within :mod:`pytato`.
     """
-    A mapper that generates a hash for a given DAG.
-    """
-    def __init__(self) -> None:
-        super().__init__()
-        import hashlib
-        self.hash = hashlib.sha256()
 
-    def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
-        return expr
+    update_for_list = KeyBuilder.update_for_tuple
+    update_for_set = KeyBuilder.update_for_frozenset
 
-    def post_visit(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> None:
-        self.hash.update(str(hash(expr)).encode("ascii"))
+    def update_for_dict(self, key_hash, key):
+        from pytools import unordered_hash
+        unordered_hash(
+            key_hash,
+            (self.rec(self.new_hash(), (k, v)).digest()
+                for k, v in key.items()))
+
+    update_for_defaultdict = update_for_dict
+
+    def update_for_ndarray(self, key_hash, key):
+        self.rec(key_hash, hash(key.data.tobytes()))
+
+    def update_for_frozenset(self, key_hash, key):
+        for set_key in sorted(key,
+                key=lambda obj: type(obj).__name__ + str(obj)):
+            self.rec(key_hash, set_key)
+
+    def update_for_BasicSet(self, key_hash, key):  # noqa
+        from islpy import Printer
+        prn = Printer.to_str(key.get_ctx())
+        getattr(prn, "print_"+key._base_name)(key)
+        key_hash.update(prn.get_str().encode("utf8"))
+
+    def update_for_Map(self, key_hash, key):  # noqa
+        import islpy as isl
+        if isinstance(key, Map):
+            self.update_for_dict(key_hash, key)
+        elif isinstance(key, isl.Map):
+            self.update_for_BasicSet(key_hash, key)
+        else:
+            raise AssertionError()
+
+    def update_for_pymbolic_expression(self, key_hash, key):
+        if key is None:
+            self.update_for_NoneType(key_hash, key)
+        else:
+            PersistentHashWalkMapper(key_hash)(key)
+
+    def update_for_Product(self, key_hash, key):
+        PersistentHashWalkMapper(key_hash)(key)
+
+    def update_for_Array(self, key_hash, key):
+        self.update_for_ndarray(key_hash, key.get())
+
+    def update_for_int64(self, key_hash, key):
+        self.rec(key_hash, int(key))
+
+    def update_for_Reduce(self, key_hash, key):
+        self.rec(key_hash, hash(key))
+
+    update_for_Sum = update_for_Product
+    update_for_If = update_for_Product
+    update_for_LogicalOr = update_for_Product
+    update_for_Call = update_for_Product
+    update_for_Comparison = update_for_Product
+    update_for_Quotient = update_for_Product
+    update_for_Power = update_for_Product
+    update_for_PMap = update_for_dict  # noqa: N815
 
 
 def get_hash(outputs: Union[Array, DictOfNamedArrays]) -> str:
@@ -480,10 +537,9 @@ def get_hash(outputs: Union[Array, DictOfNamedArrays]) -> str:
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    hm = HashMapper()
-    hm(outputs)
+    hm = PytatoKeyBuilder()
 
-    return hm.hash.hexdigest()
+    return hm(outputs)
 
 # }}}
 
