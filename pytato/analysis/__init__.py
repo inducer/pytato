@@ -471,30 +471,31 @@ class PytatoKeyBuilder(KeyBuilder):
     update_for_list = KeyBuilder.update_for_tuple
     update_for_set = KeyBuilder.update_for_frozenset
 
-    def update_for_dict(self, key_hash, key):
+    def update_for_dict(self, key_hash: Any, key: Any) -> None:
         from pytools import unordered_hash
         unordered_hash(
             key_hash,
-            (self.rec(self.new_hash(), (k, v)).digest()
+            (self.rec(self.new_hash(),  # type: ignore[misc]
+                      (k, v)).digest()  # type: ignore[no-untyped-call]
                 for k, v in key.items()))
 
     update_for_defaultdict = update_for_dict
 
-    def update_for_ndarray(self, key_hash, key):
-        self.rec(key_hash, hash(key.data.tobytes()))
+    def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
+        self.rec(key_hash, hash(key.data.tobytes()))  # type: ignore[no-untyped-call]
 
-    def update_for_frozenset(self, key_hash, key):
+    def update_for_frozenset(self, key_hash: Any, key: Any) -> None:
         for set_key in sorted(key,
                 key=lambda obj: type(obj).__name__ + str(obj)):
-            self.rec(key_hash, set_key)
+            self.rec(key_hash, set_key)  # type: ignore[no-untyped-call]
 
-    def update_for_BasicSet(self, key_hash, key):  # noqa
+    def update_for_BasicSet(self, key_hash: Any, key: Any) -> None:
         from islpy import Printer
         prn = Printer.to_str(key.get_ctx())
         getattr(prn, "print_"+key._base_name)(key)
         key_hash.update(prn.get_str().encode("utf8"))
 
-    def update_for_Map(self, key_hash, key):  # noqa
+    def update_for_Map(self, key_hash: Any, key: Any) -> None:
         import islpy as isl
         if isinstance(key, Map):
             self.update_for_dict(key_hash, key)
@@ -503,23 +504,23 @@ class PytatoKeyBuilder(KeyBuilder):
         else:
             raise AssertionError()
 
-    def update_for_pymbolic_expression(self, key_hash, key):
+    def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
         if key is None:
-            self.update_for_NoneType(key_hash, key)
+            self.update_for_NoneType(key_hash, key)  # type: ignore[no-untyped-call]
         else:
             PersistentHashWalkMapper(key_hash)(key)
 
-    def update_for_Reduce(self, key_hash, key):
-        self.rec(key_hash, hash(key))
+    def update_for_Reduce(self, key_hash: Any, key: Any) -> None:
+        self.rec(key_hash, hash(key))  # type: ignore[no-untyped-call]
 
-    update_for_Product = update_for_pymbolic_expression
-    update_for_Sum = update_for_pymbolic_expression
-    update_for_If = update_for_pymbolic_expression
-    update_for_LogicalOr = update_for_pymbolic_expression
-    update_for_Call = update_for_pymbolic_expression
-    update_for_Comparison = update_for_pymbolic_expression
-    update_for_Quotient = update_for_pymbolic_expression
-    update_for_Power = update_for_pymbolic_expression
+    update_for_Product = update_for_pymbolic_expression  # noqa: N815
+    update_for_Sum = update_for_pymbolic_expression  # noqa: N815
+    update_for_If = update_for_pymbolic_expression  # noqa: N815
+    update_for_LogicalOr = update_for_pymbolic_expression  # noqa: N815
+    update_for_Call = update_for_pymbolic_expression  # noqa: N815
+    update_for_Comparison = update_for_pymbolic_expression  # noqa: N815
+    update_for_Quotient = update_for_pymbolic_expression  # noqa: N815
+    update_for_Power = update_for_pymbolic_expression  # noqa: N815
     update_for_PMap = update_for_dict  # noqa: N815
 
 
@@ -531,7 +532,7 @@ def get_hash(outputs: Union[Array, DictOfNamedArrays]) -> str:
 
     hm = PytatoKeyBuilder()
 
-    return hm(outputs)
+    return hm(outputs)  # type: ignore[no-any-return]
 
 # }}}
 
