@@ -511,8 +511,8 @@ class _LocalSendRecvDepGatherer(
 
 TaskType = TypeVar("TaskType")
 
-# {{{ _test_schedule_task_batches_wrapper
 
+# {{{ _test_schedule_task_batches_wrapper
 
 def _schedule_task_batches(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
@@ -528,7 +528,6 @@ def _schedule_task_batches(
 
 
 # {{{ _schedule_task_batches_counted
-
 
 def _schedule_task_batches_counted(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \

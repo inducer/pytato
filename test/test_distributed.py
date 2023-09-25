@@ -117,8 +117,8 @@ def _do_test_distributed_execution_basic(ctx_factory):
 
 # }}}
 
-# {{{ Scheduler Algorithm update tests.
 
+# {{{ Scheduler Algorithm update tests.
 
 def test_distributed_scheduler_counts():
     """ Test that the scheduling algorithm runs in `O(n)` time when
@@ -141,8 +141,23 @@ def test_distributed_scheduler_counts():
     assert nonlinear_norm_frac < 0.0001
 # }}}
 
-# {{{
 
+# {{{  test_distributed_scheduler_has_minimum_num_of_levels
+
+def test_distributed_scheduler_returns_minimum_num_of_levels():
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    max_size = 10
+    needed_ids = {j: set() for j in range(max_size)}
+    for i in range(1, max_size-1):
+        needed_ids[i].add(i-1)
+
+    batches, _ = _schedule_task_batches_counted(needed_ids)
+    # The last task has no dependences listed so it can be placed anywhere.
+    assert len(batches) == (max_size - 1)
+# }}}
+
+
+# {{{  test_distributed_scheduling_alg_can_find_cycle
 
 def test_distributed_scheduling_alg_can_find_cycle():
     from pytato.distributed.partition import _schedule_task_batches_counted
@@ -154,8 +169,8 @@ def test_distributed_scheduling_alg_can_find_cycle():
         _schedule_task_batches_counted(my_graph)
 # }}}
 
-# {{{ test scheduling based upon a tree with dependents listed out.
 
+# {{{ test scheduling based upon a tree with dependents listed out.
 
 def test_distributed_scheduling_o_n_direct_dependents():
     """ Check that the temporal complexity of the scheduling algorithm
@@ -180,8 +195,8 @@ def test_distributed_scheduling_o_n_direct_dependents():
     assert nonquadratic_norm_frac < 0.0001
 # }}}
 
-# {{{ test scheduling constant branching tree
 
+# {{{ test scheduling constant branching tree
 
 def test_distributed_scheduling_constant_look_back_tree():
     """Test that the scheduling algorithm scales in linear time if the input DAG
