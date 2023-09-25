@@ -36,6 +36,7 @@ from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
+from loopy.tools import LoopyKeyBuilder, PersistentHashWalkMapper
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
@@ -460,6 +461,34 @@ def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
     cscm(outputs)
 
     return cscm.count
+
+# }}}
+
+
+# {{{ PytatoKeyBuilder
+
+class PytatoKeyBuilder(LoopyKeyBuilder):
+    """A custom :class:`pytools.persistent_dict.KeyBuilder` subclass
+    for objects within :mod:`pytato`.
+    """
+
+    def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
+        self.rec(key_hash, hash(key.data.tobytes()))  # type: ignore[no-untyped-call]
+
+    def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
+        if key is None:
+            self.update_for_NoneType(key_hash, key)  # type: ignore[no-untyped-call]
+        else:
+            PersistentHashWalkMapper(key_hash)(key)
+
+    update_for_Product = update_for_pymbolic_expression  # noqa: N815
+    update_for_Sum = update_for_pymbolic_expression  # noqa: N815
+    update_for_If = update_for_pymbolic_expression  # noqa: N815
+    update_for_LogicalOr = update_for_pymbolic_expression  # noqa: N815
+    update_for_Call = update_for_pymbolic_expression  # noqa: N815
+    update_for_Comparison = update_for_pymbolic_expression  # noqa: N815
+    update_for_Quotient = update_for_pymbolic_expression  # noqa: N815
+    update_for_Power = update_for_pymbolic_expression  # noqa: N815
 
 # }}}
 

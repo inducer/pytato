@@ -1231,6 +1231,28 @@ def test_dot_visualizers():
     # }}}
 
 
+def test_persistent_dict():
+    from pytools.persistent_dict import WriteOncePersistentDict, ReadOnlyEntryError
+    from pytato.analysis import PytatoKeyBuilder
+
+    axis_len = 5
+
+    pd = WriteOncePersistentDict("test_persistent_dict",
+                                 key_builder=PytatoKeyBuilder(),
+                                 container_dir="./pytest-pdict")
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=True)
+
+        dag = make_random_dag(rdagc)
+        pd[dag] = 42
+
+        # Make sure key stays the same
+        with pytest.raises(ReadOnlyEntryError):
+            pd[dag] = 42
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
