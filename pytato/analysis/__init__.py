@@ -467,17 +467,17 @@ def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
 
 # {{{ PytatoKeyBuilder
 
-class PytatoKeyBuilder(LoopyKeyBuilder):
+class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     """A custom :class:`pytools.persistent_dict.KeyBuilder` subclass
     for objects within :mod:`pytato`.
     """
 
     def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
-        self.rec(key_hash, hash(key.data.tobytes()))  # type: ignore[no-untyped-call]
+        self.rec(key_hash, hash(key.data.tobytes()))
 
     def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
         if key is None:
-            self.update_for_NoneType(key_hash, key)  # type: ignore[no-untyped-call]
+            self.update_for_NoneType(key_hash, key)
         else:
             PersistentHashWalkMapper(key_hash)(key)
 
