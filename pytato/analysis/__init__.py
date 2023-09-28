@@ -478,6 +478,13 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     def update_for_TaggableCLArray(self, key_hash: Any, key: Any) -> None:
         self.update_for_ndarray(key_hash, key.get())
 
+    def update_for_Array(self, key_hash: Any, key: Any) -> None:
+        # CL Array
+        self.update_for_ndarray(key_hash, key.get())
+
+    def update_for_function(self, key_hash: Any, key: Any) -> None:
+        self.rec(key_hash, key.__name__)
+
     def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
         if key is None:
             self.update_for_NoneType(key_hash, key)
