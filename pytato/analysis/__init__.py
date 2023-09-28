@@ -475,6 +475,9 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
         self.rec(key_hash, hash(key.data.tobytes()))
 
+    def update_for_TaggableCLArray(self, key_hash: Any, key: Any) -> None:
+        self.update_for_ndarray(key_hash, key.get())
+
     def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
         if key is None:
             self.update_for_NoneType(key_hash, key)
@@ -489,6 +492,7 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     update_for_Comparison = update_for_pymbolic_expression  # noqa: N815
     update_for_Quotient = update_for_pymbolic_expression  # noqa: N815
     update_for_Power = update_for_pymbolic_expression  # noqa: N815
+    update_for_Subscript = update_for_pymbolic_expression  # noqa: N815
 
 # }}}
 
