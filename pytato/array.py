@@ -922,7 +922,7 @@ class EinsumAxisDescriptor:
     pass
 
 
-@attrs.frozen
+@attrs.frozen(order=True)
 class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
@@ -932,7 +932,7 @@ class EinsumElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@attrs.frozen
+@attrs.frozen(order=True)
 class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
