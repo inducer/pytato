@@ -139,6 +139,7 @@ def test_distributed_scheduler_counts():
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
     assert nonlinear_norm_frac < 0.0001
+
 # }}}
 
 
@@ -154,6 +155,7 @@ def test_distributed_scheduler_returns_minimum_num_of_levels():
     batches, _ = _schedule_task_batches_counted(needed_ids)
     # The last task has no dependences listed so it can be placed anywhere.
     assert len(batches) == (max_size - 1)
+
 # }}}
 
 
@@ -167,6 +169,7 @@ def test_distributed_scheduling_alg_can_find_cycle():
     my_graph[60].add(95)  # Here is the cycle. 60 - 95 -94 - 93 ... - 60
     with pytest.raises(CycleError):
         _schedule_task_batches_counted(my_graph)
+
 # }}}
 
 
@@ -193,6 +196,7 @@ def test_distributed_scheduling_o_n_direct_dependents():
     # We are expecting less then cubic scaling.
     nonquadratic_norm_frac = la.norm(coefficients[:-3], 2)/la.norm(coefficients, 2)
     assert nonquadratic_norm_frac < 0.0001
+
 # }}}
 
 
@@ -207,6 +211,7 @@ def test_distributed_scheduling_constant_look_back_tree():
     levels possible.
     """
     from pytato.distributed.partition import _schedule_task_batches_counted
+    import math
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     branching_factor = 5
@@ -217,13 +222,17 @@ def test_distributed_scheduling_constant_look_back_tree():
                 needed_ids[j+1] = {0}
             else:
                 needed_ids[j] = {j - branching_factor}
-        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
+        batches, count_list[i] = _schedule_task_batches_counted(needed_ids)
+
+        # Test that the number of batches is the expected minimum number.
+        assert len(batches) == math.ceil((tree_size - 1) / 5) + 1
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
     import numpy.linalg as la
     nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
     assert nonlinear_norm_frac < 0.0001
+
 # }}}
 
 
