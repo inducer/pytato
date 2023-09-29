@@ -225,7 +225,7 @@ def test_distributed_scheduling_constant_look_back_tree():
         batches, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
         # Test that the number of batches is the expected minimum number.
-        assert len(batches) == math.ceil((tree_size - 1) / 5) + 1
+        assert len(batches) == math.ceil((tree_size - 1) / branching_factor) + 1
 
     # Now to do the fitting.
     coefficients = np.polyfit(sizes, count_list, 4)
