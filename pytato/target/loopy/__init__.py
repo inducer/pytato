@@ -54,7 +54,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 
 from typing import Any, Mapping, Optional, Callable, Dict, TYPE_CHECKING
-from immutables import Map
+from immutabledict import immutabledict
 
 from pytato.target import Target, BoundProgram
 from pytato.tags import ImplementationStrategy
@@ -137,7 +137,8 @@ class BoundPyOpenCLProgram(BoundProgram):
     """
     program: loopy.TranslationUnit
     _processed_bound_args_cache: Dict[pyopencl.Context,
-                                      Map[str, Any]] = field(default_factory=dict)
+                                      immutabledict[str, Any]] = \
+                                        field(default_factory=dict)
 
     def copy(self, *,
              program: Optional[loopy.TranslationUnit] = None,
@@ -169,7 +170,7 @@ class BoundPyOpenCLProgram(BoundProgram):
                                        queue: pyopencl.CommandQueue,
                                        allocator: Optional[Callable[
                                            [int], pyopencl.MemoryObject]],
-                                       ) -> Map[str, Any]:
+                                       ) -> immutabledict[str, Any]:
         import pyopencl.array as cla
 
         cache_key = queue.context
@@ -193,7 +194,7 @@ class BoundPyOpenCLProgram(BoundProgram):
                                     " numpy array, pyopencl array or scalar."
                                     f" Got {type(bnd_arg).__name__} for '{name}'.")
 
-            result = Map(proc_bnd_args)
+            result: immutabledict[str, Any] = immutabledict(proc_bnd_args)
             assert set(result.keys()) == set(self.bound_arguments.keys())
             self._processed_bound_args_cache[cache_key] = result
             return result

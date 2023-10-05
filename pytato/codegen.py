@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 import dataclasses
 from typing import Union, Dict, Tuple, List, Any, Optional
+from immutabledict import immutabledict
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
@@ -173,9 +174,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
         # }}}
 
-        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+        bindings: immutabledict[str, Any] = immutabledict(
+                    {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())}
+                    for name, subexpr in sorted(expr.bindings.items())})
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
@@ -282,8 +284,8 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: get_deps(output.expr)
-            for name, output in outputs.items()}
+    deps: immutabledict[str, Any] = immutabledict({name: get_deps(output.expr)
+            for name, output in outputs.items()})
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}

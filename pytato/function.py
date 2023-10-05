@@ -49,7 +49,7 @@ import enum
 
 from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
                     Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
-from immutables import Map
+from immutabledict import immutabledict
 from functools import cached_property
 from pytato.array import (Array,  AbstractResultWithNamedArrays,
                           Placeholder, NamedArray, ShapeType, _dtype_any,
@@ -126,7 +126,7 @@ class FunctionDefinition(Taggable):
     """
     parameters: FrozenSet[str]
     return_type: ReturnType
-    returns: Map[str, Array]
+    returns: immutabledict[str, Array]
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
     @cached_property
@@ -142,7 +142,7 @@ class FunctionDefinition(Taggable):
             frozenset()
         )
 
-        return Map({input_arg.name: input_arg
+        return immutabledict({input_arg.name: input_arg
                     for input_arg in all_input_args
                     if isinstance(input_arg, Placeholder)})
 
@@ -188,7 +188,8 @@ class FunctionDefinition(Taggable):
 
         # }}}
 
-        call_site = Call(self, bindings=Map(kwargs), tags=_get_default_tags())
+        call_site = Call(self, bindings=immutabledict(kwargs),
+                         tags=_get_default_tags())
 
         if self.return_type == ReturnType.ARRAY:
             return call_site["_"]
@@ -253,7 +254,7 @@ class NamedCallResult(NamedArray):
         return self._container.function.returns[self.name].dtype
 
 
-# eq=False to avoid equality comparison without EqualityMaper
+# eq=False to avoid equality comparison without EqualityMapper
 @attrs.define(frozen=True, eq=False, hash=True, cache_hash=True, repr=False)
 class Call(AbstractResultWithNamedArrays):
     """
@@ -270,7 +271,7 @@ class Call(AbstractResultWithNamedArrays):
 
     """
     function: FunctionDefinition
-    bindings: Map[str, Array]
+    bindings: immutabledict[str, Array]
 
     _mapper_method: ClassVar[str] = "map_call"
 
@@ -371,7 +372,7 @@ def trace_call(f: Callable[..., ReturnT],
     function = FunctionDefinition(
         frozenset(pl_arg.name for pl_arg in pl_args) | frozenset(pl_kwargs),
         return_type,
-        Map(returns),
+        immutabledict(returns),
         tags=_get_default_tags() | (frozenset([FunctionIdentifier(identifier)])
                                     if identifier
                                     else frozenset())

@@ -178,7 +178,7 @@ from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
                                 INT_CLASSES, get_reduction_induction_variables)
 import re
-from immutables import Map
+from immutabledict import immutabledict
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -556,7 +556,7 @@ class Array(Taggable):
             indices = tuple(var(f"_{i}") for i in range(self.ndim))
             expr = op(var("_in0")[indices])
 
-        bindings = Map({"_in0": self})
+        bindings: immutabledict[str, Array] = immutabledict({"_in0": self})
         return IndexLambda(
                 expr=expr,
                 shape=self.shape,
@@ -564,7 +564,7 @@ class Array(Taggable):
                 bindings=bindings,
                 tags=_get_default_tags(),
                 axes=_get_default_axes(self.ndim),
-                var_to_reduction_descr=Map())
+                var_to_reduction_descr=immutabledict())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
     __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
@@ -895,17 +895,18 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
                 f" '{self.var_to_reduction_descr.keys()}',"
                 f" got '{reduction_variable}'.")
 
-        assert isinstance(self.var_to_reduction_descr, Map)
-        new_var_to_redn_descr = self.var_to_reduction_descr.set(
-            reduction_variable,
-            self.var_to_reduction_descr[reduction_variable].tagged(tag))
+        assert isinstance(self.var_to_reduction_descr, immutabledict)
+        new_var_to_redn_descr = dict(self.var_to_reduction_descr)
+        new_var_to_redn_descr[reduction_variable] = \
+            self.var_to_reduction_descr[reduction_variable].tagged(tag)
 
         return type(self)(expr=self.expr,
                           shape=self.shape,
                           dtype=self.dtype,
                           bindings=self.bindings,
                           axes=self.axes,
-                          var_to_reduction_descr=new_var_to_redn_descr,
+                          var_to_reduction_descr=immutabledict
+                            (new_var_to_redn_descr),
                           tags=self.tags)
 
 # }}}
@@ -1006,7 +1007,7 @@ class Einsum(Array):
                 else:
                     descr_to_axis_len[descr] = arg_axis_len
 
-        return Map(descr_to_axis_len)
+        return immutabledict(descr_to_axis_len)
 
     @cached_property
     def shape(self) -> ShapeType:
@@ -1063,14 +1064,16 @@ class Einsum(Array):
 
         # }}}
 
-        assert isinstance(self.redn_axis_to_redn_descr, Map)
-        new_redn_axis_to_redn_descr = self.redn_axis_to_redn_descr.set(
-            redn_axis, self.redn_axis_to_redn_descr[redn_axis].tagged(tag))
+        assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
+        new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
+        new_redn_axis_to_redn_descr[redn_axis] = \
+            self.redn_axis_to_redn_descr[redn_axis].tagged(tag)
 
         return type(self)(access_descriptors=self.access_descriptors,
                           args=self.args,
                           axes=self.axes,
-                          redn_axis_to_redn_descr=new_redn_axis_to_redn_descr,
+                          redn_axis_to_redn_descr=immutabledict
+                            (new_redn_axis_to_redn_descr),
                           tags=self.tags,
                           index_to_access_descr=self.index_to_access_descr,
                           )
@@ -1079,7 +1082,7 @@ class Einsum(Array):
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
 
 
-def _normalize_einsum_out_subscript(subscript: str) -> Map[str,
+def _normalize_einsum_out_subscript(subscript: str) -> immutabledict[str,
                                                             EinsumAxisDescriptor]:
     """
     Normalizes the output subscript of an einsum (provided in the explicit
@@ -1119,19 +1122,20 @@ def _normalize_einsum_out_subscript(subscript: str) -> Map[str,
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
-    return Map({idx: EinsumElementwiseAxis(i)
+    return immutabledict({idx: EinsumElementwiseAxis(i)
                  for i, idx in enumerate(normalized_indices)})
 
 
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
-                                   index_to_descr: Map[str,
+                                   index_to_descr: immutabledict[str,
                                                         EinsumAxisDescriptor],
-                                   index_to_axis_length: Map[str,
+                                   index_to_axis_length: immutabledict[str,
                                                                ShapeComponent],
                                    ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
-                                              Map[str, EinsumAxisDescriptor],
-                                              Map[str, ShapeComponent]]:
+                                              immutabledict
+                                                [str, EinsumAxisDescriptor],
+                                              immutabledict[str, ShapeComponent]]:
     """
     Normalizes the subscript for an input operand in an einsum. Returns
     ``(access_descrs, updated_index_to_descr, updated_to_index_to_axis_length)``,
@@ -1174,12 +1178,14 @@ def _normalize_einsum_in_subscript(subscript: str,
                          f"of corresponding operand ({in_operand.ndim}).")
 
     in_operand_axis_descrs = []
+    index_to_axis_length_dict = dict(index_to_axis_length)
+    index_to_descr_dict = dict(index_to_descr)
 
     for iaxis, index_char in enumerate(normalized_indices):
         in_axis_len = in_operand.shape[iaxis]
-        if index_char in index_to_descr:
-            if index_char in index_to_axis_length:
-                seen_axis_len = index_to_axis_length[index_char]
+        if index_char in index_to_descr_dict:
+            if index_char in index_to_axis_length_dict:
+                seen_axis_len = index_to_axis_length_dict[index_char]
                 if not are_shape_components_equal(in_axis_len,
                                                   seen_axis_len):
                     if are_shape_components_equal(in_axis_len, 1):
@@ -1187,24 +1193,24 @@ def _normalize_einsum_in_subscript(subscript: str,
                         pass
                     elif are_shape_components_equal(seen_axis_len, 1):
                         # Broadcast to the length of the current axis
-                        index_to_axis_length = (index_to_axis_length
-                                                .set(index_char, in_axis_len))
+                        index_to_axis_length_dict[index_char] = in_axis_len
                     else:
                         raise ValueError("Got conflicting lengths for"
                                          f" '{index_char}' -- {in_axis_len},"
                                          f" {seen_axis_len}.")
             else:
-                index_to_axis_length = index_to_axis_length.set(index_char,
-                                                                in_axis_len)
+                index_to_axis_length_dict[index_char] = in_axis_len
         else:
-            redn_sr_no = len([descr for descr in index_to_descr.values()
+            redn_sr_no = len([descr for descr in index_to_descr_dict.values()
                               if isinstance(descr, EinsumReductionAxis)])
             redn_axis_descr = EinsumReductionAxis(redn_sr_no)
-            index_to_descr = index_to_descr.set(index_char, redn_axis_descr)
-            index_to_axis_length = index_to_axis_length.set(index_char,
-                                                             in_axis_len)
+            index_to_descr_dict[index_char] = redn_axis_descr
+            index_to_axis_length_dict[index_char] = in_axis_len
 
-        in_operand_axis_descrs.append(index_to_descr[index_char])
+        in_operand_axis_descrs.append(index_to_descr_dict[index_char])
+
+    index_to_axis_length = immutabledict(index_to_axis_length_dict)
+    index_to_descr = immutabledict(index_to_descr_dict)
 
     return (tuple(in_operand_axis_descrs), index_to_descr, index_to_axis_length)
 
@@ -1239,7 +1245,7 @@ def einsum(subscripts: str, *operands: Array,
         )
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
-    index_to_axis_length: Map[str, ShapeComponent] = Map()
+    index_to_axis_length: immutabledict[str, ShapeComponent] = immutabledict()
     access_descriptors = []
 
     for in_spec, in_operand in zip(in_specs, operands):
@@ -1274,7 +1280,7 @@ def einsum(subscripts: str, *operands: Array,
                                               if isinstance(descr,
                                                             EinsumElementwiseAxis)})
                                          ),
-                  redn_axis_to_redn_descr=Map(redn_axis_to_redn_descr),
+                  redn_axis_to_redn_descr=immutabledict(redn_axis_to_redn_descr),
                   index_to_access_descr=index_to_descr,
                   )
 
@@ -2088,10 +2094,10 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
         fill_value = dtype.type(fill_value)
 
     return IndexLambda(expr=fill_value, shape=shape, dtype=dtype,
-                       bindings=Map(),
+                       bindings=immutabledict(),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=Map())
+                       var_to_reduction_descr=immutabledict())
 
 
 def zeros(shape: ConvertibleToShape, dtype: Any = float,
@@ -2134,10 +2140,10 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
         raise ValueError(f"k must be int, got {type(k)}.")
 
     return IndexLambda(expr=parse(f"1 if ((_1 - _0) == {k}) else 0"),
-                       shape=(N, M), dtype=dtype, bindings=Map({}),
+                       shape=(N, M), dtype=dtype, bindings=immutabledict({}),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(2),
-                       var_to_reduction_descr=Map())
+                       var_to_reduction_descr=immutabledict())
 
 # }}}
 
@@ -2229,10 +2235,10 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 
     from pymbolic.primitives import Variable
     return IndexLambda(expr=start + Variable("_0") * step,
-                       shape=(size,), dtype=dtype, bindings=Map(),
+                       shape=(size,), dtype=dtype, bindings=immutabledict(),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(1),
-                       var_to_reduction_descr=Map())
+                       var_to_reduction_descr=immutabledict())
 
 # }}}
 
@@ -2343,7 +2349,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(x.shape)),
-                       var_to_reduction_descr=Map())
+                       var_to_reduction_descr=immutabledict())
 
 # }}}
 
@@ -2396,10 +2402,10 @@ def where(condition: ArrayOrScalar,
             expr=prim.If(expr1, expr2, expr3),
             shape=result_shape,
             dtype=dtype,
-            bindings=Map(bindings),
+            bindings=immutabledict(bindings),
             tags=_get_default_tags(),
             axes=_get_default_axes(len(result_shape)),
-            var_to_reduction_descr=Map())
+            var_to_reduction_descr=immutabledict())
 
 # }}}
 
@@ -2492,12 +2498,13 @@ def make_index_lambda(
     # }}}
 
     return IndexLambda(expr=expression,
-                       bindings=Map(bindings),
+                       bindings=immutabledict(bindings),
                        shape=shape,
                        dtype=dtype,
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=Map(processed_var_to_reduction_descr))
+                       var_to_reduction_descr=immutabledict
+                        (processed_var_to_reduction_descr))
 
 # }}}
 
@@ -2578,10 +2585,10 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                                                                    shape)),
                        shape=shape,
                        dtype=array.dtype,
-                       bindings=Map({"in": array}),
+                       bindings=immutabledict({"in": array}),
                        tags=_get_default_tags(),
                        axes=_get_default_axes(len(shape)),
-                       var_to_reduction_descr=Map())
+                       var_to_reduction_descr=immutabledict())
 
 # }}}
 

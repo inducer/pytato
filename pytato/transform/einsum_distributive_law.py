@@ -41,7 +41,7 @@ from pytato.array import (Array, AxesT, Einsum, IndexLambda,
                           Stack, Concatenate, Roll, AxisPermutation,
                           IndexBase, Reshape, InputArgumentBase)
 from pytato.raising import HighLevelOp
-from immutables import Map
+from immutabledict import immutabledict
 from pytools.tag import Tag
 from pytato.utils import are_shapes_equal
 import numpy as np
@@ -74,10 +74,10 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
 @attrs.frozen
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
-    surrounding_args: Map[int, Array]
-    redn_axis_to_redn_descr: Map[EinsumReductionAxis,
+    surrounding_args: immutabledict[int, Array]
+    redn_axis_to_redn_descr: immutabledict[EinsumReductionAxis,
                                  ReductionDescriptor]
-    index_to_access_descr: Map[str, EinsumAxisDescriptor]
+    index_to_access_descr: immutabledict[str, EinsumAxisDescriptor]
     axes: AxesT = attrs.field(kw_only=True)
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
@@ -223,7 +223,7 @@ class EinsumDistributiveLawMapper(Mapper):
                 expr=expr.expr,
                 shape=expr.shape,
                 dtype=expr.dtype,
-                bindings=Map({name: self.rec(bnd, None)
+                bindings=immutabledict({name: self.rec(bnd, None)
                               for name, bnd in sorted(expr.bindings.items())}),
                 var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
@@ -243,11 +243,11 @@ class EinsumDistributiveLawMapper(Mapper):
             else:
                 ctx = _EinsumDistributiveLawMapperContext(
                     expr.access_descriptors,
-                    Map({iarg: arg
+                    immutabledict({iarg: arg
                          for iarg, arg in enumerate(expr.args)
                          if iarg != distributive_law_descr.ioperand}),
-                    Map(expr.redn_axis_to_redn_descr),
-                    Map(expr.index_to_access_descr),
+                    immutabledict(expr.redn_axis_to_redn_descr),
+                    immutabledict(expr.index_to_access_descr),
                     tags=expr.tags,
                     axes=expr.axes,
                 )

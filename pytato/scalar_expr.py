@@ -42,7 +42,7 @@ from pymbolic.mapper.stringifier import (StringifyMapper as
         StringifyMapperBase)
 from pymbolic.mapper import CombineMapper as CombineMapperBase
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
-from immutables import Map
+from immutabledict import immutabledict
 import pymbolic.primitives as prim
 import numpy as np
 import re
@@ -113,7 +113,7 @@ class SubstitutionMapper(SubstitutionMapperBase):
     def map_reduce(self, expr: Reduce) -> ScalarExpression:
         return Reduce(self.rec(expr.inner_expr),
                       op=expr.op,
-                      bounds=Map(
+                      bounds=immutabledict(
                           {name: self.rec(bound)
                            for name, bound in expr.bounds.items()}))
 

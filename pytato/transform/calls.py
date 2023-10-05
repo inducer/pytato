@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from immutables import Map
+from immutabledict import immutabledict
 from pytato.transform import (ArrayOrNames, CopyMapper)
 from pytato.array import (AbstractResultWithNamedArrays, Array,
                           DictOfNamedArrays, Placeholder)
@@ -44,7 +44,8 @@ class PlaceholderSubstitutor(CopyMapper):
         A mapping from the placeholder name to the array that it is to be
         substituted with.
     """
-    def __init__(self, substitutions: Map[str, Array]) -> None:
+
+    def __init__(self, substitutions: immutabledict[str, Array]) -> None:
         super().__init__()
         self.substitutions = substitutions
 

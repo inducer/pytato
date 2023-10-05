@@ -11,7 +11,7 @@ from pytato.utils import (get_indexing_expression,
 from pytato.scalar_expr import ScalarType, ScalarExpression, Reduce, SCALAR_CLASSES
 from pytato.reductions import ReductionOperation
 from dataclasses import dataclass
-from immutables import Map
+from immutabledict import immutabledict
 
 
 __doc__ = """
@@ -101,7 +101,7 @@ class ReduceOp(HighLevelOp):
     """
     op: ReductionOperation
     x: Array
-    axes: Map[int, str]
+    axes: immutabledict[int, str]
 
 # }}}
 
@@ -319,7 +319,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
                                       .expr
                                       .inner_expr
                                       .aggregate.name],
-                        axes=Map({i: idx.name
+                        axes=immutabledict({i: idx.name
                                   for i, idx in enumerate(expr
                                                           .expr
                                                           .inner_expr
