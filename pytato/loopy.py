@@ -78,7 +78,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     :mod:`loopy` translation unit.
     """
     translation_unit: "lp.TranslationUnit"
-    bindings: immutabledict[str, ArrayOrScalar]
+    bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
     _mapper_method: ClassVar[str] = "map_loopy_call"
@@ -380,7 +380,7 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: immutabledict[str, ArrayOrScalar]
+                                         bindings: Mapping[str, ArrayOrScalar]
                                          ) -> immutabledict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps

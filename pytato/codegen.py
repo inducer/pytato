@@ -23,7 +23,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Union, Dict, Tuple, List, Any, Optional
+from typing import Union, Dict, Tuple, List, Any, Optional, Mapping
 from immutabledict import immutabledict
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
@@ -174,7 +174,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
         # }}}
 
-        bindings: immutabledict[str, Any] = immutabledict(
+        bindings: Mapping[str, Any] = immutabledict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
@@ -284,7 +284,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps: immutabledict[str, Any] = immutabledict({name: get_deps(output.expr)
+    deps: Mapping[str, Any] = immutabledict({name: get_deps(output.expr)
             for name, output in outputs.items()})
 
     # represent deps in terms of output names

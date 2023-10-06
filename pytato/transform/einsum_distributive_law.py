@@ -32,7 +32,7 @@ THE SOFTWARE.
 """
 
 
-from typing import Callable, Dict, Tuple, Optional, FrozenSet
+from typing import Callable, Dict, Tuple, Optional, FrozenSet, Mapping
 import attrs
 from pytato.transform import ArrayOrNames, Mapper, MappedT
 from pytato.array import (Array, AxesT, Einsum, IndexLambda,
@@ -74,10 +74,10 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
 @attrs.frozen
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
-    surrounding_args: immutabledict[int, Array]
-    redn_axis_to_redn_descr: immutabledict[EinsumReductionAxis,
+    surrounding_args: Mapping[int, Array]
+    redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
-    index_to_access_descr: immutabledict[str, EinsumAxisDescriptor]
+    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
     axes: AxesT = attrs.field(kw_only=True)
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 

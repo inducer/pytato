@@ -556,7 +556,7 @@ class Array(Taggable):
             indices = tuple(var(f"_{i}") for i in range(self.ndim))
             expr = op(var("_in0")[indices])
 
-        bindings: immutabledict[str, Array] = immutabledict({"_in0": self})
+        bindings: Mapping[str, Array] = immutabledict({"_in0": self})
         return IndexLambda(
                 expr=expr,
                 shape=self.shape,
@@ -1128,9 +1128,9 @@ def _normalize_einsum_out_subscript(subscript: str) -> immutabledict[str,
 
 def _normalize_einsum_in_subscript(subscript: str,
                                    in_operand: Array,
-                                   index_to_descr: immutabledict[str,
+                                   index_to_descr: Mapping[str,
                                                         EinsumAxisDescriptor],
-                                   index_to_axis_length: immutabledict[str,
+                                   index_to_axis_length: Mapping[str,
                                                                ShapeComponent],
                                    ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
                                               immutabledict
@@ -1245,7 +1245,7 @@ def einsum(subscripts: str, *operands: Array,
         )
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
-    index_to_axis_length: immutabledict[str, ShapeComponent] = immutabledict()
+    index_to_axis_length: Mapping[str, ShapeComponent] = immutabledict()
     access_descriptors = []
 
     for in_spec, in_operand in zip(in_specs, operands):

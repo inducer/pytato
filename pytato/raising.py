@@ -101,7 +101,7 @@ class ReduceOp(HighLevelOp):
     """
     op: ReductionOperation
     x: Array
-    axes: immutabledict[int, str]
+    axes: Mapping[int, str]
 
 # }}}
 

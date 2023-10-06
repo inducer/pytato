@@ -354,7 +354,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                                  )
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
-        bindings: immutabledict[Any, Any] = immutabledict(
+        bindings: Mapping[Any, Any] = immutabledict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
@@ -579,7 +579,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: Any, **kwargs: Any) -> LoopyCall:
-        bindings: immutabledict[Any, Any] = immutabledict(
+        bindings: Mapping[Any, Any] = immutabledict(
                     {name: (self.rec(subexpr, *args, **kwargs)
                            if isinstance(subexpr, Array)
                            else subexpr)
