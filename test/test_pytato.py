@@ -691,7 +691,7 @@ def test_basic_index_equality_traverses_underlying_arrays():
 
 def test_idx_lambda_to_hlo():
     from pytato.raising import index_lambda_to_high_level_op
-    from immutables import Map
+    from immutabledict import immutabledict
     from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
                                 C99CallOp, BroadcastOp)
 
@@ -734,11 +734,11 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
             == ReduceOp(SumReductionOperation(),
                         b,
-                        Map({1: "_r0"})))
+                        immutabledict({1: "_r0"})))
     assert (index_lambda_to_high_level_op(pt.prod(a))
             == ReduceOp(ProductReductionOperation(),
                         a,
-                        Map({0: "_r0",
+                        immutabledict({0: "_r0",
                              1: "_r1"})))
     assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
     assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
