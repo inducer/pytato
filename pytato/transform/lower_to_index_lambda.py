@@ -29,7 +29,7 @@ THE SOFTWARE.
 import pymbolic.primitives as prim
 
 from typing import List, Any, Dict, Tuple, TypeVar, TYPE_CHECKING
-from immutables import Map
+from immutabledict import immutabledict
 from pytools import UniqueNameGenerator
 from pytato.array import (Array, IndexLambda, Stack, Concatenate,
                           Einsum, Reshape, Roll, AxisPermutation,
@@ -119,7 +119,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=expr.expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map({name: self.rec(bnd)
+                           bindings=immutabledict({name: self.rec(bnd)
                                          for name, bnd
                                          in sorted(expr.bindings.items())}),
                            axes=expr.axes,
@@ -156,8 +156,8 @@ class ToIndexLambdaMixin:
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           bindings=Map(bindings),
-                           var_to_reduction_descr=Map(),
+                           bindings=immutabledict(bindings),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags)
 
     def map_concatenate(self, expr: Concatenate) -> IndexLambda:
@@ -203,9 +203,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=concat_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map(bindings),
+                           bindings=immutabledict(bindings),
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags)
 
     def map_einsum(self, expr: Einsum) -> IndexLambda:
@@ -272,9 +272,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=inner_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map(bindings),
+                           bindings=immutabledict(bindings),
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(var_to_redn_descr),
+                           var_to_reduction_descr=immutabledict(var_to_redn_descr),
                            tags=expr.tags)
 
     def map_roll(self, expr: Roll) -> IndexLambda:
@@ -298,10 +298,10 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map({name: self.rec(bnd)
+                           bindings=immutabledict({name: self.rec(bnd)
                                      for name, bnd in bindings.items()}),
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags)
 
     def map_contiguous_advanced_index(self,
@@ -361,11 +361,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=Map(bindings),
+                           bindings=immutabledict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
                            )
 
@@ -423,11 +423,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=Map(bindings),
+                           bindings=immutabledict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
                            )
 
@@ -456,11 +456,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=Map(bindings),
+                           bindings=immutabledict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
                            )
 
@@ -470,9 +470,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map({"_in0": self.rec(expr.array)}),
+                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> IndexLambda:
@@ -485,9 +485,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=Map({"_in0": self.rec(expr.array)}),
+                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
-                           var_to_reduction_descr=Map(),
+                           var_to_reduction_descr=immutabledict(),
                            tags=expr.tags)
 
 

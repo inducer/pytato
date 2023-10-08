@@ -38,7 +38,7 @@ from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES, INT_CLASSES, BoolT, ScalarType)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
-from immutables import Map
+from immutabledict import immutabledict
 
 
 __doc__ = """
@@ -205,9 +205,9 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     return IndexLambda(expr=op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=Map(bindings),
+                       bindings=immutabledict(bindings),
                        tags=_get_default_tags(),
-                       var_to_reduction_descr=Map(),
+                       var_to_reduction_descr=immutabledict(),
                        axes=_get_default_axes(len(result_shape)))
 
 

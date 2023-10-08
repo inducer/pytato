@@ -68,7 +68,7 @@ from typing import (
         List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional)
 
 import attrs
-from immutables import Map
+from immutabledict import immutabledict
 
 from pytools.graph import CycleError
 from pytools import memoize_method
@@ -405,11 +405,11 @@ def _make_distributed_partition(
                 partition_input_names=frozenset(
                     comm_replacer.partition_input_name_to_placeholder.keys()),
                 output_names=frozenset(name_to_ouput.keys()),
-                name_to_recv_node=Map({
+                name_to_recv_node=immutabledict({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
                     for recv_id in comm_ids.recv_ids}),
-                name_to_send_nodes=Map(name_to_send_nodes))
+                name_to_send_nodes=immutabledict(name_to_send_nodes))
 
     result = DistributedGraphPartition(
             parts=parts,

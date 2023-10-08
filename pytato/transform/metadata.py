@@ -553,14 +553,14 @@ class AxesTagsEquationCollector(Mapper):
 
 def _get_propagation_graph_from_constraints(
         equations: List[Tuple[str, str]]) -> Mapping[str, FrozenSet[str]]:
-    import immutables
+    from immutabledict import immutabledict
     propagation_graph: Dict[str, Set[str]] = {}
     for lhs, rhs in equations:
         assert lhs != rhs
         propagation_graph.setdefault(lhs, set()).add(rhs)
         propagation_graph.setdefault(rhs, set()).add(lhs)
 
-    return immutables.Map({k: frozenset(v)
+    return immutabledict({k: frozenset(v)
                            for k, v in propagation_graph.items()})
 
 

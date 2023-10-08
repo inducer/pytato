@@ -37,7 +37,7 @@ from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from immutables import Map
+from immutabledict import immutabledict
 import islpy as isl
 
 __doc__ = r"""
@@ -78,7 +78,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     :mod:`loopy` translation unit.
     """
     translation_unit: "lp.TranslationUnit"
-    bindings: Dict[str, ArrayOrScalar]
+    bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
     _mapper_method: ClassVar[str] = "map_loopy_call"
@@ -212,18 +212,19 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ perform shape inference here
 
-    bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    Map(bindings))
+    bindings_new = extend_bindings_with_shape_inference(translation_unit[entrypoint],
+                                                    immutabledict(bindings))
+    del bindings
 
     # }}}
 
     for arg in translation_unit[entrypoint].args:
         if arg.is_input:
-            if arg.name not in bindings:
+            if arg.name not in bindings_new:
                 raise ValueError(f"Kernel '{entrypoint}' expects an input"
                         f" '{arg.name}'")
 
-            arg_binding = bindings[arg.name]
+            arg_binding = bindings_new[arg.name]
 
             if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
                 if not isinstance(arg_binding, Array):
@@ -242,7 +243,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ infer types of the translation_unit
 
-    for name, ary in bindings.items():
+    for name, ary in bindings_new.items():
         if translation_unit[entrypoint].arg_dict[name].dtype not in [lp.auto,
                                                                      None]:
             continue
@@ -265,7 +266,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     translation_unit = translation_unit.with_entrypoints(frozenset())
 
-    return LoopyCall(translation_unit, bindings, entrypoint,
+    return LoopyCall(translation_unit, bindings_new, entrypoint,
                      tags=_get_default_tags())
 
 
@@ -379,8 +380,8 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: Map[str, ArrayOrScalar]
-                                         ) -> Dict[str, ArrayOrScalar]:
+                                         bindings: Mapping[str, ArrayOrScalar]
+                                         ) -> immutabledict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps
     from loopy.kernel.array import ArrayBase
@@ -478,6 +479,8 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     as_pt_size_param = EvaluationMapper({_pt_var_to_global_namespace(arg.name): arg
                                          for arg in pt_size_params})
 
+    bindings_dict = dict(bindings)
+
     for var, val in solutions.items():
         # map the pymbolic expression back into an expression in terms of
         # pt.SizeParams
@@ -494,9 +497,9 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         # }}}
 
-        bindings = bindings.set(var, val)
+        bindings_dict[var] = val
 
-    return dict(bindings)
+    return immutabledict(bindings_dict)
 
 # }}}
 

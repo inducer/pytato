@@ -46,9 +46,9 @@ sys._BUILDING_SPHINX_DOCS = True
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"typing_extensions(.+)"],
-    # As of 2022-10-20, it doesn't look like there's sphinx documentation
+    # As of 2023-10-05, it doesn't look like there's sphinx documentation
     # available.
-    ["py:class", r"immutables\.(.+)"],
+    ["py:class", r"immutabledict(.*)"],
     # https://github.com/python-attrs/attrs/issues/1073
     ["py:mod", "attrs"],
 ]
