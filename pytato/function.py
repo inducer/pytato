@@ -51,9 +51,8 @@ from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
                     Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
 from immutabledict import immutabledict
 from functools import cached_property
-from pytato.array import (Array,  AbstractResultWithNamedArrays,
-                          Placeholder, NamedArray, ShapeType, _dtype_any,
-                          InputArgumentBase)
+from pytato.array import (Array, AbstractResultWithNamedArrays,
+                          Placeholder, NamedArray, ShapeType, _dtype_any)
 from pytools.tag import Tag, Taggable
 
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
@@ -132,19 +131,19 @@ class FunctionDefinition(Taggable):
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
         from pytato.transform import InputGatherer
-        from functools import reduce
 
         mapper = InputGatherer()
 
-        all_input_args: FrozenSet[InputArgumentBase] = reduce(
-            frozenset.union,
-            (mapper(ary) for ary in self.returns.values()),
-            frozenset()
-        )
+        all_placeholder_args: FrozenSet[Placeholder] = frozenset()
+        for ary in self.returns.values():
+            new_placeholder_args = frozenset({
+                arg for arg in mapper(ary)
+                if (
+                    isinstance(arg, Placeholder)
+                    and arg.name in self.parameters)})
+            all_placeholder_args |= new_placeholder_args
 
-        return immutabledict({input_arg.name: input_arg
-                    for input_arg in all_input_args
-                    if isinstance(input_arg, Placeholder)})
+        return immutabledict({arg.name: arg for arg in all_placeholder_args})
 
     def get_placeholder(self, name: str) -> Placeholder:
         """

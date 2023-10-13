@@ -31,7 +31,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
                           ShapeType)
-from pytato.function import FunctionDefinition, Call
+from pytato.function import FunctionDefinition, Call, NamedCallResult
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
@@ -173,6 +173,15 @@ class NUserCollector(Mapper):
             if isinstance(dim, Array):
                 self.nusers[dim] += 1
                 self.rec(dim)
+
+    def map_call(self, expr: Call) -> None:
+        for ary in expr.bindings.values():
+            if isinstance(ary, Array):
+                self.nusers[ary] += 1
+                self.rec(ary)
+
+    def map_named_call_result(self, expr: NamedCallResult) -> None:
+        self.rec(expr._container)
 
 # }}}
 
@@ -358,6 +367,11 @@ class DirectPredecessorsGetter(Mapper):
                                         ) -> FrozenSet[Array]:
         return frozenset([expr.passthrough_data])
 
+    def map_named_call_result(self, expr: NamedCallResult) -> FrozenSet[Array]:
+        # Not sure if this should descend into the function definition or not?
+        return frozenset(expr.call.bindings.values())
+
+
 # }}}
 
 
@@ -423,7 +437,7 @@ class CallSiteCountMapper(CachedWalkMapper):
         if not self.visit(expr):
             return
 
-        new_mapper = self.clone_for_callee()
+        new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
 

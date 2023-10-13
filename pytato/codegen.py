@@ -30,11 +30,12 @@ from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
                           make_dict_of_named_arrays)
 
+from pytato.function import FunctionDefinition
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 from pytato.scalar_expr import IntegralScalarExpression
 from pytato.transform import (CopyMapper, CachedWalkMapper,
-                              SubsetDependencyMapper, ArrayOrNames)
+                              SubsetDependencyMapper, ArrayOrNames, _SelfMapper)
 from pytato.target import Target
 from pytato.loopy import LoopyCall
 from pytools import UniqueNameGenerator
@@ -112,8 +113,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         self.target = target
         self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
 
-    def clone_for_callee(self) -> CodeGenPreprocessor:
-        return CodeGenPreprocessor(self.target, self.kernels_seen)
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> CodeGenPreprocessor:
+        # Would need to sync bound_arguments/var_name_gen from clones
+        raise NotImplementedError("CodeGenPreprocessor does not support functions.")
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name

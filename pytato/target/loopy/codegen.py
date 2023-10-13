@@ -592,13 +592,13 @@ class CodeGenMapper(Mapper):
         raise NotImplementedError("LoopyTarget does not support outlined calls"
                                   " (yet). As a fallback, the call"
                                   " could be inlined using"
-                                  " pt.mark_all_calls_to_be_inlined.")
+                                  " pt.tag_all_calls_to_be_inlined.")
 
     def map_call(self, expr: Call, state: CodeGenState) -> None:
         raise NotImplementedError("LoopyTarget does not support outlined calls"
                                   " (yet). As a fallback, the call"
                                   " could be inlined using"
-                                  " pt.mark_all_calls_to_be_inlined.")
+                                  " pt.tag_all_calls_to_be_inlined.")
 
 # }}}
 

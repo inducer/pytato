@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import attrs
 import logging
 import numpy as np
 from immutabledict import immutabledict
@@ -244,7 +245,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
@@ -400,14 +402,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                                 expr: FunctionDefinition) -> FunctionDefinition:
         # spawn a new mapper to avoid unsound cache hits, since the namespace of the
         # function's body is different from that of the caller.
-        new_mapper = self.clone_for_callee()
+        new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return FunctionDefinition(expr.parameters,
-                                  expr.return_type,
-                                  immutabledict(new_returns),
-                                  tags=expr.tags
-                                  )
+        return attrs.evolve(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
@@ -757,6 +755,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
         return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> CombineT:
         raise NotImplementedError("Combining results from a callee expression"
                                   " is context-dependent. Derived classes"
@@ -837,6 +836,7 @@ class DependencyMapper(CombineMapper[R]):
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
@@ -902,13 +902,9 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                                                  for ret in expr.returns.values()])
         result: Set[InputArgumentBase] = set()
         for inp in all_callee_inputs:
-            if isinstance(inp, Placeholder):
-                if inp.name in expr.parameters:
-                    # drop, reference to argument
-                    pass
-                else:
-                    raise ValueError("function definition refers to non-argument "
-                                     f"placeholder named '{inp.name}'")
+            if isinstance(inp, Placeholder) and inp.name in expr.parameters:
+                # drop, reference to argument
+                pass
             else:
                 result.add(inp)
 
@@ -954,7 +950,8 @@ class WalkMapper(Mapper):
     .. automethod:: post_visit
     """
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         return type(self)()
 
     def visit(self, expr: Any, *args: Any, **kwargs: Any) -> bool:
@@ -1114,7 +1111,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        new_mapper = self.clone_for_callee()
+        new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
 
@@ -1194,6 +1191,7 @@ class TopoSortMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
@@ -1213,7 +1211,8 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         # type-ignore-reason: self.__init__ has a different function signature
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
@@ -1428,6 +1427,8 @@ class MPMSMaterializer(Mapper):
                              ) -> MPMSMaterializerAccumulator:
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
+    # Function definitions don't have predecessors, so we don't need to return
+    # a MPMSMaterializerAccumulator
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
                                 ) -> FunctionDefinition:
@@ -1437,13 +1438,11 @@ class MPMSMaterializer(Mapper):
         returns_dict_of_named_arys = DictOfNamedArrays(expr.returns)
         func_nsuccessors = get_nusers(returns_dict_of_named_arys)
         new_mapper = MPMSMaterializer(func_nsuccessors)
-        new_returns = {name: new_mapper(ret) for name, ret in expr.returns.items()}
-        return FunctionDefinition(expr.parameters,
-                                  expr.return_type,
-                                  immutabledict(new_returns),
-                                  tags=expr.tags)
+        new_returns = {
+            name: new_mapper(ret).expr
+            for name, ret in expr.returns.items()}
+        return attrs.evolve(expr, returns=immutabledict(new_returns))
 
-    @memoize_method
     def map_call(self, expr: Call) -> Call:
         return Call(self.map_function_definition(expr.function),
                         immutabledict({name: self.rec(bnd).expr
@@ -1453,7 +1452,7 @@ class MPMSMaterializer(Mapper):
     def map_named_call_result(self, expr: NamedCallResult
                               ) -> MPMSMaterializerAccumulator:
         assert isinstance(expr._container, Call)
-        new_call = self.map_call(expr._container)
+        new_call = self.rec(expr._container)
         new_result = new_call[expr.name]
 
         assert isinstance(new_result, NamedCallResult)
@@ -1709,6 +1708,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_distributed_recv(self, expr: DistributedRecv) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition, *args: Any
                                 ) -> None:
         raise AssertionError("Control shouldn't reach at this point."

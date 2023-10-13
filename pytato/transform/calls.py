@@ -50,7 +50,10 @@ class PlaceholderSubstitutor(CopyMapper):
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        return self.substitutions[expr.name]
+        if expr.name in self.substitutions:
+            return self.substitutions[expr.name]
+        else:
+            return super().map_placeholder(expr)
 
 
 class Inliner(CopyMapper):
@@ -63,12 +66,12 @@ class Inliner(CopyMapper):
         assert isinstance(new_expr, Call)
 
         if expr.tags_of_type(InlineCallTag):
-            substitutor = PlaceholderSubstitutor(expr.bindings)
+            substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
                 {name: substitutor(ret)
                  for name, ret in new_expr.function.returns.items()},
-                tags=expr.tags
+                tags=new_expr.tags
             )
         else:
             return new_expr
@@ -76,7 +79,7 @@ class Inliner(CopyMapper):
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         new_call = self.rec(expr._container)
         assert isinstance(new_call, AbstractResultWithNamedArrays)
-        return new_call[expr.name]
+        return new_call[expr.name].expr
 
 
 class InlineMarker(CopyMapper):

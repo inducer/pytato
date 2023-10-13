@@ -86,6 +86,8 @@ from pytato.distributed.nodes import (
 from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
 
+from pytato.function import FunctionDefinition
+
 if TYPE_CHECKING:
     import mpi4py.MPI
 
@@ -291,6 +293,13 @@ class _DistributedInputReplacer(CopyMapper):
         self.user_input_names: Set[str] = set()
         self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
+    def clone_for_callee(
+            self, function: FunctionDefinition) -> _DistributedInputReplacer:
+        return type(self)(
+            self.recvd_ary_to_name,
+            self.sptpo_ary_to_name,
+            self.name_to_output)
+
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
         return expr
@@ -323,8 +332,6 @@ class _DistributedInputReplacer(CopyMapper):
 
     # type ignore because no args, kwargs
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
-        assert isinstance(expr, Array)
-
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -334,7 +341,7 @@ class _DistributedInputReplacer(CopyMapper):
         # If the array is an output from the current part, it would
         # be counterproductive to turn it into a placeholder: we're
         # the ones who are supposed to compute it!
-        if expr not in self.output_arrays:
+        if isinstance(expr, Array) and expr not in self.output_arrays:
 
             name = self.sptpo_ary_to_name.get(expr)
             if name is not None:
@@ -350,6 +357,27 @@ class _DistributedInputReplacer(CopyMapper):
                     expr.axes)
             self.partition_input_name_to_placeholder[name] = placeholder
         return placeholder
+
+    @memoize_method
+    def map_function_definition(self,
+                                expr: FunctionDefinition) -> FunctionDefinition:
+        # spawn a new mapper to avoid unsound cache hits, since the namespace of the
+        # function's body is different from that of the caller.
+        new_mapper = self.clone_for_callee()
+        new_returns = {name: new_mapper(ret)
+                       for name, ret in expr.returns.items()}
+
+        self.user_input_names |= new_mapper.user_input_names - expr.parameters
+        # Seems questionable? If name is used both inside and outside function,
+        # could end up with duplicate placeholders?
+        self.partition_input_name_to_placeholder.update(
+            new_mapper.partition_input_name_to_placeholder)
+
+        return FunctionDefinition(expr.parameters,
+                                  expr.return_type,
+                                  immutabledict(new_returns),
+                                  tags=expr.tags
+                                  )
 
 # }}}
 
@@ -501,6 +529,13 @@ class _LocalSendRecvDepGatherer(
         self.local_recv_id_to_recv_node[recv_id] = expr
 
         return frozenset({recv_id})
+
+    @memoize_method
+    def map_function_definition(
+            self, expr: FunctionDefinition
+            ) -> FrozenSet[CommunicationOpIdentifier]:
+        # Assume no communication in the function body
+        return frozenset()
 
 # }}}
 
