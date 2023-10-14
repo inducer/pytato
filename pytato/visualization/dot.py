@@ -184,7 +184,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
-        for field in attrs.fields(type(expr)):
+        # type-ignore-reason: https://github.com/python/mypy/issues/16254
+        for field in attrs.fields(type(expr)):  # type: ignore[misc]
             if field.name in info.fields:
                 continue
             attr = getattr(expr, field.name)
