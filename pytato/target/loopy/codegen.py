@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 from abc import ABC, abstractmethod
 import sys
-import dataclasses
 import islpy as isl
 import loopy as lp
 import pytools
@@ -34,7 +33,7 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
-                    Any, List, Type)
+                    Any, List, Type, TYPE_CHECKING)
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
@@ -46,12 +45,14 @@ from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstituti
 from pytato.transform import Mapper
 from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
+from pytato.function import Call, NamedCallResult
 from pytato.loopy import LoopyCall
 from pytato.tags import (ImplStored, ImplInlined, Named, PrefixNamed,
                          ImplementationStrategy)
 from pytools.tag import Tag
 import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
+import attrs
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
@@ -75,6 +76,11 @@ __doc__ = """
 .. autofunction:: add_store
 .. autofunction:: normalize_outputs
 .. autofunction:: get_initial_codegen_state
+
+.. class:: ReductionBounds
+
+    A mapping from reduction inames to a tuple ``(lower_bound, upper_bound)``,
+    considered half-open.
 """
 
 
@@ -101,7 +107,7 @@ ReductionBounds = Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
 # {{{ LoopyExpressionContexts
 
-@dataclasses.dataclass(init=True, repr=False, eq=False)
+@attrs.define(init=True, repr=False, eq=False)
 class PersistentExpressionContext(object):
     """
     Mutable state used while generating :mod:`loopy` expressions for a
@@ -126,7 +132,7 @@ class PersistentExpressionContext(object):
     """
     state: CodeGenState
     _depends_on: FrozenSet[str] = \
-            dataclasses.field(default_factory=frozenset)
+            attrs.field(factory=frozenset)
 
     @property
     def depends_on(self) -> FrozenSet[str]:
@@ -136,7 +142,7 @@ class PersistentExpressionContext(object):
         self._depends_on = self._depends_on | other
 
 
-@dataclasses.dataclass(frozen=True)
+@attrs.define(frozen=True)
 class LocalExpressionContext:
     """
     Records context being to be conveyed from a parent expression to its
@@ -155,17 +161,17 @@ class LocalExpressionContext:
     .. automethod:: lookup
     """
     num_indices: int
-    local_namespace: Mapping[str, Array]
+    local_namespace: Mapping[str, ImplementedResult]
     reduction_bounds: ReductionBounds
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
-    def lookup(self, name: str) -> Array:
+    def lookup(self, name: str) -> ImplementedResult:
         return self.local_namespace[name]
 
     def copy(self, *,
              reduction_bounds: Optional[ReductionBounds] = None,
              num_indices: Optional[int] = None,
-             local_namespace: Optional[Mapping[str, Array]] = None,
+             local_namespace: Optional[Mapping[str, ImplementedResult]] = None,
              var_to_reduction_descr: Optional[
                  Mapping[str, ReductionDescriptor]] = None,
              ) -> LocalExpressionContext:
@@ -261,7 +267,7 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-@dataclasses.dataclass(frozen=True, eq=True)
+@attrs.define(frozen=True, eq=True)
 class SubstitutionRuleResult(ImplementedResult):
     """
     An array expression generated as a
@@ -285,7 +291,7 @@ class SubstitutionRuleResult(ImplementedResult):
 
 # {{{ codegen state
 
-@dataclasses.dataclass(init=True, repr=False, eq=False)
+@attrs.define(init=True, repr=False, eq=False)
 class CodeGenState:
     """A container for data kept by :class:`CodeGenMapper`.
 
@@ -307,10 +313,10 @@ class CodeGenState:
     _t_unit: lp.TranslationUnit
     results: Dict[Array, ImplementedResult]
 
-    var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
-    insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
+    var_name_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
+    insn_id_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
 
-    def __post_init__(self) -> None:
+    def __attrs_post_init__(self) -> None:
         self.var_name_gen = self._t_unit.default_entrypoint.get_var_name_generator()
         self.insn_id_gen = (
                 self._t_unit.default_entrypoint.get_instruction_id_generator())
@@ -341,13 +347,15 @@ class CodeGenMapper(Mapper):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
+    has_loopy_call: bool
 
     def __init__(self,
                  array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
                  axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
-        self.exprgen_mapper = InlinedExpressionGenMapper(self)
+        self.exprgen_mapper = InlinedExpressionGenMapper(axis_tag_t_to_not_propagate)
         self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
+        self.has_loopy_call = False
 
     def map_size_param(self, expr: SizeParam,
             state: CodeGenState) -> ImplementedResult:
@@ -398,7 +406,9 @@ class CodeGenMapper(Mapper):
 
         prstnt_ctx = PersistentExpressionContext(state)
         local_ctx = LocalExpressionContext(
-            local_namespace=expr.bindings,
+            local_namespace={
+                name: self.rec(expr.bindings[name], state)
+                for name in sorted(expr.bindings)},
             num_indices=expr.ndim,
             reduction_bounds={},
             var_to_reduction_descr=expr.var_to_reduction_descr)
@@ -462,6 +472,7 @@ class CodeGenMapper(Mapper):
         return state.results[expr]
 
     def map_loopy_call(self, expr: LoopyCall, state: CodeGenState) -> None:
+        self.has_loopy_call = True
         from loopy.kernel.instruction import make_assignment
         from loopy.symbolic import SubArrayRef
 
@@ -575,6 +586,19 @@ class CodeGenMapper(Mapper):
 
         state.update_kernel(kernel)
 
+    def map_named_call_result(self, expr: NamedCallResult,
+                              state: CodeGenState) -> None:
+        raise NotImplementedError("LoopyTarget does not support outlined calls"
+                                  " (yet). As a fallback, the call"
+                                  " could be inlined using"
+                                  " pt.mark_all_calls_to_be_inlined.")
+
+    def map_call(self, expr: Call, state: CodeGenState) -> None:
+        raise NotImplementedError("LoopyTarget does not support outlined calls"
+                                  " (yet). As a fallback, the call"
+                                  " could be inlined using"
+                                  " pt.mark_all_calls_to_be_inlined.")
+
 # }}}
 
 
@@ -605,27 +629,25 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     The outputs of this mapper are scalar expressions suitable for wrapping in
     :class:`InlinedResult`.
     """
-    codegen_mapper: CodeGenMapper
+    axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]
 
-    def __init__(self, codegen_mapper: CodeGenMapper):
-        self.codegen_mapper = codegen_mapper
+    def __init__(self, axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]):
+        self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
 
-    def __call__(self, expr: ScalarExpression,
-                 prstnt_ctx: PersistentExpressionContext,
-                 local_ctx: Optional[LocalExpressionContext],
-                 ) -> ScalarExpression:
-        return self.rec(expr, prstnt_ctx, local_ctx)
+    if TYPE_CHECKING:
+        def __call__(self, expr: ScalarExpression,
+                     prstnt_ctx: PersistentExpressionContext,
+                     local_ctx: Optional[LocalExpressionContext],
+                     ) -> ScalarExpression:
+            return self.rec(expr, prstnt_ctx, local_ctx)
 
     def map_subscript(self, expr: prim.Subscript,
                       prstnt_ctx: PersistentExpressionContext,
                       local_ctx: LocalExpressionContext,
                       ) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
-        result: ImplementedResult = self.codegen_mapper(
-                local_ctx.lookup(expr.aggregate.name), prstnt_ctx.state)
-        return result.to_loopy_expression(self.rec(expr.index, prstnt_ctx,
-                                                   local_ctx),
-                                          prstnt_ctx)
+        return local_ctx.lookup(expr.aggregate.name).to_loopy_expression(
+            self.rec(expr.index, prstnt_ctx, local_ctx), prstnt_ctx)
 
     def map_variable(self, expr: prim.Variable,
                      prstnt_ctx: PersistentExpressionContext,
@@ -642,10 +664,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         elif expr.name in local_ctx.reduction_bounds:
             return expr
         else:
-            array = local_ctx.lookup(expr.name)
-            impl_result: ImplementedResult = self.codegen_mapper(array,
-                    prstnt_ctx.state)
-            return impl_result.to_loopy_expression((), prstnt_ctx)
+            return local_ctx.lookup(expr.name).to_loopy_expression((), prstnt_ctx)
 
     def map_call(self, expr: prim.Call,
                  prstnt_ctx: PersistentExpressionContext,
@@ -700,7 +719,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         for name_in_expr, name_in_kernel in sorted(unique_names_mapping.items()):
             for tag in local_ctx.var_to_reduction_descr[name_in_expr].tags:
                 if all(not isinstance(tag, tag_t)
-                       for tag_t in self.codegen_mapper.axis_tag_t_to_not_propagate):
+                       for tag_t in self.axis_tag_t_to_not_propagate):
                     state.update_kernel(lp.tag_inames(state.kernel,
                                                       {name_in_kernel: tag}))
 
@@ -941,8 +960,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    return CodeGenState(_t_unit=kernel,
-            results={})
+    return CodeGenState(t_unit=kernel, results={})
 
 
 # {{{ generate_loopy
@@ -972,35 +990,29 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
 
     .. note::
 
-        :mod:`pytato` metadata :math:`\mapsto` :mod:`loopy` metadata semantics:
+        - :mod:`pytato` metadata :math:`\mapsto` :mod:`loopy` metadata semantics:
 
-        - Inames that index over an :class:`~pytato.array.Array`'s axis in the
-          allocation instruction are tagged with the corresponding
-          :class:`~pytato.array.Axis`'s tags. The caller may choose to not
-          propagate axis tags of type *axis_tag_t_to_not_propagate*.
-        - :attr:`pytato.Array.tags` of inputs/outputs in *outputs*
-          would be copied over to the tags of the corresponding
-          :class:`loopy.ArrayArg`. The caller may choose to not
-          propagate array tags of type *array_tag_t_to_not_propagate*.
-        - Arrays tagged with :class:`pytato.tags.ImplStored` would have their
-          tags copied over to the tags of corresponding
-          :class:`loopy.TemporaryVariable`. The caller may choose to not
-          propagate array tags of type *array_tag_t_to_not_propagate*.
+            - Inames that index over an :class:`~pytato.array.Array`'s axis in the
+              allocation instruction are tagged with the corresponding
+              :class:`~pytato.array.Axis`'s tags. The caller may choose to not
+              propagate axis tags of type *axis_tag_t_to_not_propagate*.
+            - :attr:`pytato.Array.tags` of inputs/outputs in *outputs*
+              would be copied over to the tags of the corresponding
+              :class:`loopy.ArrayArg`. The caller may choose to not
+              propagate array tags of type *array_tag_t_to_not_propagate*.
+            - Arrays tagged with :class:`pytato.tags.ImplStored` would have their
+              tags copied over to the tags of corresponding
+              :class:`loopy.TemporaryVariable`. The caller may choose to not
+              propagate array tags of type *array_tag_t_to_not_propagate*.
+
+    .. warning::
+
+        Currently only :class:`~pytato.function.Call` nodes that are tagged with
+        :class:`pytato.tags.InlineCallTag` can be lowered to :mod:`loopy` IR.
     """
 
     result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
-
-    # optimization: remove any ImplStored tags on outputs to avoid redundant
-    # store-load operations (see https://github.com/inducer/pytato/issues/415)
-    orig_outputs = DictOfNamedArrays(
-        {name: (output.without_tags(ImplStored(),
-                                    verify_existence=False)
-                if not isinstance(output,
-                                  InputArgumentBase)
-                else output)
-         for name, output in orig_outputs._data.items()},
-        tags=orig_outputs.tags)
 
     del result
 
@@ -1017,19 +1029,24 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
 
+    # optimization: remove any ImplStored tags on outputs to avoid redundant
+    # store-load operations (see https://github.com/inducer/pytato/issues/415)
+    # (This must be done after all the calls have been inlined)
+    outputs = DictOfNamedArrays(
+        {name: (output.without_tags(ImplStored(),
+                                    verify_existence=False)
+                if not isinstance(output,
+                                  InputArgumentBase)
+                else output)
+         for name, output in outputs._data.items()},
+        tags=outputs.tags)
+
     compute_order = preproc_result.compute_order
 
     if options is None:
         options = lp.Options(return_dict=result_is_dict)
-    elif isinstance(options, dict):
-        from warnings import warn
-        warn("Passing a dict for options is deprecated and will stop working in "
-                "2022. Pass an actual loopy.Options object instead.",
-                DeprecationWarning, stacklevel=2)
-        options = lp.Options(**options)
-
     if options.return_dict != result_is_dict:
-        raise ValueError("options.result_is_dict is expected to match "
+        raise ValueError("options.return_dict is expected to match "
                 "whether the returned value is a dictionary")
 
     state = get_initial_codegen_state(target, options, function_name=function_name)
@@ -1062,6 +1079,11 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     # InlinedResult is emitted for both invocations and we would be required to
     # avoid such reduction iname collisions.
     t_unit = lp.make_reduction_inames_unique(state.t_unit)
+
+    # Disable bounds checking if there is no hand-written LoopyCall in the DAG.
+    if not cg_mapper.has_loopy_call:
+        t_unit = lp.set_options(t_unit,
+                                enforce_array_accesses_within_bounds="no_check")
 
     return target.bind_program(
             program=t_unit,

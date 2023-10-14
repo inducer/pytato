@@ -3,4 +3,4 @@ git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/genpy.git#egg=genpy
 git+https://github.com/inducer/loopy.git#egg=loopy
 
-asciidag
+mako

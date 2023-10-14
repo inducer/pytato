@@ -34,7 +34,7 @@ import numpy as np
 
 from pytato.array import ShapeType, Array, make_index_lambda, ReductionDescriptor
 from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
-from immutables import Map
+from immutabledict import immutabledict
 import pymbolic.primitives as prim
 
 # {{{ docs
@@ -213,7 +213,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, Map(redn_bounds)
+    return indices, immutabledict(redn_bounds)
 
 
 def _get_var_to_redn_descr(shape: ShapeType,
@@ -258,7 +258,7 @@ def _get_var_to_redn_descr(shape: ShapeType,
             var_to_redn_descr[idx] = redn_descr
             n_redn_dims += 1
 
-    return Map(var_to_redn_descr)
+    return immutabledict(var_to_redn_descr)
 
 
 def _make_reduction_lambda(

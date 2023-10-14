@@ -37,6 +37,7 @@ import pytato as pt
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from testlib import RandomDAGContext, make_random_dag
 
 
 def test_matmul_input_validation():
@@ -372,37 +373,6 @@ def test_userscollector():
         assert nuc[dag] == 0
 
 
-def test_asciidag():
-    pytest.importorskip("asciidag")
-
-    n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
-    stack = pt.stack([array, 2*array, array + 6])
-    y = stack @ stack.T
-
-    from pytato import get_ascii_graph
-
-    res = get_ascii_graph(y, use_color=False)
-
-    ref_str = r"""* Inputs
-*-.   Placeholder
-|\ \
-* | | IndexLambda
-| |/
-|/|
-| * IndexLambda
-|/
-*   Stack
-|\
-* | AxisPermutation
-|/
-* Einsum
-* Outputs
-"""
-
-    assert res == ref_str
-
-
 def test_linear_complexity_inequality():
     # See https://github.com/inducer/pytato/issues/163
     import pytato as pt
@@ -487,33 +457,35 @@ def test_array_dot_repr():
         from pytato.tags import CreatedAt
         ary = cast(pt.Array, remove_tags_of_type(CreatedAt, ary))
 
-        expected_str = "".join([c for c in repr(ary) if c not in [" ", "\n"]])
-        result_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
+        expected_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
+        result_str = "".join([c for c in repr(ary)if c not in [" ", "\n"]])
         assert expected_str == result_str
 
     _assert_stripped_repr(
         3*x + 4*y,
         """
 IndexLambda(
+    shape=(10, 4),
+    dtype='int64',
     expr=Sum((Subscript(Variable('_in0'),
                         (Variable('_0'), Variable('_1'))),
               Subscript(Variable('_in1'),
                         (Variable('_0'), Variable('_1'))))),
-    shape=(10, 4),
-    dtype='int64',
-    bindings={'_in0': IndexLambda(expr=Product((3, Subscript(Variable('_in1'),
-                                                             (Variable('_0'),
-                                                              Variable('_1'))))),
+    bindings={'_in0': IndexLambda(
                                   shape=(10, 4),
                                   dtype='int64',
+                                  expr=Product((3, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
                                   bindings={'_in1': Placeholder(shape=(10, 4),
                                                                 dtype='int64',
                                                                 name='x')}),
-              '_in1': IndexLambda(expr=Product((4, Subscript(Variable('_in1'),
-                                                             (Variable('_0'),
-                                                              Variable('_1'))))),
+              '_in1': IndexLambda(
                                   shape=(10, 4),
                                   dtype='int64',
+                                  expr=Product((4, Subscript(Variable('_in1'),
+                                                             (Variable('_0'),
+                                                              Variable('_1'))))),
                                   bindings={'_in1': Placeholder(shape=(10, 4),
                                                                 dtype='int64',
                                                                 name='y')})})""")
@@ -533,20 +505,20 @@ Roll(
     _assert_stripped_repr(y * pt.not_equal(x, 3),
                           """
 IndexLambda(
+    shape=(10, 4),
+    dtype='int64',
     expr=Product((Subscript(Variable('_in0'),
                             (Variable('_0'), Variable('_1'))),
                   Subscript(Variable('_in1'),
                             (Variable('_0'), Variable('_1'))))),
-    shape=(10, 4),
-    dtype='int64',
     bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
               '_in1': IndexLambda(
+                  shape=(10, 4),
+                  dtype='bool',
                   expr=Comparison(Subscript(Variable('_in0'),
                                             (Variable('_0'), Variable('_1'))),
                                   '!=',
                                   3),
-                  shape=(10, 4),
-                  dtype='bool',
                   bindings={'_in0': Placeholder(shape=(10, 4),
                                                 dtype='int64',
                                                 name='x')})})""")
@@ -725,7 +697,7 @@ def test_basic_index_equality_traverses_underlying_arrays():
 
 def test_idx_lambda_to_hlo():
     from pytato.raising import index_lambda_to_high_level_op
-    from immutables import Map
+    from immutabledict import immutabledict
     from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
                                 C99CallOp, BroadcastOp)
 
@@ -768,11 +740,11 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
             == ReduceOp(SumReductionOperation(),
                         b,
-                        Map({1: "_r0"})))
+                        immutabledict({1: "_r0"})))
     assert (index_lambda_to_high_level_op(pt.prod(a))
             == ReduceOp(ProductReductionOperation(),
                         a,
-                        Map({0: "_r0",
+                        immutabledict({0: "_r0",
                              1: "_r1"})))
     assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
     assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
@@ -1187,6 +1159,35 @@ def test_rewrite_einsums_with_no_broadcasts():
     new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr, "ij,ik,ijk->i")
     assert pt.analysis.is_einsum_similar_to_subscript(new_expr.args[2], "ij,ik->ijk")
+
+
+def test_dot_visualizers():
+    a = pt.make_placeholder("A", shape=(10, 4), dtype=np.float64)
+    x1 = pt.make_placeholder("x1", shape=4, dtype=np.float64)
+    x2 = pt.make_placeholder("x2", shape=4, dtype=np.float64)
+
+    y = a @ (2*x1 + 3*x2)
+
+    axis_len = 5
+
+    graphs = [y]
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=axis_len, use_numpy=False)
+        graphs.append(make_random_dag(rdagc))
+
+    # {{{ ensure that the generated output is valid dot-lang
+
+    # TODO: Verify the soundness of the generated svg file
+
+    for graph in graphs:
+        # plot to .svg file to avoid dep on a webbrowser or X-window system
+        pt.show_dot_graph(graph, output_to="svg")
+
+    pt.show_fancy_placeholder_data_flow(y, output_to="svg")
+
+    # }}}
 
 
 if __name__ == "__main__":

@@ -32,8 +32,8 @@ THE SOFTWARE.
 """
 
 
-from typing import Callable, Dict, Tuple, Optional, FrozenSet
-import dataclasses as dc
+from typing import Callable, Dict, Tuple, Optional, FrozenSet, Mapping
+import attrs
 from pytato.transform import ArrayOrNames, Mapper, MappedT
 from pytato.array import (Array, AxesT, Einsum, IndexLambda,
                           EinsumReductionAxis,
@@ -41,7 +41,7 @@ from pytato.array import (Array, AxesT, Einsum, IndexLambda,
                           Stack, Concatenate, Roll, AxisPermutation,
                           IndexBase, Reshape, InputArgumentBase)
 from pytato.raising import HighLevelOp
-from immutables import Map
+from immutabledict import immutabledict
 from pytools.tag import Tag
 from pytato.utils import are_shapes_equal
 import numpy as np
@@ -54,7 +54,7 @@ class EinsumDistributiveLawDescriptor:
     """
 
 
-@dc.dataclass(frozen=True)
+@attrs.frozen
 class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to not apply
@@ -62,7 +62,7 @@ class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
 
 
-@dc.dataclass(frozen=True)
+@attrs.frozen
 class DoDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to apply distributive
@@ -71,17 +71,17 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
     ioperand: int
 
 
-@dc.dataclass(frozen=True)
+@attrs.frozen
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
-    surrounding_args: Map[int, Array]
-    redn_axis_to_redn_descr: Map[EinsumReductionAxis,
+    surrounding_args: Mapping[int, Array]
+    redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
-    index_to_access_descr: Map[str, EinsumAxisDescriptor]
-    axes: AxesT = dc.field(kw_only=True)
-    tags: FrozenSet[Tag] = dc.field(kw_only=True)
+    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
+    axes: AxesT = attrs.field(kw_only=True)
+    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
-    def __post_init__(self) -> None:
+    def __attrs_post_init__(self) -> None:
         # {{{ check that exactly one of the args is missing
 
         assert len(self.surrounding_args) == (
@@ -220,12 +220,12 @@ class EinsumDistributiveLawMapper(Mapper):
                 raise NotImplementedError(hlo)
         else:
             rec_expr = IndexLambda(
-                expr.expr,
-                expr.shape,
-                expr.dtype,
-                Map({name: self.rec(bnd, None)
-                     for name, bnd in expr.bindings.items()}),
-                expr.var_to_reduction_descr,
+                expr=expr.expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=immutabledict({name: self.rec(bnd, None)
+                              for name, bnd in sorted(expr.bindings.items())}),
+                var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
                 axes=expr.axes,
             )
@@ -243,11 +243,11 @@ class EinsumDistributiveLawMapper(Mapper):
             else:
                 ctx = _EinsumDistributiveLawMapperContext(
                     expr.access_descriptors,
-                    Map({iarg: arg
+                    immutabledict({iarg: arg
                          for iarg, arg in enumerate(expr.args)
                          if iarg != distributive_law_descr.ioperand}),
-                    Map(expr.redn_axis_to_redn_descr),
-                    Map(expr.index_to_access_descr),
+                    immutabledict(expr.redn_axis_to_redn_descr),
+                    immutabledict(expr.index_to_access_descr),
                     tags=expr.tags,
                     axes=expr.axes,
                 )

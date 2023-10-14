@@ -17,6 +17,16 @@ For completeness, individual (non-held/"stapled") :class:`DistributedSend` nodes
 can be made via this function:
 
 .. autofunction:: make_distributed_send
+
+Redirections for the documentation tool
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. currentmodule:: np
+
+.. class:: dtype
+
+    See :class:`numpy.dtype`.
+
 """
 
 from __future__ import annotations
@@ -45,7 +55,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Hashable, FrozenSet, Optional, Any, cast, ClassVar, Tuple
+from typing import Hashable, FrozenSet, Optional, Any, ClassVar
 
 import attrs
 import numpy as np
@@ -61,6 +71,7 @@ CommTagType = Hashable
 
 # {{{ send
 
+@attrs.frozen(init=True, eq=True, hash=True, cache_hash=True)
 class DistributedSend(Taggable):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
@@ -81,61 +92,23 @@ class DistributedSend(Taggable):
         receive the data being sent here.
     """
 
-    def __init__(self, data: Array, dest_rank: int, comm_tag: CommTagType,
-                 tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(tags=tags)
-        self.data = data
-        self.dest_rank = dest_rank
-        self.comm_tag = comm_tag
-
-    def __hash__(self) -> int:
-        return (
-                hash(self.__class__)
-                ^ hash(self.data)
-                ^ hash(self.dest_rank)
-                ^ hash(self.comm_tag)
-                ^ hash(self.tags)
-                )
-
-    def __eq__(self, other: Any) -> bool:
-        return (
-                self.__class__ is other.__class__
-                and self.data == other.data
-                and self.dest_rank == other.dest_rank
-                and self.comm_tag == other.comm_tag
-                and self.tags == other.tags)
+    data: Array
+    dest_rank: int
+    comm_tag: CommTagType
+    tags: FrozenSet[Tag] = attrs.field(kw_only=True, default=frozenset())
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> DistributedSend:
-        return DistributedSend(
-                data=self.data,
-                dest_rank=self.dest_rank,
-                comm_tag=self.comm_tag,
-                tags=tags)
+        return attrs.evolve(self, tags=tags)
 
     def copy(self, **kwargs: Any) -> DistributedSend:
-        data: Optional[Array] = kwargs.get("data")
-        dest_rank: Optional[int] = kwargs.get("dest_rank")
-        comm_tag: Optional[CommTagType] = kwargs.get("comm_tag")
-        tags = cast(FrozenSet[Tag], kwargs.get("tags"))
-        return type(self)(
-                data=data if data is not None else self.data,
-                dest_rank=dest_rank if dest_rank is not None else self.dest_rank,
-                comm_tag=comm_tag if comm_tag is not None else self.comm_tag,
-                tags=tags if tags is not None else self.tags)
-
-    def __repr__(self) -> str:
-        # self.data takes a lot of space, shorten it
-        return (f"DistributedSend(data={self.data.__class__} "
-                f"at {hex(id(self.data))}, "
-                f"dest_rank={self.dest_rank}, "
-                f"tags={self.tags}, comm_tag={self.comm_tag})")
+        return attrs.evolve(self, **kwargs)
 
 # }}}
 
 
 # {{{ send ref holder
 
-@attrs.define(frozen=True, eq=False, repr=False, init=False)
+@attrs.frozen(eq=False, repr=False, init=False, hash=True)
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -174,7 +147,6 @@ class DistributedSendRefHolder(Array):
     passthrough_data: Array
 
     _mapper_method: ClassVar[str] = "map_distributed_send_ref_holder"
-    _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("passthrough_data", "send")
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
                  tags: FrozenSet[Tag] = frozenset()) -> None:
@@ -209,7 +181,7 @@ class DistributedSendRefHolder(Array):
 
 # {{{ receive
 
-@attrs.define(frozen=True, eq=False)
+@attrs.frozen(eq=False, hash=True, cache_hash=True)
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation.
 
@@ -238,11 +210,7 @@ class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """
     src_rank: int
     comm_tag: CommTagType
-    _shape: ShapeType
-    _dtype: Any  # FIXME: sphinx does not like `_dtype: _dtype_any`
 
-    _fields: ClassVar[Tuple[str, ...]] = Array._fields + ("shape", "dtype",
-                                                          "src_rank", "comm_tag")
     _mapper_method: ClassVar[str] = "map_distributed_recv"
 
 # }}}
@@ -254,7 +222,8 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
                           send_tags: FrozenSet[Tag] = frozenset()) -> \
          DistributedSend:
     """Make a :class:`DistributedSend` object."""
-    return DistributedSend(sent_data, dest_rank, comm_tag, send_tags)
+    return DistributedSend(data=sent_data, dest_rank=dest_rank, comm_tag=comm_tag,
+                           tags=send_tags)
 
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -265,8 +234,9 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
     """Make a :class:`DistributedSend` object wrapped in a
     :class:`DistributedSendRefHolder` object."""
     return DistributedSendRefHolder(
-            DistributedSend(sent_data, dest_rank, comm_tag, send_tags),
-            stapled_to, tags=ref_holder_tags)
+            send=DistributedSend(data=sent_data, dest_rank=dest_rank,
+                                 comm_tag=comm_tag, tags=send_tags),
+            passthrough_data=stapled_to, tags=ref_holder_tags)
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
@@ -281,7 +251,9 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
         axes = _get_default_axes(len(shape))
 
     dtype = np.dtype(dtype)
-    return DistributedRecv(src_rank, comm_tag, shape, dtype, tags=tags, axes=axes)
+    return DistributedRecv(
+            src_rank=src_rank, comm_tag=comm_tag, shape=shape, dtype=dtype,
+            tags=tags, axes=axes)
 
 # }}}
 

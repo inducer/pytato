@@ -59,6 +59,19 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
+def test_ctx_bound_execution(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (5,), np.int64)
+    prog = pt.generate_loopy(
+            x * x, options=lp.Options(no_numpy=True)).bind_to_context(ctx)
+    x_in = np.array([1, 2, 3, 4, 5])
+    x_in_dev = cl_array.to_device(queue, x_in)
+    _, (out,) = prog(queue, x=x_in_dev)
+    assert (out.get() == x_in * x_in).all()
+
+
 def test_named_clash(ctx_factory):
     x = pt.make_placeholder("x", (5,), np.int64)
 
@@ -1852,6 +1865,100 @@ def test_pad(ctx_factory):
         mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
 
         np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+
+def test_function_call(ctx_factory, visualize=False):
+    from functools import partial
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    def f(x):
+        return 2*x
+
+    def g(tracer, x):
+        return tracer(f, x), 3*x
+
+    def h(x, y):
+        return {"twice": 2*x+y, "thrice": 3*x+y}
+
+    def build_expression(tracer):
+        x = pt.arange(500, dtype=np.float32)
+        twice_x = tracer(f, x)
+        twice_x_2, thrice_x_2 = tracer(partial(g, tracer), x)
+
+        result = tracer(h, x, 2*x)
+        twice_x_3 = result["twice"]
+        thrice_x_3 = result["thrice"]
+
+        return {"foo": 3.14 + twice_x_3,
+                "bar": 4 * thrice_x_3,
+                "baz": 65 * twice_x,
+                "quux": 7 * twice_x_2}
+
+    result_with_functions = pt.tag_all_calls_to_be_inlined(
+        pt.make_dict_of_named_arrays(build_expression(pt.trace_call)))
+    result_without_functions = pt.make_dict_of_named_arrays(
+        build_expression(lambda fn, *args: fn(*args)))
+
+    # test that visualizing graphs with functions works
+    dot = pt.get_dot_graph(result_with_functions)
+
+    if visualize:
+        pt.show_dot_graph(dot)
+
+    _, outputs = pt.generate_loopy(result_with_functions)(cq, out_host=True)
+    _, expected = pt.generate_loopy(result_without_functions)(cq, out_host=True)
+
+    assert len(outputs) == len(expected)
+
+    for key in outputs.keys():
+        np.testing.assert_allclose(outputs[key], expected[key])
+
+
+def test_nested_function_calls(ctx_factory):
+    from functools import partial
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10,))
+
+    x = pt.make_placeholder("x", 10, np.float64).tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy({"out1": 3*x, "out2": x})
+    _, out = prg(cq, x=x_np)
+    np.testing.assert_allclose(out["out1"], 3*x_np)
+    np.testing.assert_allclose(out["out2"], x_np)
+    ref_tracer = lambda f, *args, identifier: f(*args)  # noqa: E731
+
+    def foo(tracer, x, y):
+        return 2*x + 3*y
+
+    def bar(tracer, x, y):
+        foo_x_y = tracer(partial(foo, tracer), x, y, identifier="foo")
+        return foo_x_y * x * y
+
+    def call_bar(tracer, x, y):
+        return tracer(partial(bar, tracer), x, y, identifier="bar")
+
+    x1_np, y1_np = rng.random((2, 13, 29))
+    x2_np, y2_np = rng.random((2, 4, 29))
+    x1, y1 = pt.make_data_wrapper(x1_np), pt.make_data_wrapper(y1_np)
+    x2, y2 = pt.make_data_wrapper(x2_np), pt.make_data_wrapper(y2_np)
+    result = pt.make_dict_of_named_arrays({"out1": call_bar(pt.trace_call, x1, y1),
+                                           "out2": call_bar(pt.trace_call, x2, y2)}
+                                          )
+    result = pt.tag_all_calls_to_be_inlined(result)
+    expect = pt.make_dict_of_named_arrays({"out1": call_bar(ref_tracer, x1, y1),
+                                           "out2": call_bar(ref_tracer, x2, y2)}
+                                          )
+
+    _, result_out = pt.generate_loopy(result)(cq)
+    _, expect_out = pt.generate_loopy(expect)(cq)
+
+    assert result_out.keys() == expect_out.keys()
+    for k in expect_out:
+        np.testing.assert_allclose(result_out[k], expect_out[k])
 
 
 if __name__ == "__main__":

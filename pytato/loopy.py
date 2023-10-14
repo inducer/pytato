@@ -33,12 +33,11 @@ from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
                     Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam, AxesT)
+                          NamedArray, ArrayOrScalar, SizeParam)
 from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
-from pytools.tag import Tag
-from immutables import Map
+from immutabledict import immutabledict
 import islpy as isl
 
 __doc__ = r"""
@@ -59,17 +58,27 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: AxesT
 
     See :class:`pytato.array.AxesT`.
+
+.. class:: ArrayOrScalar
+
+    A :class:`~pytato.Array` or a scalar.
+
+.. currentmodule:: lp
+
+.. class:: TranslationUnit
+
+   See :class:`loopy.TranslationUnit`.
 """
 
 
-@attrs.define(eq=False, frozen=True)
+@attrs.frozen(eq=False)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
     translation_unit: "lp.TranslationUnit"
-    bindings: Dict[str, ArrayOrScalar]
+    bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
     _mapper_method: ClassVar[str] = "map_loopy_call"
@@ -106,11 +115,13 @@ class LoopyCall(AbstractResultWithNamedArrays):
             raise KeyError(name)
 
         # TODO: Attach a filtered set of tags from loopy's arg.
-        return LoopyCallResult(self, name,
+        return LoopyCallResult(container=self,
+                               name=name,
                                axes=_get_default_axes(len(self
                                                           ._entry_kernel
                                                           .arg_dict[name]
-                                                          .shape)))
+                                                          .shape)),
+                               tags=frozenset())
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -119,35 +130,14 @@ class LoopyCall(AbstractResultWithNamedArrays):
         return iter(self._result_names)
 
 
+@attrs.frozen(eq=False, hash=True, cache_hash=True)
 class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
     _mapper_method = "map_loopy_call_result"
-
-    def __init__(self,
-            loopy_call: LoopyCall,
-            name: str,
-            axes: AxesT,
-            tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(loopy_call, name, axes=axes, tags=tags)
-
-    # type-ignore reason: `copy` signature incompatible with super-class
-    def copy(self, *,  # type: ignore[override]
-             loopy_call: Optional[AbstractResultWithNamedArrays] = None,
-             name: Optional[str] = None,
-             axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None) -> LoopyCallResult:
-        loopy_call = self._container if loopy_call is None else loopy_call
-        name = self.name if name is None else name
-        tags = self.tags if tags is None else tags
-        axes = self.axes if axes is None else axes
-        assert isinstance(loopy_call, LoopyCall)
-        return LoopyCallResult(loopy_call=loopy_call,
-                               name=name,
-                               axes=axes,
-                               tags=tags)
+    _container: LoopyCall
 
     @property
     def expr(self) -> Array:
@@ -222,18 +212,19 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ perform shape inference here
 
-    bindings = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    Map(bindings))
+    bindings_new = extend_bindings_with_shape_inference(translation_unit[entrypoint],
+                                                    immutabledict(bindings))
+    del bindings
 
     # }}}
 
     for arg in translation_unit[entrypoint].args:
         if arg.is_input:
-            if arg.name not in bindings:
+            if arg.name not in bindings_new:
                 raise ValueError(f"Kernel '{entrypoint}' expects an input"
                         f" '{arg.name}'")
 
-            arg_binding = bindings[arg.name]
+            arg_binding = bindings_new[arg.name]
 
             if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
                 if not isinstance(arg_binding, Array):
@@ -252,7 +243,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # {{{ infer types of the translation_unit
 
-    for name, ary in bindings.items():
+    for name, ary in bindings_new.items():
         if translation_unit[entrypoint].arg_dict[name].dtype not in [lp.auto,
                                                                      None]:
             continue
@@ -275,7 +266,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     translation_unit = translation_unit.with_entrypoints(frozenset())
 
-    return LoopyCall(translation_unit, bindings, entrypoint,
+    return LoopyCall(translation_unit, bindings_new, entrypoint,
                      tags=_get_default_tags())
 
 
@@ -389,8 +380,8 @@ def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
 
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
-                                         bindings: Map[str, ArrayOrScalar]
-                                         ) -> Dict[str, ArrayOrScalar]:
+                                         bindings: Mapping[str, ArrayOrScalar]
+                                         ) -> immutabledict[str, ArrayOrScalar]:
     from functools import reduce
     from loopy.symbolic import get_dependencies as lpy_get_deps
     from loopy.kernel.array import ArrayBase
@@ -488,6 +479,8 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     as_pt_size_param = EvaluationMapper({_pt_var_to_global_namespace(arg.name): arg
                                          for arg in pt_size_params})
 
+    bindings_dict = dict(bindings)
+
     for var, val in solutions.items():
         # map the pymbolic expression back into an expression in terms of
         # pt.SizeParams
@@ -504,9 +497,9 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         # }}}
 
-        bindings = bindings.set(var, val)
+        bindings_dict[var] = val
 
-    return dict(bindings)
+    return immutabledict(bindings_dict)
 
 # }}}
 

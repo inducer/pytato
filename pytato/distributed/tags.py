@@ -123,6 +123,7 @@ def number_distributed_tags(
                 for pid, part in partition.parts.items()
                 },
             name_to_output=partition.name_to_output,
+            overall_output_names=partition.overall_output_names,
             ), next_tag
 
 # }}}

@@ -89,10 +89,13 @@ from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.target.python.jax import generate_jax
 from pytato.visualization import (get_dot_graph, show_dot_graph,
-                                  get_ascii_graph, show_ascii_graph,
-                                  get_dot_graph_from_partition)
+                                  get_dot_graph_from_partition,
+                                  show_fancy_placeholder_data_flow,
+                                  )
+from pytato.transform.calls import tag_all_calls_to_be_inlined, inline_calls
 import pytato.analysis as analysis
 import pytato.tags as tags
+import pytato.function as function
 import pytato.transform as transform
 from pytato.distributed.nodes import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
@@ -109,6 +112,7 @@ from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.transform.remove_broadcasts_einsum import (
     rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
+from pytato.function import trace_call
 
 __all__ = (
         "dtype",
@@ -131,8 +135,9 @@ __all__ = (
 
         "Target", "LoopyPyOpenCLTarget",
 
-        "get_dot_graph", "show_dot_graph", "get_ascii_graph",
-        "show_ascii_graph", "get_dot_graph_from_partition",
+        "get_dot_graph", "show_dot_graph",
+        "get_dot_graph_from_partition",
+        "show_fancy_placeholder_data_flow",
 
         "abs", "sin", "cos", "tan", "arcsin", "arccos", "arctan", "sinh", "cosh",
         "tanh", "exp", "log", "log10", "isnan", "sqrt", "conj", "arctan2",
@@ -153,11 +158,15 @@ __all__ = (
 
         "broadcast_to", "pad",
 
+        "trace_call",
+
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
         "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
 
         "DistributedGraphPart",
         "DistributedGraphPartition",
+        "tag_all_calls_to_be_inlined", "inline_calls",
+
         "find_distributed_partition",
 
         "number_distributed_tags",
@@ -172,6 +181,6 @@ __all__ = (
         "unify_axes_tags",
 
         # sub-modules
-        "analysis", "tags", "transform",
+        "analysis", "tags", "transform", "function",
 
 )

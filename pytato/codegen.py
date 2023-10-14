@@ -23,7 +23,8 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Union, Dict, Tuple, List, Any
+from typing import Union, Dict, Tuple, List, Any, Optional, Mapping
+from immutabledict import immutabledict
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
@@ -102,12 +103,17 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     ======================================  =====================================
     """
 
-    def __init__(self, target: Target) -> None:
+    def __init__(self, target: Target,
+                 kernels_seen: Optional[Dict[str, lp.LoopKernel]] = None
+                 ) -> None:
         super().__init__()
         self.bound_arguments: Dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
-        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
+        self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
+
+    def clone_for_callee(self) -> CodeGenPreprocessor:
+        return CodeGenPreprocessor(self.target, self.kernels_seen)
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -168,9 +174,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
         # }}}
 
-        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+        bindings: Mapping[str, Any] = immutabledict(
+                    {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())}
+                    for name, subexpr in sorted(expr.bindings.items())})
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
@@ -262,6 +269,7 @@ class PreprocessResult:
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays
+    from pytato.transform.calls import inline_calls
 
     check_validity_of_outputs(outputs)
 
@@ -276,8 +284,8 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: get_deps(output.expr)
-            for name, output in outputs.items()}
+    deps: Mapping[str, Any] = immutabledict({name: get_deps(output.expr)
+            for name, output in outputs.items()})
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}
@@ -289,12 +297,14 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     # }}}
 
-    mapper = CodeGenPreprocessor(target)
+    new_outputs = inline_calls(outputs)
+    assert isinstance(new_outputs, DictOfNamedArrays)
 
-    new_outputs = copy_dict_of_named_arrays(outputs, mapper)
+    mapper = CodeGenPreprocessor(target)
+    new_outputs = copy_dict_of_named_arrays(new_outputs, mapper)
 
     return PreprocessResult(outputs=new_outputs,
-            compute_order=tuple(output_order),
-            bound_arguments=mapper.bound_arguments)
+                            compute_order=tuple(output_order),
+                            bound_arguments=mapper.bound_arguments)
 
 # vim: fdm=marker
