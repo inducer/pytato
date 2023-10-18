@@ -90,7 +90,7 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 
-@attrs.define(frozen=True)
+@attrs.define(frozen=True, order=True)
 class CommunicationOpIdentifier:
     """Identifies a communication operation (consisting of a pair of
     a send and a receive).
@@ -121,55 +121,8 @@ _ValueT = TypeVar("_ValueT")
 
 # {{{ crude ordered set
 
-
-class _OrderedSet(collections.abc.MutableSet[_ValueT]):
-    def __init__(self, items: Optional[Iterable[_ValueT]] = None):
-        # Could probably also use a valueless dictionary; not sure if it matters
-        self._items: Set[_ValueT] = set()
-        self._items_ordered: List[_ValueT] = []
-        if items is not None:
-            for item in items:
-                self.add(item)
-
-    def add(self, item: _ValueT) -> None:
-        if item not in self._items:
-            self._items.add(item)
-            self._items_ordered.append(item)
-
-    def discard(self, item: _ValueT) -> None:
-        # Not currently needed
-        raise NotImplementedError
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __iter__(self) -> Iterator[_ValueT]:
-        return iter(self._items_ordered)
-
-    def __contains__(self, item: Any) -> bool:
-        return item in self._items
-
-    def __and__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet()
-        for item in self._items_ordered:
-            if item in other:
-                result.add(item)
-        return result
-
-    # Must be "Any" instead of "_ValueT", otherwise it violates Liskov substitution
-    # according to mypy. *shrug*
-    def __or__(self, other: AbstractSet[Any]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet(self._items_ordered)
-        for item in other:
-            result.add(item)
-        return result
-
-    def __sub__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet()
-        for item in self._items_ordered:
-            if item not in other:
-                result.add(item)
-        return result
+from orderedsets import OrderedSet as _OrderedSet
+from orderedsets import FrozenOrderedSet as frozenset
 
 # }}}
 
@@ -288,7 +241,7 @@ class _DistributedInputReplacer(CopyMapper):
         self.name_to_output = name_to_output
         self.output_arrays = frozenset(name_to_output.values())
 
-        self.user_input_names: Set[str] = set()
+        self.user_input_names: Set[str] = _OrderedSet()
         self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
@@ -525,16 +478,16 @@ def _schedule_comm_batches(
 
     comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
 
-    scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
-    comms_to_schedule = set(comm_ids_to_needed_comm_ids)
+    scheduled_comm_ids: Set[CommunicationOpIdentifier] = _OrderedSet()
+    comms_to_schedule = _OrderedSet(comm_ids_to_needed_comm_ids)
 
     all_comm_ids = frozenset(comm_ids_to_needed_comm_ids)
 
     # FIXME In order for this to work, comm tags must be unique
     while len(scheduled_comm_ids) < len(all_comm_ids):
-        comm_ids_this_batch = {
-                comm_id for comm_id in comms_to_schedule
-                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
+        comm_ids_this_batch = frozenset({
+                comm_id for comm_id in sorted(comms_to_schedule)
+                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids})
 
         if not comm_ids_this_batch:
             raise CycleError("cycle detected in communication graph")
@@ -542,7 +495,7 @@ def _schedule_comm_batches(
         scheduled_comm_ids.update(comm_ids_this_batch)
         comms_to_schedule = comms_to_schedule - comm_ids_this_batch
 
-        comm_batches.append(comm_ids_this_batch)
+        comm_batches.append(sorted(comm_ids_this_batch))
 
     return comm_batches
 
@@ -827,9 +780,9 @@ def find_distributed_partition(
     # that the resulting partition is also deterministic
 
     sent_arrays = _OrderedSet(
-        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
+        send_node.data for _, send_node in sorted(lsrdg.local_send_id_to_send_node.items()))
 
-    received_arrays = _OrderedSet(lsrdg.local_recv_id_to_recv_node.values())
+    received_arrays = _OrderedSet([recv for _, recv in sorted(lsrdg.local_recv_id_to_recv_node.items())])
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)

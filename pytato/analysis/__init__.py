@@ -37,6 +37,8 @@ from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 
+from orderedsets import FrozenOrderedSet as frozenset
+
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
