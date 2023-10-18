@@ -126,7 +126,6 @@ def test_stack_input_validation():
         pt.stack((x, x), axis=3)
 
 
-@pytest.mark.xfail  # Unnamed placeholders should be used via pt.bind
 def test_make_placeholder_noname():
     x = pt.make_placeholder("x", shape=(10, 4), dtype=float)
     y = 2*x
