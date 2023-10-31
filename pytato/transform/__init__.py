@@ -185,7 +185,9 @@ class Mapper:
         assert method is not None
         return method(expr, *args, **kwargs)
 
-    __call__ = rec
+    def __call__(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
+        """Handle the mapping of *expr*."""
+        return self.rec(expr, *args, **kwargs)
 
 # }}}
 
@@ -244,7 +246,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
             # type-ignore-reason: CachedMapper.rec's return type is imprecise
             return super().rec(expr)  # type: ignore[return-value]
 
-        __call__ = rec
+        # type-ignore-reason: specialized variant of super-class' rec method
+        def __call__(self,  # type: ignore[override]
+                     expr: CopyMapperResultT) -> CopyMapperResultT:
+            return self.rec(expr)
 
     def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
         """
@@ -1233,7 +1238,9 @@ class CachedMapAndCopyMapper(CopyMapper):
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
-        __call__ = rec
+        # type-ignore-reason: Mapper.__call__ returns Any
+        def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
+            return self.rec(expr)
 
 # }}}
 
