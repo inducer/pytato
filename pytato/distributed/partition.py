@@ -512,7 +512,7 @@ class _LocalSendRecvDepGatherer(
 TaskType = TypeVar("TaskType")
 
 
-# {{{ _test_schedule_task_batches_wrapper
+# {{{ _schedule_task_batches (and related)
 
 def _schedule_task_batches(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
@@ -537,60 +537,62 @@ def _schedule_task_batches_counted(
     of the input. The testing code needs to know about the number of tasks visited
     during the scheduling algorithm's execution. However, nontesting code does not.
     """
-    depend_list, visits_in_depend = \
-            _calculate_dependency_level(task_ids_to_needed_task_ids)
-    max_level = max(depend_list.values(), default=0)
-    task_batches: Sequence[set[TaskType]] \
-            = [set() for _ in range(max_level)]
+    task_to_dep_level, visits_in_depend = \
+            _calculate_dependency_levels(task_ids_to_needed_task_ids)
+    nlevels = 1 + max(task_to_dep_level.values(), default=-1)
+    task_batches: Sequence[Set[TaskType]] = [set() for _ in range(nlevels)]
 
-    for task_id, n_depend in depend_list.items():
-        # the root has an n_depend value of 1 but it goes in the zeroth batch.
-        task_batches[n_depend - 1].add(task_id)
-    return task_batches, visits_in_depend + len(depend_list.keys())
+    for task_id, dep_level in task_to_dep_level.items():
+        task_batches[dep_level].add(task_id)
+
+    return task_batches, visits_in_depend + len(task_to_dep_level.keys())
 
 # }}}
 
 
-# {{{ _calculate_dependency_level
+# {{{ _calculate_dependency_levels
 
-def _calculate_dependency_level(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-                -> Tuple[Mapping[TaskType, int], int]:
-    """ Calculate the minimum dependendency level needed before a task of
-        type TaskType can be scheduled. We assume that any number of tasks
-        can be scheduled at the same time, and that each task has a constant
-        number of direct dependents.
+def _calculate_dependency_levels(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
+        ) -> Tuple[Mapping[TaskType, int], int]:
+    """Calculate the minimum dependendency level needed before a task of
+    type TaskType can be scheduled. We assume that any number of tasks
+    can be scheduled at the same time. To attain complexity linear in the
+    number of nodes, we assume that each task has a constant number of direct
+    dependents.
 
-        The minimum dependency level for a task, i, is defined as
-        1 + the maximum dependency level for its children.
+    The minimum dependency level for a task, i, is defined as
+    1 + the maximum dependency level for its children.
     """
-    known_vals: Dict[TaskType, int] = {}
+    task_to_dep_level: Dict[TaskType, int] = {}
     seen: set[TaskType] = set()
-    count: int = 0
+    nodes_visited: int = 0
 
-    def _internal_dependency_level_dfs(node: TaskType) -> int:
+    def _dependency_level_dfs(task_id: TaskType) -> int:
         """Helper function to do depth first search on a graph."""
-        nonlocal count
-        count += 1
-        if node in seen:
+
+        if task_id in task_to_dep_level:
+            return task_to_dep_level[task_id]
+
+        # If node has been 'seen', but dep level is not yet known, that's a cycle.
+        if task_id in seen:
             raise CycleError("Cycle detected in your input graph.")
-        seen.add(node)
-        if node in known_vals:
-            return known_vals[node]
-        else:
-            count += len(task_ids_to_needed_task_ids[node])
-            kids = task_ids_to_needed_task_ids[node]
-            val = 1 + max([_internal_dependency_level_dfs(c) for c in kids] or [0])
-            known_vals[node] = val
-            return val
+        seen.add(task_id)
+
+        nonlocal nodes_visited
+        nodes_visited += 1
+
+        dep_level = 1 + max(
+                [_dependency_level_dfs(dep)
+                    for dep in task_ids_to_needed_task_ids[task_id]] or [-1])
+        task_to_dep_level[task_id] = dep_level
+        return dep_level
 
     for task_id in task_ids_to_needed_task_ids:
-        seen = {task_id}
-        count += 1
-        kids = task_ids_to_needed_task_ids[task_id]
-        kids_portion: List[int] = [_internal_dependency_level_dfs(c) for c in kids]
-        known_vals[task_id] = 1 + max(kids_portion, default=0)
-    return known_vals, count
+        _dependency_level_dfs(task_id)
+
+    return task_to_dep_level, nodes_visited
+
 # }}}
 
 
