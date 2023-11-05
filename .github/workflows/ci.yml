@@ -64,10 +64,6 @@ jobs:
         -   name: "Main Script"
             run: |
                 curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
-                # pytest gets angry when 'import pytato.array' may come
-                # from both the project file and the venv. This matters
-                # because of doctest collection.
-                PROJECT_INSTALL_FLAGS="--editable"
                 . ./build-and-test-py-project-within-miniconda.sh
 
     examples:
