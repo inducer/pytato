@@ -352,6 +352,7 @@ class CodeGenMapper(Mapper):
     def __init__(self,
                  array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
                  axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
+        super().__init__()
         self.exprgen_mapper = InlinedExpressionGenMapper(axis_tag_t_to_not_propagate)
         self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate

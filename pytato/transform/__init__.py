@@ -201,6 +201,7 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._cache: Dict[Hashable, CachedMapperT] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
@@ -430,6 +431,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     arguments to keep the cost of its each call frame low.
     """
     def __init__(self) -> None:
+        super().__init__()
         # type-ignored as '._cache' attribute is not coherent with the base
         # class
         self._cache: Dict[Tuple[ArrayOrNames,
@@ -657,6 +659,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
     .. automethod:: combine
     """
     def __init__(self) -> None:
+        super().__init__()
         self.cache: Dict[ArrayOrNames, CombineT] = {}
 
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
@@ -1149,6 +1152,7 @@ class CachedWalkMapper(WalkMapper):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._visited_nodes: Set[Any] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
