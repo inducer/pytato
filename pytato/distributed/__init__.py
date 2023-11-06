@@ -22,7 +22,8 @@ Internal stuff that is only here because the documentation tool wants it
 
 .. class:: CommTagType
 
-    A type representing a communication tag.
+    A type representing a communication tag. Communication tags must be
+    hashable and comparable.
 
 .. class:: ShapeType
 

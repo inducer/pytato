@@ -31,7 +31,7 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, Tuple, FrozenSet, Any
+from typing import TYPE_CHECKING, Tuple, FrozenSet, Any, Optional
 
 from pytato.distributed.partition import DistributedGraphPartition
 
@@ -59,6 +59,10 @@ def number_distributed_tags(
 
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
+
+    .. note::
+
+        This function requires that symbolic tags are comparable.
     """
     tags = frozenset({
             recv.comm_tag
@@ -74,7 +78,7 @@ def number_distributed_tags(
 
     def set_union(
             set_a: FrozenSet[Any], set_b: FrozenSet[Any],
-            mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
+            mpi_data_type: Optional[MPI.Datatype]) -> FrozenSet[Any]:
         assert mpi_data_type is None
         assert isinstance(set_a, frozenset)
         assert isinstance(set_b, frozenset)
