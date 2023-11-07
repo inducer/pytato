@@ -233,6 +233,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     in subclasses to permit term rewriting on an expression graph.
 
     .. automethod:: clone_for_callee
+    .. automethod:: update_from_callee_clone
 
     .. note::
 
@@ -252,6 +253,15 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         :class:`pytato.function.FunctionDefinition`.
         """
         return type(self)()
+
+    def update_from_callee_clone(
+            self: _SelfMapper, function: FunctionDefinition,
+            callee_clone: _SelfMapper) -> None:
+        """
+        Called to update any data stored in *self* after using a cloned mapper
+        to traverse a :class:`pytato.function.FunctionDefinition`.
+        """
+        pass
 
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
                               ) -> Tuple[IndexOrShapeExpr, ...]:
@@ -405,6 +415,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
+        self.update_from_callee_clone(expr, new_mapper)
         return attrs.evolve(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
@@ -954,6 +965,11 @@ class WalkMapper(Mapper):
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         return type(self)()
 
+    def update_from_callee_clone(
+            self: _SelfMapper, function: FunctionDefinition,
+            callee_clone: _SelfMapper) -> None:
+        pass
+
     def visit(self, expr: Any, *args: Any, **kwargs: Any) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
@@ -1114,6 +1130,7 @@ class WalkMapper(Mapper):
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
+        self.update_from_callee_clone(expr, new_mapper)
 
         self.post_visit(expr, *args, **kwargs)
 

@@ -300,6 +300,19 @@ class _DistributedInputReplacer(CopyMapper):
             self.sptpo_ary_to_name,
             self.name_to_output)
 
+    def update_from_callee_clone(
+            self,
+            function: FunctionDefinition,
+            callee_clone: _DistributedInputReplacer) -> None:
+        super().update_from_callee_clone(function, callee_clone)
+
+        self.user_input_names |= (
+            callee_clone.user_input_names - function.parameters)
+        # Seems questionable? If name is used both inside and outside function,
+        # could end up with duplicate placeholders?
+        self.partition_input_name_to_placeholder.update(
+            callee_clone.partition_input_name_to_placeholder)
+
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
         return expr
@@ -357,27 +370,6 @@ class _DistributedInputReplacer(CopyMapper):
                     expr.axes)
             self.partition_input_name_to_placeholder[name] = placeholder
         return placeholder
-
-    @memoize_method
-    def map_function_definition(self,
-                                expr: FunctionDefinition) -> FunctionDefinition:
-        # spawn a new mapper to avoid unsound cache hits, since the namespace of the
-        # function's body is different from that of the caller.
-        new_mapper = self.clone_for_callee()
-        new_returns = {name: new_mapper(ret)
-                       for name, ret in expr.returns.items()}
-
-        self.user_input_names |= new_mapper.user_input_names - expr.parameters
-        # Seems questionable? If name is used both inside and outside function,
-        # could end up with duplicate placeholders?
-        self.partition_input_name_to_placeholder.update(
-            new_mapper.partition_input_name_to_placeholder)
-
-        return FunctionDefinition(expr.parameters,
-                                  expr.return_type,
-                                  immutabledict(new_returns),
-                                  tags=expr.tags
-                                  )
 
 # }}}
 

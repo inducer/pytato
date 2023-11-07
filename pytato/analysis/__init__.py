@@ -431,6 +431,13 @@ class CallSiteCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    def update_from_callee_clone(
+            self,
+            function: FunctionDefinition,
+            callee_clone: CallSiteCountMapper) -> None:
+        super().update_from_callee_clone(function, callee_clone)
+        self.count += callee_clone.count
+
     @memoize_method
     def map_function_definition(self, /, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
@@ -440,8 +447,7 @@ class CallSiteCountMapper(CachedWalkMapper):
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
-
-        self.count += new_mapper.count
+        self.update_from_callee_clone(expr, new_mapper)
 
         self.post_visit(expr, *args, **kwargs)
 
