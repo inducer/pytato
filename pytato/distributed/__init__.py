@@ -23,7 +23,7 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: CommTagType
 
     A type representing a communication tag. Communication tags must be
-    hashable and comparable.
+    hashable and totally ordered (and hence comparable).
 
 .. class:: ShapeType
 
