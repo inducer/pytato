@@ -23,7 +23,8 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: CommTagType
 
     A type representing a communication tag. Communication tags must be
-    hashable and totally ordered (and hence comparable).
+    hashable and have a textual representation via :func:`repr` that is
+    stable across Python invocations (to support sorting).
 
 .. class:: ShapeType
 

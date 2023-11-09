@@ -65,7 +65,8 @@ def number_distributed_tags(
 
     .. note::
 
-        This function requires that symbolic tags are comparable.
+        This function requires that symbolic tags have a textual representation
+        that is stable across Python invocations.
     """
     tags = frozenset({
             recv.comm_tag
