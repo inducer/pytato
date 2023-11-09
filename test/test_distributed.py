@@ -266,7 +266,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
     ntests = 10
     for i in range(ntests):
         seed = 120 + i
-        print(f"Step {i} {seed}")
+        print(f"Step {i} {seed=}")
 
         # {{{ compute value with communication
 
@@ -278,7 +278,13 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
             nonlocal comm_tag
             comm_tag += 1
-            tag = (comm_tag, _RandomDAGTag)  # noqa: B023
+
+            if comm_tag % 5 == 1:
+                tag = (comm_tag, frozenset([_RandomDAGTag, _RandomDAGTag]))
+            elif comm_tag % 5 == 2:
+                tag = (comm_tag, (_RandomDAGTag,))
+            else:
+                tag = (comm_tag, _RandomDAGTag)  # noqa: B023
 
             inner = make_random_dag(rdagc)
             return pt.staple_distributed_send(
