@@ -263,7 +263,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
     gen_comm_called = False
 
-    ntests = 10
+    ntests = 20
     for i in range(ntests):
         seed = 120 + i
         print(f"Step {i} {seed=}")
@@ -280,9 +280,11 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
             comm_tag += 1
 
             if comm_tag % 5 == 1:
-                tag = (comm_tag, frozenset([_RandomDAGTag, _RandomDAGTag]))
+                tag = (comm_tag, frozenset([_RandomDAGTag, "a", comm_tag]))
             elif comm_tag % 5 == 2:
-                tag = (comm_tag, (_RandomDAGTag,))
+                tag = (comm_tag, (_RandomDAGTag, "b"))
+            elif comm_tag % 5 == 3:
+                tag = (_RandomDAGTag, comm_tag)
             else:
                 tag = (comm_tag, _RandomDAGTag)  # noqa: B023
 
