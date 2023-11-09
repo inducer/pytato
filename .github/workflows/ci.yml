@@ -99,7 +99,7 @@ jobs:
     downstream_tests:
         strategy:
             matrix:
-                downstream_project: [meshmode, mirgecom, arraycontext]
+                downstream_project: [meshmode, mirgecom, grudge, arraycontext]
         name: Tests for downstream project ${{ matrix.downstream_project }}
         runs-on: ubuntu-latest
         steps:
@@ -115,5 +115,9 @@ jobs:
 
                 if [[ "$DOWNSTREAM_PROJECT" = "meshmode" ]]; then
                     python ../examples/simple-dg.py --lazy
+                fi
+
+                if [[ "$DOWNSTREAM_PROJECT" = "grudge" ]]; then
+                    mpirun -n 2 python ../examples/wave/wave-op-mpi.py --lazy
                 fi
 
