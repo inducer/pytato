@@ -39,6 +39,7 @@ setup(
         "immutabledict",
         "attrs",
         "bidict",
+        "orderedsets",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
