@@ -147,8 +147,7 @@ class EinsumDistributiveLawMapper(Mapper):
                                  Optional[_EinsumDistributiveLawMapperContext]]:
         return (expr, ctx)
 
-    # type-ignore-reason: incompatible with superclass
-    def rec(self,  # type: ignore[override]
+    def rec(self,
             expr: MappedT,
             ctx: Optional[_EinsumDistributiveLawMapperContext]
             ) -> MappedT:
@@ -161,8 +160,7 @@ class EinsumDistributiveLawMapper(Mapper):
             # type-ignore-reason: Mapper.rec has imprecise func. signature
             return result  # type: ignore[no-any-return]
 
-    # type-ignore-reason: incompatible with super class
-    def __call__(self,  # type: ignore[override]
+    def __call__(self,
                  expr: MappedT,
                  ctx: Optional[_EinsumDistributiveLawMapperContext],
                  ) -> MappedT:

@@ -86,10 +86,7 @@ def _normalize_pad_width(
             and isinstance(pad_width[0], INT_CLASSES)
             and isinstance(pad_width[1], INT_CLASSES)
           ):
-        # type-ignore-reason: mypy does not take the guarding predicate into
-        # account
-        processed_pad_widths = [pad_width  # type: ignore[misc]
-                                for _ in range(array.ndim)]
+        processed_pad_widths = [pad_width for _ in range(array.ndim)]
     elif isinstance(pad_width, abc.Sequence):
         if len(pad_width) != array.ndim:
             raise ValueError(f"Number of pad widths != {array.ndim}"
@@ -191,10 +188,7 @@ def pad(array: Array,
                     and np.isscalar(constant_vals[0])
                     and np.isscalar(constant_vals[1])
                   ):
-                # type-ignore-reason: mypy does not understand the guarding
-                # predicate
-                processed_constant_vals = [constant_vals  # type: ignore[misc]
-                                           for _ in range(array.ndim)]
+                processed_constant_vals = [constant_vals for _ in range(array.ndim)]
             elif isinstance(constant_vals, abc.Sequence):
                 if len(constant_vals) != array.ndim:
                     raise ValueError("")
@@ -205,10 +199,7 @@ def pad(array: Array,
                             and len(constant_val) == 2
                             and np.isscalar(constant_val[0])
                             and np.isscalar(constant_val[1])):
-                        # type-ignore-reason: mypy does not understand the guarding
-                        # predicate
-                        processed_constant_vals.append(
-                            constant_val)  # type: ignore[arg-type]
+                        processed_constant_vals.append(constant_val)
                     else:
                         raise ValueError(
                             "Elements of `constant_vals` must be of type"

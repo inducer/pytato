@@ -608,12 +608,10 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         super().__init__()
         self.materialized_arrays: _OrderedSet[Array] = _OrderedSet()
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
 

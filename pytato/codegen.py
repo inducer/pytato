@@ -230,12 +230,10 @@ class NamesValidityChecker(CachedWalkMapper):
         self.name_to_input: Dict[str, InputArgumentBase] = {}
         super().__init__()
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
             if expr.name is not None:
                 try:
