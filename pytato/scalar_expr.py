@@ -286,7 +286,7 @@ class InductionVariableCollector(CombineMapper):
         from functools import reduce
         return reduce(frozenset.union, values, frozenset())
 
-    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:  # type: ignore[override]
+    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
