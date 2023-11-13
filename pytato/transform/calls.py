@@ -275,15 +275,11 @@ class _NamedCallResultReplacerPostConcatenate(CopyMapper):
             return Call(new_mapper.map_function_definition(expr.function),
                         Map({name: self.rec(bnd)
                              for name, bnd in expr.bindings.items()}),
-                        result_axes=expr.result_axes,
-                        result_tags=expr.result_tags,
                         tags=expr.tags)
         else:
             return Call(expr.function,  # do not map the exprs in function's body.
                         Map({name: self.rec(bnd)
                              for name, bnd in expr.bindings.items()}),
-                        result_axes=expr.result_axes,
-                        result_tags=expr.result_tags,
                         tags=expr.tags)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
@@ -1281,8 +1277,6 @@ class _Concatenator(Mapper):
         )
         return Call(new_fn_defn,
                     Map(new_bindings),
-                    result_axes=expr.result_axes,
-                    result_tags=expr.result_tags,
                     tags=expr.tags)
 
     def map_named_call_result(self,
@@ -1459,8 +1453,6 @@ def _get_replacement_map_post_concatenating(call_sites: Sequence[Call],
     new_call = Call(
         function=new_function,
         bindings=Map(new_call_bindings),
-        result_tags=template_call_site.result_tags,
-        result_axes=template_call_site.result_axes,
         tags=template_call_site.tags)
 
     # slice into new_call's outputs to replace the old expressions.
