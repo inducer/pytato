@@ -368,8 +368,9 @@ class DirectPredecessorsGetter(Mapper):
         return frozenset([expr.passthrough_data])
 
     def map_named_call_result(self, expr: NamedCallResult) -> FrozenSet[Array]:
-        # Not sure if this should descend into the function definition or not?
-        return frozenset(expr.call.bindings.values())
+        raise NotImplementedError(
+            "DirectPredecessorsGetter does not yet support expressions containing "
+            "functions.")
 
 
 # }}}
