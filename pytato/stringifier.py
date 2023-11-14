@@ -95,9 +95,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        # type-ignore-reason: https://github.com/python/mypy/issues/16254
-        fields = tuple(field.name
-                       for field in attrs.fields(type(expr)))  # type: ignore[misc]
+        fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
@@ -155,8 +153,7 @@ class Reprifier(Mapper):
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                    # type-ignore-reason: https://github.com/python/mypy/issues/16254
-                        for field in attrs.fields(type(expr)))  # type: ignore[misc]
+                        for field in attrs.fields(type(expr)))
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:

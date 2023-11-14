@@ -518,7 +518,7 @@ class Array(Taggable):
     @memoize_method
     def __hash__(self) -> int:
         attrs_filtered: List[Any] = []
-        for field in attrs.fields(type(self)):  # type: ignore[misc]
+        for field in attrs.fields(type(self)):
             attr = getattr(self, field)
             if field == "tags":
                 attr = Taggable.__hash__(self)
@@ -1796,7 +1796,7 @@ class _PytatoFrameSummary:
         #
         # No need to dispatch to superclass: fields() automatically gives us
         # fields from the entire class hierarchy.
-        for f in fields(self.__class__):  # type: ignore[misc]
+        for f in fields(self.__class__):
             key_builder.rec(key_hash, getattr(self, f.name))
 
     def short_str(self, maxlen: int = 100) -> str:
@@ -1831,7 +1831,7 @@ class _PytatoStackSummary:
         #
         # No need to dispatch to superclass: fields() automatically gives us
         # fields from the entire class hierarchy.
-        for f in fields(self.__class__):  # type: ignore[misc]
+        for f in fields(self.__class__):
             key_builder.rec(key_hash, getattr(self, f.name))
 
     def short_str(self, maxlen: int = 100) -> str:
