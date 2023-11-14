@@ -366,7 +366,7 @@ def dot_escape_leave_space(s: str) -> str:
 
 # {{{ emit helpers
 
-def _stringify_created_at(non_equality_tags: frozenset[Tag]) -> str:
+def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
     from pytato.tags import CreatedAt
     for tag in non_equality_tags:
         if isinstance(tag, CreatedAt):

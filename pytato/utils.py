@@ -253,8 +253,6 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     .. testsetup::
 
         >>> import pytato as pt
-        >>> from pytato.transform import remove_tags_of_type
-        >>> from pytato.tags import CreatedAt
         >>> from pytato.utils import dim_to_index_lambda_components
         >>> from pytools import UniqueNameGenerator
 
@@ -264,7 +262,7 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
         >>> expr, bnds = dim_to_index_lambda_components(3*n+8, UniqueNameGenerator())
         >>> print(expr)
         3*_in + 8
-        >>> {"_in": remove_tags_of_type(CreatedAt, bnds["_in"])}
+        >>> bnds
         {'_in': SizeParam(name='n')}
     """
     if isinstance(expr, INT_CLASSES):
