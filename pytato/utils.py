@@ -179,7 +179,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         ) -> ArrayOrScalar:
-    from pytato.array import _get_default_axes, _get_default_tags
+    from pytato.array import (_get_default_axes, _get_default_tags,
+                              _get_created_at_tag)
 
     if isinstance(a1, SCALAR_CLASSES):
         a1 = np.dtype(type(a1)).type(a1)
@@ -207,6 +208,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                        dtype=result_dtype,
                        bindings=immutabledict(bindings),
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        var_to_reduction_descr=immutabledict(),
                        axes=_get_default_axes(len(result_shape)))
 
@@ -475,7 +477,8 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
     from pytato.diagnostic import CannotBroadcastError
-    from pytato.array import _get_default_axes, _get_default_tags
+    from pytato.array import (_get_default_axes, _get_default_tags,
+                              _get_created_at_tag)
 
     # {{{ handle ellipsis
 
@@ -562,6 +565,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
                 ary,
                 tuple(normalized_indices),
                 tags=_get_default_tags(),
+                non_equality_tags=frozenset({_get_created_at_tag()}),
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
         else:
@@ -569,6 +573,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
                 ary,
                 tuple(normalized_indices),
                 tags=_get_default_tags(),
+                non_equality_tags=frozenset({_get_created_at_tag()}),
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
     else:
@@ -576,6 +581,7 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
         return BasicIndex(ary,
                           tuple(normalized_indices),
                           tags=_get_default_tags(),
+                          non_equality_tags=frozenset({_get_created_at_tag()}),
                           axes=_get_default_axes(
                               len([idx
                                    for idx in normalized_indices

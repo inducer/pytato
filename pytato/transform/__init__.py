@@ -33,7 +33,7 @@ import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable)
+                    Hashable, cast)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -82,7 +82,6 @@ __doc__ = """
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
-.. autofunction:: remove_tags_of_type
 .. autofunction:: materialize_with_mpms
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
@@ -207,8 +206,7 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
         return expr
 
-    # type-ignore-reason: incompatible with super class
-    def rec(self, expr: ArrayOrNames) -> CachedMapperT:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> CachedMapperT:
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -219,9 +217,7 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
             return result  # type: ignore[no-any-return]
 
     if TYPE_CHECKING:
-        # type-ignore-reason: incompatible with super class
-        def __call__(self, expr: ArrayOrNames  # type: ignore[override]
-                     ) -> CachedMapperT:
+        def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
             return self.rec(expr)
 
 # }}}
@@ -241,15 +237,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
     if TYPE_CHECKING:
-        # type-ignore-reason: specialized variant of super-class' rec method
-        def rec(self,  # type: ignore[override]
-                expr: CopyMapperResultT) -> CopyMapperResultT:
-            # type-ignore-reason: CachedMapper.rec's return type is imprecise
-            return super().rec(expr)  # type: ignore[return-value]
+        def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
+            return cast(CopyMapperResultT, super().rec(expr))
 
-        # type-ignore-reason: specialized variant of super-class' rec method
-        def __call__(self,  # type: ignore[override]
-                     expr: CopyMapperResultT) -> CopyMapperResultT:
+        def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
     def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
@@ -1193,17 +1184,13 @@ class TopoSortMapper(CachedWalkMapper):
         super().__init__()
         self.topological_order: List[Array] = []
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def map_function_definition(self,  # type: ignore[override]
-                                expr: FunctionDefinition) -> None:
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
 
@@ -1227,8 +1214,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
 
-    # type-ignore-reason:incompatible with Mapper.rec()
-    def rec(self, expr: MappedT) -> MappedT:  # type: ignore[override]
+    def rec(self, expr: MappedT) -> MappedT:
         if expr in self._cache:
             # type-ignore-reason: parametric Mapping types aren't a thing
             return self._cache[expr]  # type: ignore[return-value]
@@ -1239,8 +1225,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
-        # type-ignore-reason: Mapper.__call__ returns Any
-        def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
+        def __call__(self, expr: MappedT) -> MappedT:
             return self.rec(expr)
 
 # }}}
@@ -1530,21 +1515,6 @@ def map_and_copy(expr: MappedT,
         caching nature each node is mapped exactly once.
     """
     return CachedMapAndCopyMapper(map_fn)(expr)
-
-
-def remove_tags_of_type(tag_types: Union[type, Tuple[type]], expr: ArrayOrNames
-                        ) -> ArrayOrNames:
-    def process_node(expr: ArrayOrNames) -> ArrayOrNames:
-        if isinstance(expr, Array):
-            return expr.copy(tags=frozenset({
-                tag for tag in expr.tags
-                if not isinstance(tag, tag_types)}))
-        elif isinstance(expr, AbstractResultWithNamedArrays):
-            return expr
-        else:
-            raise AssertionError(type(expr))
-
-    return map_and_copy(expr, process_node)
 
 
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:

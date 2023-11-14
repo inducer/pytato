@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union, FrozenSet
+from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
 from pytato.array import (AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes, AxisPermutation,
                           BasicIndex, Concatenate, DataWrapper, Einsum,
@@ -34,7 +34,7 @@ from pytato.array import (AdvancedIndexInContiguousAxes,
 from pytato.function import Call, NamedCallResult, FunctionDefinition
 from pytools import memoize_method
 
-from pytools.tag import Tag, IgnoredForEqualityTag, Taggable
+from pytools.tag import Taggable
 
 if TYPE_CHECKING:
     from pytato.loopy import LoopyCall, LoopyCallResult
@@ -42,20 +42,10 @@ if TYPE_CHECKING:
 
 
 __doc__ = """
-.. autofunction:: preprocess_tags_for_equality
 .. autoclass:: EqualityComparer
 """
 
-
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-
-
-def preprocess_tags_for_equality(tags: FrozenSet[Tag]) -> FrozenSet[Tag]:
-    """Remove tags of :class:`~pytools.tag.IgnoredForEqualityTag` for equality
-    comparison."""
-    return frozenset(tag
-                     for tag in tags
-                     if not isinstance(tag, IgnoredForEqualityTag))
 
 
 # {{{ EqualityComparer

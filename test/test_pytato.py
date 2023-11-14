@@ -807,9 +807,6 @@ def test_created_at():
     a = pt.make_placeholder("a", (10, 10), "float64")
     b = pt.make_placeholder("b", (10, 10), "float64")
 
-    _prev_debug_enabled = pt.DEBUG_ENABLED
-    pt.DEBUG_ENABLED = True
-
     # res1 and res2 are defined on different lines and should have different
     # CreatedAt tags.
     res1 = a+b
@@ -821,23 +818,21 @@ def test_created_at():
 
     # {{{ Check that CreatedAt tags are handled correctly for equality
 
-    from pytato.equality import preprocess_tags_for_equality
-
     assert res1 == res2 == res3 == res4
 
-    assert res1.tags != res2.tags
-    assert res3.tags == res4.tags
+    assert res1.non_equality_tags != res2.non_equality_tags
+    assert res3.non_equality_tags == res4.non_equality_tags
 
-    assert (preprocess_tags_for_equality(res1.tags)
-            == preprocess_tags_for_equality(res2.tags))
-    assert (preprocess_tags_for_equality(res3.tags)
-            == preprocess_tags_for_equality(res4.tags))
+    assert res1.tags == res2.tags
+    assert res3.tags == res4.tags
 
     # }}}
 
     from pytato.tags import CreatedAt
 
-    created_tag = res1.tags_of_type(CreatedAt)
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
 
     assert len(created_tag) == 1
 
@@ -865,8 +860,6 @@ def test_created_at():
     s = get_dot_graph(res1)
     assert "test_created_at" in s
     assert "a+b" in s
-
-    pt.DEBUG_ENABLED = _prev_debug_enabled
 
     # }}}
 

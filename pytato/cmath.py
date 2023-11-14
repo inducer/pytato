@@ -59,7 +59,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from typing import Tuple, Optional
 from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
-                          _get_default_axes, _get_default_tags)
+                          _get_default_axes, _get_default_tags, _get_created_at_tag)
 from pytato.scalar_expr import SCALAR_CLASSES
 from pymbolic import var
 from immutabledict import immutabledict
@@ -115,6 +115,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
                   tuple(sym_args)),
         shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
         tags=_get_default_tags(),
+        non_equality_tags=frozenset({_get_created_at_tag()}),
         axes=_get_default_axes(len(shape)),
         var_to_reduction_descr=immutabledict(),
     )

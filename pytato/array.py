@@ -181,7 +181,7 @@ import numpy as np
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable, ToTagSetConvertible
+from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
@@ -448,6 +448,10 @@ class Array(Taggable):
     axes: AxesT = attrs.field(kw_only=True)
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
+    # These are automatically excluded from equality in EqualityComparer
+    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True, hash=False,
+                                                    default=None)
+
     _mapper_method: ClassVar[str]
 
     # disallow numpy arithmetic from taking precedence
@@ -514,18 +518,6 @@ class Array(Taggable):
                                tuple(range(self.ndim)[::-1]),
                                tags=_get_default_tags(),
                                axes=_get_default_axes(self.ndim))
-
-    @memoize_method
-    def __hash__(self) -> int:
-        attrs_filtered: List[Any] = []
-        for field in attrs.fields(type(self)):
-            attr = getattr(self, field)
-            if field == "tags":
-                attr = Taggable.__hash__(self)
-            if isinstance(attr, dict):
-                attr = frozenset(attr.items())
-            attrs_filtered.append(attr)
-        return hash(tuple(attrs_filtered))
 
     def __eq__(self, other: Any) -> bool:
         if self is other:
@@ -680,12 +672,6 @@ class Array(Taggable):
     def __repr__(self) -> str:
         from pytato.stringifier import Reprifier
         return Reprifier()(self)
-
-    def tagged(self, tags: ToTagSetConvertible) -> Array:
-        from pytato.equality import preprocess_tags_for_equality
-        from pytools.tag import normalize_tags
-        new_tags = preprocess_tags_for_equality(normalize_tags(tags))
-        return super().tagged(new_tags)
 
 # }}}
 
@@ -1852,24 +1838,21 @@ class _PytatoStackSummary:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
-def _get_default_tags(existing_tags: Optional[FrozenSet[Tag]] = None) \
-        -> FrozenSet[Tag]:
+def _get_created_at_tag() -> Optional[Tag]:
     import traceback
     from pytato.tags import CreatedAt
 
-    from pytato import DEBUG_ENABLED
+    if not __debug__:
+        return None
 
-    # This has a significant overhead, so only enable it when PYTATO_DEBUG is
-    # enabled.
-    if DEBUG_ENABLED and (
-            existing_tags is None
-            or not any(isinstance(tag, CreatedAt) for tag in existing_tags)):
-        frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
+    frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
                        for s in traceback.extract_stack())
-        c = CreatedAt(_PytatoStackSummary(frames))
-        return frozenset((c,))
-    else:
-        return frozenset()
+
+    return CreatedAt(_PytatoStackSummary(frames))
+
+
+def _get_default_tags() -> FrozenSet[Tag]:
+    return frozenset()
 
 
 def matmul(x1: Array, x2: Array) -> Array:
@@ -1931,6 +1914,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
 
     return Roll(a, shift, axis,
                 tags=_get_default_tags(),
+                non_equality_tags=frozenset({_get_created_at_tag()}),
                 axes=_get_default_axes(a.ndim))
 
 
@@ -1953,6 +1937,7 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
 
     return AxisPermutation(a, tuple(axes),
                            tags=_get_default_tags(),
+                           non_equality_tags=frozenset({_get_created_at_tag()}),
                            axes=_get_default_axes(a.ndim))
 
 
@@ -1987,6 +1972,7 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     return Stack(tuple(arrays), axis,
                  tags=_get_default_tags(),
+                 non_equality_tags=frozenset({_get_created_at_tag()}),
                  axes=_get_default_axes(arrays[0].ndim+1))
 
 
@@ -2022,6 +2008,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
 
     return Concatenate(tuple(arrays), axis,
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(arrays[0].ndim))
 
 
@@ -2085,6 +2072,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 
     return Reshape(array, tuple(newshape_explicit), order,
                    tags=_get_default_tags(),
+                   non_equality_tags=frozenset({_get_created_at_tag()}),
                    axes=_get_default_axes(len(newshape_explicit)))
 
 
@@ -2128,7 +2116,8 @@ def make_placeholder(name: str,
                          f" expected {len(shape)}, got {len(axes)}.")
 
     return Placeholder(name=name, shape=shape, dtype=dtype, axes=axes,
-                       tags=(tags | _get_default_tags(tags)))
+                       tags=(tags | _get_default_tags()),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),)
 
 
 def make_size_param(name: str,
@@ -2142,7 +2131,8 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags(tags)))
+    return SizeParam(name, tags=(tags | _get_default_tags()),
+                     non_equality_tags=frozenset({_get_created_at_tag()}),)
 
 
 def make_data_wrapper(data: DataInterface,
@@ -2181,7 +2171,8 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags(tags)))
+    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),)
 
 # }}}
 
@@ -2212,6 +2203,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarType,
     return IndexLambda(expr=fill_value, shape=shape, dtype=dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=immutabledict())
 
@@ -2258,6 +2250,7 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
     return IndexLambda(expr=parse(f"1 if ((_1 - _0) == {k}) else 0"),
                        shape=(N, M), dtype=dtype, bindings=immutabledict({}),
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(2),
                        var_to_reduction_descr=immutabledict())
 
@@ -2353,6 +2346,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     return IndexLambda(expr=start + Variable("_0") * step,
                        shape=(size,), dtype=dtype, bindings=immutabledict(),
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(1),
                        var_to_reduction_descr=immutabledict())
 
@@ -2464,6 +2458,7 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
                        dtype=np.dtype(np.bool_),
                        bindings={"_in0": x},
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(len(x.shape)),
                        var_to_reduction_descr=immutabledict())
 
@@ -2520,6 +2515,7 @@ def where(condition: ArrayOrScalar,
             dtype=dtype,
             bindings=immutabledict(bindings),
             tags=_get_default_tags(),
+            non_equality_tags=frozenset({_get_created_at_tag()}),
             axes=_get_default_axes(len(result_shape)),
             var_to_reduction_descr=immutabledict())
 
@@ -2618,6 +2614,7 @@ def make_index_lambda(
                        shape=shape,
                        dtype=dtype,
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=immutabledict
                         (processed_var_to_reduction_descr))
@@ -2703,6 +2700,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
                        dtype=array.dtype,
                        bindings=immutabledict({"in": array}),
                        tags=_get_default_tags(),
+                       non_equality_tags=frozenset({_get_created_at_tag()}),
                        axes=_get_default_axes(len(shape)),
                        var_to_reduction_descr=immutabledict())
 
@@ -2777,6 +2775,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
     return Reshape(array=array, newshape=tuple(new_shape), order="C",
                    tags=(_get_default_tags()
                          | {ExpandedDimsReshape(tuple(normalized_axis))}),
+                   non_equality_tags=frozenset({_get_created_at_tag()}),
                    axes=_get_default_axes(len(new_shape)))
 
 # }}}
