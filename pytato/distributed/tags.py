@@ -31,13 +31,16 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, Tuple, FrozenSet, Any
+from typing import TYPE_CHECKING, Tuple, FrozenSet, Optional, TypeVar
 
 from pytato.distributed.partition import DistributedGraphPartition
 
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+
+
+T = TypeVar("T")
 
 
 # {{{ construct tag numbering
@@ -59,6 +62,10 @@ def number_distributed_tags(
 
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
+
+    .. note::
+
+        This function requires that symbolic tags are comparable.
     """
     tags = frozenset({
             recv.comm_tag
@@ -73,8 +80,8 @@ def number_distributed_tags(
     from mpi4py import MPI
 
     def set_union(
-            set_a: FrozenSet[Any], set_b: FrozenSet[Any],
-            mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
+            set_a: FrozenSet[T], set_b: FrozenSet[T],
+            mpi_data_type: Optional[MPI.Datatype]) -> FrozenSet[T]:
         assert mpi_data_type is None
         assert isinstance(set_a, frozenset)
         assert isinstance(set_b, frozenset)
@@ -99,7 +106,7 @@ def number_distributed_tags(
         next_tag = base_tag
         assert isinstance(all_tags, frozenset)
 
-        for sym_tag in all_tags:
+        for sym_tag in sorted(all_tags):
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
 

@@ -65,7 +65,7 @@ from functools import reduce
 import collections
 from typing import (
         Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional)
+        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
 
 import attrs
 from immutabledict import immutabledict
@@ -509,47 +509,95 @@ class _LocalSendRecvDepGatherer(
 # }}}
 
 
-# {{{ _schedule_comm_batches
+TaskType = TypeVar("TaskType")
 
-def _schedule_comm_batches(
-        comm_ids_to_needed_comm_ids: CommunicationDepGraph
-        ) -> Sequence[AbstractSet[CommunicationOpIdentifier]]:
-    """For each :class:`CommunicationOpIdentifier`, determine the
+
+# {{{ _schedule_task_batches (and related)
+
+def _schedule_task_batches(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
+        -> Sequence[AbstractSet[TaskType]]:
+    """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
-    of communication consists of sends and receives. Computation
-    occurs between batches. (So, from the perspective of the
-    :class:`DistributedGraphPartition`, communication batches
-    sit *between* parts.)
+    of tasks consists of tasks which do not depend on each other.
+    A task may only be in a batch if all of its dependents have already been
+    completed.
     """
-    # FIXME: I'm an O(n^2) algorithm.
+    return _schedule_task_batches_counted(task_ids_to_needed_task_ids)[0]
+# }}}
 
-    comm_batches: List[AbstractSet[CommunicationOpIdentifier]] = []
 
-    scheduled_comm_ids: Set[CommunicationOpIdentifier] = set()
-    comms_to_schedule = set(comm_ids_to_needed_comm_ids)
+# {{{ _schedule_task_batches_counted
 
-    all_comm_ids = frozenset(comm_ids_to_needed_comm_ids)
+def _schedule_task_batches_counted(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
+        -> Tuple[Sequence[AbstractSet[TaskType]], int]:
+    """
+    Static type checkers need the functions to return the same type regardless
+    of the input. The testing code needs to know about the number of tasks visited
+    during the scheduling algorithm's execution. However, nontesting code does not.
+    """
+    task_to_dep_level, visits_in_depend = \
+            _calculate_dependency_levels(task_ids_to_needed_task_ids)
+    nlevels = 1 + max(task_to_dep_level.values(), default=-1)
+    task_batches: Sequence[Set[TaskType]] = [set() for _ in range(nlevels)]
 
-    # FIXME In order for this to work, comm tags must be unique
-    while len(scheduled_comm_ids) < len(all_comm_ids):
-        comm_ids_this_batch = {
-                comm_id for comm_id in comms_to_schedule
-                if comm_ids_to_needed_comm_ids[comm_id] <= scheduled_comm_ids}
+    for task_id, dep_level in task_to_dep_level.items():
+        task_batches[dep_level].add(task_id)
 
-        if not comm_ids_this_batch:
-            raise CycleError("cycle detected in communication graph")
+    return task_batches, visits_in_depend + len(task_to_dep_level.keys())
 
-        scheduled_comm_ids.update(comm_ids_this_batch)
-        comms_to_schedule = comms_to_schedule - comm_ids_this_batch
+# }}}
 
-        comm_batches.append(comm_ids_this_batch)
 
-    return comm_batches
+# {{{ _calculate_dependency_levels
+
+def _calculate_dependency_levels(
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
+        ) -> Tuple[Mapping[TaskType, int], int]:
+    """Calculate the minimum dependendency level needed before a task of
+    type TaskType can be scheduled. We assume that any number of tasks
+    can be scheduled at the same time. To attain complexity linear in the
+    number of nodes, we assume that each task has a constant number of direct
+    dependents.
+
+    The minimum dependency level for a task, i, is defined as
+    1 + the maximum dependency level for its children.
+    """
+    task_to_dep_level: Dict[TaskType, int] = {}
+    seen: set[TaskType] = set()
+    nodes_visited: int = 0
+
+    def _dependency_level_dfs(task_id: TaskType) -> int:
+        """Helper function to do depth first search on a graph."""
+
+        if task_id in task_to_dep_level:
+            return task_to_dep_level[task_id]
+
+        # If node has been 'seen', but dep level is not yet known, that's a cycle.
+        if task_id in seen:
+            raise CycleError("Cycle detected in your input graph.")
+        seen.add(task_id)
+
+        nonlocal nodes_visited
+        nodes_visited += 1
+
+        dep_level = 1 + max(
+                [_dependency_level_dfs(dep)
+                    for dep in task_ids_to_needed_task_ids[task_id]] or [-1])
+        task_to_dep_level[task_id] = dep_level
+        return dep_level
+
+    for task_id in task_ids_to_needed_task_ids:
+        _dependency_level_dfs(task_id)
+
+    return task_to_dep_level, nodes_visited
 
 # }}}
 
 
 # {{{  _MaterializedArrayCollector
+
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _MaterializedArrayCollector(CachedWalkMapper):
@@ -751,7 +799,7 @@ def find_distributed_partition(
         # The comm_batches correspond one-to-one to DistributedGraphParts
         # in the output.
         try:
-            comm_batches = _schedule_comm_batches(comm_ids_to_needed_comm_ids)
+            comm_batches = _schedule_task_batches(comm_ids_to_needed_comm_ids)
         except Exception as exc:
             mpi_communicator.bcast(exc)
             raise
@@ -771,7 +819,6 @@ def find_distributed_partition(
     # {{{ create (local) parts out of batch ids
 
     part_comm_ids: List[_PartCommIDs] = []
-
     if comm_batches:
         recv_ids: FrozenSet[CommunicationOpIdentifier] = frozenset()
         for batch in comm_batches:
