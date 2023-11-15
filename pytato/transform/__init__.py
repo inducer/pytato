@@ -33,7 +33,7 @@ import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable, cast)
+                    Hashable)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -206,7 +206,8 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
         return expr
 
-    def rec(self, expr: ArrayOrNames) -> CachedMapperT:
+    # type-ignore-reason: incompatible with super class
+    def rec(self, expr: ArrayOrNames) -> CachedMapperT:  # type: ignore[override]
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -217,7 +218,9 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
             return result  # type: ignore[no-any-return]
 
     if TYPE_CHECKING:
-        def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
+        # type-ignore-reason: incompatible with super class
+        def __call__(self, expr: ArrayOrNames  # type: ignore[override]
+                     ) -> CachedMapperT:
             return self.rec(expr)
 
 # }}}
@@ -237,10 +240,15 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
     if TYPE_CHECKING:
-        def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return cast(CopyMapperResultT, super().rec(expr))
+        # type-ignore-reason: specialized variant of super-class' rec method
+        def rec(self,  # type: ignore[override]
+                expr: CopyMapperResultT) -> CopyMapperResultT:
+            # type-ignore-reason: CachedMapper.rec's return type is imprecise
+            return super().rec(expr)  # type: ignore[return-value]
 
-        def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
+        # type-ignore-reason: specialized variant of super-class' rec method
+        def __call__(self,  # type: ignore[override]
+                     expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
     def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
@@ -1184,13 +1192,17 @@ class TopoSortMapper(CachedWalkMapper):
         super().__init__()
         self.topological_order: List[Array] = []
 
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
         return id(expr)
 
-    def post_visit(self, expr: Any) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
         self.topological_order.append(expr)
 
-    def map_function_definition(self, expr: FunctionDefinition) -> None:
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def map_function_definition(self,  # type: ignore[override]
+                                expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
 
@@ -1214,7 +1226,8 @@ class CachedMapAndCopyMapper(CopyMapper):
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
 
-    def rec(self, expr: MappedT) -> MappedT:
+    # type-ignore-reason:incompatible with Mapper.rec()
+    def rec(self, expr: MappedT) -> MappedT:  # type: ignore[override]
         if expr in self._cache:
             # type-ignore-reason: parametric Mapping types aren't a thing
             return self._cache[expr]  # type: ignore[return-value]
@@ -1225,7 +1238,8 @@ class CachedMapAndCopyMapper(CopyMapper):
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
-        def __call__(self, expr: MappedT) -> MappedT:
+        # type-ignore-reason: Mapper.__call__ returns Any
+        def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
             return self.rec(expr)
 
 # }}}

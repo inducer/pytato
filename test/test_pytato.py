@@ -376,7 +376,7 @@ def test_linear_complexity_inequality():
     from pytato.equality import EqualityComparer
     from numpy.random import default_rng
 
-    def construct_intestine_graph(depth=90, seed=0):
+    def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
         x = pt.make_placeholder("x", shape=(10,), dtype=float)
 
@@ -650,7 +650,7 @@ def test_rec_get_user_nodes_linear_complexity():
 def test_tag_user_nodes_linear_complexity():
     from numpy.random import default_rng
 
-    def construct_intestine_graph(depth=90, seed=0):
+    def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
         x = pt.make_placeholder("x", shape=(10,), dtype=float)
         y = x
