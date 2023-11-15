@@ -419,8 +419,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
                     immutabledict({name: self.rec(bnd)
-                         for name, bnd in expr.bindings.items()}),
-                    tags=expr.tags,
+                         for name, bnd in sorted(expr.bindings.items())}),
+                    tags=expr.tags
                     )
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
@@ -642,7 +642,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                  *args: Any, **kwargs: Any) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function, *args, **kwargs),
                     immutabledict({name: self.rec(bnd, *args, **kwargs)
-                         for name, bnd in expr.bindings.items()}),
+                         for name, bnd in sorted(expr.bindings.items())}),
                     tags=expr.tags,
                     )
 
@@ -1540,7 +1540,7 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 
         - MPMS materialization strategy is a greedy materialization algorithm in
           which any node with more than 1 materialized predecessors and more than
-          1 successors is materialized.
+          1 successor is materialized.
         - Materializing here corresponds to tagging a node with
           :class:`~pytato.tags.ImplStored`.
         - Does not attempt to materialize sub-expressions in

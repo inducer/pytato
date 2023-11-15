@@ -1902,7 +1902,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     if axis is None:
         if a.ndim > 1:
             raise NotImplementedError(
-                    "shifing along more than one dimension is unsupported")
+                    "shifting along more than one dimension is unsupported")
         else:
             axis = 0
 
