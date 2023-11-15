@@ -134,16 +134,22 @@ class FunctionDefinition(Taggable):
 
         mapper = InputGatherer()
 
-        all_placeholder_args: FrozenSet[Placeholder] = frozenset()
+        all_placeholders: FrozenSet[Placeholder] = frozenset()
         for ary in self.returns.values():
-            new_placeholder_args = frozenset({
+            new_placeholders = frozenset({
                 arg for arg in mapper(ary)
-                if (
-                    isinstance(arg, Placeholder)
-                    and arg.name in self.parameters)})
-            all_placeholder_args |= new_placeholder_args
+                if isinstance(arg, Placeholder)})
+            all_placeholders |= new_placeholders
 
-        return immutabledict({arg.name: arg for arg in all_placeholder_args})
+        # FIXME: Need a way to check for *any* captured arrays, not just placeholders
+        if __debug__:
+            pl_names = frozenset(arg.name for arg in all_placeholders)
+            extra_pl_names = pl_names - self.parameters
+            assert not extra_pl_names, \
+                f"Found non-argument placeholder '{next(iter(extra_pl_names))}' " \
+                "in function definition."
+
+        return immutabledict({arg.name: arg for arg in all_placeholders})
 
     def get_placeholder(self, name: str) -> Placeholder:
         """

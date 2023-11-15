@@ -913,9 +913,13 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                                                  for ret in expr.returns.values()])
         result: Set[InputArgumentBase] = set()
         for inp in all_callee_inputs:
-            if isinstance(inp, Placeholder) and inp.name in expr.parameters:
-                # drop, reference to argument
-                pass
+            if isinstance(inp, Placeholder):
+                if inp.name in expr.parameters:
+                    # drop, reference to argument
+                    pass
+                else:
+                    raise ValueError("function definition refers to non-argument "
+                                     f"placeholder named '{inp.name}'")
             else:
                 result.add(inp)
 

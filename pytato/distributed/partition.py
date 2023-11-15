@@ -86,7 +86,7 @@ from pytato.distributed.nodes import (
 from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
 
-from pytato.function import FunctionDefinition
+from pytato.function import FunctionDefinition, NamedCallResult
 
 if TYPE_CHECKING:
     import mpi4py.MPI
@@ -272,14 +272,6 @@ class DistributedGraphPartition:
 
 # {{{ _DistributedInputReplacer
 
-class _PlaceholderGenerator:
-    """Generates a unique placeholder given an input name/array."""
-    @memoize_method
-    def __call__(self, name: str, expr: Array) -> Placeholder:
-        return make_placeholder(
-            name, expr.shape, expr.dtype, expr.tags, expr.axes)
-
-
 class _DistributedInputReplacer(CopyMapper):
     """Replaces part inputs with :class:`~pytato.array.Placeholder`
     instances for their assigned names. Also gathers names for
@@ -290,7 +282,6 @@ class _DistributedInputReplacer(CopyMapper):
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
-                 placeholder_generator: Optional[_PlaceholderGenerator] = None
                  ) -> None:
         super().__init__()
 
@@ -299,33 +290,14 @@ class _DistributedInputReplacer(CopyMapper):
         self.name_to_output = name_to_output
         self.output_arrays = frozenset(name_to_output.values())
 
-        if placeholder_generator is not None:
-            self._placeholder_generator = placeholder_generator
-        else:
-            self._placeholder_generator = _PlaceholderGenerator()
-
         self.user_input_names: Set[str] = set()
-        self.partition_input_names: Set[str] = set()
+        self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
-        return type(self)(
-            self.recvd_ary_to_name,
-            self.sptpo_ary_to_name,
-            self.name_to_output,
-            # Clones must use the same generator in order to avoid potentially
-            # duplicating placeholders
-            self._placeholder_generator)
-
-    def update_from_callee_clone(
-            self,
-            function: FunctionDefinition,
-            callee_clone: _DistributedInputReplacer) -> None:
-        super().update_from_callee_clone(function, callee_clone)
-
-        self.user_input_names |= (
-            callee_clone.user_input_names - function.parameters)
-        self.partition_input_names |= callee_clone.partition_input_names
+        # Function definitions aren't allowed to contain receives,
+        # stored arrays promoted to part outputs, or part outputs
+        return type(self)({}, {}, {})
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
@@ -377,8 +349,12 @@ class _DistributedInputReplacer(CopyMapper):
         return cast(ArrayOrNames, super().rec(expr))
 
     def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
-        placeholder = self._placeholder_generator(name, expr)
-        self.partition_input_names.add(name)
+        placeholder = self.partition_input_name_to_placeholder.get(name)
+        if placeholder is None:
+            placeholder = make_placeholder(
+                    name, expr.shape, expr.dtype, expr.tags,
+                    expr.axes)
+            self.partition_input_name_to_placeholder[name] = placeholder
         return placeholder
 
 # }}}
@@ -428,7 +404,8 @@ def _make_distributed_partition(
                 pid=part_id,
                 needed_pids=frozenset({part_id - 1} if part_id else {}),
                 user_input_names=frozenset(comm_replacer.user_input_names),
-                partition_input_names=frozenset(comm_replacer.partition_input_names),
+                partition_input_names=frozenset(
+                    comm_replacer.partition_input_name_to_placeholder.keys()),
                 output_names=frozenset(name_to_ouput.keys()),
                 name_to_recv_node=immutabledict({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:

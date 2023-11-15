@@ -50,10 +50,7 @@ class PlaceholderSubstitutor(CopyMapper):
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        if expr.name in self.substitutions:
-            return self.substitutions[expr.name]
-        else:
-            return super().map_placeholder(expr)
+        return self.substitutions[expr.name]
 
 
 class Inliner(CopyMapper):
