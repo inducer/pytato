@@ -275,7 +275,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 bindings=bindings,
                 axes=expr.axes,
                 var_to_reduction_descr=expr.var_to_reduction_descr,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         assert expr.name is not None
@@ -283,35 +284,41 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack) -> Array:
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
-        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags)
+        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
         arrays = tuple(self.rec(arr) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
-                           axes=expr.axes, tags=expr.tags)
+                           axes=expr.axes, tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll) -> Array:
         return Roll(array=self.rec(expr.array),
                 shift=expr.shift,
                 axis=expr.axis,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
         return AxisPermutation(array=self.rec(expr.array),
                 axis_permutation=expr.axis_permutation,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
         return type(expr)(self.rec(expr.array),
                           indices=self.rec_idx_or_size_tuple(expr.indices),
                           axes=expr.axes,
-                          tags=expr.tags)
+                          tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_basic_index(self, expr: BasicIndex) -> Array:
         return self._map_index_base(expr)
@@ -331,7 +338,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape),
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
@@ -343,13 +351,15 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       index_to_access_descr=expr.index_to_access_descr,
-                      tags=expr.tags)
+                      tags=expr.tags,
+                      non_equality_tags=expr.non_equality_tags)
 
     def map_named_array(self, expr: NamedArray) -> Array:
         return type(expr)(self.rec(expr._container),
                           expr.name,
                           axes=expr.axes,
-                          tags=expr.tags)
+                          tags=expr.tags,
+                          non_equality_tags=expr.non_equality_tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -377,14 +387,16 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                 container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
         return Reshape(self.rec(expr.array),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape),
                        order=expr.order,
                        axes=expr.axes,
-                       tags=expr.tags)
+                       tags=expr.tags,
+                       non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
@@ -400,7 +412,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape),
-               dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
+               dtype=expr.dtype, tags=expr.tags, axes=expr.axes,
+               non_equality_tags=expr.non_equality_tags)
 
     @memoize_method
     def map_function_definition(self,
@@ -492,7 +505,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                            bindings=bindings,
                            axes=expr.axes,
                            var_to_reduction_descr=expr.var_to_reduction_descr,
-                           tags=expr.tags)
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
@@ -501,37 +515,43 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                                             *args, **kwargs),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           tags=expr.tags)
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack, *args: Any, **kwargs: Any) -> Array:
         arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
-        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags)
+        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
+                     non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate, *args: Any, **kwargs: Any) -> Array:
         arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
-                           axes=expr.axes, tags=expr.tags)
+                           axes=expr.axes, tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll, *args: Any, **kwargs: Any) -> Array:
         return Roll(array=self.rec(expr.array, *args, **kwargs),
                     shift=expr.shift,
                     axis=expr.axis,
                     axes=expr.axes,
-                    tags=expr.tags)
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation,
                              *args: Any, **kwargs: Any) -> Array:
         return AxisPermutation(array=self.rec(expr.array, *args, **kwargs),
                                axis_permutation=expr.axis_permutation,
                                axes=expr.axes,
-                               tags=expr.tags)
+                               tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> Array:
         return type(expr)(self.rec(expr.array, *args, **kwargs),
                           indices=self.rec_idx_or_size_tuple(expr.indices,
                                                              *args, **kwargs),
                           axes=expr.axes,
-                          tags=expr.tags)
+                          tags=expr.tags,
+                          non_equality_tags=expr.non_equality_tags)
 
     def map_basic_index(self, expr: BasicIndex, *args: Any, **kwargs: Any) -> Array:
         return self._map_index_base(expr, *args, **kwargs)
@@ -555,7 +575,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                 data=expr.data,
                 shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
@@ -567,13 +588,15 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       index_to_access_descr=expr.index_to_access_descr,
-                      tags=expr.tags)
+                      tags=expr.tags,
+                      non_equality_tags=expr.non_equality_tags)
 
     def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
         return type(expr)(self.rec(expr._container, *args, **kwargs),
                           expr.name,
                           axes=expr.axes,
-                          tags=expr.tags)
+                          tags=expr.tags,
+                          non_equality_tags=expr.non_equality_tags)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays, *args: Any, **kwargs: Any) -> DictOfNamedArrays:
@@ -613,7 +636,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                                            *args, **kwargs),
                        order=expr.order,
                        axes=expr.axes,
-                       tags=expr.tags)
+                       tags=expr.tags,
+                       non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
@@ -623,14 +647,16 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
                 self.rec(expr.passthrough_data, *args, **kwargs),
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: Any, **kwargs: Any) -> Array:
         return DistributedRecv(
                src_rank=expr.src_rank, comm_tag=expr.comm_tag,
                shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
-               dtype=expr.dtype, tags=expr.tags, axes=expr.axes)
+               dtype=expr.dtype, tags=expr.tags, axes=expr.axes,
+               non_equality_tags=expr.non_equality_tags)
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> FunctionDefinition:

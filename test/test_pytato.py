@@ -857,6 +857,43 @@ def test_created_at():
 
     # }}}
 
+    # {{{ Make sure only a single CreatedAt tag is created
+
+    old_tag = tag
+
+    res1 = res1 + res2
+
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    # Tag should be recreated
+    assert tag != old_tag
+
+    # }}}
+
+    # {{{ Make sure that copying preserves the tag
+
+    old_tag = tag
+
+    res1_new = pt.transform.map_and_copy(res1, lambda x: x)
+
+    created_tag = frozenset({tag
+                         for tag in res1_new.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    assert old_tag == tag
+
+    # }}}
+
 
 def test_pickling_and_unpickling_is_equal():
     from testlib import RandomDAGContext, make_random_dag
