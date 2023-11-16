@@ -173,7 +173,7 @@ class FunctionDefinition(Taggable):
 
         if self.parameters != frozenset(kwargs):
             missing_params = self.parameters - frozenset(kwargs)
-            extra_params = self.parameters - frozenset(kwargs)
+            extra_params = frozenset(kwargs) - self.parameters
 
             raise TypeError(
                     "Incorrect arguments."
