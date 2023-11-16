@@ -508,12 +508,10 @@ class _LocalSendRecvDepGatherer(
 
         return frozenset({recv_id})
 
-    @memoize_method
-    def map_function_definition(
-            self, expr: FunctionDefinition
-            ) -> FrozenSet[CommunicationOpIdentifier]:
-        # Assume no communication in the function body
-        return frozenset()
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> FrozenSet[CommunicationOpIdentifier]:
+        raise NotImplementedError(
+            "LocalSendRecvDepGatherer does not support functions.")
 
 # }}}
 
