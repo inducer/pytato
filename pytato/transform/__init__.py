@@ -1263,11 +1263,11 @@ class MPMSMaterializerAccumulator:
     contains the set of materialized predecessors and the rewritten expression
     (i.e. the expression with tags for materialization applied).
     """
-    materialized_predecessors: FrozenSet[ArrayOrNames]
-    expr: ArrayOrNames
+    materialized_predecessors: FrozenSet[Array]
+    expr: Array
 
 
-def _materialize_if_mpms(expr: ArrayOrNames,
+def _materialize_if_mpms(expr: Array,
                          nsuccessors: int,
                          predecessors: Iterable[MPMSMaterializerAccumulator]
                          ) -> MPMSMaterializerAccumulator:
@@ -1278,7 +1278,7 @@ def _materialize_if_mpms(expr: ArrayOrNames,
     """
     from functools import reduce
 
-    materialized_predecessors: FrozenSet[ArrayOrNames] = reduce(
+    materialized_predecessors: FrozenSet[Array] = reduce(
                                                     frozenset.union,
                                                     (pred.materialized_predecessors
                                                      for pred in predecessors),
@@ -1448,51 +1448,9 @@ class MPMSMaterializer(Mapper):
                              ) -> MPMSMaterializerAccumulator:
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
-    # Function definitions don't have predecessors, so we don't need to return
-    # a MPMSMaterializerAccumulator
-    @memoize_method
-    def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FunctionDefinition:
-        # spawn a new traversal here.
-        from pytato.analysis import get_nusers
-
-        returns_dict_of_named_arys = DictOfNamedArrays(expr.returns)
-        func_nsuccessors = get_nusers(returns_dict_of_named_arys)
-        new_mapper = MPMSMaterializer(func_nsuccessors)
-        new_returns = {
-            name: new_mapper(ret).expr
-            for name, ret in expr.returns.items()}
-        return attrs.evolve(expr, returns=immutabledict(new_returns))
-
-    def map_call(self, expr: Call) -> MPMSMaterializerAccumulator:
-        children_rec = {bnd_name: self.rec(bnd)
-                        for bnd_name, bnd in sorted(expr.bindings.items())}
-        new_expr = Call(
-            self.map_function_definition(expr.function),
-            immutabledict({
-                bnd_name: bnd.expr
-                for bnd_name, bnd in sorted(children_rec.items())}),
-            tags=expr.tags)
-        return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
-                                    children_rec.values())
-
     def map_named_call_result(self, expr: NamedCallResult
                               ) -> MPMSMaterializerAccumulator:
-        assert isinstance(expr._container, Call)
-        call_result = self.rec(expr._container)
-        new_call = call_result.expr
-        new_result = new_call[expr.name]
-
-        assert isinstance(new_result, NamedCallResult)
-        assert isinstance(new_result._container, Call)
-
-        # do not use _materialize_if_mpms as tagging a NamedArray is illegal.
-        if new_call.tags_of_type(ImplStored):
-            materialized_predecessors = frozenset([new_result])
-        else:
-            materialized_predecessors = call_result.materialized_predecessors
-
-        return MPMSMaterializerAccumulator(materialized_predecessors, new_result)
+        raise NotImplementedError("MPMSMaterializer does not support functions.")
 
 # }}}
 
