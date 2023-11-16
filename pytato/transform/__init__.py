@@ -1263,8 +1263,8 @@ def _materialize_if_mpms(expr: Array,
                          ) -> MPMSMaterializerAccumulator:
     """
     Returns an instance of :class:`MPMSMaterializerAccumulator`, that
-    materializes *expr* if it has more than 1 successors and more than 1
-    materialized predecessors.
+    materializes *expr* if it has more than 1 successor and more than 1
+    materialized predecessor.
     """
     from functools import reduce
 
@@ -1539,8 +1539,8 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     .. note::
 
         - MPMS materialization strategy is a greedy materialization algorithm in
-          which any node with more than 1 materialized predecessors and more than
-          1 successors is materialized.
+          which any node with more than 1 materialized predecessor and more than
+          1 successor is materialized.
         - Materializing here corresponds to tagging a node with
           :class:`~pytato.tags.ImplStored`.
         - Does not attempt to materialize sub-expressions in
