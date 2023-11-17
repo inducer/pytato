@@ -118,12 +118,6 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         # Would need to sync bound_arguments/var_name_gen from clones
         raise NotImplementedError("CodeGenPreprocessor does not support functions.")
 
-    def update_from_callee_clone(
-            self: _SelfMapper, function: FunctionDefinition,
-            callee_clone: _SelfMapper) -> None:
-        # Would need to sync bound_arguments/var_name_gen from clones
-        raise NotImplementedError("CodeGenPreprocessor does not support functions.")
-
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
