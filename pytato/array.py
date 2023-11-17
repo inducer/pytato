@@ -145,11 +145,12 @@ Internal API
 .. autoclass:: EinsumReductionAxis
 .. autoclass:: NormalizedSlice
 
-Internal classes for traceback
-------------------------------
+Traceback functionality
+-----------------------
 
 Please consider these undocumented and subject to change at any time.
 
+.. autofunction:: enable_traceback_tag
 .. class:: _PytatoFrameSummary
 .. class:: _PytatoStackSummary
 
@@ -1838,11 +1839,20 @@ class _PytatoStackSummary:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
+_ENABLE_TRACEBACK_TAG = False
+
+
+def enable_traceback_tag(enable: bool = True) -> None:
+    """Enable or disable the traceback tag."""
+    global _ENABLE_TRACEBACK_TAG
+    _ENABLE_TRACEBACK_TAG = enable
+
+
 def _get_created_at_tag() -> Optional[Tag]:
     import traceback
     from pytato.tags import CreatedAt
 
-    if not __debug__:
+    if not _ENABLE_TRACEBACK_TAG:
         return None
 
     frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)

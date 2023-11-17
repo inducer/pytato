@@ -798,6 +798,8 @@ def test_einsum_dot_axes_has_correct_dim():
 
 
 def test_created_at():
+    pt.enable_traceback_tag()
+
     a = pt.make_placeholder("a", (10, 10), "float64")
     b = pt.make_placeholder("b", (10, 10), "float64")
 
@@ -891,6 +893,20 @@ def test_created_at():
     tag, = created_tag
 
     assert old_tag == tag
+
+    # }}}
+
+    # {{{ Test disabling traceback creation
+
+    pt.enable_traceback_tag(False)
+
+    a = pt.make_placeholder("a", (10, 10), "float64")
+
+    created_tag = frozenset({tag
+                         for tag in a.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 0
 
     # }}}
 
