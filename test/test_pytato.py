@@ -812,15 +812,20 @@ def test_created_at():
     # CreatedAt tags.
     res3 = a+b; res4 = a+b  # noqa: E702
 
-    # {{{ Check that CreatedAt tags are handled correctly for equality
+    # {{{ Check that CreatedAt tags are handled correctly for equality/hashing
 
     assert res1 == res2 == res3 == res4
+    assert hash(res1) == hash(res2) == hash(res3) == hash(res4)
 
     assert res1.non_equality_tags != res2.non_equality_tags
     assert res3.non_equality_tags == res4.non_equality_tags
 
-    assert res1.tags == res2.tags
-    assert res3.tags == res4.tags
+    assert hash(res1.non_equality_tags) != hash(res2.non_equality_tags)
+    assert hash(res3.non_equality_tags) == hash(res4.non_equality_tags)
+
+    assert res1.tags == res2.tags == res3.tags == res4.tags
+
+    assert hash(res1.tags) == hash(res2.tags) == hash(res3.tags) == hash(res4.tags)
 
     # }}}
 
