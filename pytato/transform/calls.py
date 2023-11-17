@@ -74,9 +74,12 @@ class Inliner(CopyMapper):
             return new_expr
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
-        new_call = self.rec(expr._container)
-        assert isinstance(new_call, AbstractResultWithNamedArrays)
-        return new_call[expr.name].expr
+        new_call_or_inlined_expr = self.rec(expr._container)
+        assert isinstance(new_call_or_inlined_expr, AbstractResultWithNamedArrays)
+        if isinstance(new_call_or_inlined_expr, Call):
+            return new_call_or_inlined_expr[expr.name]
+        else:
+            return new_call_or_inlined_expr[expr.name].expr
 
 
 class InlineMarker(CopyMapper):
