@@ -449,12 +449,12 @@ def test_array_dot_repr():
     x = pt.make_placeholder("x", (10, 4), np.int64)
     y = pt.make_placeholder("y", (10, 4), np.int64)
 
-    def _assert_repr(ary: pt.Array, expected_repr: str):
+    def _assert_stripped_repr(ary: pt.Array, expected_repr: str):
         expected_str = "".join([c for c in expected_repr if c not in [" ", "\n"]])
         result_str = "".join([c for c in repr(ary)if c not in [" ", "\n"]])
         assert expected_str == result_str
 
-    _assert_repr(
+    _assert_stripped_repr(
         3*x + 4*y,
         """
 IndexLambda(
@@ -483,7 +483,7 @@ IndexLambda(
                                                                 dtype='int64',
                                                                 name='y')})})""")
 
-    _assert_repr(
+    _assert_stripped_repr(
         pt.roll(x.reshape(2, 20).reshape(-1), 3),
         """
 Roll(
@@ -495,7 +495,7 @@ Roll(
                   newshape=(40),
                   order='C'),
     shift=3, axis=0)""")
-    _assert_repr(y * pt.not_equal(x, 3),
+    _assert_stripped_repr(y * pt.not_equal(x, 3),
                           """
 IndexLambda(
     shape=(10, 4),
@@ -515,7 +515,7 @@ IndexLambda(
                   bindings={'_in0': Placeholder(shape=(10, 4),
                                                 dtype='int64',
                                                 name='x')})})""")
-    _assert_repr(
+    _assert_stripped_repr(
         x[y[:, 2:3], x[2, :]],
         """
 AdvancedIndexInContiguousAxes(
@@ -530,7 +530,7 @@ AdvancedIndexInContiguousAxes(
                                           name='x'),
                         indices=(2, NormalizedSlice(start=0, stop=4, step=1)))))""")
 
-    _assert_repr(
+    _assert_stripped_repr(
         pt.stack([x[y[:, 2:3], x[2, :]].T, y[x[:, 2:3], y[2, :]].T]),
         """
 Stack(
@@ -819,12 +819,10 @@ def test_created_at():
 
     assert res1.non_equality_tags != res2.non_equality_tags
     assert res3.non_equality_tags == res4.non_equality_tags
-
     assert hash(res1.non_equality_tags) != hash(res2.non_equality_tags)
     assert hash(res3.non_equality_tags) == hash(res4.non_equality_tags)
 
     assert res1.tags == res2.tags == res3.tags == res4.tags
-
     assert hash(res1.tags) == hash(res2.tags) == hash(res3.tags) == hash(res4.tags)
 
     # }}}

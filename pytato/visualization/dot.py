@@ -190,7 +190,6 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         for field in attrs.fields(type(expr)):  # type: ignore[misc]
             if field.name in info.fields:
                 continue
-
             attr = getattr(expr, field.name)
 
             if isinstance(attr, Array):
