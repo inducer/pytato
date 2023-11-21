@@ -74,7 +74,7 @@ IntegralT = Union[int, np.integer[Any]]
 BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[np.number[Any], int, np.bool_, bool, float]
+ScalarType = Union[np.number[Any], int, np.bool_, bool, float, complex]
 
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
