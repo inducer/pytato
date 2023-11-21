@@ -526,7 +526,7 @@ class Array(Taggable):
     __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
     def _binary_op(self,
-            op: Any,
+            op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
             other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
