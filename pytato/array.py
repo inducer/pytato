@@ -2530,7 +2530,8 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     elif a.ndim == b.ndim == 2:
         return a @ b
     elif a.ndim == 0 or b.ndim == 0:
-        return a * b
+        # https://github.com/python/mypy/issues/16499
+        return a * b  # type: ignore[no-any-return]
     elif b.ndim == 1:
         return pt.sum(a * b, axis=(a.ndim - 1))
     else:
