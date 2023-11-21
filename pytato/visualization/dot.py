@@ -144,11 +144,11 @@ class DotEmitter:
 @attrs.define
 class _DotNodeInfo:
     title: str
-    fields: Dict[str, str]
+    fields: Dict[str, Any]
     edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]]
 
 
-def stringify_tags(tags: FrozenSet[Tag]) -> str:
+def stringify_tags(tags: FrozenSet[Optional[Tag]]) -> str:
     components = sorted(str(elem) for elem in tags)
     return "{" + ", ".join(components) + "}"
 
@@ -373,14 +373,16 @@ def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
     return "<unknown>"
 
 
-def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, str],
+def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
         dot_node_id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
     rows = [f"<tr><td colspan='2' {td_attrib}>{dot_escape(title)}</td></tr>"]
 
-    non_equality_tags = fields.pop("non_equality_tags", frozenset())
+    non_equality_tags: FrozenSet[Any] = fields.pop("non_equality_tags", frozenset())
+
+    print(non_equality_tags)
     tooltip = dot_escape_leave_space(_stringify_created_at(non_equality_tags))
 
     for name, field in fields.items():
