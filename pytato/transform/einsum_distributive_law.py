@@ -195,25 +195,31 @@ class EinsumDistributiveLawMapper(Mapper):
                 assert (isinstance(hlo.x1, Array)
                         and isinstance(hlo.x2, Array)
                         and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
-                return self.rec(hlo.x1, ctx) + self.rec(hlo.x2, ctx)
+                # https://github.com/python/mypy/issues/16499
+                return self.rec(hlo.x1, ctx) + self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
             elif hlo.binary_op == BinaryOpType.SUB:
                 assert (isinstance(hlo.x1, Array)
                         and isinstance(hlo.x2, Array)
                         and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
                 assert are_shapes_equal(hlo.x1.shape, hlo.x2.shape)
-                return self.rec(hlo.x1, ctx) - self.rec(hlo.x2, ctx)
+                # https://github.com/python/mypy/issues/16499
+                return self.rec(hlo.x1, ctx) - self.rec(hlo.x2, ctx)  # type: ignore[no-any-return] # noqa: E501
             elif hlo.binary_op == BinaryOpType.MULT:
                 if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
-                    return self.rec(hlo.x1, ctx) * hlo.x2
+                    # https://github.com/python/mypy/issues/16499
+                    return self.rec(hlo.x1, ctx) * hlo.x2  # type: ignore[no-any-return]  # noqa: E501
                 else:
                     assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
-                    return hlo.x1 * self.rec(hlo.x2, ctx)
+                    # https://github.com/python/mypy/issues/16499
+                    return hlo.x1 * self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
             elif hlo.binary_op == BinaryOpType.TRUEDIV:
                 if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
-                    return self.rec(hlo.x1, ctx) / hlo.x2
+                    # https://github.com/python/mypy/issues/16499
+                    return self.rec(hlo.x1, ctx) / hlo.x2  # type: ignore[no-any-return]  # noqa: E501
                 else:
                     assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
-                    return hlo.x1 / self.rec(hlo.x2, ctx)
+                    # https://github.com/python/mypy/issues/16499
+                    return hlo.x1 / self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
             else:
                 raise NotImplementedError(hlo)
         else:
