@@ -169,8 +169,7 @@ class Reprifier(Mapper):
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                    # type-ignore-reason: https://github.com/python/mypy/issues/16254
-                        for field in attrs.fields(type(expr)))  # type: ignore[misc]
+                        for field in attrs.fields(type(expr)))
                 + ")")
 
     def map_call(self, expr: Call, depth: int) -> str:
