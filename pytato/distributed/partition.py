@@ -336,10 +336,6 @@ class _DistributedInputReplacer(CopyMapper):
         # the ones who are supposed to compute it!
         if expr not in self.output_arrays:
 
-            name = self.recvd_ary_to_name.get(expr)
-            if name is not None:
-                return self._get_placeholder_for(name, expr)
-
             name = self.sptpo_ary_to_name.get(expr)
             if name is not None:
                 return self._get_placeholder_for(name, expr)
