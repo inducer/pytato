@@ -33,7 +33,7 @@ import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable)
+                    Hashable, cast)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -238,7 +238,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     """
     if TYPE_CHECKING:
         def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return super().rec(expr)
+            return cast(CopyMapperResultT, super().rec(expr))
 
         def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
