@@ -70,11 +70,12 @@ __doc__ = """
 
 # {{{ scalar expressions
 
-IntegralT = Union[int, np.integer]
+IntegralT = Union[int, np.integer[Any]]
 BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[np.number, int, np.bool_, bool, float]
+ScalarType = Union[np.number[Any], int, np.bool_, bool, float]
+
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
