@@ -540,7 +540,7 @@ class Array(Taggable):
     __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
     def _binary_op(self,
-            op: Any,
+            op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
             other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
@@ -2653,7 +2653,8 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     elif a.ndim == b.ndim == 2:
         return a @ b
     elif a.ndim == 0 or b.ndim == 0:
-        return a * b
+        # https://github.com/python/mypy/issues/16499
+        return a * b  # type: ignore[no-any-return]
     elif b.ndim == 1:
         return pt.sum(a * b, axis=(a.ndim - 1))
     else:

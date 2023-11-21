@@ -336,10 +336,6 @@ class _DistributedInputReplacer(CopyMapper):
         # the ones who are supposed to compute it!
         if expr not in self.output_arrays:
 
-            name = self.recvd_ary_to_name.get(expr)
-            if name is not None:
-                return self._get_placeholder_for(name, expr)
-
             name = self.sptpo_ary_to_name.get(expr)
             if name is not None:
                 return self._get_placeholder_for(name, expr)
@@ -608,12 +604,10 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         super().__init__()
         self.materialized_arrays: _OrderedSet[Array] = _OrderedSet()
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
 

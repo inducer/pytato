@@ -59,8 +59,7 @@ class Reprifier(Mapper):
 
         self._cache: Dict[Tuple[int, int], str] = {}
 
-    # type-ignore-reason: incompatible with super class
-    def rec(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
         try:
             return self._cache[cache_key]
@@ -69,12 +68,10 @@ class Reprifier(Mapper):
             self._cache[cache_key] = result
             return result  # type: ignore[no-any-return]
 
-    # type-ignore-reason: incompatible with super class
-    def __call__(self, expr: Any, depth: int = 0) -> str:  # type: ignore[override]
+    def __call__(self, expr: Any, depth: int = 0) -> str:
         return self.rec(expr, depth)
 
-    # type-ignore-reason: incompatible with super class
-    def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
         elif isinstance(expr, (dict, immutabledict)):
@@ -95,9 +92,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        # type-ignore-reason: https://github.com/python/mypy/issues/16254
-        fields = tuple(field.name
-                       for field in attrs.fields(type(expr)))  # type: ignore[misc]
+        fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         fields = tuple(field for field in fields if field != "non_equality_tags")
 
@@ -157,8 +152,7 @@ class Reprifier(Mapper):
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                    # type-ignore-reason: https://github.com/python/mypy/issues/16254
-                        for field in attrs.fields(type(expr)))  # type: ignore[misc]
+                        for field in attrs.fields(type(expr)))
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:

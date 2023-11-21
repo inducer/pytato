@@ -175,8 +175,7 @@ class AxesTagsEquationCollector(Mapper):
 
     # {{{ mapper interface
 
-    # type-ignore reason: signature not compatible with Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> None:
         if expr in self._visited_nodes:
             return
 
@@ -595,8 +594,7 @@ class AxisTagAttacher(CopyMapper):
         self.axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
-    # type-ignore reason: overrides the type of Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> Any:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> Any:
         if isinstance(expr, (AbstractResultWithNamedArrays,
                              DistributedSendRefHolder)):
             return super().rec(expr)

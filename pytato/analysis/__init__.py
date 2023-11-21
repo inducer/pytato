@@ -377,12 +377,10 @@ class NodeCountMapper(CachedWalkMapper):
         super().__init__()
         self.count = 0
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         self.count += 1
 
 
@@ -416,8 +414,7 @@ class CallSiteCountMapper(CachedWalkMapper):
         super().__init__()
         self.count = 0
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
     @memoize_method
@@ -434,8 +431,7 @@ class CallSiteCountMapper(CachedWalkMapper):
 
         self.post_visit(expr, *args, **kwargs)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):
             self.count += 1
 
