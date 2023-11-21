@@ -382,7 +382,6 @@ def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
 
     non_equality_tags: FrozenSet[Any] = fields.pop("non_equality_tags", frozenset())
 
-    print(non_equality_tags)
     tooltip = dot_escape_leave_space(_stringify_created_at(non_equality_tags))
 
     for name, field in fields.items():

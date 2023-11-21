@@ -64,7 +64,8 @@ from pytools.tag import Taggable, Tag
 
 from pytato.array import (
         Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
-        _get_default_axes, ConvertibleToShape, normalize_shape)
+        _get_default_axes, ConvertibleToShape, normalize_shape,
+        _get_created_at_tag)
 
 CommTagType = Hashable
 
@@ -170,13 +171,15 @@ class DistributedSendRefHolder(Array):
         send = kwargs.pop("send", self.send)
         passthrough_data = kwargs.pop("passthrough_data", self.passthrough_data)
         tags = kwargs.pop("tags", self.tags)
+        non_equality_tags = kwargs.pop("non_equality_tags", self.non_equality_tags)
 
         if kwargs:
             raise ValueError("Cannot assign"
                              f" DistributedSendRefHolder.'{set(kwargs)}'")
         return DistributedSendRefHolder(send,
                                         passthrough_data,
-                                        tags)
+                                        tags,
+                                        non_equality_tags)
 
 # }}}
 
@@ -238,7 +241,8 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
     return DistributedSendRefHolder(
             send=DistributedSend(data=sent_data, dest_rank=dest_rank,
                                  comm_tag=comm_tag, tags=send_tags),
-            passthrough_data=stapled_to, tags=ref_holder_tags)
+            passthrough_data=stapled_to, tags=ref_holder_tags,
+            non_equality_tags=frozenset({_get_created_at_tag()}))
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
@@ -255,7 +259,8 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
     dtype = np.dtype(dtype)
     return DistributedRecv(
             src_rank=src_rank, comm_tag=comm_tag, shape=shape, dtype=dtype,
-            tags=tags, axes=axes)
+            tags=tags, axes=axes,
+            non_equality_tags=frozenset({_get_created_at_tag()}))
 
 # }}}
 

@@ -1091,6 +1091,7 @@ class Einsum(Array):
                             (new_redn_axis_to_redn_descr),
                           tags=self.tags,
                           index_to_access_descr=self.index_to_access_descr,
+                          non_equality_tags=self.non_equality_tags,
                           )
 
 
@@ -1297,6 +1298,7 @@ def einsum(subscripts: str, *operands: Array,
                                          ),
                   redn_axis_to_redn_descr=immutabledict(redn_axis_to_redn_descr),
                   index_to_access_descr=index_to_descr,
+                  non_equality_tags=frozenset({_get_created_at_tag()}),
                   )
 
 # }}}
@@ -1825,11 +1827,12 @@ class _PytatoStackSummary:
     def short_str(self, maxlen: int = 100) -> str:
         from os.path import dirname
 
-        # Find the first file in the frames that is not in pytato's pytato/
-        # directory.
+        # Find the first file in the frames that is not in pytato's internal
+        # directories.
         for frame in reversed(self.frames):
             frame_dir = dirname(frame.filename)
-            if not frame_dir.endswith("pytato"):
+            if (not frame_dir.endswith("pytato")
+                    and not frame_dir.endswith("pytato/distributed")):
                 return frame.short_str(maxlen)
 
         # Fallback in case we don't find any file that is not in the pytato/
