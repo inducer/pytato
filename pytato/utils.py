@@ -220,6 +220,7 @@ class ShapeExpressionMapper(Mapper):
     Mapper that takes a shape component and returns it as a scalar expression.
     """
     def __init__(self, var_name_gen: UniqueNameGenerator):
+        super().__init__()
         self.cache: Dict[Array, ScalarExpression] = {}
         self.var_name_gen = var_name_gen
         self.bindings: Dict[str, SizeParam] = {}
@@ -322,6 +323,7 @@ class ShapeToISLExpressionMapper(Mapper):
     Mapper that takes a shape component and returns it as :class:`isl.Aff`.
     """
     def __init__(self, space: isl.Space):
+        super().__init__()
         self.cache: Dict[Array, isl.Aff] = {}
         self.space = space
 

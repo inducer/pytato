@@ -30,6 +30,7 @@ from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
                           make_dict_of_named_arrays)
 
+from pytato.function import NamedCallResult
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 from pytato.scalar_expr import IntegralScalarExpression
@@ -112,9 +113,6 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         self.target = target
         self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
 
-    def clone_for_callee(self) -> CodeGenPreprocessor:
-        return CodeGenPreprocessor(self.target, self.kernels_seen)
-
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
@@ -195,6 +193,9 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                 dtype=expr.dtype,
                 axes=expr.axes,
                 tags=expr.tags)
+
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError("CodeGenPreprocessor does not support functions.")
 
 # }}}
 
