@@ -86,6 +86,8 @@ from pytato.distributed.nodes import (
 from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
 
+from pytato.function import FunctionDefinition, NamedCallResult
+
 if TYPE_CHECKING:
     import mpi4py.MPI
 
@@ -291,6 +293,12 @@ class _DistributedInputReplacer(CopyMapper):
         self.user_input_names: Set[str] = set()
         self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
+    def clone_for_callee(
+            self, function: FunctionDefinition) -> _DistributedInputReplacer:
+        # Function definitions aren't allowed to contain receives,
+        # stored arrays promoted to part outputs, or part outputs
+        return type(self)({}, {}, {})
+
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
         return expr
@@ -323,8 +331,6 @@ class _DistributedInputReplacer(CopyMapper):
 
     # type ignore because no args, kwargs
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
-        assert isinstance(expr, Array)
-
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -334,7 +340,7 @@ class _DistributedInputReplacer(CopyMapper):
         # If the array is an output from the current part, it would
         # be counterproductive to turn it into a placeholder: we're
         # the ones who are supposed to compute it!
-        if expr not in self.output_arrays:
+        if isinstance(expr, Array) and expr not in self.output_arrays:
 
             name = self.sptpo_ary_to_name.get(expr)
             if name is not None:
@@ -501,6 +507,11 @@ class _LocalSendRecvDepGatherer(
         self.local_recv_id_to_recv_node[recv_id] = expr
 
         return frozenset({recv_id})
+
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> FrozenSet[CommunicationOpIdentifier]:
+        raise NotImplementedError(
+            "LocalSendRecvDepGatherer does not support functions.")
 
 # }}}
 

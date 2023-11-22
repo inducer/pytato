@@ -26,10 +26,13 @@ THE SOFTWARE.
 
 import numpy as np
 
+from pytools import memoize_method
+
 from typing import Any, Dict, Tuple, cast
 from pytato.transform import Mapper
 from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
                           IndexLambda, ReductionDescriptor)
+from pytato.function import FunctionDefinition, Call
 from pytato.loopy import LoopyCall
 from immutabledict import immutabledict
 import attrs
@@ -151,6 +154,38 @@ class Reprifier(Mapper):
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
                         for field in attrs.fields(type(expr)))
+                + ")")
+
+    @memoize_method
+    def map_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "returns":
+                return self.rec(getattr(expr, field), depth+1)
+            else:
+                return repr(getattr(expr, field))
+
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                        for field in attrs.fields(type(expr)))
+                + ")")
+
+    def map_call(self, expr: Call, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "function":
+                return self.map_function_definition(expr.function, depth+1)
+            else:
+                return self.rec(getattr(expr, field), depth+1)
+
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field}={_get_field_val(field)}"
+                            for field in ["function",
+                                          "bindings"])
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:
