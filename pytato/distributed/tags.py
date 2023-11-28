@@ -62,10 +62,6 @@ def number_distributed_tags(
 
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
-
-    .. note::
-
-        This function requires that symbolic tags are comparable.
     """
     tags = frozenset({
             recv.comm_tag
