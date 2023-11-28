@@ -62,10 +62,6 @@ def number_distributed_tags(
 
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
-
-    .. note::
-
-        This function requires that symbolic tags are comparable.
     """
     tags = frozenset({
             recv.comm_tag
@@ -106,7 +102,7 @@ def number_distributed_tags(
         next_tag = base_tag
         assert isinstance(all_tags, frozenset)
 
-        for sym_tag in sorted(all_tags):
+        for sym_tag in all_tags:
             sym_tag_to_int_tag[sym_tag] = next_tag
             next_tag += 1
 
