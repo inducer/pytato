@@ -26,10 +26,13 @@ THE SOFTWARE.
 
 import numpy as np
 
+from pytools import memoize_method
+
 from typing import Any, Dict, Tuple, cast
 from pytato.transform import Mapper
 from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
                           IndexLambda, ReductionDescriptor)
+from pytato.function import FunctionDefinition, Call
 from pytato.loopy import LoopyCall
 from immutabledict import immutabledict
 import attrs
@@ -59,8 +62,7 @@ class Reprifier(Mapper):
 
         self._cache: Dict[Tuple[int, int], str] = {}
 
-    # type-ignore-reason: incompatible with super class
-    def rec(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
         try:
             return self._cache[cache_key]
@@ -69,12 +71,10 @@ class Reprifier(Mapper):
             self._cache[cache_key] = result
             return result  # type: ignore[no-any-return]
 
-    # type-ignore-reason: incompatible with super class
-    def __call__(self, expr: Any, depth: int = 0) -> str:  # type: ignore[override]
+    def __call__(self, expr: Any, depth: int = 0) -> str:
         return self.rec(expr, depth)
 
-    # type-ignore-reason: incompatible with super class
-    def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
         elif isinstance(expr, (dict, immutabledict)):
@@ -95,9 +95,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        # type-ignore-reason: https://github.com/python/mypy/issues/16254
-        fields = tuple(field.name
-                       for field in attrs.fields(type(expr)))  # type: ignore[misc]
+        fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
@@ -155,8 +153,39 @@ class Reprifier(Mapper):
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                    # type-ignore-reason: https://github.com/python/mypy/issues/16254
-                        for field in attrs.fields(type(expr)))  # type: ignore[misc]
+                        for field in attrs.fields(type(expr)))
+                + ")")
+
+    @memoize_method
+    def map_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "returns":
+                return self.rec(getattr(expr, field), depth+1)
+            else:
+                return repr(getattr(expr, field))
+
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                        for field in attrs.fields(type(expr)))
+                + ")")
+
+    def map_call(self, expr: Call, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "function":
+                return self.map_function_definition(expr.function, depth+1)
+            else:
+                return self.rec(getattr(expr, field), depth+1)
+
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field}={_get_field_val(field)}"
+                            for field in ["function",
+                                          "bindings"])
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:

@@ -852,6 +852,48 @@ def _do_verify_distributed_partition(ctx_factory):
 # }}}
 
 
+# {{{ test symbolic tag numbering with bare classes
+
+class FooTag1:
+    pass
+
+
+class FooTag2:
+    pass
+
+
+def test_number_symbolic_tags_bare_classes(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    from pytato.distributed.nodes import (staple_distributed_send,
+                make_distributed_recv)
+
+    rank = 0
+    size = 2
+
+    x = pt.make_placeholder("x", (4, 4), int)
+    y = pt.make_placeholder("y", (4, 4), int)
+
+    r1 = staple_distributed_send(x, dest_rank=(rank-1) % size,
+            comm_tag=FooTag1, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=FooTag1, shape=(4, 4),
+                dtype=int))
+
+    r2 = staple_distributed_send(y, dest_rank=(rank-1) % size,
+            comm_tag=FooTag2, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=FooTag2, shape=(4, 4),
+                dtype=int))
+
+    res = r1 + r2
+
+    outputs = pt.make_dict_of_named_arrays({"out": res})
+    partition = pt.find_distributed_partition(comm, outputs)
+
+    pt.number_distributed_tags(comm, partition, base_tag=4242)
+
+# }}}
+
+
 if __name__ == "__main__":
     if "RUN_WITHIN_MPI" in os.environ:
         run_test_with_mpi_inner()

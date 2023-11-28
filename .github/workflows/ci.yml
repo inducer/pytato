@@ -77,7 +77,7 @@ jobs:
                 . ci-support-v0
                 build_py_project_in_conda_env
                 pip install pytest  # for advection.py
-                run_examples
+                run_examples --no-require-main
 
     docs:
         name: Documentation

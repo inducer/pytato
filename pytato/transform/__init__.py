@@ -28,12 +28,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import attrs
 import logging
 import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable)
+                    Hashable, cast)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -201,13 +202,13 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._cache: Dict[Hashable, CachedMapperT] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
         return expr
 
-    # type-ignore-reason: incompatible with super class
-    def rec(self, expr: ArrayOrNames) -> CachedMapperT:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> CachedMapperT:
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -218,9 +219,7 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
             return result  # type: ignore[no-any-return]
 
     if TYPE_CHECKING:
-        # type-ignore-reason: incompatible with super class
-        def __call__(self, expr: ArrayOrNames  # type: ignore[override]
-                     ) -> CachedMapperT:
+        def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
             return self.rec(expr)
 
 # }}}
@@ -240,18 +239,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
     if TYPE_CHECKING:
-        # type-ignore-reason: specialized variant of super-class' rec method
-        def rec(self,  # type: ignore[override]
-                expr: CopyMapperResultT) -> CopyMapperResultT:
-            # type-ignore-reason: CachedMapper.rec's return type is imprecise
-            return super().rec(expr)  # type: ignore[return-value]
+        def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
+            return cast(CopyMapperResultT, super().rec(expr))
 
-        # type-ignore-reason: specialized variant of super-class' rec method
-        def __call__(self,  # type: ignore[override]
-                     expr: CopyMapperResultT) -> CopyMapperResultT:
+        def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
@@ -407,14 +402,10 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                                 expr: FunctionDefinition) -> FunctionDefinition:
         # spawn a new mapper to avoid unsound cache hits, since the namespace of the
         # function's body is different from that of the caller.
-        new_mapper = self.clone_for_callee()
+        new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return FunctionDefinition(expr.parameters,
-                                  expr.return_type,
-                                  immutabledict(new_returns),
-                                  tags=expr.tags
-                                  )
+        return attrs.evolve(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
@@ -438,6 +429,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     arguments to keep the cost of its each call frame low.
     """
     def __init__(self) -> None:
+        super().__init__()
         # type-ignored as '._cache' attribute is not coherent with the base
         # class
         self._cache: Dict[Tuple[ArrayOrNames,
@@ -665,6 +657,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
     .. automethod:: combine
     """
     def __init__(self) -> None:
+        super().__init__()
         self.cache: Dict[ArrayOrNames, CombineT] = {}
 
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
@@ -762,6 +755,7 @@ class CombineMapper(Mapper, Generic[CombineT]):
     def map_distributed_recv(self, expr: DistributedRecv) -> CombineT:
         return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> CombineT:
         raise NotImplementedError("Combining results from a callee expression"
                                   " is context-dependent. Derived classes"
@@ -842,6 +836,7 @@ class DependencyMapper(CombineMapper[R]):
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
@@ -959,7 +954,8 @@ class WalkMapper(Mapper):
     .. automethod:: post_visit
     """
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         return type(self)()
 
     def visit(self, expr: Any, *args: Any, **kwargs: Any) -> bool:
@@ -1119,7 +1115,7 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        new_mapper = self.clone_for_callee()
+        new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
 
@@ -1157,6 +1153,7 @@ class CachedWalkMapper(WalkMapper):
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._visited_nodes: Set[Any] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
@@ -1192,17 +1189,14 @@ class TopoSortMapper(CachedWalkMapper):
         super().__init__()
         self.topological_order: List[Array] = []
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def map_function_definition(self,  # type: ignore[override]
-                                expr: FunctionDefinition) -> None:
+    @memoize_method
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
 
@@ -1221,13 +1215,13 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
-    def clone_for_callee(self: _SelfMapper) -> _SelfMapper:
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         # type-ignore-reason: self.__init__ has a different function signature
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
 
-    # type-ignore-reason:incompatible with Mapper.rec()
-    def rec(self, expr: MappedT) -> MappedT:  # type: ignore[override]
+    def rec(self, expr: MappedT) -> MappedT:
         if expr in self._cache:
             # type-ignore-reason: parametric Mapping types aren't a thing
             return self._cache[expr]  # type: ignore[return-value]
@@ -1238,8 +1232,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
-        # type-ignore-reason: Mapper.__call__ returns Any
-        def __call__(self, expr: MappedT) -> MappedT:  # type: ignore[override]
+        def __call__(self, expr: MappedT) -> MappedT:
             return self.rec(expr)
 
 # }}}
@@ -1263,8 +1256,8 @@ def _materialize_if_mpms(expr: Array,
                          ) -> MPMSMaterializerAccumulator:
     """
     Returns an instance of :class:`MPMSMaterializerAccumulator`, that
-    materializes *expr* if it has more than 1 successors and more than 1
-    materialized predecessors.
+    materializes *expr* if it has more than 1 successor and more than 1
+    materialized predecessor.
     """
     from functools import reduce
 
@@ -1438,51 +1431,9 @@ class MPMSMaterializer(Mapper):
                              ) -> MPMSMaterializerAccumulator:
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
-    @memoize_method
-    def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FunctionDefinition:
-        # spawn a new traversal here.
-        from pytato.analysis import get_nusers
-
-        returns_dict_of_named_arys = DictOfNamedArrays(expr.returns)
-        func_nsuccessors = get_nusers(returns_dict_of_named_arys)
-        new_mapper = MPMSMaterializer(func_nsuccessors)
-        new_returns = {name: new_mapper(ret) for name, ret in expr.returns.items()}
-        return FunctionDefinition(expr.parameters,
-                                  expr.return_type,
-                                  immutabledict(new_returns),
-                                  tags=expr.tags)
-
-    @memoize_method
-    def map_call(self, expr: Call) -> Call:
-        return Call(self.map_function_definition(expr.function),
-                        immutabledict({name: self.rec(bnd).expr
-                             for name, bnd in expr.bindings.items()}),
-                        tags=expr.tags)
-
     def map_named_call_result(self, expr: NamedCallResult
                               ) -> MPMSMaterializerAccumulator:
-        assert isinstance(expr._container, Call)
-        new_call = self.map_call(expr._container)
-        new_result = new_call[expr.name]
-
-        assert isinstance(new_result, NamedCallResult)
-        assert isinstance(new_result._container, Call)
-
-        # do not use _materialize_if_mpms as tagging a NamedArray is illegal.
-        if new_result.tags_of_type(ImplStored):
-            return MPMSMaterializerAccumulator(frozenset([new_result]),
-                                               new_result)
-        else:
-            from functools import reduce
-            materialized_predecessors: FrozenSet[Array] = (
-                reduce(frozenset.union,
-                       (self.rec(bnd).materialized_predecessors
-                        for bnd in new_result._container.bindings.values()),
-                       frozenset())
-            )
-            return MPMSMaterializerAccumulator(materialized_predecessors,
-                                               new_result)
+        raise NotImplementedError("MPMSMaterializer does not support functions.")
 
 # }}}
 
@@ -1539,8 +1490,8 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     .. note::
 
         - MPMS materialization strategy is a greedy materialization algorithm in
-          which any node with more than 1 materialized predecessors and more than
-          1 successors is materialized.
+          which any node with more than 1 materialized predecessor and more than
+          1 successor is materialized.
         - Materializing here corresponds to tagging a node with
           :class:`~pytato.tags.ImplStored`.
         - Does not attempt to materialize sub-expressions in
@@ -1719,6 +1670,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_distributed_recv(self, expr: DistributedRecv) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition, *args: Any
                                 ) -> None:
         raise AssertionError("Control shouldn't reach at this point."

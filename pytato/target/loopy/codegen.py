@@ -352,6 +352,7 @@ class CodeGenMapper(Mapper):
     def __init__(self,
                  array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
                  axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
+        super().__init__()
         self.exprgen_mapper = InlinedExpressionGenMapper(axis_tag_t_to_not_propagate)
         self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
@@ -591,13 +592,13 @@ class CodeGenMapper(Mapper):
         raise NotImplementedError("LoopyTarget does not support outlined calls"
                                   " (yet). As a fallback, the call"
                                   " could be inlined using"
-                                  " pt.mark_all_calls_to_be_inlined.")
+                                  " pt.tag_all_calls_to_be_inlined.")
 
     def map_call(self, expr: Call, state: CodeGenState) -> None:
         raise NotImplementedError("LoopyTarget does not support outlined calls"
                                   " (yet). As a fallback, the call"
                                   " could be inlined using"
-                                  " pt.mark_all_calls_to_be_inlined.")
+                                  " pt.tag_all_calls_to_be_inlined.")
 
 # }}}
 
