@@ -51,9 +51,8 @@ from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
                     Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
 from immutabledict import immutabledict
 from functools import cached_property
-from pytato.array import (Array,  AbstractResultWithNamedArrays,
-                          Placeholder, NamedArray, ShapeType, _dtype_any,
-                          InputArgumentBase)
+from pytato.array import (Array, AbstractResultWithNamedArrays,
+                          Placeholder, NamedArray, ShapeType, _dtype_any)
 from pytools.tag import Tag, Taggable
 
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
@@ -132,19 +131,25 @@ class FunctionDefinition(Taggable):
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
         from pytato.transform import InputGatherer
-        from functools import reduce
 
         mapper = InputGatherer()
 
-        all_input_args: FrozenSet[InputArgumentBase] = reduce(
-            frozenset.union,
-            (mapper(ary) for ary in self.returns.values()),
-            frozenset()
-        )
+        all_placeholders: FrozenSet[Placeholder] = frozenset()
+        for ary in self.returns.values():
+            new_placeholders = frozenset({
+                arg for arg in mapper(ary)
+                if isinstance(arg, Placeholder)})
+            all_placeholders |= new_placeholders
 
-        return immutabledict({input_arg.name: input_arg
-                    for input_arg in all_input_args
-                    if isinstance(input_arg, Placeholder)})
+        # FIXME: Need a way to check for *any* captured arrays, not just placeholders
+        if __debug__:
+            pl_names = frozenset(arg.name for arg in all_placeholders)
+            extra_pl_names = pl_names - self.parameters
+            assert not extra_pl_names, \
+                f"Found non-argument placeholder '{next(iter(extra_pl_names))}' " \
+                "in function definition."
+
+        return immutabledict({arg.name: arg for arg in all_placeholders})
 
     def get_placeholder(self, name: str) -> Placeholder:
         """
@@ -168,7 +173,7 @@ class FunctionDefinition(Taggable):
 
         if self.parameters != frozenset(kwargs):
             missing_params = self.parameters - frozenset(kwargs)
-            extra_params = self.parameters - frozenset(kwargs)
+            extra_params = frozenset(kwargs) - self.parameters
 
             raise TypeError(
                     "Incorrect arguments."

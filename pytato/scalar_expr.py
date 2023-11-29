@@ -70,11 +70,12 @@ __doc__ = """
 
 # {{{ scalar expressions
 
-IntegralT = Union[int, np.integer]
+IntegralT = Union[int, np.integer[Any]]
 BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[np.number, int, np.bool_, bool, float]
+ScalarType = Union[np.number[Any], int, np.bool_, bool, float, complex]
+
 ScalarExpression = Union[ScalarType, prim.Expression]
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
@@ -286,7 +287,7 @@ class InductionVariableCollector(CombineMapper):
         from functools import reduce
         return reduce(frozenset.union, values, frozenset())
 
-    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:  # type: ignore[override]
+    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
