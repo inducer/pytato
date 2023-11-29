@@ -138,12 +138,10 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
         super().__init__()
         self.seen_nodes: Set[ArrayOrNames] = set()
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def visit(self, expr: ArrayOrNames) -> bool:  # type: ignore[override]
+    def visit(self, expr: ArrayOrNames) -> bool:
         super().visit(expr)
         self.seen_nodes.add(expr)
         return True
