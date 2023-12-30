@@ -62,7 +62,7 @@ THE SOFTWARE.
 
 from typing import Any
 
-# These are here to support hold versions of grudge.
+# These are here to support old versions of grudge.
 
 _depr_names = {
         "DistributedGraphPartition",
