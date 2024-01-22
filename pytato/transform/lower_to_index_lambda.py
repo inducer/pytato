@@ -326,7 +326,7 @@ class ToIndexLambdaMixin:
                             idx.shape,
                             (1,)*i_adv_indices[0]+adv_idx_shape))
 
-                    if not idx.tags_of_type(AssumeNonNegative):
+                    if axis_len > 1 and not idx.tags_of_type(AssumeNonNegative):
                         # We define "upper" out-of bounds access to be undefined
                         # behavior.  (numpy raises an exception, too)
                         indirect_idx_expr = indirect_idx_expr % axis_len
