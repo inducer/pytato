@@ -52,6 +52,9 @@ from dataclasses import dataclass
 from pytato.tags import ImplStored
 from pymbolic.mapper.optimize import optimize_mapper
 
+from orderedsets import FrozenOrderedSet as frozenset
+from orderedsets import OrderedSet as set
+
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 MappedT = TypeVar("MappedT",
@@ -1715,12 +1718,12 @@ def _recursively_get_all_users(
         queue = queue[1:]
         result.add(current_node)
         # visit each user only once.
-        users_to_visit = frozenset({user
+        users_to_visit = frozenset([user
                                     for user in direct_users.get(current_node, set())
-                                    if id(user) not in ids_already_noted_to_visit})
+                                    if id(user) not in ids_already_noted_to_visit])
 
-        ids_already_noted_to_visit.update({id(k)
-                                           for k in users_to_visit})
+        ids_already_noted_to_visit.update([id(k)
+                                           for k in users_to_visit])
 
         queue.extend(list(users_to_visit))
 

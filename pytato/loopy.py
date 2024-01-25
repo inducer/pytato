@@ -87,7 +87,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     @property
     def _result_names(self) -> FrozenSet[str]:
-        return frozenset({name
+        return FrozenOrderedSet({name
                           for name, lp_arg in self._entry_kernel.arg_dict.items()
                           if lp_arg.is_output})
 
@@ -121,7 +121,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
                                                           ._entry_kernel
                                                           .arg_dict[name]
                                                           .shape)),
-                               tags=frozenset())
+                               tags=FrozenOrderedSet())
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -264,7 +264,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # }}}
 
-    translation_unit = translation_unit.with_entrypoints(frozenset())
+    translation_unit = translation_unit.with_entrypoints(FrozenOrderedSet())
 
     return LoopyCall(translation_unit, bindings_new, entrypoint,
                      tags=_get_default_tags())
@@ -390,17 +390,17 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     get_size_param_deps = SizeParamGatherer()
 
-    lp_size_params: FrozenSet[str] = reduce(frozenset.union,
+    lp_size_params: FrozenSet[str] = reduce(FrozenOrderedSet.union,
                                             (lpy_get_deps(arg.shape)
                                              for arg in knl.args
                                              if isinstance(arg, ArrayBase)),
-                                            frozenset())
+                                            FrozenOrderedSet())
 
-    pt_size_params: FrozenSet[SizeParam] = reduce(frozenset.union,
+    pt_size_params: FrozenSet[SizeParam] = reduce(FrozenOrderedSet.union,
                                                   (get_size_param_deps(bnd)
                                                    for bnd in bindings.values()
                                                    if isinstance(bnd, Array)),
-                                                  frozenset())
+                                                  FrozenOrderedSet())
 
     # {{{ mappers to map expressions to a global namespace
 

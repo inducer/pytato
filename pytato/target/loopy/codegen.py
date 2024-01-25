@@ -53,6 +53,8 @@ from pytools.tag import Tag
 import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
 import attrs
+from orderedsets import FrozenOrderedSet as frozenset
+from orderedsets import OrderedSet as set
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
@@ -1030,6 +1032,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
 
+
+
     # optimization: remove any ImplStored tags on outputs to avoid redundant
     # store-load operations (see https://github.com/inducer/pytato/issues/415)
     # (This must be done after all the calls have been inlined)
@@ -1055,11 +1059,11 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     from pytato.transform import InputGatherer
     ing = InputGatherer()
 
-    state.var_name_gen.add_names({input_expr.name
+    state.var_name_gen.add_names(frozenset(input_expr.name
             for name in compute_order
             for input_expr in ing(outputs[name].expr)
             if isinstance(input_expr, (Placeholder, SizeParam, DataWrapper))
-            if input_expr.name is not None})
+            if input_expr.name is not None))
 
     state.var_name_gen.add_names(outputs)
 

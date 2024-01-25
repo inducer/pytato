@@ -826,7 +826,7 @@ def find_distributed_partition(
     sent_arrays = FrozenOrderedSet(
         send_node.data for _, send_node in sorted(lsrdg.local_send_id_to_send_node.items()))
 
-    received_arrays = FrozenOrderedSet([recv for _, recv in sorted(lsrdg.local_recv_id_to_recv_node.items())])
+    received_arrays = FrozenOrderedSet(recv for _, recv in sorted(lsrdg.local_recv_id_to_recv_node.items()))
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)

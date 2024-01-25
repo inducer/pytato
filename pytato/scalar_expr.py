@@ -47,6 +47,9 @@ import pymbolic.primitives as prim
 import numpy as np
 import re
 
+from orderedsets import FrozenOrderedSet
+from orderedsets import OrderedSet
+
 if TYPE_CHECKING:
     from pytato.reductions import ReductionOperation
 
@@ -140,7 +143,7 @@ class DependencyMapper(DependencyMapperBase):
     def map_variable(self, expr: prim.Variable) -> Set[prim.Variable]:
         if ((not self.include_idx_lambda_indices)
                 and IDX_LAMBDA_RE.fullmatch(str(expr))):
-            return set()
+            return OrderedSet()
         else:
             return super().map_variable(expr)  # type: ignore
 
@@ -148,7 +151,7 @@ class DependencyMapper(DependencyMapperBase):
             *args: Any, **kwargs: Any) -> Set[prim.Variable]:
         return self.combine([  # type: ignore
             self.rec(expr.inner_expr),
-            set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
+            OrderedSet().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
 
 
 class EvaluationMapper(EvaluationMapperBase):
@@ -197,7 +200,7 @@ def get_dependencies(expression: Any,
     mapper = DependencyMapper(
             composite_leaves=False,
             include_idx_lambda_indices=include_idx_lambda_indices)
-    return frozenset(dep.name for dep in mapper(expression))
+    return FrozenOrderedSet(dep.name for dep in mapper(expression))
 
 
 def substitute(expression: Any,
@@ -225,7 +228,7 @@ def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> An
     return EvaluationMapper(context)(expression)
 
 
-def distribute(expr: Any, parameters: FrozenSet[Any] = frozenset(),
+def distribute(expr: Any, parameters: FrozenSet[Any] = FrozenOrderedSet(),
                commutative: bool = True) -> Any:
     if commutative:
         return DistributeMapper(TermCollector(parameters))(expr)
@@ -285,17 +288,17 @@ class Reduce(ExpressionBase):
 class InductionVariableCollector(CombineMapper):
     def combine(self, values: Iterable[FrozenSet[str]]) -> FrozenSet[str]:
         from functools import reduce
-        return reduce(frozenset.union, values, frozenset())
+        return reduce(FrozenOrderedSet.union, values, FrozenOrderedSet())
 
-    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:
-        return self.combine([frozenset(expr.bounds.keys()),
+    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:  # type: ignore[override]
+        return self.combine([FrozenOrderedSet(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
     def map_algebraic_leaf(self, expr: prim.Expression) -> FrozenSet[str]:
-        return frozenset()
+        return FrozenOrderedSet()
 
     def map_constant(self, expr: Any) -> FrozenSet[str]:
-        return frozenset()
+        return FrozenOrderedSet()
 
 
 def get_reduction_induction_variables(expr: prim.Expression) -> FrozenSet[str]:

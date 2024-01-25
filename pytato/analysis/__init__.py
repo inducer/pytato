@@ -37,7 +37,7 @@ from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 
-from orderedsets import FrozenOrderedSet as frozenset
+from orderedsets import FrozenOrderedSet
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
@@ -309,36 +309,36 @@ class DirectPredecessorsGetter(Mapper):
         We only consider the predecessors of a nodes in a data-flow sense.
     """
     def _get_preds_from_shape(self, shape: ShapeType) -> FrozenSet[Array]:
-        return frozenset({dim for dim in shape if isinstance(dim, Array)})
+        return FrozenOrderedSet([dim for dim in shape if isinstance(dim, Array)])
 
     def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
-        return (frozenset(expr.bindings.values())
+        return (FrozenOrderedSet(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
     def map_stack(self, expr: Stack) -> FrozenSet[Array]:
-        return (frozenset(expr.arrays)
+        return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
     def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
-        return (frozenset(expr.arrays)
+        return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
     def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
-        return (frozenset(expr.args)
+        return (FrozenOrderedSet(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
     def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
         from pytato.loopy import LoopyCallResult, LoopyCall
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
-        return (frozenset(ary
+        return (FrozenOrderedSet(ary
                           for ary in expr._container.bindings.values()
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
     def _map_index_base(self, expr: IndexBase) -> FrozenSet[Array]:
-        return (frozenset([expr.array])
-                | frozenset(idx for idx in expr.indices
+        return (FrozenOrderedSet([expr.array])
+                | FrozenOrderedSet(idx for idx in expr.indices
                             if isinstance(idx, Array))
                 | self._get_preds_from_shape(expr.shape))
 
@@ -348,7 +348,7 @@ class DirectPredecessorsGetter(Mapper):
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
                                   ) -> FrozenSet[Array]:
-        return frozenset([expr.array])
+        return FrozenOrderedSet([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
@@ -367,7 +367,7 @@ class DirectPredecessorsGetter(Mapper):
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
                                         ) -> FrozenSet[Array]:
-        return frozenset([expr.passthrough_data])
+        return FrozenOrderedSet([expr.passthrough_data])
 
     def map_named_call_result(self, expr: NamedCallResult) -> FrozenSet[Array]:
         raise NotImplementedError(
