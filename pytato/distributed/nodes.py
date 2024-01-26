@@ -10,13 +10,10 @@ The following nodes represent communication in the DAG:
 
 These functions aid in creating communication nodes:
 
+.. autofunction:: make_distributed_send
+.. autofunction:: make_distributed_send_ref_holder
 .. autofunction:: staple_distributed_send
 .. autofunction:: make_distributed_recv
-
-For completeness, individual (non-held/"stapled") :class:`DistributedSend` nodes
-can be made via this function:
-
-.. autofunction:: make_distributed_send
 
 Redirections for the documentation tool
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -226,6 +223,16 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
                            tags=send_tags)
 
 
+def make_distributed_send_ref_holder(
+        send: DistributedSend,
+        passthrough_data: Array,
+        tags: FrozenSet[Tag] = frozenset()
+        ) -> DistributedSendRefHolder:
+    """Make a :class:`DistributedSendRefHolder` object."""
+    return DistributedSendRefHolder(
+        send=send, passthrough_data=passthrough_data, tags=tags)
+
+
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
                           stapled_to: Array, *,
                           send_tags: FrozenSet[Tag] = frozenset(),
@@ -233,10 +240,11 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
          DistributedSendRefHolder:
     """Make a :class:`DistributedSend` object wrapped in a
     :class:`DistributedSendRefHolder` object."""
-    return DistributedSendRefHolder(
-            send=DistributedSend(data=sent_data, dest_rank=dest_rank,
-                                 comm_tag=comm_tag, tags=send_tags),
-            passthrough_data=stapled_to, tags=ref_holder_tags)
+    return make_distributed_send_ref_holder(
+        send=DistributedSend(data=sent_data, dest_rank=dest_rank,
+                             comm_tag=comm_tag, tags=send_tags),
+        passthrough_data=stapled_to,
+        tags=ref_holder_tags)
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
