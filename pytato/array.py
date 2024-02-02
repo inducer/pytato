@@ -558,7 +558,7 @@ class Array(Taggable):
         # }}}
 
         tags = _get_default_tags()
-        non_equality_tags = frozenset({_get_created_at_tag(stacklevel=2)})
+        non_equality_tags = frozenset({_get_created_at_tag()})
 
         import pytato.utils as utils
         if reverse:
@@ -590,7 +590,7 @@ class Array(Taggable):
                 bindings=bindings,
                 tags=_get_default_tags(),
                 axes=_get_default_axes(self.ndim),
-                non_equality_tags=frozenset({_get_created_at_tag(stacklevel=2)}),
+                non_equality_tags=frozenset({_get_created_at_tag()}),
                 var_to_reduction_descr=immutabledict())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
