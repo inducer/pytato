@@ -508,7 +508,11 @@ class Array(Taggable):
             slice_spec = (slice_spec,)
 
         from pytato.utils import _index_into
-        return _index_into(self, slice_spec)
+        return _index_into(
+            self,
+            slice_spec,
+            tags=_get_default_tags(),
+            non_equality_tags=frozenset({_get_created_at_tag()}))
 
     @property
     def ndim(self) -> int:
@@ -553,13 +557,20 @@ class Array(Taggable):
 
         # }}}
 
+        tags = _get_default_tags()
+        non_equality_tags = frozenset({_get_created_at_tag(stacklevel=2)})
+
         import pytato.utils as utils
         if reverse:
             result = utils.broadcast_binary_op(other, self, op,
-                                               get_result_type)
+                                               get_result_type,
+                                               tags=tags,
+                                               non_equality_tags=non_equality_tags)
         else:
             result = utils.broadcast_binary_op(self, other, op,
-                                               get_result_type)
+                                               get_result_type,
+                                               tags=tags,
+                                               non_equality_tags=non_equality_tags)
 
         assert isinstance(result, Array)
         return result
@@ -579,6 +590,7 @@ class Array(Taggable):
                 bindings=bindings,
                 tags=_get_default_tags(),
                 axes=_get_default_axes(self.ndim),
+                non_equality_tags=frozenset({_get_created_at_tag(stacklevel=2)}),
                 var_to_reduction_descr=immutabledict())
 
     __mul__ = partialmethod(_binary_op, operator.mul)
@@ -1852,15 +1864,25 @@ def enable_traceback_tag(enable: bool = True) -> None:
     _ENABLE_TRACEBACK_TAG = enable
 
 
-def _get_created_at_tag() -> Optional[Tag]:
+def _get_created_at_tag(stacklevel: int = 1) -> Optional[Tag]:
+    """
+    Get a :class:`CreatedAt` tag storing the stack trace of an array's creation.
+
+    :param stacklevel: the number of stack levels above this call to record as the
+        array creation location
+    """
     import traceback
     from pytato.tags import CreatedAt
 
     if not _ENABLE_TRACEBACK_TAG:
         return None
 
+    # Drop the stack levels corresponding to extract_stack() and any additional
+    # levels specified via stacklevel
+    stack = traceback.extract_stack()[:-(1+stacklevel)]
+
     frames = tuple(_PytatoFrameSummary(s.filename, s.lineno, s.name, s.line)
-                       for s in traceback.extract_stack())
+                       for s in stack)
 
     return CreatedAt(_PytatoStackSummary(frames))
 
@@ -2376,7 +2398,10 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
     # '_compare' returns a bool.
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.Comparison(x, which, y),
-                                     lambda x, y: np.dtype(np.bool_)
+                                     lambda x, y: np.dtype(np.bool_),
+                                     tags=_get_default_tags(),
+                                     non_equality_tags=frozenset({
+                                         _get_created_at_tag(stacklevel=2)}),
                                      )  # type: ignore[return-value]
 
 
@@ -2436,7 +2461,10 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalOr((x, y)),
-                                     lambda x, y: np.dtype(np.bool_)
+                                     lambda x, y: np.dtype(np.bool_),
+                                     tags=_get_default_tags(),
+                                     non_equality_tags=frozenset({
+                                         _get_created_at_tag()}),
                                      )  # type: ignore[return-value]
 
 
@@ -2450,7 +2478,10 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
     import pytato.utils as utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalAnd((x, y)),
-                                     lambda x, y: np.dtype(np.bool_)
+                                     lambda x, y: np.dtype(np.bool_),
+                                     tags=_get_default_tags(),
+                                     non_equality_tags=frozenset({
+                                         _get_created_at_tag()}),
                                      )  # type: ignore[return-value]
 
 

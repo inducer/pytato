@@ -115,7 +115,7 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
                   tuple(sym_args)),
         shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
         tags=_get_default_tags(),
-        non_equality_tags=frozenset({_get_created_at_tag()}),
+        non_equality_tags=frozenset({_get_created_at_tag(stacklevel=2)}),
         axes=_get_default_axes(len(shape)),
         var_to_reduction_descr=immutabledict(),
     )
