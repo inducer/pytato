@@ -36,7 +36,7 @@ from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
-from loopy.tools import LoopyKeyBuilder, PersistentHashWalkMapper
+from loopy.tools import LoopyKeyBuilder
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
