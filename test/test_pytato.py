@@ -1231,26 +1231,41 @@ def test_dot_visualizers():
     # }}}
 
 
-def test_persistent_dict():
+def test_persistent_hashing_and_persistent_dict():
     from pytools.persistent_dict import WriteOncePersistentDict, ReadOnlyEntryError
     from pytato.analysis import PytatoKeyBuilder
+    import shutil
+    import tempfile
 
     axis_len = 5
 
-    pd = WriteOncePersistentDict("test_persistent_dict",
-                                 key_builder=PytatoKeyBuilder(),
-                                 container_dir="./pytest-pdict")
+    try:
+        tmpdir = tempfile.mkdtemp()
 
-    for i in range(100):
-        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
-                axis_len=axis_len, use_numpy=True)
+        pkb = PytatoKeyBuilder()
 
-        dag = make_random_dag(rdagc)
-        pd[dag] = 42
+        pd = WriteOncePersistentDict("test_persistent_dict",
+                                 key_builder=pkb,
+                                 container_dir=tmpdir)
 
-        # Make sure key stays the same
-        with pytest.raises(ReadOnlyEntryError):
+        for i in range(100):
+            rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                    axis_len=axis_len, use_numpy=True)
+
+            dag = make_random_dag(rdagc)
+
+            # Make sure the PytatoKeyBuilder can handle 'dag'
             pd[dag] = 42
+
+            # make sure the key stays the same across invocations
+            if i == 0:
+                assert pkb(dag) == "eaa8ad49c9490cb6f0b61a33c17d0c2fd10fafc6ce02705105cc9c379c91b9c8"
+
+            # Make sure key stays the same
+            with pytest.raises(ReadOnlyEntryError):
+                pd[dag] = 42
+    finally:
+        shutil.rmtree(tmpdir)
 
 
 if __name__ == "__main__":
