@@ -500,6 +500,7 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     update_for_Quotient = update_for_pymbolic_expression  # noqa: N815
     update_for_Power = update_for_pymbolic_expression  # noqa: N815
     update_for_Subscript = update_for_pymbolic_expression  # noqa: N815
+    update_for_Variable = update_for_pymbolic_expression  # noqa: N815
 
 # }}}
 
