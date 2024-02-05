@@ -473,34 +473,28 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     """
 
     def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
-        self.rec(key_hash, hash(key.data.tobytes()))
+        self.rec(key_hash, key.data.tobytes())
 
     def update_for_TaggableCLArray(self, key_hash: Any, key: Any) -> None:
-        self.update_for_ndarray(key_hash, key.get())
+        self.rec(key_hash, key.get())
 
     def update_for_Array(self, key_hash: Any, key: Any) -> None:
         # CL Array
-        self.update_for_ndarray(key_hash, key.get())
+        self.rec(key_hash, key.get())
 
     def update_for_function(self, key_hash: Any, key: Any) -> None:
-        self.rec(key_hash, key.__name__)
+        self.rec(key_hash, key.__module__ + key.__qualname__)
 
-    def update_for_pymbolic_expression(self, key_hash: Any, key: Any) -> None:
-        if key is None:
-            self.update_for_NoneType(key_hash, key)
-        else:
-            PersistentHashWalkMapper(key_hash)(key)
-
-    update_for_Product = update_for_pymbolic_expression  # noqa: N815
-    update_for_Sum = update_for_pymbolic_expression  # noqa: N815
-    update_for_If = update_for_pymbolic_expression  # noqa: N815
-    update_for_LogicalOr = update_for_pymbolic_expression  # noqa: N815
-    update_for_Call = update_for_pymbolic_expression  # noqa: N815
-    update_for_Comparison = update_for_pymbolic_expression  # noqa: N815
-    update_for_Quotient = update_for_pymbolic_expression  # noqa: N815
-    update_for_Power = update_for_pymbolic_expression  # noqa: N815
-    update_for_Subscript = update_for_pymbolic_expression  # noqa: N815
-    update_for_Variable = update_for_pymbolic_expression  # noqa: N815
+    update_for_Product = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_Sum = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_If = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_LogicalOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Call = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_Comparison = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Quotient = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Power = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_Subscript = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Variable = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
 
 # }}}
 
