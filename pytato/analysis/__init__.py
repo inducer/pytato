@@ -485,15 +485,27 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     def update_for_function(self, key_hash: Any, key: Any) -> None:
         self.rec(key_hash, key.__module__ + key.__qualname__)
 
-    update_for_Product = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
-    update_for_Sum = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
-    update_for_If = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
-    update_for_LogicalOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_BitwiseAnd = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_BitwiseNot = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_BitwiseOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_BitwiseXor = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_Call = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_CallWithKwargs = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
     update_for_Comparison = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
-    update_for_Quotient = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_If = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_FloorDiv = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_LeftShift = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_LogicalAnd = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_LogicalNot = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_LogicalOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Lookup = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_Power = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_Product = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_Quotient = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Remainder = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_RightShift = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_Subscript = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
+    update_for_Sum = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
     update_for_Variable = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
 
 # }}}
