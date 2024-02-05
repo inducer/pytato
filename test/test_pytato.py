@@ -1233,7 +1233,7 @@ def test_dot_visualizers():
 
 # {{{ Test PytatoKeyBuilder
 
-def run_test_with_new_python_invocation(f, *args, extra_env_vars = None) -> None:
+def run_test_with_new_python_invocation(f, *args, extra_env_vars=None) -> None:
     import os
     if extra_env_vars is None:
         extra_env_vars = {}
@@ -1256,6 +1256,8 @@ def run_test_with_new_python_invocation(f, *args, extra_env_vars = None) -> None
 def run_test_with_new_python_invocation_inner() -> None:
     from base64 import b64decode
     from pickle import loads
+    import os
+
     f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
 
     f(*args)
@@ -1290,10 +1292,11 @@ def test_persistent_hashing_and_persistent_dict() -> None:
                 pd[dag] = 42
 
         # Make sure that the key stays the same across Python invocations
-        run_test_with_new_python_invocation(_test_persistent_hashing_and_persistent_dict_stage2,
-                                        tmpdir)
+        run_test_with_new_python_invocation(
+            _test_persistent_hashing_and_persistent_dict_stage2, tmpdir)
     finally:
         shutil.rmtree(tmpdir)
+
 
 def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
     from pytools.persistent_dict import WriteOncePersistentDict, ReadOnlyEntryError
