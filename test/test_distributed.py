@@ -889,7 +889,13 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
     outputs = pt.make_dict_of_named_arrays({"out": res})
     partition = pt.find_distributed_partition(comm, outputs)
 
-    pt.number_distributed_tags(comm, partition, base_tag=4242)
+    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+
+    assert next_tag == 4244
+
+    # For the next assertion, find_distributed_partition needs to be
+    # deterministic too (https://github.com/inducer/pytato/pull/465).
+    # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
 
 # }}}
 
