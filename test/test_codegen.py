@@ -181,7 +181,7 @@ def test_data_wrapper(ctx_factory):
     # With name/shape
     x_in = np.array([[1, 2], [3, 4], [5, 6]])
     n = pt.make_size_param("n")
-    x = pt.make_data_wrapper(x_in, name="x", shape=(n, 2))
+    x = pt.make_data_wrapper(x_in, shape=(n, 2))
     prog = pt.generate_loopy(x)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
@@ -302,7 +302,8 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(
-                    y_orig.astype(dtype), name=f"y{dtype}")
+                    y_orig.astype(dtype),
+                    tags=frozenset([pt.tags.PrefixNamed(f"y{dtype}")]))
             exprs[dtype] = pt_op(x_in, y)
 
         prog = pt.generate_loopy(exprs)
@@ -352,14 +353,15 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             continue
 
         x_in = x_orig.astype(first_dtype)
-        x = pt.make_data_wrapper(x_in, name="x")
+        x = pt.make_data_wrapper(x_in)
 
         exprs = {}
         for dtype in ARITH_DTYPES:
             if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(
-                    y_orig.astype(dtype), name=f"y{dtype}")
+                    y_orig.astype(dtype),
+                    tags=frozenset([pt.tags.PrefixNamed(f"y{dtype}")]))
             exprs[dtype] = pt_op(x, y)
 
         prog = pt.generate_loopy(exprs)
@@ -649,10 +651,10 @@ def test_full_zeros_ones(ctx_factory, dtype):
     assert (t == 2).all()
 
 
-def test_passsing_bound_arguments_raises(ctx_factory):
+def test_passing_bound_arguments_raises(ctx_factory):
     queue = cl.CommandQueue(ctx_factory())
 
-    x = pt.make_data_wrapper(np.ones(10), name="x")
+    x = pt.make_data_wrapper(np.ones(10), tags=frozenset([pt.tags.PrefixNamed("x")]))
     prg = pt.generate_loopy(42*x)
 
     with pytest.raises(ValueError):
@@ -1544,7 +1546,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
     pt_dag = kernel(pt, **{kw: pt.make_data_wrapper(arg)
                            for kw, arg in np_inputs.items()})
 
-    knl = pt.generate_loopy(pt_dag, options=lp.Options(write_cl=True))
+    knl = pt.generate_loopy(pt_dag, options=lp.Options(write_code=True))
 
     _, (pt_result,) = knl(cq)
 
