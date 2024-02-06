@@ -490,10 +490,10 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
     update_for_BitwiseOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_BitwiseXor = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_Call = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
-    update_for_CallWithKwargs = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_CallWithKwargs = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_Comparison = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_If = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
-    update_for_FloorDiv = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815
+    update_for_FloorDiv = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_LeftShift = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_LogicalAnd = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_LogicalNot = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
