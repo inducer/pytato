@@ -100,6 +100,7 @@ import pytato.transform as transform
 from pytato.distributed.nodes import (make_distributed_send, make_distributed_recv,
                                 DistributedRecv, DistributedSend,
                                 DistributedSendRefHolder,
+                                make_distributed_send_ref_holder,
                                 staple_distributed_send)
 from pytato.distributed.partition import (
         find_distributed_partition, DistributedGraphPart, DistributedGraphPartition)
@@ -162,7 +163,8 @@ __all__ = (
         "trace_call",
 
         "make_distributed_recv", "make_distributed_send", "DistributedRecv",
-        "DistributedSend", "staple_distributed_send", "DistributedSendRefHolder",
+        "DistributedSend", "make_distributed_send_ref_holder",
+        "staple_distributed_send", "DistributedSendRefHolder",
 
         "DistributedGraphPart",
         "DistributedGraphPartition",
