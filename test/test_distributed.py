@@ -263,10 +263,10 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
     gen_comm_called = False
 
-    ntests = 10
+    ntests = 20
     for i in range(ntests):
         seed = 120 + i
-        print(f"Step {i} {seed}")
+        print(f"Step {i} {seed=}")
 
         # {{{ compute value with communication
 
@@ -278,7 +278,15 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
             nonlocal comm_tag
             comm_tag += 1
-            tag = (comm_tag, _RandomDAGTag)  # noqa: B023
+
+            if comm_tag % 5 == 1:
+                tag = (comm_tag, frozenset([_RandomDAGTag, "a", comm_tag]))
+            elif comm_tag % 5 == 2:
+                tag = (comm_tag, (_RandomDAGTag, "b"))
+            elif comm_tag % 5 == 3:
+                tag = (_RandomDAGTag, comm_tag)
+            else:
+                tag = (comm_tag, _RandomDAGTag)  # noqa: B023
 
             inner = make_random_dag(rdagc)
             return pt.staple_distributed_send(
@@ -881,7 +889,13 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
     outputs = pt.make_dict_of_named_arrays({"out": res})
     partition = pt.find_distributed_partition(comm, outputs)
 
-    pt.number_distributed_tags(comm, partition, base_tag=4242)
+    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+
+    assert next_tag == 4244
+
+    # FIXME: For the next assertion, find_distributed_partition needs to be
+    # deterministic too (https://github.com/inducer/pytato/pull/465).
+    # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
 
 # }}}
 
