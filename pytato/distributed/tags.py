@@ -65,6 +65,11 @@ def number_distributed_tags(
     """
     from pytools import flatten
 
+    # A potential optimization here could be to use a 'set' to collect the tags,
+    # but this would introduce non-determinism in the tag numbering. Another
+    # option would be use something like pytools.unique() to reduce the amount
+    # of data communicated, but since all sends and receives should each
+    # have unique tags, this would at most buy us a factor of 2.
     tags = tuple([
             recv.comm_tag
             for part in partition.parts.values()
@@ -77,6 +82,8 @@ def number_distributed_tags(
 
     root_rank = 0
 
+    # We can't let MPI do a set union here, since the result would be
+    # non-deterministic.
     all_tags = mpi_communicator.gather(tags, root=root_rank)
 
     if mpi_communicator.rank == root_rank:

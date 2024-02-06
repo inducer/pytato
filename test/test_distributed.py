@@ -893,7 +893,7 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
 
     assert next_tag == 4244
 
-    # For the next assertion, find_distributed_partition needs to be
+    # FIXME: For the next assertion, find_distributed_partition needs to be
     # deterministic too (https://github.com/inducer/pytato/pull/465).
     # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
 
