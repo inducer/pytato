@@ -1038,6 +1038,8 @@ def test_arange(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
+    # {{{ Integer
+
     from numpy.random import default_rng
     rng = default_rng(seed=0)
     for _ in range(30):
@@ -1052,6 +1054,43 @@ def test_arange(ctx_factory):
         _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
 
         assert np.array_equal(pt_res, np_res)
+
+    # }}}
+
+    # {{{ Real
+
+    # generates '[0. ... 4.]':
+    np_res = np.arange(5, dtype=np.float64)
+    pt_res_sym = pt.arange(5, dtype=np.float64)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # }}}
+
+    # {{{ Complex
+
+    # generates '[]':
+    np_res = np.arange(5j, dtype=np.complex128)
+    pt_res_sym = pt.arange(5j, dtype=np.complex128)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # generates '[0.+0.j ... 4.+0.j]':
+    np_res = np.arange(5, dtype=np.complex128)
+    pt_res_sym = pt.arange(5, dtype=np.complex128)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # }}}
 
 
 @pytest.mark.parametrize("which,num_args", ([("maximum", 2),

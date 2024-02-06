@@ -2230,7 +2230,10 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     step = dtype.type(inf.step)
     stop = dtype.type(inf.stop)
 
-    size = max(0, int(np.ceil((np.real(stop)-np.real(start))/np.real(step))))
+    from math import ceil
+    # np.real() suppresses "ComplexWarning: Casting complex values to real
+    # discards the imaginary part":
+    size = max(0, int(ceil((np.real(stop)-np.real(start))/np.real(step))))
 
     from pymbolic.primitives import Variable
     return IndexLambda(expr=start + Variable("_0") * step,
