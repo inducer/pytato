@@ -231,12 +231,16 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
 def make_distributed_send_ref_holder(
         send: DistributedSend,
         passthrough_data: Array,
-        tags: FrozenSet[Tag] = frozenset()
+        tags: FrozenSet[Tag] = frozenset(),
+        non_equality_tags: FrozenSet[Optional[Tag]] = frozenset(),
         ) -> DistributedSendRefHolder:
     """Make a :class:`DistributedSendRefHolder` object."""
+    if not non_equality_tags:
+        non_equality_tags = frozenset({_get_created_at_tag()})
     return DistributedSendRefHolder(
         send=send, passthrough_data=passthrough_data,
-        tags=(tags | _get_default_tags()))
+        tags=(tags | _get_default_tags()),
+        non_equality_tags=non_equality_tags)
 
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -251,7 +255,8 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
             sent_data=sent_data, dest_rank=dest_rank, comm_tag=comm_tag,
             send_tags=send_tags),
         passthrough_data=stapled_to,
-        tags=ref_holder_tags)
+        tags=ref_holder_tags,
+        non_equality_tags=frozenset({_get_created_at_tag()}))
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
