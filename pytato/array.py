@@ -267,7 +267,7 @@ def normalize_shape(
 # }}}
 
 
-# {{{ array inteface
+# {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
@@ -376,7 +376,7 @@ class Array(Taggable):
             :class:`~pytato.array.IndexLambda` is used to produce
             references to named arrays. Since any array that needs to be
             referenced in this way needs to obey this restriction anyway,
-            a decision was made to requir the same of *all* array expressions.
+            a decision was made to require the same of *all* array expressions.
 
     .. attribute:: dtype
 
@@ -526,7 +526,7 @@ class Array(Taggable):
     __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
     def _binary_op(self,
-            op: Any,
+            op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
             other: ArrayOrScalar,
             get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
             reverse: bool = False) -> Array:
@@ -1801,7 +1801,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
     if axis is None:
         if a.ndim > 1:
             raise NotImplementedError(
-                    "shifing along more than one dimension is unsupported")
+                    "shifting along more than one dimension is unsupported")
         else:
             axis = 0
 
@@ -2225,7 +2225,9 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     stop = dtype.type(inf.stop)
 
     from math import ceil
-    size = max(0, int(ceil((stop-start)/step)))
+    # np.real() suppresses "ComplexWarning: Casting complex values to real
+    # discards the imaginary part":
+    size = max(0, int(ceil((np.real(stop)-np.real(start))/np.real(step))))
 
     from pymbolic.primitives import Variable
     return IndexLambda(expr=start + Variable("_0") * step,
@@ -2524,7 +2526,8 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     elif a.ndim == b.ndim == 2:
         return a @ b
     elif a.ndim == 0 or b.ndim == 0:
-        return a * b
+        # https://github.com/python/mypy/issues/16499
+        return a * b  # type: ignore[no-any-return]
     elif b.ndim == 1:
         return pt.sum(a * b, axis=(a.ndim - 1))
     else:

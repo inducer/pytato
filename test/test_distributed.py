@@ -118,6 +118,124 @@ def _do_test_distributed_execution_basic(ctx_factory):
 # }}}
 
 
+# {{{ Scheduler Algorithm update tests.
+
+def test_distributed_scheduler_counts():
+    """ Test that the scheduling algorithm runs in `O(n)` time when
+    operating on a DAG which is just a stick with the dependencies
+    implied and not directly listed.
+    """
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    sizes = np.logspace(0, 6, 10, dtype=int)
+    count_list = np.zeros(len(sizes))
+    for i, tree_size in enumerate(sizes):
+        needed_ids = {i: set() for i in range(int(tree_size))}
+        for key in needed_ids.keys():
+            needed_ids[key] = {key-1} if key > 0 else set()
+        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
+
+    # Now to do the fitting.
+    coefficients = np.polyfit(sizes, count_list, 4)
+    import numpy.linalg as la
+    nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
+    assert nonlinear_norm_frac < 0.0001
+
+# }}}
+
+
+# {{{  test_distributed_scheduler_has_minimum_num_of_levels
+
+def test_distributed_scheduler_returns_minimum_num_of_levels():
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    max_size = 10
+    needed_ids = {j: set() for j in range(max_size)}
+    for i in range(1, max_size-1):
+        needed_ids[i].add(i-1)
+
+    batches, _ = _schedule_task_batches_counted(needed_ids)
+    # The last task has no dependences listed so it can be placed anywhere.
+    assert len(batches) == (max_size - 1)
+
+# }}}
+
+
+# {{{  test_distributed_scheduling_alg_can_find_cycle
+
+def test_distributed_scheduling_alg_can_find_cycle():
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    sizes = 100
+    my_graph = {i: {i-1} for i in range(int(sizes))}
+    my_graph[0] = {}
+    my_graph[60].add(95)  # Here is the cycle. 60 - 95 -94 - 93 ... - 60
+    with pytest.raises(CycleError):
+        _schedule_task_batches_counted(my_graph)
+
+# }}}
+
+
+# {{{ test scheduling based upon a tree with dependents listed out.
+
+def test_distributed_scheduling_o_n_direct_dependents():
+    """ Check that the temporal complexity of the scheduling algorithm
+    in the case that there are `O(n)` direct dependents for each task
+    is not cubic.
+    """
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    sizes = np.logspace(0, 4, 10, dtype=int)
+    count_list = np.zeros(len(sizes))
+    for i, tree_size in enumerate(sizes):
+        needed_ids = {i: set() for i in range(int(tree_size))}
+        for key in needed_ids.keys():
+            for j in range(key):
+                needed_ids[key].add(j)
+        _, count_list[i] = _schedule_task_batches_counted(needed_ids)
+
+    # Now to do the fitting.
+    coefficients = np.polyfit(sizes, count_list, 4)
+    import numpy.linalg as la
+    # We are expecting less then cubic scaling.
+    nonquadratic_norm_frac = la.norm(coefficients[:-3], 2)/la.norm(coefficients, 2)
+    assert nonquadratic_norm_frac < 0.0001
+
+# }}}
+
+
+# {{{ test scheduling constant branching tree
+
+def test_distributed_scheduling_constant_look_back_tree():
+    """Test that the scheduling algorithm scales in linear time if the input DAG
+    is a constant look back tree. This tree has a single root and then 5 tendrils
+    off of this root. Along the tendril each node has a direct dependence on the
+    previous one in the tendril but no other direct dependencies. This is intended
+    to confirm that the scheduling algorithm utilizing the minimum number of batch
+    levels possible.
+    """
+    from pytato.distributed.partition import _schedule_task_batches_counted
+    import math
+    sizes = np.logspace(0, 6, 10, dtype=int)
+    count_list = np.zeros(len(sizes))
+    branching_factor = 5
+    for i, tree_size in enumerate(sizes):
+        needed_ids = {j: set() for j in range(int(tree_size))}
+        for j in range(1, int(tree_size)):
+            if j < branching_factor:
+                needed_ids[j+1] = {0}
+            else:
+                needed_ids[j] = {j - branching_factor}
+        batches, count_list[i] = _schedule_task_batches_counted(needed_ids)
+
+        # Test that the number of batches is the expected minimum number.
+        assert len(batches) == math.ceil((tree_size - 1) / branching_factor) + 1
+
+    # Now to do the fitting.
+    coefficients = np.polyfit(sizes, count_list, 4)
+    import numpy.linalg as la
+    nonlinear_norm_frac = la.norm(coefficients[:-2], 2)/la.norm(coefficients, 2)
+    assert nonlinear_norm_frac < 0.0001
+
+# }}}
+
+
 # {{{ test based on random dag
 
 def test_distributed_execution_random_dag():
@@ -145,10 +263,10 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
     gen_comm_called = False
 
-    ntests = 10
+    ntests = 20
     for i in range(ntests):
         seed = 120 + i
-        print(f"Step {i} {seed}")
+        print(f"Step {i} {seed=}")
 
         # {{{ compute value with communication
 
@@ -160,7 +278,15 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
             nonlocal comm_tag
             comm_tag += 1
-            tag = (comm_tag, _RandomDAGTag)  # noqa: B023
+
+            if comm_tag % 5 == 1:
+                tag = (comm_tag, frozenset([_RandomDAGTag, "a", comm_tag]))
+            elif comm_tag % 5 == 2:
+                tag = (comm_tag, (_RandomDAGTag, "b"))
+            elif comm_tag % 5 == 3:
+                tag = (_RandomDAGTag, comm_tag)
+            else:
+                tag = (comm_tag, _RandomDAGTag)  # noqa: B023
 
             inner = make_random_dag(rdagc)
             return pt.staple_distributed_send(
@@ -722,6 +848,54 @@ def _do_verify_distributed_partition(ctx_factory):
         pt.find_distributed_partition(comm, outputs)
 
     # }}}
+
+# }}}
+
+
+# {{{ test symbolic tag numbering with bare classes
+
+class FooTag1:
+    pass
+
+
+class FooTag2:
+    pass
+
+
+def test_number_symbolic_tags_bare_classes(ctx_factory):
+    from mpi4py import MPI  # pylint: disable=import-error
+    comm = MPI.COMM_WORLD
+    from pytato.distributed.nodes import (staple_distributed_send,
+                make_distributed_recv)
+
+    rank = 0
+    size = 2
+
+    x = pt.make_placeholder("x", (4, 4), int)
+    y = pt.make_placeholder("y", (4, 4), int)
+
+    r1 = staple_distributed_send(x, dest_rank=(rank-1) % size,
+            comm_tag=FooTag1, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=FooTag1, shape=(4, 4),
+                dtype=int))
+
+    r2 = staple_distributed_send(y, dest_rank=(rank-1) % size,
+            comm_tag=FooTag2, stapled_to=make_distributed_recv(
+                src_rank=(rank+1) % size, comm_tag=FooTag2, shape=(4, 4),
+                dtype=int))
+
+    res = r1 + r2
+
+    outputs = pt.make_dict_of_named_arrays({"out": res})
+    partition = pt.find_distributed_partition(comm, outputs)
+
+    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+
+    assert next_tag == 4244
+
+    # FIXME: For the next assertion, find_distributed_partition needs to be
+    # deterministic too (https://github.com/inducer/pytato/pull/465).
+    # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
 
 # }}}
 

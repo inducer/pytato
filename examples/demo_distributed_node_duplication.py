@@ -1,11 +1,14 @@
 """
 An example to demonstrate the behavior of
-:func:`pytato.find_distrbuted_partition`. One of the key characteristic of the
-partitioning routine is to recompute expressions that appear in the multiple
+:func:`pytato.find_distributed_partition`. One of the key characteristics of the
+partitioning routine is to recompute expressions that appear in multiple
 partitions but are not materialized.
 """
 import pytato as pt
 import numpy as np
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
 
 size = 2
 rank = 0
@@ -30,7 +33,7 @@ recv = pt.staple_distributed_send(tmp4, dest_rank=(rank-1) % size, comm_tag=10,
 out = tmp2 + recv
 result = pt.make_dict_of_named_arrays({"out": out})
 
-partitions = pt.find_distributed_partition(result)
+partitions = pt.find_distributed_partition(comm, result)
 
 # Visualize *partitions* to see that each of the two partitions contains a node
 # named 'tmp2'.

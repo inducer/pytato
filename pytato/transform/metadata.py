@@ -48,6 +48,7 @@ from pytato.array import (InputArgumentBase, Stack, Concatenate, IndexLambda,
                           DictOfNamedArrays, NamedArray,
                           AbstractResultWithNamedArrays, ArrayOrScalar,
                           EinsumReductionAxis)
+from pytato.function import NamedCallResult
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 from pytato.raising import (index_lambda_to_high_level_op,
@@ -175,8 +176,7 @@ class AxesTagsEquationCollector(Mapper):
 
     # {{{ mapper interface
 
-    # type-ignore reason: signature not compatible with Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> None:
         if expr in self._visited_nodes:
             return
 
@@ -546,6 +546,11 @@ class AxesTagsEquationCollector(Mapper):
         more equations are deduced.
         """
 
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError(
+            "AxesTagsEquationCollector does not currently support expressions "
+            "containing functions.")
+
     # }}}
 
 # }}}
@@ -595,8 +600,7 @@ class AxisTagAttacher(CopyMapper):
         self.axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
-    # type-ignore reason: overrides the type of Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> Any:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> Any:
         if isinstance(expr, (AbstractResultWithNamedArrays,
                              DistributedSendRefHolder)):
             return super().rec(expr)
@@ -643,6 +647,11 @@ class AxisTagAttacher(CopyMapper):
 
                 self._cache[key] = expr_copy
                 return expr_copy
+
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError(
+            "AxisTagAttacher does not currently support expressions containing "
+            "functions.")
 
     # type-ignore reason: overrides the type of Mapper.__call__
     def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
