@@ -487,9 +487,9 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_index_lambda(self, expr: IndexLambda,
                          *args: Any, **kwargs: Any) -> Array:
-        bindings: Dict[str, Array] = {
-                name: self.rec(subexpr, *args, **kwargs)
-                for name, subexpr in sorted(expr.bindings.items())}
+        bindings: Mapping[str, Array] = immutabledict({
+                name: self.rec(subexpr)
+                for name, subexpr in sorted(expr.bindings.items())})
         return IndexLambda(expr=expr.expr,
                            shape=self.rec_idx_or_size_tuple(expr.shape,
                                                             *args, **kwargs),
