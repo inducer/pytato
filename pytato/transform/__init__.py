@@ -32,7 +32,7 @@ import attrs
 import logging
 import numpy as np
 from immutabledict import immutabledict
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
+from typing import (Any, Callable, Dict, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
                     Hashable, cast)
 
@@ -52,8 +52,8 @@ from dataclasses import dataclass
 from pytato.tags import ImplStored
 from pymbolic.mapper.optimize import optimize_mapper
 
-from orderedsets import FrozenOrderedSet as frozenset
-from orderedsets import OrderedSet as set
+from orderedsets import FrozenOrderedSet, OrderedSet
+from collections.abc import Set as abc_Set
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
@@ -64,7 +64,7 @@ CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
                             Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
-R = FrozenSet[Array]
+R = abc_Set[Array]
 _SelfMapper = TypeVar("_SelfMapper", bound="Mapper")
 
 __doc__ = """
@@ -790,60 +790,64 @@ class DependencyMapper(CombineMapper[R]):
 
     def combine(self, *args: R) -> R:
         from functools import reduce
-        return reduce(lambda a, b: a | b, args, frozenset())
+        return reduce(lambda a, b: a | b, args, FrozenOrderedSet())
 
     def map_index_lambda(self, expr: IndexLambda) -> R:
-        return self.combine(frozenset([expr]), super().map_index_lambda(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_index_lambda(expr))
 
     def map_placeholder(self, expr: Placeholder) -> R:
-        return self.combine(frozenset([expr]), super().map_placeholder(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_placeholder(expr))
 
     def map_data_wrapper(self, expr: DataWrapper) -> R:
-        return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_data_wrapper(expr))
 
     def map_size_param(self, expr: SizeParam) -> R:
-        return frozenset([expr])
+        return FrozenOrderedSet([expr])
 
     def map_stack(self, expr: Stack) -> R:
-        return self.combine(frozenset([expr]), super().map_stack(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_stack(expr))
 
     def map_roll(self, expr: Roll) -> R:
-        return self.combine(frozenset([expr]), super().map_roll(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_roll(expr))
 
     def map_axis_permutation(self, expr: AxisPermutation) -> R:
-        return self.combine(frozenset([expr]), super().map_axis_permutation(expr))
+        return self.combine(FrozenOrderedSet([expr]),
+                            super().map_axis_permutation(expr))
 
     def _map_index_base(self, expr: IndexBase) -> R:
-        return self.combine(frozenset([expr]), super()._map_index_base(expr))
+        return self.combine(FrozenOrderedSet([expr]), super()._map_index_base(expr))
 
     def map_reshape(self, expr: Reshape) -> R:
-        return self.combine(frozenset([expr]), super().map_reshape(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_reshape(expr))
 
     def map_concatenate(self, expr: Concatenate) -> R:
-        return self.combine(frozenset([expr]), super().map_concatenate(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_concatenate(expr))
 
     def map_einsum(self, expr: Einsum) -> R:
-        return self.combine(frozenset([expr]), super().map_einsum(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_einsum(expr))
 
     def map_named_array(self, expr: NamedArray) -> R:
-        return self.combine(frozenset([expr]), super().map_named_array(expr))
+        return self.combine(FrozenOrderedSet([expr]), super().map_named_array(expr))
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> R:
-        return self.combine(frozenset([expr]), super().map_loopy_call_result(expr))
+        return self.combine(FrozenOrderedSet([expr]),
+                            super().map_loopy_call_result(expr))
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> R:
         return self.combine(
-                frozenset([expr]), super().map_distributed_send_ref_holder(expr))
+                FrozenOrderedSet([expr]),
+                super().map_distributed_send_ref_holder(expr))
 
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
-        return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
+        return self.combine(FrozenOrderedSet([expr]),
+                            super().map_distributed_recv(expr))
 
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
-        return frozenset()
+        return FrozenOrderedSet()
 
     def map_call(self, expr: Call) -> R:
         return self.combine(self.map_function_definition(expr.function),
@@ -862,48 +866,47 @@ class SubsetDependencyMapper(DependencyMapper):
     Mapper to combine the dependencies of an expression that are a subset of
     *universe*.
     """
-    def __init__(self, universe: FrozenSet[Array]):
+    def __init__(self, universe: abc_Set[Array]):
         self.universe = universe
         super().__init__()
 
-    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+    def combine(self, *args: abc_Set[Array]) -> abc_Set[Array]:
         from functools import reduce
         return reduce(lambda acc, arg: acc | (arg & self.universe),
-                      args,
-                      frozenset())
+                      args, FrozenOrderedSet())
 
 # }}}
 
 
 # {{{ InputGatherer
 
-class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
+class InputGatherer(CombineMapper[abc_Set[InputArgumentBase]]):
     """
     Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
     """
-    def combine(self, *args: FrozenSet[InputArgumentBase]
-                ) -> FrozenSet[InputArgumentBase]:
+    def combine(self, *args: abc_Set[InputArgumentBase]
+                ) -> abc_Set[InputArgumentBase]:
         from functools import reduce
-        return reduce(lambda a, b: a | b, args, frozenset())
+        return reduce(lambda a, b: a | b, args, FrozenOrderedSet())
 
-    def map_placeholder(self, expr: Placeholder) -> FrozenSet[InputArgumentBase]:
-        return self.combine(frozenset([expr]), super().map_placeholder(expr))
+    def map_placeholder(self, expr: Placeholder) -> abc_Set[InputArgumentBase]:
+        return self.combine(FrozenOrderedSet([expr]), super().map_placeholder(expr))
 
-    def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[InputArgumentBase]:
-        return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
+    def map_data_wrapper(self, expr: DataWrapper) -> abc_Set[InputArgumentBase]:
+        return self.combine(FrozenOrderedSet([expr]), super().map_data_wrapper(expr))
 
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
-        return frozenset([expr])
+    def map_size_param(self, expr: SizeParam) -> abc_Set[SizeParam]:
+        return FrozenOrderedSet([expr])
 
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FrozenSet[InputArgumentBase]:
+                                ) -> abc_Set[InputArgumentBase]:
         # get rid of placeholders local to the function.
         new_mapper = InputGatherer()
         all_callee_inputs = new_mapper.combine(*[new_mapper(ret)
                                                  for ret in expr.returns.values()])
-        result: Set[InputArgumentBase] = set()
+        result: OrderedSet[InputArgumentBase] = OrderedSet()
         for inp in all_callee_inputs:
             if isinstance(inp, Placeholder):
                 if inp.name in expr.parameters:
@@ -915,29 +918,29 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
             else:
                 result.add(inp)
 
-        return frozenset(result)
+        return FrozenOrderedSet(result)
 
 # }}}
 
 
 # {{{ SizeParamGatherer
 
-class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
+class SizeParamGatherer(CombineMapper[abc_Set[SizeParam]]):
     """
     Mapper to combine all instances of :class:`pytato.array.SizeParam` that
     an array expression depends on.
     """
-    def combine(self, *args: FrozenSet[SizeParam]
-                ) -> FrozenSet[SizeParam]:
+    def combine(self, *args: abc_Set[SizeParam]
+                ) -> abc_Set[SizeParam]:
         from functools import reduce
-        return reduce(lambda a, b: a | b, args, frozenset())
+        return reduce(lambda a, b: a | b, args, FrozenOrderedSet())
 
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
-        return frozenset([expr])
+    def map_size_param(self, expr: SizeParam) -> abc_Set[SizeParam]:
+        return FrozenOrderedSet([expr])
 
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FrozenSet[SizeParam]:
+                                ) -> abc_Set[SizeParam]:
         return self.combine(*[self.rec(ret)
                               for ret in expr.returns.values()])
 
@@ -1157,7 +1160,7 @@ class CachedWalkMapper(WalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self._visited_nodes: Set[Any] = set()
+        self._visited_nodes: OrderedSet[Any] = OrderedSet()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -1249,7 +1252,7 @@ class MPMSMaterializerAccumulator:
     contains the set of materialized predecessors and the rewritten expression
     (i.e. the expression with tags for materialization applied).
     """
-    materialized_predecessors: FrozenSet[Array]
+    materialized_predecessors: abc_Set[Array]
     expr: Array
 
 
@@ -1264,14 +1267,14 @@ def _materialize_if_mpms(expr: Array,
     """
     from functools import reduce
 
-    materialized_predecessors: FrozenSet[Array] = reduce(
-                                                    frozenset.union,
-                                                    (pred.materialized_predecessors
-                                                     for pred in predecessors),
-                                                    frozenset())
+    materialized_predecessors: abc_Set[Array] = reduce(
+                                FrozenOrderedSet.union,  # type: ignore[arg-type]
+                                (pred.materialized_predecessors
+                                    for pred in predecessors),
+                                FrozenOrderedSet())
     if nsuccessors > 1 and len(materialized_predecessors) > 1:
         new_expr = expr.tagged(ImplStored())
-        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        return MPMSMaterializerAccumulator(FrozenOrderedSet([new_expr]), new_expr)
     else:
         return MPMSMaterializerAccumulator(materialized_predecessors, expr)
 
@@ -1300,7 +1303,7 @@ class MPMSMaterializer(Mapper):
 
     def _map_input_base(self, expr: InputArgumentBase
                         ) -> MPMSMaterializerAccumulator:
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+        return MPMSMaterializerAccumulator(FrozenOrderedSet([expr]), expr)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
@@ -1412,7 +1415,7 @@ class MPMSMaterializer(Mapper):
 
     def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
         # loopy call result is always materialized
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+        return MPMSMaterializerAccumulator(FrozenOrderedSet([expr]), expr)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
@@ -1432,7 +1435,7 @@ class MPMSMaterializer(Mapper):
 
     def map_distributed_recv(self, expr: DistributedRecv
                              ) -> MPMSMaterializerAccumulator:
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+        return MPMSMaterializerAccumulator(FrozenOrderedSet([expr]), expr)
 
     def map_named_call_result(self, expr: NamedCallResult
                               ) -> MPMSMaterializerAccumulator:
@@ -1462,7 +1465,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     return DictOfNamedArrays(data, tags=source_dict.tags)
 
 
-def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
+def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, abc_Set[Array]]:
     """Returns the dependencies of each named array in *expr*.
     """
     dep_mapper = DependencyMapper()
@@ -1563,12 +1566,12 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def __init__(self) -> None:
         super().__init__()
         self.node_to_users: Dict[ArrayOrNames,
-                Set[Union[DistributedSend, ArrayOrNames]]] = {}
+                OrderedSet[Union[DistributedSend, ArrayOrNames]]] = {}
 
     # type-ignore-reason: incompatible with superclass (args/kwargs, return type)
     def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
         # Root node has no predecessor
-        self.node_to_users[expr] = set()
+        self.node_to_users[expr] = OrderedSet()
         self.rec(expr)
 
     def rec_idx_or_size_tuple(
@@ -1576,21 +1579,21 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
             ) -> None:
         for dim in situp:
             if isinstance(dim, Array):
-                self.node_to_users.setdefault(dim, set()).add(expr)
+                self.node_to_users.setdefault(dim, OrderedSet()).add(expr)
                 self.rec(dim)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for child in expr._data.values():
-            self.node_to_users.setdefault(child, set()).add(expr)
+            self.node_to_users.setdefault(child, OrderedSet()).add(expr)
             self.rec(child)
 
     def map_named_array(self, expr: NamedArray) -> None:
-        self.node_to_users.setdefault(expr._container, set()).add(expr)
+        self.node_to_users.setdefault(expr._container, OrderedSet()).add(expr)
         self.rec(expr._container)
 
     def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:
-            self.node_to_users.setdefault(arg, set()).add(expr)
+            self.node_to_users.setdefault(arg, OrderedSet()).add(expr)
             self.rec(arg)
 
         self.rec_idx_or_size_tuple(expr, expr.shape)
@@ -1598,7 +1601,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_reshape(self, expr: Reshape) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
-        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.node_to_users.setdefault(expr.array, OrderedSet()).add(expr)
         self.rec(expr.array)
 
     def map_placeholder(self, expr: Placeholder) -> None:
@@ -1606,23 +1609,23 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def map_concatenate(self, expr: Concatenate) -> None:
         for ary in expr.arrays:
-            self.node_to_users.setdefault(ary, set()).add(expr)
+            self.node_to_users.setdefault(ary, OrderedSet()).add(expr)
             self.rec(ary)
 
     def map_stack(self, expr: Stack) -> None:
         for ary in expr.arrays:
-            self.node_to_users.setdefault(ary, set()).add(expr)
+            self.node_to_users.setdefault(ary, OrderedSet()).add(expr)
             self.rec(ary)
 
     def map_roll(self, expr: Roll) -> None:
-        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.node_to_users.setdefault(expr.array, OrderedSet()).add(expr)
         self.rec(expr.array)
 
     def map_size_param(self, expr: SizeParam) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> None:
-        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.node_to_users.setdefault(expr.array, OrderedSet()).add(expr)
         self.rec(expr.array)
 
     def map_data_wrapper(self, expr: DataWrapper) -> None:
@@ -1630,18 +1633,18 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
         for child in expr.bindings.values():
-            self.node_to_users.setdefault(child, set()).add(expr)
+            self.node_to_users.setdefault(child, OrderedSet()).add(expr)
             self.rec(child)
 
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def _map_index_base(self, expr: IndexBase) -> None:
-        self.node_to_users.setdefault(expr.array, set()).add(expr)
+        self.node_to_users.setdefault(expr.array, OrderedSet()).add(expr)
         self.rec(expr.array)
 
         for idx in expr.indices:
             if isinstance(idx, Array):
-                self.node_to_users.setdefault(idx, set()).add(expr)
+                self.node_to_users.setdefault(idx, OrderedSet()).add(expr)
                 self.rec(idx)
 
     def map_basic_index(self, expr: BasicIndex) -> None:
@@ -1660,14 +1663,14 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_loopy_call(self, expr: LoopyCall) -> None:
         for _, child in sorted(expr.bindings.items()):
             if isinstance(child, Array):
-                self.node_to_users.setdefault(child, set()).add(expr)
+                self.node_to_users.setdefault(child, OrderedSet()).add(expr)
                 self.rec(child)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> None:
-        self.node_to_users.setdefault(expr.passthrough_data, set()).add(expr)
+        self.node_to_users.setdefault(expr.passthrough_data, OrderedSet()).add(expr)
         self.rec(expr.passthrough_data)
-        self.node_to_users.setdefault(expr.send.data, set()).add(expr.send)
+        self.node_to_users.setdefault(expr.send.data, OrderedSet()).add(expr.send)
         self.rec(expr.send.data)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> None:
@@ -1687,7 +1690,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
     def map_named_call(self, expr: NamedCallResult, *args: Any) -> None:
         assert isinstance(expr._container, Call)
         for bnd in expr._container.bindings.values():
-            self.node_to_users.setdefault(bnd, set()).add(expr)
+            self.node_to_users.setdefault(bnd, OrderedSet()).add(expr)
 
         self.rec(expr._container)
 
@@ -1707,32 +1710,32 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 # {{{ operations on graphs in dict form
 
 def _recursively_get_all_users(
-        direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
-        node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
-    result = set()
-    queue = list(direct_users.get(node, set()))
-    ids_already_noted_to_visit: Set[int] = set()
+        direct_users: Mapping[ArrayOrNames, abc_Set[ArrayOrNames]],
+        node: ArrayOrNames) -> abc_Set[ArrayOrNames]:
+    result: OrderedSet[ArrayOrNames] = OrderedSet()
+    queue = list(direct_users.get(node, OrderedSet()))
+    ids_already_noted_to_visit: OrderedSet[int] = OrderedSet()
 
     while queue:
         current_node = queue[0]
         queue = queue[1:]
         result.add(current_node)
         # visit each user only once.
-        users_to_visit = frozenset([user
-                                    for user in direct_users.get(current_node, set())
-                                    if id(user) not in ids_already_noted_to_visit])
+        users_to_visit = FrozenOrderedSet([user
+                            for user in direct_users.get(current_node, OrderedSet())
+                            if id(user) not in ids_already_noted_to_visit])
 
         ids_already_noted_to_visit.update([id(k)
                                            for k in users_to_visit])
 
         queue.extend(list(users_to_visit))
 
-    return frozenset(result)
+    return FrozenOrderedSet(result)
 
 
 def rec_get_user_nodes(expr: ArrayOrNames,
                        node: ArrayOrNames,
-                       ) -> FrozenSet[ArrayOrNames]:
+                       ) -> abc_Set[ArrayOrNames]:
     """
     Returns all direct and indirect users of *node* in *expr*.
     """
@@ -1741,11 +1744,11 @@ def rec_get_user_nodes(expr: ArrayOrNames,
 
 
 def tag_user_nodes(
-        graph: Mapping[ArrayOrNames, Set[ArrayOrNames]],
+        graph: Mapping[ArrayOrNames, abc_Set[ArrayOrNames]],
         tag: Any,
         starting_point: ArrayOrNames,
-        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None
-        ) -> Dict[ArrayOrNames, Set[Any]]:
+        node_to_tags: Optional[Dict[ArrayOrNames, abc_Set[ArrayOrNames]]] = None
+        ) -> Dict[ArrayOrNames, abc_Set[Any]]:
     """Tags all nodes reachable from *starting_point* with *tag*.
 
     :param graph: A :class:`dict` representation of a directed graph, mapping each
@@ -1763,10 +1766,12 @@ def tag_user_nodes(
     if node_to_tags is None:
         node_to_tags = {}
 
-    node_to_tags.setdefault(starting_point, set()).add(tag)
+    node_to_tags.setdefault(starting_point,
+                            OrderedSet()).add(tag)  # type: ignore[attr-defined]
 
     for user in _recursively_get_all_users(graph, starting_point):
-        node_to_tags.setdefault(user, set()).add(tag)
+        node_to_tags.setdefault(user,
+                                OrderedSet()).add(tag)  # type: ignore[attr-defined]
 
     return node_to_tags
 

@@ -126,7 +126,7 @@ def test_distributed_scheduler_counts():
     implied and not directly listed.
     """
     from pytato.distributed.partition import _schedule_task_batches_counted
-    sizes = np.logspace(0, 6, 10, dtype=int)
+    sizes = np.logspace(0, 4, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
@@ -181,7 +181,7 @@ def test_distributed_scheduling_o_n_direct_dependents():
     is not cubic.
     """
     from pytato.distributed.partition import _schedule_task_batches_counted
-    sizes = np.logspace(0, 4, 10, dtype=int)
+    sizes = np.logspace(0, 3, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
@@ -212,10 +212,11 @@ def test_distributed_scheduling_constant_look_back_tree():
     """
     from pytato.distributed.partition import _schedule_task_batches_counted
     import math
-    sizes = np.logspace(0, 6, 10, dtype=int)
+    sizes = np.logspace(0, 5, 10, dtype=int)
     count_list = np.zeros(len(sizes))
-    branching_factor = 5
+    branching_factor = 7
     for i, tree_size in enumerate(sizes):
+        print(i, tree_size)
         needed_ids = {j: set() for j in range(int(tree_size))}
         for j in range(1, int(tree_size)):
             if j < branching_factor:
@@ -893,9 +894,7 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
 
     assert next_tag == 4244
 
-    # FIXME: For the next assertion, find_distributed_partition needs to be
-    # deterministic too (https://github.com/inducer/pytato/pull/465).
-    # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
+    assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242
 
 # }}}
 

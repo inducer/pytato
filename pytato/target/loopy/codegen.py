@@ -32,7 +32,7 @@ import pytato.scalar_expr as scalar_expr
 import pymbolic.primitives as prim
 from pymbolic import var
 
-from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
+from typing import (Union, Optional, Mapping, Dict, Tuple,
                     Any, List, Type, TYPE_CHECKING)
 
 
@@ -53,8 +53,8 @@ from pytools.tag import Tag
 import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
 import attrs
-from orderedsets import FrozenOrderedSet as frozenset
-from orderedsets import OrderedSet as set
+from orderedsets import FrozenOrderedSet, OrderedSet
+from collections.abc import Set as abc_Set
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
@@ -133,14 +133,14 @@ class PersistentExpressionContext(object):
 
     """
     state: CodeGenState
-    _depends_on: FrozenSet[str] = \
-            attrs.field(factory=frozenset)
+    _depends_on: abc_Set[str] = \
+            attrs.field(factory=FrozenOrderedSet)
 
     @property
-    def depends_on(self) -> FrozenSet[str]:
+    def depends_on(self) -> abc_Set[str]:
         return self._depends_on
 
-    def update_depends_on(self, other: FrozenSet[str]) -> None:
+    def update_depends_on(self, other: abc_Set[str]) -> None:
         self._depends_on = self._depends_on | other
 
 
@@ -225,7 +225,7 @@ class StoredResult(ImplementedResult):
 
     See also: :class:`pytato.tags.ImplStored`.
     """
-    def __init__(self, name: str, num_indices: int, depends_on: FrozenSet[str]):
+    def __init__(self, name: str, num_indices: int, depends_on: abc_Set[str]):
         self.name = name
         self.num_indices = num_indices
         self.depends_on = depends_on
@@ -252,7 +252,7 @@ class InlinedResult(ImplementedResult):
     """
     def __init__(self, expr: ScalarExpression,
             num_indices: int,
-            depends_on: FrozenSet[str]):
+            depends_on: abc_Set[str]):
         self.expr = expr
         self.num_indices = num_indices
         self.depends_on = depends_on
@@ -279,7 +279,7 @@ class SubstitutionRuleResult(ImplementedResult):
     """
     subst_name: str
     num_args: int
-    depends_on: FrozenSet[str]
+    depends_on: abc_Set[str]
 
     def to_loopy_expression(self,
                             indices: SymbolicIndex,
@@ -352,8 +352,8 @@ class CodeGenMapper(Mapper):
     has_loopy_call: bool
 
     def __init__(self,
-                 array_tag_t_to_not_propagate: FrozenSet[Type[Tag]],
-                 axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]) -> None:
+                 array_tag_t_to_not_propagate: abc_Set[Type[Tag]],
+                 axis_tag_t_to_not_propagate: abc_Set[Type[Tag]]) -> None:
         super().__init__()
         self.exprgen_mapper = InlinedExpressionGenMapper(axis_tag_t_to_not_propagate)
         self.array_tag_t_to_not_propagate = array_tag_t_to_not_propagate
@@ -374,7 +374,7 @@ class CodeGenMapper(Mapper):
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
         assert expr.name is not None
-        result = StoredResult(expr.name, expr.ndim, frozenset())
+        result = StoredResult(expr.name, expr.ndim, FrozenOrderedSet())
         state.results[expr] = result
         return result
 
@@ -398,7 +398,7 @@ class CodeGenMapper(Mapper):
         kernel = state.kernel.copy(args=state.kernel.args + [arg])
         state.update_kernel(kernel)
         assert expr.name is not None
-        result = StoredResult(expr.name, expr.ndim, frozenset())
+        result = StoredResult(expr.name, expr.ndim, FrozenOrderedSet())
         state.results[expr] = result
         return result
 
@@ -428,7 +428,7 @@ class CodeGenMapper(Mapper):
         if expr.tags_of_type(ImplStored):
             name = _generate_name_for_temp(expr, state.var_name_gen)
             result = StoredResult(name, expr.ndim,
-                                  frozenset([add_store(name, expr,
+                                  FrozenOrderedSet([add_store(name, expr,
                                                        result, state,
                                                        self, True)]))
         elif expr.tags_of_type(ImplInlined):
@@ -462,7 +462,7 @@ class CodeGenMapper(Mapper):
             insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
                     output_to_temporary=True, cgen_mapper=self)
             state.results[subexpr] = state.results[expr[key]] = (
-                    StoredResult(name, subexpr.ndim, frozenset([insn_id])))
+                    StoredResult(name, subexpr.ndim, FrozenOrderedSet([insn_id])))
 
     def map_named_array(self, expr: NamedArray,
             state: CodeGenState) -> ImplementedResult:
@@ -501,7 +501,7 @@ class CodeGenMapper(Mapper):
 
         assignees = []
         params = []
-        depends_on: Set[str] = set()
+        depends_on: OrderedSet[str] = OrderedSet()
         new_tvs = {}
         new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
 
@@ -519,7 +519,7 @@ class CodeGenMapper(Mapper):
 
                     # stored result for the assignee
                     result = StoredResult(assignee_name, named_array.ndim,
-                                          frozenset([new_insn_id]))
+                                          FrozenOrderedSet([new_insn_id]))
                     # record the result for the corresponding loopy array
                     state.results[named_array] = result
 
@@ -548,8 +548,8 @@ class CodeGenMapper(Mapper):
                                 cgen_mapper=self)
                         depends_on.add(store_insn_id)
                         # replace "arg" with the created stored variable
-                        state.results[pt_arg] = StoredResult(name, pt_arg.ndim,
-                                                          frozenset([store_insn_id]))
+                        state.results[pt_arg] = StoredResult(
+                            name, pt_arg.ndim, FrozenOrderedSet([store_insn_id]))
                         params.append(_get_sub_array_ref(pt_arg, name))
                         new_tvs[name] = get_loopy_temporary(name, pt_arg,
                                                             self, state)
@@ -575,7 +575,7 @@ class CodeGenMapper(Mapper):
         new_insn = make_assignment(
                 tuple(assignees),
                 var(expr.entrypoint)(*params),
-                depends_on=frozenset(depends_on),
+                depends_on=FrozenOrderedSet(depends_on),
                 id=new_insn_id)
 
         # update kernel
@@ -632,9 +632,9 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     The outputs of this mapper are scalar expressions suitable for wrapping in
     :class:`InlinedResult`.
     """
-    axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]
+    axis_tag_t_to_not_propagate: abc_Set[Type[Tag]]
 
-    def __init__(self, axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]]):
+    def __init__(self, axis_tag_t_to_not_propagate: abc_Set[Type[Tag]]):
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
 
     if TYPE_CHECKING:
@@ -777,7 +777,7 @@ def domain_for_shape(dim_names: Tuple[str, ...],
     assert len(dim_names) == len(shape)
 
     # Collect parameters.
-    param_names_set: Set[str] = set()
+    param_names_set: OrderedSet[str] = OrderedSet()
     for sdep in map(scalar_expr.get_dependencies, shape):
         param_names_set |= sdep
 
@@ -819,9 +819,9 @@ def domain_for_shape(dim_names: Tuple[str, ...],
 
 
 def _filter_tags_not_of_type(expr: Array,
-                             ignore_tag_t: FrozenSet[Type[Tag]]
-                             ) -> FrozenSet[Tag]:
-    return frozenset(tag
+                             ignore_tag_t: abc_Set[Type[Tag]]
+                             ) -> abc_Set[Tag]:
+    return FrozenOrderedSet(tag
                      for tag in expr.tags
                      if not isinstance(tag, tuple(ignore_tag_t)))
 
@@ -858,7 +858,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     insn = make_assignment((assignee,),
             loopy_expr,
             id=insn_id,
-            within_inames=frozenset(inames),
+            within_inames=FrozenOrderedSet(inames),
             depends_on=loopy_expr_context.depends_on)
     shape = shape_to_scalar_expression(expr.shape, cgen_mapper, state)
 
@@ -974,9 +974,10 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    *,
                    function_name: str = "_pt_kernel",
                    cl_device: Optional["pyopencl.Device"] = None,
-                   array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
-                       ImplStored, Named, PrefixNamed]),
-                   axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset(),
+                   array_tag_t_to_not_propagate: abc_Set[Type[Tag]] =
+                   FrozenOrderedSet([ImplStored, Named, PrefixNamed]),
+                   axis_tag_t_to_not_propagate: abc_Set[Type[Tag]] =
+                     FrozenOrderedSet(),
                    ) -> BoundProgram:
     r"""Code generation entry point.
 
@@ -1032,8 +1033,6 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs
 
-
-
     # optimization: remove any ImplStored tags on outputs to avoid redundant
     # store-load operations (see https://github.com/inducer/pytato/issues/415)
     # (This must be done after all the calls have been inlined)
@@ -1059,7 +1058,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     from pytato.transform import InputGatherer
     ing = InputGatherer()
 
-    state.var_name_gen.add_names(frozenset(input_expr.name
+    state.var_name_gen.add_names(FrozenOrderedSet(input_expr.name
             for name in compute_order
             for input_expr in ing(outputs[name].expr)
             if isinstance(input_expr, (Placeholder, SizeParam, DataWrapper))
@@ -1075,7 +1074,8 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         expr = outputs[name].expr
         insn_id = add_store(name, expr, cg_mapper(expr, state), state, cg_mapper)
         # replace "expr" with the created stored variable
-        state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
+        state.results[expr] = StoredResult(
+            name, expr.ndim, FrozenOrderedSet([insn_id]))
 
     # Why call make_reduction_inames_unique?
     # Consider pt.generate_loopy(pt.sum(x) + pt.sum(x)), the generated

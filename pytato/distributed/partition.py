@@ -62,13 +62,13 @@ THE SOFTWARE.
 """
 
 from functools import reduce
-import collections
 from typing import (
-        Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
+        Sequence, Any, Mapping, FrozenSet, Dict, cast,
+        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Tuple)
 
 import attrs
 from immutabledict import immutabledict
+from collections.abc import Set as abc_Set
 
 from pytools.graph import CycleError
 from pytools import memoize_method
@@ -169,16 +169,16 @@ class DistributedGraphPart:
     .. automethod:: all_input_names
     """
     pid: PartId
-    needed_pids: FrozenSet[PartId]
-    user_input_names: FrozenSet[str]
-    partition_input_names: FrozenSet[str]
-    output_names: FrozenSet[str]
+    needed_pids: abc_Set[PartId]
+    user_input_names: abc_Set[str]
+    partition_input_names: abc_Set[str]
+    output_names: abc_Set[str]
 
     name_to_recv_node: Mapping[str, DistributedRecv]
     name_to_send_nodes: Mapping[str, Sequence[DistributedSend]]
 
     @memoize_method
-    def all_input_names(self) -> FrozenSet[str]:
+    def all_input_names(self) -> abc_Set[str]:
         return self.user_input_names | self. partition_input_names
 
 # }}}
@@ -235,7 +235,7 @@ class _DistributedInputReplacer(CopyMapper):
         self.name_to_output = name_to_output
         self.output_arrays = FrozenOrderedSet(name_to_output.values())
 
-        self.user_input_names: Set[str] = OrderedSet()
+        self.user_input_names: OrderedSet[str] = OrderedSet()
         self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
 
     def clone_for_callee(
@@ -309,8 +309,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: FrozenSet[CommunicationOpIdentifier]
-    send_ids: FrozenSet[CommunicationOpIdentifier]
+    recv_ids: abc_Set[CommunicationOpIdentifier]
+    send_ids: abc_Set[CommunicationOpIdentifier]
 
 
 # {{{ _make_distributed_partition
@@ -396,12 +396,12 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+        CombineMapper[abc_Set[CommunicationOpIdentifier]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
                 Dict[CommunicationOpIdentifier,
-                     FrozenSet[CommunicationOpIdentifier]] = {}
+                     abc_Set[CommunicationOpIdentifier]] = {}
 
         self.local_recv_id_to_recv_node: \
                 Dict[CommunicationOpIdentifier, DistributedRecv] = {}
@@ -411,13 +411,14 @@ class _LocalSendRecvDepGatherer(
         self.local_rank = local_rank
 
     def combine(
-            self, *args: FrozenSet[CommunicationOpIdentifier]
-            ) -> FrozenSet[CommunicationOpIdentifier]:
-        return reduce(FrozenOrderedSet.union, args, FrozenOrderedSet())
+            self, *args: abc_Set[CommunicationOpIdentifier]
+            ) -> abc_Set[CommunicationOpIdentifier]:
+        return reduce(FrozenOrderedSet.union,  # type: ignore[arg-type]
+                      args, FrozenOrderedSet())
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[CommunicationOpIdentifier]:
+                                        ) -> abc_Set[CommunicationOpIdentifier]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -431,7 +432,7 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> FrozenSet[CommunicationOpIdentifier]:
+    def _map_input_base(self, expr: Array) -> abc_Set[CommunicationOpIdentifier]:
         return FrozenOrderedSet()
 
     map_placeholder = _map_input_base
@@ -440,7 +441,7 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> FrozenSet[CommunicationOpIdentifier]:
+            ) -> abc_Set[CommunicationOpIdentifier]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
@@ -451,7 +452,7 @@ class _LocalSendRecvDepGatherer(
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
-        return FrozenOrderedSet({recv_id})
+        return FrozenOrderedSet([recv_id])
 
     def map_named_call_result(
             self, expr: NamedCallResult) -> FrozenSet[CommunicationOpIdentifier]:
@@ -492,7 +493,8 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches: Sequence[Set[TaskType]] = [OrderedSet() for _ in range(nlevels)]
+    task_batches: Sequence[OrderedSet[TaskType]] = \
+        [OrderedSet() for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
         task_batches[dep_level].add(task_id)
@@ -517,7 +519,7 @@ def _calculate_dependency_levels(
     1 + the maximum dependency level for its children.
     """
     task_to_dep_level: Dict[TaskType, int] = {}
-    seen: set[TaskType] = OrderedSet()
+    seen: OrderedSet[TaskType] = OrderedSet()
     nodes_visited: int = 0
 
     def _dependency_level_dfs(task_id: TaskType) -> int:
@@ -770,7 +772,7 @@ def find_distributed_partition(
 
     part_comm_ids: List[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: FrozenSet[CommunicationOpIdentifier] = FrozenOrderedSet()
+        recv_ids: abc_Set[CommunicationOpIdentifier] = FrozenOrderedSet()
         for batch in comm_batches:
             send_ids = FrozenOrderedSet(
                 comm_id for comm_id in batch
@@ -824,9 +826,10 @@ def find_distributed_partition(
     # that the resulting partition is also deterministic
 
     sent_arrays = FrozenOrderedSet(
-        send_node.data for _, send_node in sorted(lsrdg.local_send_id_to_send_node.items()))
+        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
 
-    received_arrays = FrozenOrderedSet(recv for _, recv in sorted(lsrdg.local_recv_id_to_recv_node.items()))
+    received_arrays = FrozenOrderedSet(
+        recv for recv in lsrdg.local_recv_id_to_recv_node.values())
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)

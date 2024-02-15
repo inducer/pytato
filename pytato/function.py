@@ -58,6 +58,7 @@ from pytools.tag import Tag, Taggable
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
 
 from orderedsets import FrozenOrderedSet
+from collections.abc import Set as abc_Set
 
 # {{{ Call/NamedCallResult
 
@@ -72,7 +73,7 @@ class ReturnType(enum.Enum):
     TUPLE_OF_ARRAYS = 2
 
 
-# eq=False to avoid equality comparison without EqualityMaper
+# eq=False to avoid equality comparison without EqualityMapper
 @attrs.define(frozen=True, eq=False, hash=True)
 class FunctionDefinition(Taggable):
     r"""
@@ -135,7 +136,7 @@ class FunctionDefinition(Taggable):
 
         mapper = InputGatherer()
 
-        all_placeholders: FrozenSet[Placeholder] = FrozenOrderedSet()
+        all_placeholders: abc_Set[Placeholder] = FrozenOrderedSet()
         for ary in self.returns.values():
             new_placeholders = FrozenOrderedSet([
                 arg for arg in mapper(ary)
@@ -287,7 +288,7 @@ class Call(AbstractResultWithNamedArrays):
         def __attrs_post_init__(self) -> None:
             # check that the invocation parameters and the function definition
             # parameters agree with each other.
-            assert FrozenOrderedSet(self.bindings) == self.function.parameters
+            assert set(self.bindings) == self.function.parameters
             super().__attrs_post_init__()
 
     def __contains__(self, name: object) -> bool:
@@ -376,10 +377,12 @@ def trace_call(f: Callable[..., ReturnT],
 
     # construct the function
     function = FunctionDefinition(
-        FrozenOrderedSet(pl_arg.name for pl_arg in pl_args) | FrozenOrderedSet(pl_kwargs),
+        FrozenOrderedSet(pl_arg.name for pl_arg in pl_args)  # type: ignore[arg-type]
+        | FrozenOrderedSet(pl_kwargs),
         return_type,
         immutabledict(returns),
-        tags=_get_default_tags() | (FrozenOrderedSet([FunctionIdentifier(identifier)])
+        tags=_get_default_tags() | (FrozenOrderedSet(
+                                    [FunctionIdentifier(identifier)])
                                     if identifier
                                     else FrozenOrderedSet())
     )

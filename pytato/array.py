@@ -163,6 +163,7 @@ Internal stuff that is only here because the documentation tool wants it
 # }}}
 
 from abc import ABC, abstractmethod
+from collections.abc import Set as abc_Set
 from functools import partialmethod, cached_property
 import operator
 import attrs
@@ -788,7 +789,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
 
     def __init__(self, data: Mapping[str, Array], *,
-                 tags: Optional[FrozenSet[Tag]] = None) -> None:
+                 tags: Optional[abc_Set[Tag]] = None) -> None:
         if tags is None:
             from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
@@ -1272,7 +1273,8 @@ def einsum(subscripts: str, *operands: Array,
     for descr in index_to_descr.values():
         if isinstance(descr, EinsumReductionAxis):
             if descr not in redn_axis_to_redn_descr:
-                redn_axis_to_redn_descr[descr] = ReductionDescriptor(FrozenOrderedSet())
+                redn_axis_to_redn_descr[descr] = \
+                    ReductionDescriptor(FrozenOrderedSet())  # type: ignore[arg-type]
 
     # }}}
 
@@ -1752,11 +1754,12 @@ class SizeParam(InputArgumentBase):
 # {{{ end-user facing
 
 def _get_default_axes(ndim: int) -> AxesT:
-    return tuple(Axis(FrozenOrderedSet()) for _ in range(ndim))
+    return tuple(
+        Axis(FrozenOrderedSet()) for _ in range(ndim))  # type: ignore[arg-type]
 
 
 def _get_default_tags() -> FrozenSet[Tag]:
-    return FrozenOrderedSet()
+    return FrozenOrderedSet()  # type: ignore[return-value]
 
 
 def matmul(x1: Array, x2: Array) -> Array:
@@ -1978,7 +1981,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 # {{{ make_dict_of_named_arrays
 
 def make_dict_of_named_arrays(data: Dict[str, Array], *,
-                              tags: FrozenSet[Tag] = FrozenOrderedSet()
+                              tags: abc_Set[Tag] = FrozenOrderedSet()
                               ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
@@ -1992,7 +1995,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any,
-                     tags: FrozenSet[Tag] = FrozenOrderedSet(),
+                     tags: abc_Set[Tag] = FrozenOrderedSet(),
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2015,11 +2018,11 @@ def make_placeholder(name: str,
                          f" expected {len(shape)}, got {len(axes)}.")
 
     return Placeholder(name=name, shape=shape, dtype=dtype, axes=axes,
-                       tags=(tags | _get_default_tags()))
+                       tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 
 def make_size_param(name: str,
-                    tags: FrozenSet[Tag] = FrozenOrderedSet()) -> SizeParam:
+                    tags: abc_Set[Tag] = FrozenOrderedSet()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -2029,14 +2032,15 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags()))
+    return SizeParam(name,
+                     tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 
 def make_data_wrapper(data: DataInterface,
         *,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: FrozenSet[Tag] = FrozenOrderedSet(),
+        tags: abc_Set[Tag] = FrozenOrderedSet(),
         axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
@@ -2057,7 +2061,7 @@ def make_data_wrapper(data: DataInterface,
                 "Use pytato.tags.{Named,PrefixNamed} instead.",
                 DeprecationWarning, stacklevel=2)
         from pytato.tags import PrefixNamed
-        tags = tags | FrozenOrderedSet({PrefixNamed(name)})
+        tags = tags | FrozenOrderedSet([PrefixNamed(name)])
 
     shape = normalize_shape(shape)
 
@@ -2068,7 +2072,8 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()))
+    return DataWrapper(data, shape, axes=axes,
+                       tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 # }}}
 
@@ -2489,12 +2494,13 @@ def make_index_lambda(
     redn_vars = get_reduction_induction_variables(expression)
 
     if not (FrozenOrderedSet(var_to_reduction_descr) <= redn_vars):
-        raise ValueError(f"'{FrozenOrderedSet(var_to_reduction_descr) - redn_vars}': not"
-                         " reduction induction variables.")
+        raise ValueError(
+            f"'{FrozenOrderedSet(var_to_reduction_descr) - redn_vars}': not"
+            " reduction induction variables.")
 
     for redn_var in redn_vars:
         redn_descr = var_to_reduction_descr.get(redn_var,
-                                           ReductionDescriptor(FrozenOrderedSet()))
+                ReductionDescriptor(FrozenOrderedSet()))  # type: ignore[arg-type]
         if not isinstance(redn_descr, ReductionDescriptor):
             raise TypeError(f"reduction_dim for {redn_var} expected to be"
                             f" of type ReductionDescriptor, got {type(redn_descr)}.")

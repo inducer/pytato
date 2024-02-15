@@ -108,12 +108,12 @@ class Reprifier(Mapper):
             # prettify: if empty 'expr.tags' => don't print.
             fields = tuple(field for field in fields if field != "tags")
 
-        if all(axis == Axis(FrozenOrderedSet()) for axis in expr.axes):
+        if all(axis == Axis(frozenset()) for axis in expr.axes):
             # prettify: if trivial 'expr.axes' => don't print.
             fields = tuple(field for field in fields if field != "axes")
 
         if (isinstance(expr, IndexLambda)
-                and all(redn_descr == ReductionDescriptor(FrozenOrderedSet())
+                and all(redn_descr == ReductionDescriptor(frozenset())
                         for redn_descr in expr.var_to_reduction_descr.values())):
             # prettify: if trivial 'expr.var_to_reduction_descr' => don't print.
             fields = tuple(field

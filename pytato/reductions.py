@@ -236,9 +236,9 @@ def _get_var_to_redn_descr(shape: ShapeType,
     if axis_to_reduction_descr is None:
         axis_to_reduction_descr = {}
 
-    if not (FrozenOrderedSet(axis_to_reduction_descr) <= FrozenOrderedSet(axes)):
+    if not (frozenset(axis_to_reduction_descr) <= frozenset(axes)):
         raise ValueError("Axes "
-                         f"'{FrozenOrderedSet(axis_to_reduction_descr) - FrozenOrderedSet(axes)}'"
+                         f"'{frozenset(axis_to_reduction_descr) - frozenset(axes)}'"
                          " in 'axis_to_reduction_descr' not a part of axes"
                          " to be reduced over.")
 
@@ -253,7 +253,7 @@ def _get_var_to_redn_descr(shape: ShapeType,
             idx = f"_r{n_redn_dims}"
             redn_descr = axis_to_reduction_descr.get(
                 idim,
-                ReductionDescriptor(FrozenOrderedSet()))
+                ReductionDescriptor(FrozenOrderedSet()))  # type: ignore[arg-type]
             if not isinstance(redn_descr, ReductionDescriptor):
                 raise TypeError(f"'axis_to_reduction_descr[{idim}]': "
                                 "expected an instance of ReductionDescriptor, "

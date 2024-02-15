@@ -25,7 +25,7 @@ THE SOFTWARE.
 import dataclasses
 from typing import Union, Dict, Tuple, List, Any, Optional, Mapping
 from immutabledict import immutabledict
-from orderedsets import FrozenOrderedSet
+from orderedsets import FrozenOrderedSet, OrderedSet
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
@@ -136,7 +136,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             raise ValueError("Got a LoopyCall for a non-loopy target.")
         translation_unit = expr.translation_unit.copy(
                                         target=self.target.get_loopy_target())
-        namegen = UniqueNameGenerator(FrozenOrderedSet(self.kernels_seen))
+        namegen = UniqueNameGenerator(
+            OrderedSet(self.kernels_seen))  # type: ignore[arg-type]
         entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
