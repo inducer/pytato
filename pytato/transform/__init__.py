@@ -1344,14 +1344,16 @@ class MPMSMaterializer(Mapper):
                                 for bnd_name, bnd in sorted(children_rec.items())}),
                                axes=expr.axes,
                                var_to_reduction_descr=expr.var_to_reduction_descr,
-                               tags=expr.tags)
+                               tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_expr = Stack(tuple(ary.expr for ary in rec_arrays),
-                         expr.axis, axes=expr.axes, tags=expr.tags)
+                         expr.axis, axes=expr.axes, tags=expr.tags,
+                         non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1362,7 +1364,8 @@ class MPMSMaterializer(Mapper):
         new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
                                expr.axis,
                                axes=expr.axes,
-                               tags=expr.tags)
+                               tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     rec_arrays)
@@ -1370,7 +1373,8 @@ class MPMSMaterializer(Mapper):
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,
-                        tags=expr.tags)
+                        tags=expr.tags,
+                        non_equality_tags=expr.non_equality_tags)
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     (rec_array,))
 
@@ -1378,7 +1382,8 @@ class MPMSMaterializer(Mapper):
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,
-                                   axes=expr.axes, tags=expr.tags)
+                                   axes=expr.axes, tags=expr.tags,
+                                   non_equality_tags=expr.non_equality_tags)
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     (rec_array,))
@@ -1396,7 +1401,8 @@ class MPMSMaterializer(Mapper):
                                     for i in range(
                                         len(expr.indices))),
                               axes=expr.axes,
-                              tags=expr.tags)
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1410,7 +1416,8 @@ class MPMSMaterializer(Mapper):
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         new_expr = Reshape(rec_array.expr, expr.newshape,
-                           expr.order, axes=expr.axes, tags=expr.tags)
+                           expr.order, axes=expr.axes, tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -1423,7 +1430,8 @@ class MPMSMaterializer(Mapper):
                           expr.redn_axis_to_redn_descr,
                           expr.index_to_access_descr,
                           axes=expr.axes,
-                          tags=expr.tags)
+                          tags=expr.tags,
+                          non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
