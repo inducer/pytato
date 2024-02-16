@@ -393,7 +393,8 @@ class Array(Taggable):
 
     .. attribute:: tags
 
-        A :class:`FrozenOrderedSet` of :class:`pytools.tag.Tag` instances.
+        A :class:`~orderedsets.FrozenOrderedSet` of :class:`pytools.tag.Tag`
+        instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__

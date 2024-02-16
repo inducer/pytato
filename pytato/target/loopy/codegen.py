@@ -132,8 +132,9 @@ class PersistentExpressionContext(object):
     .. automethod:: update_depends_on
 
     """
+    from collections.abc import Set
     state: CodeGenState
-    _depends_on: abc_Set[str] = \
+    _depends_on: Set[str] = \
             attrs.field(factory=FrozenOrderedSet)
 
     @property
