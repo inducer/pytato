@@ -229,7 +229,8 @@ def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> An
     return EvaluationMapper(context)(expression)
 
 
-def distribute(expr: Any, parameters: abc_Set[Any] = FrozenOrderedSet(),
+def distribute(expr: Any,
+               parameters: abc_Set[Any] = FrozenOrderedSet(),  # noqa: B008
                commutative: bool = True) -> Any:
     if commutative:
         return DistributeMapper(TermCollector(parameters))(expr)

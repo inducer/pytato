@@ -975,9 +975,9 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    function_name: str = "_pt_kernel",
                    cl_device: Optional["pyopencl.Device"] = None,
                    array_tag_t_to_not_propagate: abc_Set[Type[Tag]] =
-                   FrozenOrderedSet([ImplStored, Named, PrefixNamed]),
+                   FrozenOrderedSet([ImplStored, Named, PrefixNamed]),  # noqa: B008
                    axis_tag_t_to_not_propagate: abc_Set[Type[Tag]] =
-                     FrozenOrderedSet(),
+                     FrozenOrderedSet(),  # noqa: B008
                    ) -> BoundProgram:
     r"""Code generation entry point.
 

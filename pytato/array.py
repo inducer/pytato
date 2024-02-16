@@ -1981,7 +1981,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 # {{{ make_dict_of_named_arrays
 
 def make_dict_of_named_arrays(data: Dict[str, Array], *,
-                              tags: abc_Set[Tag] = FrozenOrderedSet()
+                              tags: abc_Set[Tag] = FrozenOrderedSet()  # noqa: B008
                               ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
@@ -1995,7 +1995,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any,
-                     tags: abc_Set[Tag] = FrozenOrderedSet(),
+                     tags: abc_Set[Tag] = FrozenOrderedSet(),  # noqa: B008
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2022,7 +2022,8 @@ def make_placeholder(name: str,
 
 
 def make_size_param(name: str,
-                    tags: abc_Set[Tag] = FrozenOrderedSet()) -> SizeParam:
+                    tags: abc_Set[Tag] = FrozenOrderedSet()  # noqa: B008
+                    ) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -2040,7 +2041,7 @@ def make_data_wrapper(data: DataInterface,
         *,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: abc_Set[Tag] = FrozenOrderedSet(),
+        tags: abc_Set[Tag] = FrozenOrderedSet(),  # noqa: B008
         axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
