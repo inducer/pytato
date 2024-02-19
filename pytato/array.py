@@ -173,7 +173,7 @@ from functools import partialmethod, cached_property
 import operator
 import attrs
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
+        KeysView, Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
         FrozenSet, Collection)
 
@@ -845,7 +845,12 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         return iter(self._data)
 
     def __repr__(self) -> str:
-        return "DictOfNamedArrays(" + str(self._data) + ")"
+        return "DictOfNamedArrays(" + repr(self._data) + ")"
+
+    # Note: items() and values() are not implemented here, they go through
+    # __iter__()/__getitem__() above.
+    def keys(self) -> KeysView[str]:
+        return self._data.keys()
 
 # }}}
 
