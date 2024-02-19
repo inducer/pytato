@@ -845,7 +845,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         return iter(self._data)
 
     def __repr__(self) -> str:
-        return "DictOfNamedArrays(" + repr(self._data) + ")"
+        return f"DictOfNamedArrays(tags={self.tags!r}, data={self._data!r})"
 
     # Note: items() and values() are not implemented here, they go through
     # __iter__()/__getitem__() above.
