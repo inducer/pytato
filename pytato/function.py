@@ -48,7 +48,8 @@ import re
 import enum
 
 from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
-                    Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
+                    Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping,
+                    KeysView)
 from immutabledict import immutabledict
 from functools import cached_property
 from pytato.array import (Array, AbstractResultWithNamedArrays,
@@ -305,6 +306,9 @@ class Call(AbstractResultWithNamedArrays):
 
     def _with_new_tags(self: Call, tags: FrozenSet[Tag]) -> Call:
         return attrs.evolve(self, tags=tags)
+
+    def keys(self) -> KeysView[str]:
+        return self.function.returns.keys()
 
 # }}}
 

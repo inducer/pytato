@@ -797,6 +797,10 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
+    @abstractmethod
+    def keys(self) -> KeysView[str]:
+        pass
+
 
 @attrs.frozen(eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
