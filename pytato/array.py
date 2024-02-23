@@ -761,6 +761,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     .. automethod:: __contains__
     .. automethod:: __getitem__
     .. automethod:: __len__
+    .. automethod:: keys
 
     .. note::
 
@@ -799,6 +800,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
 
     @abstractmethod
     def keys(self) -> KeysView[str]:
+        """Return a :class:`KeysView` of the names of the named arrays."""
         pass
 
 
