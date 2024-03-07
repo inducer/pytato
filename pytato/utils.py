@@ -27,7 +27,7 @@ import islpy as isl
 import pymbolic.primitives as prim
 
 from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
-                    Optional, Iterable, TypeVar)
+                    Optional, Iterable, TypeVar, FrozenSet)
 from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
                           DtypeOrScalar, ArrayOrScalar, BasicIndex,
                           AdvancedIndexInContiguousAxes,
@@ -38,6 +38,7 @@ from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
                                 SCALAR_CLASSES, INT_CLASSES, BoolT, ScalarType)
 from pytools import UniqueNameGenerator
 from pytato.transform import Mapper
+from pytools.tag import Tag
 from immutabledict import immutabledict
 
 
@@ -178,9 +179,10 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
 def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
+                        tags: FrozenSet[Tag],
+                        non_equality_tags: FrozenSet[Optional[Tag]],
                         ) -> ArrayOrScalar:
-    from pytato.array import (_get_default_axes, _get_default_tags,
-                              _get_created_at_tag)
+    from pytato.array import _get_default_axes
 
     if isinstance(a1, SCALAR_CLASSES):
         a1 = np.dtype(type(a1)).type(a1)
@@ -207,8 +209,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                        shape=result_shape,
                        dtype=result_dtype,
                        bindings=immutabledict(bindings),
-                       tags=_get_default_tags(),
-                       non_equality_tags=frozenset({_get_created_at_tag()}),
+                       tags=tags,
+                       non_equality_tags=non_equality_tags,
                        var_to_reduction_descr=immutabledict(),
                        axes=_get_default_axes(len(result_shape)))
 
@@ -475,10 +477,13 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 # }}}
 
 
-def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Array:
+def _index_into(
+        ary: Array,
+        indices: Tuple[ConvertibleToIndexExpr, ...],
+        tags: FrozenSet[Tag],
+        non_equality_tags: FrozenSet[Optional[Tag]]) -> Array:
     from pytato.diagnostic import CannotBroadcastError
-    from pytato.array import (_get_default_axes, _get_default_tags,
-                              _get_created_at_tag)
+    from pytato.array import _get_default_axes
 
     # {{{ handle ellipsis
 
@@ -564,24 +569,24 @@ def _index_into(ary: Array, indices: Tuple[ConvertibleToIndexExpr, ...]) -> Arra
             return AdvancedIndexInNoncontiguousAxes(
                 ary,
                 tuple(normalized_indices),
-                tags=_get_default_tags(),
-                non_equality_tags=frozenset({_get_created_at_tag()}),
+                tags=tags,
+                non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
         else:
             return AdvancedIndexInContiguousAxes(
                 ary,
                 tuple(normalized_indices),
-                tags=_get_default_tags(),
-                non_equality_tags=frozenset({_get_created_at_tag()}),
+                tags=tags,
+                non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
     else:
         # basic indexing expression
         return BasicIndex(ary,
                           tuple(normalized_indices),
-                          tags=_get_default_tags(),
-                          non_equality_tags=frozenset({_get_created_at_tag()}),
+                          tags=tags,
+                          non_equality_tags=non_equality_tags,
                           axes=_get_default_axes(
                               len([idx
                                    for idx in normalized_indices
