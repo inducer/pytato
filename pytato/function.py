@@ -163,14 +163,6 @@ class FunctionDefinition(Taggable):
                 if isinstance(arg, Placeholder)})
             all_placeholders |= new_placeholders
 
-        # FIXME: Need a way to check for *any* captured arrays, not just placeholders
-        if __debug__:
-            pl_names = frozenset(arg.name for arg in all_placeholders)
-            extra_pl_names = pl_names - self.parameters
-            assert not extra_pl_names, \
-                f"Found non-argument placeholder '{next(iter(extra_pl_names))}' " \
-                "in function definition."
-
         return immutabledict({arg.name: arg for arg in all_placeholders})
 
     def get_placeholder(self, name: str) -> Placeholder:
