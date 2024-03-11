@@ -463,6 +463,16 @@ class Array(Taggable):
 
     if __debug__:
         def __attrs_post_init__(self) -> None:
+            if _ENABLE_TRACEBACK_TAG:
+                from pytato.tags import CreatedAt
+                ntags = sum(
+                    1 if isinstance(tag, CreatedAt) else 0
+                    for tag in self.non_equality_tags)
+                if ntags < 1:
+                    raise AssertionError("Array has no CreatedAt tag.")
+                elif ntags > 1:
+                    raise AssertionError("Array has multiple CreatedAt tags.")
+
             # ensure that a developer does not uses dataclass' "__eq__"
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
@@ -723,16 +733,22 @@ class NamedArray(Array):
              container: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
              axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
+             tags: Optional[FrozenSet[Tag]] = None,
+             non_equality_tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
         axes = self.axes if axes is None else axes
+        non_equality_tags = (
+            self.non_equality_tags
+            if non_equality_tags is None
+            else non_equality_tags)
 
         return type(self)(container=container,
                           name=name,
                           tags=tags,
-                          axes=axes)
+                          axes=axes,
+                          non_equality_tags=non_equality_tags)
 
     @property
     def expr(self) -> Array:
@@ -836,7 +852,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             raise KeyError(name)
         return NamedArray(self, name,
                           axes=self._data[name].axes,
-                          tags=self._data[name].tags)
+                          tags=self._data[name].tags,
+                          non_equality_tags=self._data[name].non_equality_tags)
 
     def __len__(self) -> int:
         return len(self._data)
@@ -931,7 +948,8 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
                           axes=self.axes,
                           var_to_reduction_descr=immutabledict
                             (new_var_to_redn_descr),
-                          tags=self.tags)
+                          tags=self.tags,
+                          non_equality_tags=self.non_equality_tags)
 
 # }}}
 

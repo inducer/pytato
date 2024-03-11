@@ -117,7 +117,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(name, tags=expr.tags)
+        return SizeParam(
+            name=name,
+            tags=expr.tags,
+            non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         name = expr.name
@@ -128,7 +131,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
@@ -193,7 +197,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError("CodeGenPreprocessor does not support functions.")
