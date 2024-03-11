@@ -338,7 +338,11 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(
+            name=expr.name,
+            axes=expr.axes,
+            tags=expr.tags,
+            non_equality_tags=expr.non_equality_tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
@@ -401,7 +405,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
                 self.rec(expr.passthrough_data),
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         return DistributedRecv(
@@ -619,7 +624,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                 container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape,
                     *args: Any, **kwargs: Any) -> Array:
@@ -1457,7 +1463,8 @@ class MPMSMaterializer(Mapper):
                                  tags=expr.send.tags),
             passthrough_data=rec_passthrough.expr,
             tags=expr.tags,
-        )
+            non_equality_tags=expr.non_equality_tags,
+            )
         return MPMSMaterializerAccumulator(
             rec_passthrough.materialized_predecessors, new_expr)
 
