@@ -57,6 +57,8 @@ ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
+TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
+                            Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
                             Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
@@ -69,6 +71,8 @@ __doc__ = """
 
 .. autoclass:: Mapper
 .. autoclass:: CachedMapper
+.. autoclass:: TransformMapper
+.. autoclass:: TransformMapperWithExtraArgs
 .. autoclass:: CopyMapper
 .. autoclass:: CopyMapperWithExtraArgs
 .. autoclass:: CombineMapper
@@ -220,6 +224,98 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     if TYPE_CHECKING:
         def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
             return self.rec(expr)
+
+# }}}
+
+
+# {{{ TransformMapper
+
+class TransformMapper(CachedMapper[ArrayOrNames]):
+    """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
+    other :class:`pytato.array.Array`\\ s.
+
+    .. automethod:: clone_for_callee
+    """
+    if TYPE_CHECKING:
+        def rec(self, expr: TransformMapperResultT) -> TransformMapperResultT:
+            return cast(TransformMapperResultT, super().rec(expr))
+
+        def __call__(self, expr: TransformMapperResultT) -> TransformMapperResultT:
+            return self.rec(expr)
+
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        # Return self by default; if a subclass wants to implement
+        # function-specific mappings, it can override this
+        return self
+
+# }}}
+
+
+# {{{ TransformMapperWithExtraArgs
+
+class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
+    """
+    Similar to :class:`TransformMapper`, but each mapper method takes extra
+    ``*args``, ``**kwargs`` that are propagated along a path by default.
+
+    The logic in :class:`TransformMapper` purposely does not take the extra
+    arguments to keep the cost of its each call frame low.
+
+    .. automethod:: clone_for_callee
+    """
+    if TYPE_CHECKING:
+        def __call__(
+                self, expr: TransformMapperResultT, *args: Any, **kwargs: Any
+                ) -> TransformMapperResultT:
+            return self.rec(expr, *args, **kwargs)
+
+    def __init__(self) -> None:
+        super().__init__()
+        # type-ignored as '._cache' attribute is not coherent with the base
+        # class
+        self._cache: Dict[Tuple[ArrayOrNames,
+                                Tuple[Any, ...],
+                                Tuple[Tuple[str, Any], ...]
+                                ],
+                          ArrayOrNames] = {}  # type: ignore[assignment]
+
+    def get_cache_key(self,
+                      expr: ArrayOrNames,
+                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
+                                                          Tuple[Any, ...],
+                                                          Tuple[Tuple[str, Any], ...]
+                                                          ]:
+        return (expr, args, tuple(sorted(kwargs.items())))
+
+    def rec(self,
+            expr: TransformMapperResultT,
+            *args: Any, **kwargs: Any) -> TransformMapperResultT:
+        key = self.get_cache_key(expr, *args, **kwargs)
+        try:
+            # type-ignore-reason: self._cache has ArrayOrNames as its values
+            return self._cache[key]  # type: ignore[return-value]
+        except KeyError:
+            result = Mapper.rec(self, expr,
+                                *args,
+                                **kwargs)
+            self._cache[key] = result
+            # type-ignore-reason: Mapper.rec is imprecise
+            return result  # type: ignore[no-any-return]
+
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        # Return self by default; if a subclass wants to implement
+        # function-specific mappings, it can override this
+        return self
 
 # }}}
 
