@@ -54,6 +54,7 @@ from functools import cached_property
 from pytato.array import (Array, AbstractResultWithNamedArrays,
                           Placeholder, NamedArray, ShapeType, _dtype_any)
 from pytools.tag import Tag, Taggable
+from pytools import memoize_method
 
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
 
@@ -163,7 +164,8 @@ class FunctionDefinition(Taggable):
             self: FunctionDefinition, tags: FrozenSet[Tag]) -> FunctionDefinition:
         return attrs.evolve(self, tags=tags)
 
-    def __call__(self, **kwargs: Array
+    @memoize_method
+    def __call__(self, /, **kwargs: Array
                  ) -> Union[Array,
                             Tuple[Array, ...],
                             Dict[str, Array]]:
