@@ -242,7 +242,6 @@ class NamedCallResult(NamedArray):
         The name by which the returned array is referred to in
         :attr:`FunctionDefinition.returns`.
     """
-    name: str
     _mapper_method: ClassVar[str] = "map_named_call_result"
 
     def with_tagged_axis(self, iaxis: int,
