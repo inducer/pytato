@@ -92,7 +92,7 @@ class ReturnType(enum.Enum):
 
 
 # eq=False to avoid equality comparison without EqualityMaper
-@attrs.define(frozen=True, eq=False, hash=True)
+@attrs.define(frozen=True, eq=False, hash=True, cache_hash=True)
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
