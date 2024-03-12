@@ -35,7 +35,6 @@ from pytato.function import FunctionDefinition, Call, NamedCallResult
 from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
 from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
@@ -432,16 +431,17 @@ class CallSiteCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    @memoize_method
     def map_function_definition(self, /, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr) or expr in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
         self.count += new_mapper.count
+
+        self._visited_functions.add(expr)
 
         self.post_visit(expr, *args, **kwargs)
 
