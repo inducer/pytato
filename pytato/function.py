@@ -242,7 +242,6 @@ class NamedCallResult(NamedArray):
         The name by which the returned array is referred to in
         :attr:`FunctionDefinition.returns`.
     """
-    call: Call
     name: str
     _mapper_method: ClassVar[str] = "map_named_call_result"
 
@@ -262,6 +261,11 @@ class NamedCallResult(NamedArray):
                      ) -> NamedCallResult:
         raise ValueError("Untagging a NamedCallResult is illegal, use"
                          " Call.without_tags instead")
+
+    @property
+    def call(self) -> Call:
+        assert isinstance(self._container, Call)
+        return self._container
 
     @property
     def shape(self) -> ShapeType:
