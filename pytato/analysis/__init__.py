@@ -320,26 +320,26 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[Array]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[ArrayOrNames]:
         return frozenset({dim for dim in shape if isinstance(dim, Array)})
 
-    def map_index_lambda(self, expr: IndexLambda) -> frozenset[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> frozenset[Array]:
+    def map_stack(self, expr: Stack) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> frozenset[Array]:
+    def map_concatenate(self, expr: Concatenate) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> frozenset[Array]:
+    def map_einsum(self, expr: Einsum) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[Array]:
+    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[ArrayOrNames]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
@@ -348,7 +348,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> frozenset[Array]:
+    def _map_index_base(self, expr: IndexBase) -> frozenset[ArrayOrNames]:
         return (frozenset([expr.array])
                 | frozenset(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -359,32 +359,34 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> frozenset[Array]:
+                                  ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[Array]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[Array]:
+                                        ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.passthrough_data])
 
-    def map_named_call_result(self, expr: NamedCallResult) -> frozenset[Array]:
-        raise NotImplementedError(
-            "DirectPredecessorsGetter does not yet support expressions containing "
-            "functions.")
+    def map_call(self, expr: Call) -> frozenset[ArrayOrNames]:
+        return frozenset(expr.bindings.values())
+
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> frozenset[ArrayOrNames]:
+        return frozenset([expr._container])
 
 
 # }}}
