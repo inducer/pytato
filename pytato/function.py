@@ -314,6 +314,7 @@ class Call(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self.function.returns)
 
+    @memoize_method
     def __getitem__(self, name: str) -> NamedCallResult:
         return NamedCallResult(
             self, name,
