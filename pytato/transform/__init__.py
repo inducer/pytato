@@ -398,12 +398,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
+        rec_passthrough = self.rec(expr.passthrough_data)
         return DistributedSendRefHolder(
                 DistributedSend(
                     data=self.rec(expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data),
+                rec_passthrough,
+                axes=rec_passthrough.axes,
                 tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
@@ -638,12 +640,14 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
+        rec_passthrough = self.rec(expr.passthrough_data, *args, **kwargs)
         return DistributedSendRefHolder(
                 DistributedSend(
                     data=self.rec(expr.send.data, *args, **kwargs),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data, *args, **kwargs),
+                rec_passthrough,
+                axes=rec_passthrough.axes,
                 tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
@@ -1461,6 +1465,7 @@ class MPMSMaterializer(Mapper):
                                  comm_tag=expr.send.comm_tag,
                                  tags=expr.send.tags),
             passthrough_data=rec_passthrough.expr,
+            axes=rec_passthrough.expr.axes,
             tags=expr.tags,
             non_equality_tags=expr.non_equality_tags,
             )
