@@ -29,7 +29,6 @@ THE SOFTWARE.
 from typing import TYPE_CHECKING, Any, Mapping
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
 
 from pytato.array import (
     Array,
@@ -447,16 +446,17 @@ class CallSiteCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    @memoize_method
     def map_function_definition(self, /, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr) or expr in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
         self.count += new_mapper.count
+
+        self._visited_functions.add(expr)
 
         self.post_visit(expr, *args, **kwargs)
 
