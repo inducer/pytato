@@ -276,6 +276,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
@@ -1229,6 +1230,10 @@ class CachedWalkMapper(WalkMapper):
         super().rec(expr, *args, **kwargs)
         self._visited_nodes.add(cache_key)
 
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        return type(self)()
 # }}}
 
 
@@ -1276,6 +1281,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         # type-ignore-reason: self.__init__ has a different function signature
