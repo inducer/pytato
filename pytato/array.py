@@ -2427,7 +2427,7 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
                      # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.NaN),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),  # pylint: disable=no-member
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2446,7 +2446,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
                      # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.NaN),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),  # pylint: disable=no-member
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)
