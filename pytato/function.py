@@ -63,6 +63,7 @@ from typing import (
 import attrs
 from immutabledict import immutabledict
 
+from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
 from pytato.array import (
@@ -183,7 +184,8 @@ class FunctionDefinition(Taggable):
             self: FunctionDefinition, tags: frozenset[Tag]) -> FunctionDefinition:
         return attrs.evolve(self, tags=tags)
 
-    def __call__(self, **kwargs: Array
+    @memoize_method
+    def __call__(self, /, **kwargs: Array
                  ) -> Array | tuple[Array, ...] | dict[str, Array]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
