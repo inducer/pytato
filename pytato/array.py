@@ -1988,7 +1988,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
-                     dtype: Any,
+                     dtype: Any = np.float64,
                      tags: FrozenSet[Tag] = frozenset(),
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
@@ -1997,7 +1997,8 @@ def make_placeholder(name: str,
                        if not given
     :param shape:      shape of the placeholder array
     :param dtype:      dtype of the placeholder array
-                       (must be convertible to :class:`numpy.dtype`)
+                       (must be convertible to :class:`numpy.dtype`, default is
+                       :class:`numpy.float64`)
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
