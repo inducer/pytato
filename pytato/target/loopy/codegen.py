@@ -54,6 +54,9 @@ import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
 import attrs
 
+from loopy.symbolic import IdentityMapper as LoopyIdentityMapper
+from pymbolic.mapper.subst_applier import SubstitutionApplier
+
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
@@ -84,20 +87,26 @@ __doc__ = """
 """
 
 
-def loopy_substitute(expression: Any, variable_assigments: Mapping[str, Any]) -> Any:
-    from loopy.symbolic import SubstitutionMapper
-    from pymbolic.mapper.substitutor import make_subst_func
+# type-ignore-reason: superclasses have no type information
+class LoopySubstitutionApplier(
+        SubstitutionApplier, LoopyIdentityMapper):  # type: ignore
+    def get_cache_key(self, expr: ScalarExpression,
+                      current_substs: Dict[ScalarExpression, ScalarExpression])\
+                      -> Tuple[Any, ScalarExpression, Any]:
+        return (type(expr), expr, tuple(sorted(current_substs.items())))
 
+
+def loopy_substitute(expression: Any, variable_assignments: Mapping[str, Any]) -> Any:
     # {{{ early exit for identity substitution
 
     if all(isinstance(v, prim.Variable) and v.name == k
-           for k, v in variable_assigments.items()):
+           for k, v in variable_assignments.items()):
         # Nothing to do here, move on.
         return expression
 
     # }}}
 
-    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+    return prim.Substitution(expression, *zip(*variable_assignments.items()))
 
 
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
@@ -844,7 +853,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
             for d in range(expr.ndim))
     indices = tuple(prim.Variable(iname) for iname in inames)
     loopy_expr_context = PersistentExpressionContext(state)
-    loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
+    loopy_expr = LoopySubstitutionApplier()(
+        result.to_loopy_expression(indices, loopy_expr_context))
 
     # Make the instruction
     from loopy.kernel.instruction import make_assignment
