@@ -115,6 +115,8 @@ from pytato.transform.remove_broadcasts_einsum import (
 from pytato.transform.metadata import unify_axes_tags
 from pytato.function import trace_call
 
+import pytato.match as match
+
 __all__ = (
         "dtype",
 
@@ -184,5 +186,8 @@ __all__ = (
 
         # sub-modules
         "analysis", "tags", "transform", "function",
+
+        # sub-modules
+        "match",
 
 )
