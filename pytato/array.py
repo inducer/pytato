@@ -1995,7 +1995,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
-                     dtype: Any,
+                     dtype: Any = np.float64,
                      tags: abc_Set[Tag] = FrozenOrderedSet(),  # noqa: B008
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
@@ -2004,7 +2004,8 @@ def make_placeholder(name: str,
                        if not given
     :param shape:      shape of the placeholder array
     :param dtype:      dtype of the placeholder array
-                       (must be convertible to :class:`numpy.dtype`)
+                       (must be convertible to :class:`numpy.dtype`, default is
+                       :class:`numpy.float64`)
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
@@ -2437,7 +2438,7 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
                      # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.NaN),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),  # pylint: disable=no-member
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2456,7 +2457,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
                      # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.NaN),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),  # pylint: disable=no-member
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)
