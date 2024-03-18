@@ -25,6 +25,7 @@ THE SOFTWARE.
 import dataclasses
 from typing import Union, Dict, Tuple, List, Any, Optional, Mapping
 from immutabledict import immutabledict
+from orderedsets import FrozenOrderedSet, OrderedSet
 
 from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
@@ -135,7 +136,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             raise ValueError("Got a LoopyCall for a non-loopy target.")
         translation_unit = expr.translation_unit.copy(
                                         target=self.target.get_loopy_target())
-        namegen = UniqueNameGenerator(set(self.kernels_seen))
+        namegen = UniqueNameGenerator(
+            OrderedSet(self.kernels_seen))  # type: ignore[arg-type]
         entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
@@ -279,7 +281,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     from pytools.graph import compute_topological_order
 
-    get_deps = SubsetDependencyMapper(frozenset(out.expr
+    get_deps = SubsetDependencyMapper(FrozenOrderedSet(out.expr
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
@@ -288,8 +290,8 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}
-    dag = {name: (frozenset([output_expr_to_name[output] for output in val])
-                  - frozenset([name]))
+    dag = {name: (FrozenOrderedSet([output_expr_to_name[output] for output in val])
+                  - FrozenOrderedSet([name]))
            for name, val in deps.items()}
 
     output_order: List[str] = compute_topological_order(dag, key=lambda x: x)[::-1]

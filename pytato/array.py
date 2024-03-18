@@ -26,6 +26,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from orderedsets import FrozenOrderedSet
+from orderedsets import OrderedSet
+
 # {{{ docs
 
 __doc__ = """
@@ -160,6 +163,7 @@ Internal stuff that is only here because the documentation tool wants it
 # }}}
 
 from abc import ABC, abstractmethod
+from collections.abc import Set as abc_Set
 from functools import partialmethod, cached_property
 import operator
 import attrs
@@ -389,7 +393,8 @@ class Array(Taggable):
 
     .. attribute:: tags
 
-        A :class:`frozenset` of :class:`pytools.tag.Tag` instances.
+        A :class:`~orderedsets.FrozenOrderedSet` of :class:`pytools.tag.Tag`
+        instances.
 
         Motivation: `RDF
         <https://en.wikipedia.org/wiki/Resource_Description_Framework>`__
@@ -785,19 +790,19 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
 
     def __init__(self, data: Mapping[str, Array], *,
-                 tags: Optional[FrozenSet[Tag]] = None) -> None:
+                 tags: Optional[abc_Set[Tag]] = None) -> None:
         if tags is None:
             from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
                  " in an error from 2023. To remove this message either"
                  " call make_dict_of_named_arrays or pass the `tags` argument.")
-            tags = frozenset()
+            tags = FrozenOrderedSet()
 
         object.__setattr__(self, "_data", data)
         object.__setattr__(self, "tags", tags)
 
     def __hash__(self) -> int:
-        return hash((frozenset(self._data.items()), self.tags))
+        return hash((FrozenOrderedSet(self._data.items()), self.tags))
 
     def __contains__(self, name: object) -> bool:
         return name in self._data
@@ -886,7 +891,7 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
             raise TypeError("Argument 'reduction_variable' expected to be str, "
                             f"got {type(reduction_variable)}.")
 
-        assert (frozenset(self.var_to_reduction_descr)
+        assert (FrozenOrderedSet(self.var_to_reduction_descr)
                 == get_reduction_induction_variables(self.expr))
 
         if reduction_variable not in self.var_to_reduction_descr:
@@ -1118,7 +1123,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> immutabledict[str,
             raise ValueError(f"Cannot parse '{acc}' in provided einsum"
                              f" '{subscript}'.")
 
-    if len(set(normalized_indices)) != len(normalized_indices):
+    if len(OrderedSet(normalized_indices)) != len(normalized_indices):
         raise ValueError("Used an input more than once to refer to the"
                          f" output axis in '{subscript}")
 
@@ -1269,7 +1274,8 @@ def einsum(subscripts: str, *operands: Array,
     for descr in index_to_descr.values():
         if isinstance(descr, EinsumReductionAxis):
             if descr not in redn_axis_to_redn_descr:
-                redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+                redn_axis_to_redn_descr[descr] = \
+                    ReductionDescriptor(FrozenOrderedSet())  # type: ignore[arg-type]
 
     # }}}
 
@@ -1749,11 +1755,12 @@ class SizeParam(InputArgumentBase):
 # {{{ end-user facing
 
 def _get_default_axes(ndim: int) -> AxesT:
-    return tuple(Axis(frozenset()) for _ in range(ndim))
+    return tuple(
+        Axis(FrozenOrderedSet()) for _ in range(ndim))  # type: ignore[arg-type]
 
 
 def _get_default_tags() -> FrozenSet[Tag]:
-    return frozenset()
+    return FrozenOrderedSet()  # type: ignore[return-value]
 
 
 def matmul(x1: Array, x2: Array) -> Array:
@@ -1832,7 +1839,7 @@ def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
     if len(axes) != a.ndim:
         raise ValueError("axes have incorrect length")
 
-    if set(axes) != set(range(a.ndim)):
+    if OrderedSet(axes) != OrderedSet(range(a.ndim)):
         raise ValueError("repeated or out-of-bounds axes detected")
 
     return AxisPermutation(a, tuple(axes),
@@ -1975,7 +1982,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 # {{{ make_dict_of_named_arrays
 
 def make_dict_of_named_arrays(data: Dict[str, Array], *,
-                              tags: FrozenSet[Tag] = frozenset()
+                              tags: abc_Set[Tag] = FrozenOrderedSet()  # noqa: B008
                               ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
@@ -1989,7 +1996,7 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any = np.float64,
-                     tags: FrozenSet[Tag] = frozenset(),
+                     tags: abc_Set[Tag] = FrozenOrderedSet(),  # noqa: B008
                      axes: Optional[AxesT] = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2013,11 +2020,12 @@ def make_placeholder(name: str,
                          f" expected {len(shape)}, got {len(axes)}.")
 
     return Placeholder(name=name, shape=shape, dtype=dtype, axes=axes,
-                       tags=(tags | _get_default_tags()))
+                       tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 
 def make_size_param(name: str,
-                    tags: FrozenSet[Tag] = frozenset()) -> SizeParam:
+                    tags: abc_Set[Tag] = FrozenOrderedSet()  # noqa: B008
+                    ) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -2027,14 +2035,15 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags()))
+    return SizeParam(name,
+                     tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 
 def make_data_wrapper(data: DataInterface,
         *,
         name: Optional[str] = None,
         shape: Optional[ConvertibleToShape] = None,
-        tags: FrozenSet[Tag] = frozenset(),
+        tags: abc_Set[Tag] = FrozenOrderedSet(),  # noqa: B008
         axes: Optional[AxesT] = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
@@ -2055,7 +2064,7 @@ def make_data_wrapper(data: DataInterface,
                 "Use pytato.tags.{Named,PrefixNamed} instead.",
                 DeprecationWarning, stacklevel=2)
         from pytato.tags import PrefixNamed
-        tags = tags | frozenset({PrefixNamed(name)})
+        tags = tags | FrozenOrderedSet([PrefixNamed(name)])
 
     shape = normalize_shape(shape)
 
@@ -2066,7 +2075,8 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()))
+    return DataWrapper(data, shape, axes=axes,
+                       tags=(tags | _get_default_tags()))  # type: ignore[arg-type]
 
 # }}}
 
@@ -2474,7 +2484,7 @@ def make_index_lambda(
 
     from pytato.scalar_expr import get_dependencies
     unknown_dep = (get_dependencies(expression, include_idx_lambda_indices=False)
-            - set(bindings))
+            - OrderedSet(bindings))
 
     for dep in unknown_dep:
         raise ValueError(f"Unknown variable '{dep}' in the expression.")
@@ -2486,13 +2496,14 @@ def make_index_lambda(
     processed_var_to_reduction_descr = {}
     redn_vars = get_reduction_induction_variables(expression)
 
-    if not (frozenset(var_to_reduction_descr) <= redn_vars):
-        raise ValueError(f"'{frozenset(var_to_reduction_descr) - redn_vars}': not"
-                         " reduction induction variables.")
+    if not (FrozenOrderedSet(var_to_reduction_descr) <= redn_vars):
+        raise ValueError(
+            f"'{FrozenOrderedSet(var_to_reduction_descr) - redn_vars}': not"
+            " reduction induction variables.")
 
     for redn_var in redn_vars:
         redn_descr = var_to_reduction_descr.get(redn_var,
-                                           ReductionDescriptor(frozenset()))
+                ReductionDescriptor(FrozenOrderedSet()))  # type: ignore[arg-type]
         if not isinstance(redn_descr, ReductionDescriptor):
             raise TypeError(f"reduction_dim for {redn_var} expected to be"
                             f" of type ReductionDescriptor, got {type(redn_descr)}.")
@@ -2608,13 +2619,13 @@ def squeeze(array: Array, axis: Optional[Collection[int]] = None) -> Array:
     """
     from pytato.utils import are_shape_components_equal
 
-    one_d_axes = frozenset({idim
+    one_d_axes = FrozenOrderedSet({idim
                             for idim in range(array.ndim)
                             if are_shape_components_equal(array.shape[idim], 1)})
     if axis is None:
         axis = one_d_axes
     else:
-        axis = frozenset(axis)
+        axis = FrozenOrderedSet(axis)
         if not (axis <= one_d_axes):
             raise ValueError("cannot squeeze an axis which is not 1-long")
 
@@ -2649,7 +2660,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
 
         normalized_axis.append(ax if ax >= 0 else (ax+output_ndim))
 
-    if len(set(normalized_axis)) != len(normalized_axis):
+    if len(OrderedSet(normalized_axis)) != len(normalized_axis):
         raise ValueError(f"repeated axis in '{axis}'.")
 
     # }}}
