@@ -381,43 +381,6 @@ class DirectPredecessorsGetter(Mapper):
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
-    Counts the number of nodes in a DAG.
-
-    .. attribute:: count
-
-       The number of nodes.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.count = 0
-
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
-
-    def post_visit(self, expr: Any) -> None:
-        self.count += 1
-
-
-def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
-    """Returns the number of nodes in DAG *outputs*."""
-
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
-    ncm = NodeCountMapper()
-    ncm(outputs)
-
-    return ncm.count
-
-# }}}
-
-
-# {{{ NodeTypeCountMapper
-
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class NodeTypeCountMapper(CachedWalkMapper):
-    """
     Counts the number of nodes of a given type in a DAG.
 
     .. attribute:: counts
@@ -434,12 +397,10 @@ class NodeTypeCountMapper(CachedWalkMapper):
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        if type(expr) not in self.counts:
-            self.counts[type(expr)] = 0
         self.counts[type(expr)] += 1
 
 
-def get_num_node_types(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type, int]:
+def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type, int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
@@ -452,6 +413,17 @@ def get_num_node_types(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type, i
     ncm(outputs)
 
     return ncm.counts
+
+def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
+    """Returns the number of nodes in DAG *outputs*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    ncm = NodeCountMapper()
+    ncm(outputs)
+
+    return sum(ncm.counts.values())
 
 # }}}
 
