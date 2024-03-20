@@ -114,6 +114,11 @@ from pytato.transform.remove_broadcasts_einsum import (
     rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
 from pytato.function import trace_call
+from pytato.transform.indirections import (
+    decouple_multi_axis_indirections_into_single_axis_indirections,
+    push_axis_indirections_towards_materialized_nodes,
+    fold_constant_indirections,
+)
 
 __all__ = (
         "dtype",
@@ -181,6 +186,10 @@ __all__ = (
         "rewrite_einsums_with_no_broadcasts",
 
         "unify_axes_tags",
+
+        "decouple_multi_axis_indirections_into_single_axis_indirections",
+        "push_axis_indirections_towards_materialized_nodes",
+        "fold_constant_indirections",
 
         # sub-modules
         "analysis", "tags", "transform", "function",
