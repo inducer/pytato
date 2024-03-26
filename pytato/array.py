@@ -150,8 +150,8 @@ Traceback functionality
 Please consider these undocumented and subject to change at any time.
 
 .. autofunction:: set_traceback_tag_enabled
-.. class:: _PytatoFrameSummary
-.. class:: _PytatoStackSummary
+.. autoclass:: pytato.tags._PytatoFrameSummary
+.. autoclass:: pytato.tags._PytatoStackSummary
 
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

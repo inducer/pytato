@@ -113,7 +113,7 @@ class AssumeNonNegative(Tag):
 @dataclass(frozen=True, eq=True)
 class _PytatoFrameSummary:
     """Class to store a single call frame, similar to
-    :class:`FrameSummary`, but immutable."""
+    :class:`traceback.FrameSummary`, but immutable."""
     filename: str
     lineno: Optional[int]
     name: str
@@ -134,7 +134,7 @@ class _PytatoFrameSummary:
 @dataclass(frozen=True, eq=True)
 class _PytatoStackSummary:
     """Class to store a list of :class:`_PytatoFrameSummary` call frames,
-    similar to :class:`StackSummary`, but immutable."""
+    similar to :class:`traceback.StackSummary`, but immutable."""
     frames: Tuple[_PytatoFrameSummary, ...]
 
     def to_stacksummary(self) -> StackSummary:
