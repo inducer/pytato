@@ -1783,7 +1783,8 @@ def _get_default_axes(ndim: int) -> AxesT:
 
 @attrs.define(frozen=True, eq=True)
 class _PytatoFrameSummary:
-    """Class to store a single call frame."""
+    """Class to store a single call frame, similar to
+    :class:`FrameSummary`, but immutable."""
     filename: str
     lineno: Optional[int]
     name: str
@@ -1803,7 +1804,8 @@ class _PytatoFrameSummary:
 
 @attrs.define(frozen=True, eq=True)
 class _PytatoStackSummary:
-    """Class to store a list of :class:`_PytatoFrameSummary` call frames."""
+    """Class to store a list of :class:`_PytatoFrameSummary` call frames,
+    similar to :class:`StackSummary`, but immutable."""
     frames: Tuple[_PytatoFrameSummary, ...]
 
     def to_stacksummary(self) -> StackSummary:
