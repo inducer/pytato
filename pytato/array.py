@@ -522,7 +522,8 @@ class Array(Taggable):
         return AxisPermutation(self,
                                tuple(range(self.ndim)[::-1]),
                                tags=_get_default_tags(),
-                               axes=_get_default_axes(self.ndim))
+                               axes=_get_default_axes(self.ndim),
+                               non_equality_tags=frozenset({_get_created_at_tag()}))
 
     def __eq__(self, other: Any) -> bool:
         if self is other:
