@@ -150,7 +150,7 @@ Traceback functionality
 
 Please consider these undocumented and subject to change at any time.
 
-.. autofunction:: enable_traceback_tag
+.. autofunction:: set_traceback_tag_enabled
 .. class:: _PytatoFrameSummary
 .. class:: _PytatoStackSummary
 
@@ -1858,7 +1858,7 @@ class _PytatoStackSummary:
 _ENABLE_TRACEBACK_TAG = False
 
 
-def enable_traceback_tag(enable: bool = True) -> None:
+def set_traceback_tag_enabled(enable: bool = True) -> None:
     """Enable or disable the traceback tag."""
     global _ENABLE_TRACEBACK_TAG
     _ENABLE_TRACEBACK_TAG = enable

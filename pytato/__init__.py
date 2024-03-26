@@ -114,7 +114,7 @@ from pytato.transform.remove_broadcasts_einsum import (
     rewrite_einsums_with_no_broadcasts)
 from pytato.transform.metadata import unify_axes_tags
 from pytato.function import trace_call
-from pytato.array import enable_traceback_tag
+from pytato.array import set_traceback_tag_enabled
 
 __all__ = (
         "dtype",
@@ -186,5 +186,5 @@ __all__ = (
         # sub-modules
         "analysis", "tags", "transform", "function",
 
-        "enable_traceback_tag",
+        "set_traceback_tag_enabled",
 )

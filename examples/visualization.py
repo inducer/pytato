@@ -17,7 +17,7 @@ GRAPH_SVG = "graph.svg"
 
 
 def main():
-    pt.enable_traceback_tag()
+    pt.set_traceback_tag_enabled()
 
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)

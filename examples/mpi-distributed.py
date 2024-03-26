@@ -15,7 +15,7 @@ from pytato import (find_distributed_partition, generate_code_for_partition,
 
 
 def main():
-    pt.enable_traceback_tag()
+    pt.set_traceback_tag_enabled()
 
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
