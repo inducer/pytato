@@ -9,15 +9,17 @@ Pre-Defined Tags
 .. autoclass:: Named
 .. autoclass:: PrefixNamed
 .. autoclass:: AssumeNonNegative
+.. autoclass:: CreatedAt
 .. autoclass:: ExpandedDimsReshape
 .. autoclass:: FunctionIdentifier
 .. autoclass:: CallImplementationTag
 .. autoclass:: InlineCallTag
 """
 
-from typing import Tuple, Hashable
-from pytools.tag import Tag, UniqueTag
+from typing import Tuple, Hashable, Optional
+from pytools.tag import Tag, UniqueTag, IgnoredForEqualityTag
 from dataclasses import dataclass
+from traceback import FrameSummary, StackSummary
 
 
 # {{{ pre-defined tag: ImplementationStrategy
@@ -106,6 +108,74 @@ class AssumeNonNegative(Tag):
     :class:`~pytato.target.Target` that all entries of the tagged array are
     non-negative.
     """
+
+
+@dataclass(frozen=True, eq=True)
+class _PytatoFrameSummary:
+    """Class to store a single call frame, similar to
+    :class:`traceback.FrameSummary`, but immutable."""
+    filename: str
+    lineno: Optional[int]
+    name: str
+    line: Optional[str]
+
+    def short_str(self, maxlen: int = 100) -> str:
+        s = f"{self.filename}:{self.lineno}, in {self.name}():\n{self.line}"
+        s1, s2 = s.split("\n")
+        # Limit display to maxlen characters
+        s1 = "[...] " + s1[len(s1)-maxlen:] if len(s1) > maxlen else s1
+        s2 = s2[:maxlen] + " [...]" if len(s2) > maxlen else s2
+        return s1 + "\n" + s2
+
+    def __repr__(self) -> str:
+        return f"{self.filename}:{self.lineno}, in {self.name}(): {self.line}"
+
+
+@dataclass(frozen=True, eq=True)
+class _PytatoStackSummary:
+    """Class to store a list of :class:`_PytatoFrameSummary` call frames,
+    similar to :class:`traceback.StackSummary`, but immutable."""
+    frames: Tuple[_PytatoFrameSummary, ...]
+
+    def to_stacksummary(self) -> StackSummary:
+        frames = [FrameSummary(f.filename, f.lineno, f.name, line=f.line)
+                  for f in self.frames]
+
+        return StackSummary.from_list(frames)
+
+    def short_str(self, maxlen: int = 100) -> str:
+        from os.path import dirname
+
+        # Find the first file in the frames that is not in pytato's internal
+        # directories.
+        for frame in reversed(self.frames):
+            frame_dir = dirname(frame.filename)
+            if (not frame_dir.endswith("pytato")
+                    and not frame_dir.endswith("pytato/distributed")):
+                return frame.short_str(maxlen)
+
+        # Fallback in case we don't find any file that is not in the pytato/
+        # directory (should be unlikely).
+        return self.__repr__()
+
+    def __repr__(self) -> str:
+        return "\n  " + "\n  ".join([str(f) for f in self.frames])
+
+
+# See
+# https://mypy.readthedocs.io/en/stable/additional_features.html#caveats-known-issues
+# on why this can not be '@tag_dataclass'.
+@dataclass(init=True, eq=True, frozen=True, repr=True)
+class CreatedAt(UniqueTag, IgnoredForEqualityTag):
+    """
+    A tag attached to a :class:`~pytato.Array` to store the traceback
+    of where it was created.
+    """
+
+    traceback: _PytatoStackSummary
+
+    def __repr__(self) -> str:
+        return "CreatedAt(" + str(self.traceback) + ")"
 
 
 @dataclass(frozen=True)

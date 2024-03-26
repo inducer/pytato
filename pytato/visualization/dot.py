@@ -144,11 +144,11 @@ class DotEmitter:
 @attrs.define
 class _DotNodeInfo:
     title: str
-    fields: Dict[str, str]
+    fields: Dict[str, Any]
     edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]]
 
 
-def stringify_tags(tags: FrozenSet[Tag]) -> str:
+def stringify_tags(tags: FrozenSet[Optional[Tag]]) -> str:
     components = sorted(str(elem) for elem in tags)
     return "{" + ", ".join(components) + "}"
 
@@ -171,9 +171,11 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def get_common_dot_info(self, expr: Array) -> _DotNodeInfo:
         title = type(expr).__name__
         fields = {"addr": hex(id(expr)),
-                "shape": stringify_shape(expr.shape),
-                "dtype": str(expr.dtype),
-                "tags": stringify_tags(expr.tags)}
+                  "shape": stringify_shape(expr.shape),
+                  "dtype": str(expr.dtype),
+                  "tags": stringify_tags(expr.tags),
+                  "non_equality_tags": expr.non_equality_tags,
+                  }
 
         edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
         return _DotNodeInfo(title, fields, edges)
@@ -355,15 +357,32 @@ def dot_escape(s: str) -> str:
     return html.escape(s.replace("\\", "\\\\").replace(" ", "_"))
 
 
+def dot_escape_leave_space(s: str) -> str:
+    # "\" and HTML are significant in graphviz.
+    return html.escape(s.replace("\\", "\\\\"))
+
+
 # {{{ emit helpers
 
-def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, str],
+def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
+    from pytato.tags import CreatedAt
+    for tag in non_equality_tags:
+        if isinstance(tag, CreatedAt):
+            return tag.traceback.short_str()
+
+    return "<unknown>"
+
+
+def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
         dot_node_id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
-    rows = ['<tr><td colspan="2" %s>%s</td></tr>'
-            % (td_attrib, dot_escape(title))]
+    rows = [f"<tr><td colspan='2' {td_attrib}>{dot_escape(title)}</td></tr>"]
+
+    non_equality_tags: FrozenSet[Any] = fields.pop("non_equality_tags", frozenset())
+
+    tooltip = dot_escape_leave_space(_stringify_created_at(non_equality_tags))
 
     for name, field in fields.items():
         field_content = dot_escape(field).replace("\n", "<br/>")
@@ -371,8 +390,10 @@ def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, str],
                 f"<tr><td {td_attrib}>{dot_escape(name)}:</td><td {td_attrib}>"
                 f"<FONT FACE='monospace'>{field_content}</FONT></td></tr>"
         )
-    table = "<table %s>\n%s</table>" % (table_attrib, "".join(rows))
-    emit("%s [label=<%s> style=filled fillcolor=%s]" % (dot_node_id, table, color))
+
+    table = f"<table {table_attrib}>\n{''.join(rows)}</table>"
+    emit(f"{dot_node_id} [label=<{table}> style=filled fillcolor={color} "
+         f'tooltip="{tooltip}"]')
 
 
 def _emit_name_cluster(
