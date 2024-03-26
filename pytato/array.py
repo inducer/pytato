@@ -1789,18 +1789,6 @@ class _PytatoFrameSummary:
     name: str
     line: Optional[str]
 
-    def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
-        key_builder.rec(key_hash,
-                (self.__class__.__module__, self.__class__.__qualname__))
-
-        from attrs import fields
-        # Fields are ordered consistently, so ordered hashing is OK.
-        #
-        # No need to dispatch to superclass: fields() automatically gives us
-        # fields from the entire class hierarchy.
-        for f in fields(self.__class__):
-            key_builder.rec(key_hash, getattr(self, f.name))
-
     def short_str(self, maxlen: int = 100) -> str:
         s = f"{self.filename}:{self.lineno}, in {self.name}():\n{self.line}"
         s1, s2 = s.split("\n")
@@ -1823,18 +1811,6 @@ class _PytatoStackSummary:
                   for f in self.frames]
 
         return StackSummary.from_list(frames)
-
-    def update_persistent_hash(self, key_hash: int, key_builder: Any) -> None:
-        key_builder.rec(key_hash,
-                (self.__class__.__module__, self.__class__.__qualname__))
-
-        from attrs import fields
-        # Fields are ordered consistently, so ordered hashing is OK.
-        #
-        # No need to dispatch to superclass: fields() automatically gives us
-        # fields from the entire class hierarchy.
-        for f in fields(self.__class__):
-            key_builder.rec(key_hash, getattr(self, f.name))
 
     def short_str(self, maxlen: int = 100) -> str:
         from os.path import dirname
