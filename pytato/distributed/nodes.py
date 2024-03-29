@@ -236,7 +236,7 @@ def make_distributed_send_ref_holder(
         ) -> DistributedSendRefHolder:
     """Make a :class:`DistributedSendRefHolder` object."""
     if not non_equality_tags:
-        non_equality_tags = frozenset({_get_created_at_tag()})
+        non_equality_tags = _get_created_at_tag()
     return DistributedSendRefHolder(
         send=send, passthrough_data=passthrough_data,
         tags=(tags | _get_default_tags()),
@@ -256,7 +256,7 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
             send_tags=send_tags),
         passthrough_data=stapled_to,
         tags=ref_holder_tags,
-        non_equality_tags=frozenset({_get_created_at_tag()}))
+        non_equality_tags=_get_created_at_tag())
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
@@ -274,7 +274,7 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
     return DistributedRecv(
             src_rank=src_rank, comm_tag=comm_tag, shape=shape, dtype=dtype,
             axes=axes, tags=(tags | _get_default_tags()),
-            non_equality_tags=frozenset({_get_created_at_tag()}))
+            non_equality_tags=_get_created_at_tag())
 
 # }}}
 
