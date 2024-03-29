@@ -37,7 +37,7 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate,
                           AdvancedIndexInNoncontiguousAxes,
                           NormalizedSlice, ShapeType,
                           AbstractResultWithNamedArrays)
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES, IntegralT
+from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper

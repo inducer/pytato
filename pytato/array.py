@@ -1912,7 +1912,7 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
-    :param order: ``"C"`` or ``"F"``. Layout order of the resulting array. 
+    :param order: ``"C"`` or ``"F"``. Indexing strategy for the resulting array.
 
     .. note::
 
