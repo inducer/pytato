@@ -77,9 +77,6 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
 
     # }}}
 
-    flattened_idx = sum(prim.Variable(f"_{i}")*stride
-                        for i, stride in enumerate(newstrides))
-
     # {{{ compute size tills
 
     oldsizetills = [oldshape[-1] if order == "C" else oldshape[0]]
@@ -97,6 +94,9 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
         oldsizetills = oldsizetills[::-1]
 
     # }}}
+
+    flattened_idx = sum(prim.Variable(f"_{i}")*stride
+                        for i, stride in enumerate(newstrides))
 
     return tuple(((flattened_idx % sizetill) // stride)
                  for stride, sizetill in zip(oldstrides, oldsizetills))
