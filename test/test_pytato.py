@@ -39,23 +39,23 @@ from testlib import RandomDAGContext, make_random_dag
 
 
 def test_matmul_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
-    b = pt.make_placeholder(name="b", shape=(20, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
+    b = pt.make_placeholder(name="b", shape=(20, 10))
 
     with pytest.raises(ValueError):
         a @ b
 
-    c = pt.make_placeholder(name="c", shape=(), dtype=np.float64)
+    c = pt.make_placeholder(name="c", shape=())
     with pytest.raises(ValueError):
         c @ c
 
     n = pt.make_size_param("n")
-    d = pt.make_placeholder(name="d", shape=(n, n), dtype=np.float64)
+    d = pt.make_placeholder(name="d", shape=(n, n))
     d @ d
 
 
 def test_roll_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
     pt.roll(a, 1, axis=0)
 
     with pytest.raises(ValueError):
@@ -66,7 +66,7 @@ def test_roll_input_validation():
 
 
 def test_transpose_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
     pt.transpose(a)
 
     with pytest.raises(ValueError):
@@ -80,7 +80,7 @@ def test_transpose_input_validation():
 
 
 def test_slice_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10, 10))
 
     a[0]
     a[0, 0]
@@ -94,7 +94,7 @@ def test_slice_input_validation():
 
 
 def test_index_type_validation():
-    a = pt.make_placeholder(name="a", shape=(10,), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10,))
 
     idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.int8)
     a[idx]
@@ -102,14 +102,14 @@ def test_index_type_validation():
     idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.uint8)
     a[idx]
 
-    idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.float64)
+    idx = pt.make_placeholder(name="idx", shape=(5,))
     with pytest.raises(IndexError):
         a[idx]
 
 
 def test_stack_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
+    x = pt.make_placeholder(name="x", shape=(10, 10))
+    y = pt.make_placeholder(name="y", shape=(1, 10))
 
     assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
 
@@ -127,7 +127,7 @@ def test_stack_input_validation():
 
 
 def test_make_placeholder_noname():
-    x = pt.make_placeholder("x", shape=(10, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(10, 4))
     y = 2*x
 
     knl = pt.generate_loopy(y).kernel
@@ -137,7 +137,7 @@ def test_make_placeholder_noname():
 
 
 def test_zero_length_arrays():
-    x = pt.make_placeholder("x", shape=(0, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(0, 4))
     y = 2*x
 
     assert y.shape == (0, 4)
@@ -147,8 +147,8 @@ def test_zero_length_arrays():
 
 
 def test_concatenate_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
+    x = pt.make_placeholder(name="x", shape=(10, 10))
+    y = pt.make_placeholder(name="y", shape=(1, 10))
 
     assert pt.concatenate((x, x, x), axis=0).shape == (30, 10)
     assert pt.concatenate((x, y), axis=0).shape == (11, 10)
@@ -167,7 +167,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    x = pt.make_placeholder("x", shape=(3, 3, 4), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(3, 3, 4))
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
@@ -184,7 +184,7 @@ def test_reshape_input_validation():
 
     # Reporter by alexfikl
     # See https://github.com/inducer/pytato/issues/157
-    x = pt.make_placeholder("x", shape=(0,), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(0,))
     assert pt.reshape(x, (128, 0, 17)).shape == (128, 0, 17)
 
 
@@ -202,22 +202,22 @@ def test_binary_op_dispatch():
 
             return NotImplemented
 
-    x = pt.make_placeholder(name="x", shape=(10,), dtype=float)
+    x = pt.make_placeholder(name="x", shape=(10,))
     assert Foo() + x == "bar"
     assert x + Foo() == "baz"
 
 
 def test_same_placeholder_name_raises():
     from pytato.diagnostic import NameClashError
-    x = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+    x = pt.make_placeholder(name="arr", shape=(10, 4))
+    y = pt.make_placeholder(name="arr", shape=(10, 4))
 
     with pytest.raises(NameClashError):
         pt.generate_loopy(x+y)
 
     n1 = pt.make_size_param("n")
     n2 = pt.make_size_param("n")
-    x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
+    x = pt.make_placeholder(name="arr", shape=(n1, n2))
     with pytest.raises(NameClashError):
         pt.generate_loopy(2*x)
 
@@ -225,7 +225,7 @@ def test_same_placeholder_name_raises():
 def test_einsum_error_handling():
     with pytest.raises(ValueError):
         # operands not enough
-        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2), float))
+        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2)))
 
     with pytest.raises(ValueError):
         # double index use in the out spec.
@@ -233,7 +233,7 @@ def test_einsum_error_handling():
 
 
 def test_accessing_dict_of_named_arrays_validation():
-    x = pt.make_placeholder(name="x", shape=10, dtype=float)
+    x = pt.make_placeholder(name="x", shape=10)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
 
     assert isinstance(y1y2["y1"], pt.array.NamedArray)
@@ -256,7 +256,7 @@ def test_call_loopy_shape_inference():
 
     # {{{ variant 1
 
-    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37))  # noqa: N806
     y = call_loopy(knl, {"A": A})["out"]
     assert are_shapes_equal(y.shape, (4, 3))
 
@@ -267,8 +267,7 @@ def test_call_loopy_shape_inference():
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
     A = pt.make_placeholder(name="x",  # noqa: N806
-                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
-                            dtype=np.float64)
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3))
 
     y = call_loopy(knl, {"A": A})["out"]
     assert are_shapes_equal(y.shape, (2*n2, 2*n1))
@@ -284,14 +283,14 @@ def test_tagging_array():
         Best array known to humankind.
         """
 
-    x = pt.make_placeholder(shape=(42, 1729), dtype=float, name="x")
+    x = pt.make_placeholder(shape=(42, 1729), name="x")
     y = x.tagged(BestArrayTag())
     assert any(isinstance(tag, BestArrayTag) for tag in y.tags)
 
 
 def test_dict_of_named_arrays_comparison():
     # See https://github.com/inducer/pytato/pull/137
-    x = pt.make_placeholder("x", (10, 4), float)
+    x = pt.make_placeholder("x", (10, 4))
     dict1 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict2 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict3 = pt.make_dict_of_named_arrays({"not_out": 2 * x})
@@ -303,7 +302,7 @@ def test_dict_of_named_arrays_comparison():
 
 def test_toposortmapper():
     n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    array = pt.make_placeholder(name="array", shape=n)
     stack = pt.stack([array, 2*array, array + 6])
     y = stack @ stack.T
 
@@ -378,7 +377,7 @@ def test_linear_complexity_inequality():
 
     def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        x = pt.make_placeholder("x", shape=(10,))
 
         for _ in range(depth):
             coeff1, coeff2 = rng.integers(0, 10, 2)
@@ -602,8 +601,8 @@ def test_nodecountmapper():
 
 
 def test_rec_get_user_nodes():
-    x1 = pt.make_placeholder("x1", shape=(10, 4), dtype=np.float64)
-    x2 = pt.make_placeholder("x2", shape=(10, 4), dtype=np.float64)
+    x1 = pt.make_placeholder("x1", shape=(10, 4))
+    x2 = pt.make_placeholder("x2", shape=(10, 4))
 
     expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
                                          "out2": 7 * x1 + 3 * x2})
@@ -619,7 +618,7 @@ def test_rec_get_user_nodes_linear_complexity():
     def construct_intestine_graph(depth=100, seed=0):
         from numpy.random import default_rng
         rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        x = pt.make_placeholder("x", shape=(10,))
         y = x
 
         for _ in range(depth):
@@ -652,7 +651,7 @@ def test_tag_user_nodes_linear_complexity():
 
     def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        x = pt.make_placeholder("x", shape=(10,))
         y = x
 
         for _ in range(depth):
@@ -683,8 +682,8 @@ def test_tag_user_nodes_linear_complexity():
 
 def test_basic_index_equality_traverses_underlying_arrays():
     # to test bug in pytato which didn't account underlying arrays
-    a = pt.make_placeholder("a", (10,), float)
-    b = pt.make_placeholder("b", (10,), float)
+    a = pt.make_placeholder("a", (10,))
+    b = pt.make_placeholder("b", (10,))
     assert a[0] != b[0]
 
 
@@ -697,8 +696,8 @@ def test_idx_lambda_to_hlo():
     from pytato.reductions import (SumReductionOperation,
                                    ProductReductionOperation)
 
-    a = pt.make_placeholder("a", (10, 4), dtype=np.float64)
-    b = pt.make_placeholder("b", (10, 4), dtype=np.float64)
+    a = pt.make_placeholder("a", (10, 4))
+    b = pt.make_placeholder("b", (10, 4))
 
     assert index_lambda_to_high_level_op(a + b) == BinaryOp(BinaryOpType.ADD,
                                                             a, b)
@@ -791,8 +790,8 @@ def test_deduplicate_data_wrappers():
 def test_einsum_dot_axes_has_correct_dim():
     # before 'pytato@895bae5', this test would fail because of incorrect
     # default 'Einsum.axes' instantiation.
-    a = pt.make_placeholder("a", (10, 10), "float64")
-    b = pt.make_placeholder("b", (10, 10), "float64")
+    a = pt.make_placeholder("a", (10, 10))
+    b = pt.make_placeholder("b", (10, 10))
     einsum = pt.einsum("ij,jk   ->    ik", a, b)
     assert len(einsum.axes) == einsum.ndim
 
@@ -850,17 +849,17 @@ def test_adv_indexing_into_zero_long_axes():
     n = pt.make_size_param("n")
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(0, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(0, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(n-n, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n-2, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(n-n-2, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
@@ -886,7 +885,7 @@ def test_adv_indexing_into_zero_long_axes():
 
 
 def test_expand_dims_input_validate():
-    a = pt.make_placeholder("x", (10, 4), dtype="float64")
+    a = pt.make_placeholder("x", (10, 4))
 
     assert pt.expand_dims(a, (0, 2, 4)).shape == (1, 10, 1, 4, 1)
     assert pt.expand_dims(a, (-5, -3, -1)).shape == (1, 10, 1, 4, 1)
@@ -906,7 +905,7 @@ def test_with_tagged_reduction():
     from testlib import FooRednTag
     from pytato.raising import index_lambda_to_high_level_op
     from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
-    x = pt.make_placeholder("x", shape=(10, 10), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(10, 10))
     x_sum = pt.sum(x)
 
     with pytest.raises(NotAReductionAxis):
@@ -1002,7 +1001,7 @@ def test_unify_axes_tags():
 
     # {{{ 1. broadcasting + expand_dims
 
-    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = pt.make_placeholder("x", (10, 4))
     x = x.with_tagged_axis(0, FooTag())
     x = x.with_tagged_axis(1, BarTag())
 
@@ -1022,10 +1021,10 @@ def test_unify_axes_tags():
 
     # {{{ 2. back-propagation + einsum
 
-    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = pt.make_placeholder("x", (10, 4))
     x = x.with_tagged_axis(0, FooTag())
 
-    y = pt.make_placeholder("y", (10, 4), "float64")
+    y = pt.make_placeholder("y", (10, 4))
     y = y.with_tagged_axis(1, BarTag())
 
     z = pt.einsum("ij, ij -> i", x, y)
@@ -1076,8 +1075,8 @@ def test_unify_axes_tags():
 
 
 def test_rewrite_einsums_with_no_broadcasts():
-    a = pt.make_placeholder("a", (10, 4, 1), np.float64)
-    b = pt.make_placeholder("b", (10, 1, 4), np.float64)
+    a = pt.make_placeholder("a", (10, 4, 1))
+    b = pt.make_placeholder("b", (10, 1, 4))
     c = pt.einsum("ijk,ijk->ijk", a, b)
     expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
 
@@ -1087,9 +1086,9 @@ def test_rewrite_einsums_with_no_broadcasts():
 
 
 def test_dot_visualizers():
-    a = pt.make_placeholder("A", shape=(10, 4), dtype=np.float64)
-    x1 = pt.make_placeholder("x1", shape=4, dtype=np.float64)
-    x2 = pt.make_placeholder("x2", shape=4, dtype=np.float64)
+    a = pt.make_placeholder("A", shape=(10, 4))
+    x1 = pt.make_placeholder("x1", shape=4)
+    x2 = pt.make_placeholder("x2", shape=4)
 
     y = a @ (2*x1 + 3*x2)
 
