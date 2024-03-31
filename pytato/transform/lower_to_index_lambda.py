@@ -59,7 +59,54 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
     oldshape = expr.array.shape
     newshape = expr.shape
 
-    # {{{ compute strides
+    # {{{ find the axes that changed
+
+    oldax_to_newax = {}
+
+    # WARNING: ugly code ahead, this is a first pass
+    # case 1: folded an axis into many axes
+    if len(oldshape) < len(newshape):
+        inewax = 0
+        for ioldax,oldax in enumerate(oldshape):
+            if oldax == newshape[inewax]:
+                inewax += 1
+                continue
+
+            acc = 1
+            newaxs = []
+            while oldax != acc:
+                newaxs.append(newshape[inewax])
+                acc *= newaxs[-1]
+                inewax += 1
+            oldax_to_newax[ioldax] = tuple(newaxs)
+
+    # case 2: unfolded axes into a larger axis
+    elif len(oldshape) > len(newshape):
+        ioldax = 0
+        for inewax,newax in enumerate(newshape):
+            if newax == oldshape[ioldax]:
+                inewax += 1
+                continue
+
+            acc = 1
+            oldaxs = []
+            while newax != acc:
+                oldaxs.append(ioldax)
+                acc *= oldshape[ioldax]
+                ioldax += 1
+            oldax_to_newax[tuple(oldaxs)] = inewax
+
+    # case 3: permuted axes
+    else:
+        oldax_to_newax = {
+            iax: newshape[iax]
+            for iax in range(len(oldshape))
+            if oldshape[iax] != newshape[iax]
+        }
+
+    # }}}
+
+    # {{{ compute strides of changed axes
 
     oldstrides = [1]
     oldstride_axes = (reversed(oldshape[1:]) if order == "C" else oldshape[:-1])
