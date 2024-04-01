@@ -61,7 +61,8 @@ from pytools.tag import Taggable, Tag
 
 from pytato.array import (
         Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
-        _get_default_axes, _get_default_tags, ConvertibleToShape, normalize_shape)
+        _get_default_axes, _get_default_tags, ConvertibleToShape,
+        normalize_shape, _get_created_at_tag)
 
 CommTagType = Hashable
 
@@ -146,8 +147,10 @@ class DistributedSendRefHolder(Array):
     _mapper_method: ClassVar[str] = "map_distributed_send_ref_holder"
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
-                 tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(axes=passthrough_data.axes, tags=tags)
+                 tags: FrozenSet[Tag] = frozenset(),
+                 non_equality_tags: FrozenSet[Optional[Tag]] = frozenset()) -> None:
+        super().__init__(axes=passthrough_data.axes, tags=tags,
+                         non_equality_tags=non_equality_tags)
         object.__setattr__(self, "send", send)
         object.__setattr__(self, "passthrough_data", passthrough_data)
 
@@ -165,13 +168,15 @@ class DistributedSendRefHolder(Array):
         send = kwargs.pop("send", self.send)
         passthrough_data = kwargs.pop("passthrough_data", self.passthrough_data)
         tags = kwargs.pop("tags", self.tags)
+        non_equality_tags = kwargs.pop("non_equality_tags", self.non_equality_tags)
 
         if kwargs:
             raise ValueError("Cannot assign"
                              f" DistributedSendRefHolder.'{set(kwargs)}'")
         return DistributedSendRefHolder(send,
                                         passthrough_data,
-                                        tags)
+                                        tags,
+                                        non_equality_tags)
 
 # }}}
 
@@ -226,12 +231,16 @@ def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagTyp
 def make_distributed_send_ref_holder(
         send: DistributedSend,
         passthrough_data: Array,
-        tags: FrozenSet[Tag] = frozenset()
+        tags: FrozenSet[Tag] = frozenset(),
+        non_equality_tags: FrozenSet[Optional[Tag]] = frozenset(),
         ) -> DistributedSendRefHolder:
     """Make a :class:`DistributedSendRefHolder` object."""
+    if not non_equality_tags:
+        non_equality_tags = _get_created_at_tag()
     return DistributedSendRefHolder(
         send=send, passthrough_data=passthrough_data,
-        tags=(tags | _get_default_tags()))
+        tags=(tags | _get_default_tags()),
+        non_equality_tags=non_equality_tags)
 
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
@@ -246,7 +255,8 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
             sent_data=sent_data, dest_rank=dest_rank, comm_tag=comm_tag,
             send_tags=send_tags),
         passthrough_data=stapled_to,
-        tags=ref_holder_tags)
+        tags=ref_holder_tags,
+        non_equality_tags=_get_created_at_tag())
 
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
@@ -263,7 +273,8 @@ def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
     dtype = np.dtype(dtype)
     return DistributedRecv(
             src_rank=src_rank, comm_tag=comm_tag, shape=shape, dtype=dtype,
-            axes=axes, tags=(tags | _get_default_tags()))
+            axes=axes, tags=(tags | _get_default_tags()),
+            non_equality_tags=_get_created_at_tag())
 
 # }}}
 
