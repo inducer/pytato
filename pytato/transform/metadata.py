@@ -556,38 +556,7 @@ class AxesTagsEquationCollector(Mapper):
 # }}}
 
 
-def _get_propagation_graph_from_constraints(
-        equations: List[Tuple[str, str]]) -> Mapping[str, FrozenSet[str]]:
-    from immutabledict import immutabledict
-    propagation_graph: Dict[str, Set[str]] = {}
-    for lhs, rhs in equations:
-        assert lhs != rhs
-        propagation_graph.setdefault(lhs, set()).add(rhs)
-        propagation_graph.setdefault(rhs, set()).add(lhs)
-
-    return immutabledict({k: frozenset(v)
-                           for k, v in propagation_graph.items()})
-
-
-def get_reachable_nodes(undirected_graph: Mapping[GraphNodeT, Iterable[GraphNodeT]],
-                        source_node: GraphNodeT) -> FrozenSet[GraphNodeT]:
-    """
-    Returns a :class:`frozenset` of all nodes in *undirected_graph* that are
-    reachable from *source_node*.
-    """
-    nodes_visited: Set[GraphNodeT] = set()
-    nodes_to_visit = {source_node}
-    while nodes_to_visit:
-        current_node = nodes_to_visit.pop()
-        nodes_visited.add(current_node)
-
-        neighbors = undirected_graph[current_node]
-        nodes_to_visit.update({node
-                               for node in neighbors
-                               if node not in nodes_visited})
-
-    return frozenset(nodes_visited)
-
+# {{{ AxisTagAttacher
 
 class AxisTagAttacher(CopyMapper):
     """
@@ -659,6 +628,8 @@ class AxisTagAttacher(CopyMapper):
         assert isinstance(result, (Array, AbstractResultWithNamedArrays))
         return result
 
+# }}}
+
 
 def unify_axes_tags(
         expr: ArrayOrNames,
@@ -693,19 +664,30 @@ def unify_axes_tags(
     # Defn. A Propagation graph is a graph where nodes denote variables and an
     # edge between 2 nodes denotes an equality criterion.
 
-    propagation_graph = _get_propagation_graph_from_constraints(
-        equations_collector.equations)
+    from pytools.graph import (
+        get_propagation_graph_from_constraints,
+        get_reachable_nodes
+    )
+    from pytools.tag import IgnoredForPropagationTag
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
     axis_to_solved_tags: Dict[Tuple[Array, int], Set[Tag]] = {}
 
+    propagation_graph = get_propagation_graph_from_constraints(
+        equations_collector.equations,
+        equations_collector.known_tag_to_var
+    )
+
     for tag, var in equations_collector.known_tag_to_var.items():
-        for reachable_var in (get_reachable_nodes(propagation_graph, var)
-                              - known_tag_vars):
-            axis_to_solved_tags.setdefault(
-                equations_collector.axis_to_var.inverse[reachable_var],
-                set()
-            ).add(tag)
+        if isinstance(tag, IgnoredForPropagationTag):
+            continue
+
+        reachable_nodes = get_reachable_nodes(propagation_graph, var)
+        for reachable_var in (reachable_nodes - known_tag_vars):
+                axis_to_solved_tags.setdefault(
+                    equations_collector.axis_to_var.inverse[reachable_var],
+                    set()
+                ).add(tag)
 
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
