@@ -1,7 +1,6 @@
-git+https://github.com/inducer/pytools.git#egg=pytools >= 2021.1
+git+https://github.com/a-alveyblanc/pytools.git@tag-propagation#egg=pytools
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/genpy.git#egg=genpy
 git+https://github.com/inducer/loopy.git#egg=loopy
-git+https://github.com/a-alveyblanc/pytools.git@tag-propagation#egg=pytools
 
 mako
