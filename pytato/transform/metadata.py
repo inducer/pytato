@@ -35,8 +35,8 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
-                    Mapping, Iterable, Any, TypeVar, cast)
+from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, Mapping,
+                    Iterable, Any, TypeVar, cast)
 from bidict import bidict
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, Mapper, CopyMapper
@@ -684,10 +684,10 @@ def unify_axes_tags(
 
         reachable_nodes = get_reachable_nodes(propagation_graph, var)
         for reachable_var in (reachable_nodes - known_tag_vars):
-                axis_to_solved_tags.setdefault(
-                    equations_collector.axis_to_var.inverse[reachable_var],
-                    set()
-                ).add(tag)
+            axis_to_solved_tags.setdefault(
+                equations_collector.axis_to_var.inverse[reachable_var],
+                set()
+            ).add(tag)
 
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
