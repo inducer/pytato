@@ -78,7 +78,8 @@ class LoopyCall(AbstractResultWithNamedArrays):
     :mod:`loopy` translation unit.
     """
     translation_unit: "lp.TranslationUnit"
-    bindings: Mapping[str, ArrayOrScalar]
+    bindings: Mapping[str, ArrayOrScalar] = \
+        attrs.field(validator=attrs.validators.instance_of(immutabledict))
     entrypoint: str
 
     _mapper_method: ClassVar[str] = "map_loopy_call"

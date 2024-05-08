@@ -807,7 +807,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     .. automethod:: __init__
     """
-    _data: Mapping[str, Array]
+    _data: Mapping[str, Array] = attrs.field(
+        validator=attrs.validators.instance_of(immutabledict))
 
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
 
@@ -887,16 +888,12 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
     .. automethod:: with_tagged_reduction
     """
     expr: prim.Expression
-    bindings: Mapping[str, Array] = attrs.field()
-    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
+    bindings: Mapping[str, Array] = attrs.field(
+        validator=attrs.validators.instance_of(immutabledict))
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor] = \
+        attrs.field(validator=attrs.validators.instance_of(immutabledict))
 
     _mapper_method: ClassVar[str] = "map_index_lambda"
-
-    if __debug__:
-        @bindings.validator  # type: ignore[attr-defined, misc]
-        def _check_bindings(self, attribute: Any, value: Any) -> None:
-            if isinstance(value, dict):
-                raise TypeError("bindings may not be a dict")
 
     def with_tagged_reduction(self,
                               reduction_variable: str,
@@ -1006,8 +1003,10 @@ class Einsum(Array):
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
     args: Tuple[Array, ...]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
-                                     ReductionDescriptor]
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
+                                     ReductionDescriptor] = \
+        attrs.field(validator=attrs.validators.instance_of(immutabledict))
+    index_to_access_descr: Mapping[str, EinsumAxisDescriptor] = \
+        attrs.field(validator=attrs.validators.instance_of(immutabledict))
     _mapper_method: ClassVar[str] = "map_einsum"
 
     @memoize_method
