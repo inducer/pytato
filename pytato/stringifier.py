@@ -99,6 +99,8 @@ class Reprifier(Mapper):
 
         fields = tuple(field.name for field in attrs.fields(type(expr)))
 
+        fields = tuple(field for field in fields if field != "non_equality_tags")
+
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
             # => don't print.

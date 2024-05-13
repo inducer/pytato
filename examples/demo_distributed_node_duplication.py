@@ -13,6 +13,8 @@ comm = MPI.COMM_WORLD
 size = 2
 rank = 0
 
+pt.set_traceback_tag_enabled()
+
 x1 = pt.make_placeholder("x1", shape=(10, 4), dtype=np.float64)
 x2 = pt.make_placeholder("x2", shape=(10, 4), dtype=np.float64)
 x3 = pt.make_placeholder("x3", shape=(10, 4), dtype=np.float64)
