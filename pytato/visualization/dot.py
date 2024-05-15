@@ -186,6 +186,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
+        # pylint: disable=not-an-iterable
         for field in attrs.fields(type(expr)):
             if field.name in info.fields:
                 continue
