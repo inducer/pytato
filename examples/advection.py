@@ -43,6 +43,7 @@ class AdvectionOperator(object):
             else:
                 flux = self.dg.array_ops.stack((swp[:, 0], vec[:, 1]), axis=1)
 
+        # pylint: disable=used-before-assignment
         flux = flux * self.c * self.dg.normals
 
         return flux
