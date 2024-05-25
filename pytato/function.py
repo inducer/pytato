@@ -125,7 +125,8 @@ class FunctionDefinition(Taggable):
     """
     parameters: FrozenSet[str]
     return_type: ReturnType
-    returns: Mapping[str, Array]
+    returns: Mapping[str, Array] = attrs.field(
+        validator=attrs.validators.instance_of(immutabledict))
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
     @cached_property
@@ -276,7 +277,8 @@ class Call(AbstractResultWithNamedArrays):
 
     """
     function: FunctionDefinition
-    bindings: Mapping[str, Array]
+    bindings: Mapping[str, Array] = attrs.field(
+        validator=attrs.validators.instance_of(immutabledict))
 
     _mapper_method: ClassVar[str] = "map_call"
 

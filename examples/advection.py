@@ -42,6 +42,8 @@ class AdvectionOperator(object):
                 flux = self.dg.array_ops.stack((vec[:, 0], swp[:, 1]), axis=1)
             else:
                 flux = self.dg.array_ops.stack((swp[:, 0], vec[:, 1]), axis=1)
+        else:
+            raise ValueError("Invalid flux type")
 
         flux = flux * self.c * self.dg.normals
 

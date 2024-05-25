@@ -101,6 +101,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Stack`            :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 

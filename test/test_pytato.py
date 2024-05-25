@@ -796,6 +796,123 @@ def test_einsum_dot_axes_has_correct_dim():
     assert len(einsum.axes) == einsum.ndim
 
 
+def test_created_at():
+    pt.set_traceback_tag_enabled()
+
+    a = pt.make_placeholder("a", (10, 10), "float64")
+    b = pt.make_placeholder("b", (10, 10), "float64")
+
+    # res1 and res2 are defined on different lines and should have different
+    # CreatedAt tags.
+    res1 = a+b
+    res2 = a+b
+
+    # res3 and res4 are defined on the same line and should have the same
+    # CreatedAt tags.
+    res3 = a+b; res4 = a+b  # noqa: E702
+
+    # {{{ Check that CreatedAt tags are handled correctly for equality/hashing
+
+    assert res1 == res2 == res3 == res4
+    assert hash(res1) == hash(res2) == hash(res3) == hash(res4)
+
+    assert res1.non_equality_tags != res2.non_equality_tags
+    assert res3.non_equality_tags == res4.non_equality_tags
+    assert hash(res1.non_equality_tags) != hash(res2.non_equality_tags)
+    assert hash(res3.non_equality_tags) == hash(res4.non_equality_tags)
+
+    assert res1.tags == res2.tags == res3.tags == res4.tags
+    assert hash(res1.tags) == hash(res2.tags) == hash(res3.tags) == hash(res4.tags)
+
+    # }}}
+
+    from pytato.tags import CreatedAt
+
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    # {{{ Make sure the function name appears in the traceback
+
+    tag, = created_tag
+
+    found = False
+
+    stacksummary = tag.traceback.to_stacksummary()
+    assert len(stacksummary) > 10
+
+    for frame in tag.traceback.frames:
+        if frame.name == "test_created_at" and "a+b" in frame.line:
+            found = True
+            break
+
+    assert found
+
+    # }}}
+
+    # {{{ Make sure that CreatedAt tags are in the visualization
+
+    from pytato.visualization import get_dot_graph
+    s = get_dot_graph(res1)
+    assert "test_created_at" in s
+    assert "a+b" in s
+
+    # }}}
+
+    # {{{ Make sure only a single CreatedAt tag is created
+
+    old_tag = tag
+
+    res1 = res1 + res2
+
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    # Tag should be recreated
+    assert tag != old_tag
+
+    # }}}
+
+    # {{{ Make sure that copying preserves the tag
+
+    old_tag = tag
+
+    res1_new = pt.transform.map_and_copy(res1, lambda x: x)
+
+    created_tag = frozenset({tag
+                         for tag in res1_new.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    assert old_tag == tag
+
+    # }}}
+
+    # {{{ Test disabling traceback creation
+
+    pt.set_traceback_tag_enabled(False)
+
+    a = pt.make_placeholder("a", (10, 10), "float64")
+
+    created_tag = frozenset({tag
+                         for tag in a.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 0
+
+    # }}}
+
+
 def test_pickling_and_unpickling_is_equal():
     from testlib import RandomDAGContext, make_random_dag
     import pickle
