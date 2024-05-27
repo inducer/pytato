@@ -123,23 +123,14 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
             if ilongax >= len(longshape):
                 break
 
-    # case 3: permute axes of oldshape
+    # case 3: permute axes of oldshape => linearize all indices
     else:
+        # shapes are the same, don't do anything
         if oldshape == newshape:
-            oldax_to_newax = {(i,): (i,) for i in range(len(oldshape))}
-        else:
-            for ioldax, oldax in enumerate(oldshape):
-                inewax = 0
-                while inewax < len(newshape):
-                    if oldax == newshape[inewax]:
-                        break
-                    inewax += 1
-
-                if inewax >= len(newshape):
-                    ambiguous_reshape = True
-                    break
-
-                oldax_to_newax[(ioldax,)] = (inewax,)
+            return tuple(
+                prim.Variable(f"_{i}") for i in range(len(newshape))
+            )
+        ambiguous_reshape = True
 
     # }}}
 
@@ -160,14 +151,15 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
                             fallback: bool=False) -> Tuple[ScalarExpression]:
 
         if not fallback:
-            sub_oldshape = tuple(oldshape[ioldax] for ioldax in ioldaxs) # type: ignore
-            sub_newshape = tuple(newshape[inewax] for inewax in inewaxs) # type: ignore
+            sub_oldshape = tuple(
+                oldshape[ioldax] for ioldax in ioldaxs) # type: ignore
+            sub_newshape = tuple(
+                newshape[inewax] for inewax in inewaxs) # type: ignore
 
             index_vars = [prim.Variable(f"_{i}") for i in inewaxs]
 
-            # indices match, no need to do anything
-            if ioldaxs == inewaxs:
-                return tuple(index_vars)
+            if len(sub_oldshape) == len(sub_newshape):
+                return tuple(prim.Variable(f"_{i}") for i in inewaxs)
 
         else:
             sub_oldshape = oldshape
