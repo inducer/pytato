@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 import pymbolic.primitives as prim
 
-from typing import Sequence, List, Any, Dict, Tuple, TypeVar, TYPE_CHECKING
+from typing import List, Any, Dict, Tuple, TypeVar, TYPE_CHECKING
 from immutabledict import immutabledict
 from pytools import UniqueNameGenerator
 from pytato.array import (Array, IndexLambda, Stack, Concatenate,
@@ -36,9 +36,8 @@ from pytato.array import (Array, IndexLambda, Stack, Concatenate,
                           BasicIndex, AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes,
                           NormalizedSlice, ShapeType,
-                          AbstractResultWithNamedArrays,
-                          ShapeType)
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES, IntegralT
+                          AbstractResultWithNamedArrays)
+from pytato.scalar_expr import ScalarExpression, INT_CLASSES
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
@@ -148,13 +147,13 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
     def compute_new_indices(ioldaxs: ShapeType,
                             inewaxs: ShapeType,
                             order: str,
-                            fallback: bool=False) -> Tuple[ScalarExpression]:
+                            fallback: bool = False) -> Tuple[ScalarExpression]:
 
         if not fallback:
             sub_oldshape = tuple(
-                oldshape[ioldax] for ioldax in ioldaxs) # type: ignore
+                oldshape[ioldax] for ioldax in ioldaxs)  # type: ignore
             sub_newshape = tuple(
-                newshape[inewax] for inewax in inewaxs) # type: ignore
+                newshape[inewax] for inewax in inewaxs)  # type: ignore
 
             index_vars = [prim.Variable(f"_{i}") for i in inewaxs]
 
