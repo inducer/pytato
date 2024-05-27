@@ -1703,7 +1703,7 @@ def test_expand_dims(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    for i in range(ntests):
+    for _ in range(ntests):
         in_dim = rng.integers(2, 7)
         n_new_axes = rng.integers(0, 7)
         in_shape = rng.integers(2, 7, in_dim)
