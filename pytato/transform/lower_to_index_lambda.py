@@ -63,111 +63,141 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
 
     # NOTE: there are cases where the mapping of old -> new axes is obfuscated
     # by the reshape, i.e. (5, 12, 3) -> (3, 2, 3, 10). In cases like this, we
-    # default to linearizing using all indices and computing new indices that
-    # way. In cases where the reshape is simple, i.e. (5, 16) -> (5, 4, 4) or
+    # default to linearizing all indices.
+    # In cases where the reshape is simple, i.e. (5, 16) -> (5, 4, 4) or
     # (5, 4, 4, 4) -> (5, 16, 4), we leave the untouched axes alone and only
     # bother computing new indices for the collapsed/expanded axes.
     ambiguous_reshape = False
     oldax_to_newax = {}
 
-    # case 1: expand axes of oldshape
-    if len(newshape) > len(oldshape):
+    # case 1 & 2: collapsed/expanded old axes
+    if len(newshape) != len(oldshape):
+        expanded_old_dims = (True if len(newshape) > len(oldshape) else False)
 
-        # attempt to map old axis -> tuple of new axes
-        inewax = 0
-        for ioldax, oldax in enumerate(oldshape):
+        if expanded_old_dims:
+            longshape = newshape
+            shortshape = oldshape
+        else:
+            longshape = oldshape
+            shortshape = newshape
 
-            if oldax != newshape[inewax]:
+        ilongax = 0
+        for ishortax, shortax in enumerate(shortshape):
+            if shortax != longshape[ilongax]:
+
+                # collect expanded axes
                 acc = 1
-                inewaxs = []
-                while acc < oldax:
-                    if inewax > len(newshape):
+                ilongaxs = []
+                while acc < shortax:
+                    if ilongax >= len(longshape):
                         ambiguous_reshape = True
                         break
 
-                    inewaxs.append(inewax)
-                    acc *= newshape[inewax]
-                    inewax += 1
+                    ilongaxs.append(ilongax)
+                    acc *= longshape[ilongax]
+                    ilongax += 1
 
-                oldax_to_newax[(ioldax,)] = tuple(inewaxs)
+                # check for axes of length 1
+                if ilongax < len(longshape) and longshape[ilongax] == 1:
+                    while ilongax < len(longshape) and longshape[ilongax] == 1:
+                        ilongaxs.append(ilongax)
+                        ilongax += 1
+
+                if len(newshape) > len(oldshape):
+                    oldax_to_newax[(ishortax,)] = tuple(ilongaxs)
+                else:
+                    oldax_to_newax[tuple(ilongaxs)] = (ishortax,)
             else:
-                oldax_to_newax[(ioldax,)] = (inewax,)
+                if len(newshape) > len(oldshape):
+                    oldax_to_newax[(ishortax,)] = (ilongax,)
+                else:
+                    oldax_to_newax[(ilongax,)] = (ishortax,)
 
             if ambiguous_reshape:
                 break
 
-            inewax += 1
+            ilongax += 1
 
-    # case 2: collapse axes of oldshape
-    elif len(newshape) < len(oldshape):
-
-        # attempt to map tuples of old axes -> new axis
-        ioldax = 0
-        for inewax, newax in enumerate(newshape):
-
-            if newax != oldshape[ioldax]:
-                acc = 1
-                oldaxs = []
-                while acc < newax:
-                    if inewax > len(oldshape):
-                        ambiguous_reshape = True
-                        break
-
-                    oldaxs.append(ioldax)
-                    acc *= oldshape[ioldax]
-                    ioldax += 1
-
-                oldax_to_newax[tuple(oldaxs)] = (inewax,)
-            else:
-                oldax_to_newax[(ioldax,)] = (inewax,)
-
-            if ambiguous_reshape:
+            if ilongax >= len(longshape):
                 break
-
-            ioldax += 1
 
     # case 3: permute axes of oldshape
     else:
-        for ioldax, oldax in enumerate(oldshape):
-            inewax = 0
-            while inewax < len(newshape):
-                if oldax == newshape[inewax]:
+        if oldshape == newshape:
+            oldax_to_newax = { (i,): (i,) for i in range(len(oldshape)) }
+        else:
+            for ioldax, oldax in enumerate(oldshape):
+                inewax = 0
+                while inewax < len(newshape):
+                    if oldax == newshape[inewax]:
+                        break
+                    inewax += 1
+
+                if inewax >= len(newshape):
+                    ambiguous_reshape = True
                     break
-                inewax += 1
 
-            if inewax >= len(newshape):
-                ambiguous_reshape = True
-                break
+                oldax_to_newax[(ioldax,)] = (inewax,)
 
-            oldax_to_newax[(ioldax,)] = (inewax,)
+    # }}}
+
+    # {{{ check that we've caught everything
+
+    # need a mapping of all old axes -> all new axes
+    if (len(sum(oldax_to_newax.keys(), ())) != len(oldshape) or
+        len(sum(oldax_to_newax.values(), ())) != len(newshape)):
+        ambiguous_reshape = True
 
     # }}}
 
     # {{{ process old -> new axis mapping
 
-    def compute_new_indices(oldshape, newshape, order):
+    def compute_new_indices(ioldaxs, inewaxs, order, fallback=False):
 
-        oldstride_axes = (
-            reversed(oldshape[1:]) if order == "C" else oldshape[:-1])
+        if not fallback:
+            sub_oldshape = [oldshape[ioldax] for ioldax in ioldaxs]
+            sub_newshape = [newshape[inewax] for inewax in inewaxs]
+
+            index_vars = [prim.Variable(f"_{i}") for i in inewaxs]
+
+            # indices match, no need to do anything
+            if ioldaxs == inewaxs:
+                return tuple(index_vars)
+
+        else:
+            sub_oldshape = oldshape
+            sub_newshape = newshape
+
+            index_vars = [prim.Variable(f"_{i}") for i in range(len(newshape))]
+
         oldstrides = [1]
+        oldstride_axes = (
+            reversed(sub_oldshape[1:]) if order == "C" else sub_oldshape[:-1])
+
         for ax_len in oldstride_axes:
             oldstrides.append(ax_len*oldstrides[-1])
 
         oldsizetill_axes = (
-            reversed(oldshape[:-1]) if order == "C" else oldshape[:-1])
-        oldsizetills = [oldshape[-1] if order == "C" else oldshape[0]]
+            reversed(sub_oldshape[:-1]) if order == "C" else sub_oldshape[:-1])
+        oldsizetills = [sub_oldshape[-1] if order == "C" else sub_oldshape[0]]
+
         for ax_len in oldsizetill_axes:
             oldsizetills.append(ax_len*oldsizetills[-1])
 
         newstride_axes = (
-            reversed(newshape[1:] if order == "C" else newshape[:-1]))
+            reversed(sub_newshape[1:] if order == "C" else sub_newshape[:-1]))
         newstrides = [1]
         for ax_len in newstride_axes:
             newstrides.append(ax_len*newstrides[-1])
 
+        if order == "C":
+            newstrides = newstrides[::-1]
+            oldstrides = oldstrides [::-1]
+            oldsizetills = oldsizetills[::-1]
+
         flattened_idx = sum(
-            prim.Variable(f"_{i}")*stride
-            for i, stride in enumerate(newstrides)
+            index_var*stride
+            for index_var, stride in zip(index_vars, newstrides)
         )
 
         return tuple(((flattened_idx % sizetill) // stride)
@@ -176,21 +206,16 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
     if ambiguous_reshape:
         print("Ambiguous reshape found when trying to compute reshaped indices."
               " Defaulting to linearizing all axes.")
-        ret = compute_new_indices(oldshape, newshape, order)
-        for r in ret:
-            print(r)
+        return compute_new_indices(oldshape, newshape, order, fallback=True)
 
-        return ret
-
-    ret = []
-    for ioldaxs, inewaxs in oldax_to_newax.items():
-        oldaxs = [oldshape[ioldax] for ioldax in ioldaxs]
-        newaxs = [newshape[inewax] for inewax in inewaxs]
-
-        ret.append(compute_new_indices(oldaxs, newaxs, order))
+    ret = [
+        compute_new_indices(ioldaxs, inewaxs, order)
+        for ioldaxs, inewaxs in oldax_to_newax.items()
+    ]
 
     # }}}
 
+    # create a flat tuple instead of a (possibly) tuple of tuples
     return sum(ret, ())
 
 class ToIndexLambdaMixin:
