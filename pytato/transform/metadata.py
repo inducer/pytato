@@ -35,8 +35,8 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, Mapping,
-                    Iterable, Any, TypeVar, cast)
+from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
+                    Mapping, Iterable, Any, TypeVar, cast)
 from bidict import bidict
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, Mapper, CopyMapper
@@ -58,7 +58,7 @@ from pytato.raising import (index_lambda_to_high_level_op,
 from pytato.diagnostic import UnknownIndexLambdaExpr
 
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
+from pytools.tag import Tag, UniqueTag
 import logging
 logger = logging.getLogger(__name__)
 
@@ -492,11 +492,12 @@ class AxesTagsEquationCollector(Mapper):
             descr_to_var[EinsumElementwiseAxis(iaxis)] = self.get_var_for_axis(expr,
                                                                                iaxis)
 
-        for access_descrs, arg in zip(expr.access_descriptors,
-                                      expr.args):
+        for access_descrs, arg in zip(expr.access_descriptors, expr.args):
             for iarg_axis, descr in enumerate(access_descrs):
-                in_tag_var = self.get_var_for_axis(arg, iarg_axis)
+                if arg.axes[iarg_axis].tags_of_type(AxisIgnoredForPropagationTag):
+                    continue
 
+                in_tag_var = self.get_var_for_axis(arg, iarg_axis)
                 if descr in descr_to_var:
                     self.record_equation(descr_to_var[descr], in_tag_var)
                 else:
@@ -631,6 +632,22 @@ class AxisTagAttacher(CopyMapper):
 # }}}
 
 
+# {{{ IgnoredForPropagationTag
+
+class AxisIgnoredForPropagationTag(UniqueTag):
+    """
+    Used to influence equality constraints when determining which axes tags
+    are allowed to propagate along.
+
+    The intended use case for this is to prevent the axes of a matrix used to,
+    for example, differentiate a tensor of DOF data from picking up on the
+    unique tags attached to the axes of the tensor.
+    """
+    pass
+
+# }}}
+
+
 def unify_axes_tags(
         expr: ArrayOrNames,
         *,
@@ -668,26 +685,24 @@ def unify_axes_tags(
         get_propagation_graph_from_constraints,
         get_reachable_nodes
     )
-    from pytools.tag import IgnoredForPropagationTag
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
     axis_to_solved_tags: Dict[Tuple[Array, int], Set[Tag]] = {}
 
     propagation_graph = get_propagation_graph_from_constraints(
         equations_collector.equations,
-        equations_collector.known_tag_to_var
     )
 
     for tag, var in equations_collector.known_tag_to_var.items():
-        if isinstance(tag, IgnoredForPropagationTag):
+        if isinstance(tag, AxisIgnoredForPropagationTag):
             continue
 
         reachable_nodes = get_reachable_nodes(propagation_graph, var)
         for reachable_var in (reachable_nodes - known_tag_vars):
-            axis_to_solved_tags.setdefault(
-                equations_collector.axis_to_var.inverse[reachable_var],
-                set()
-            ).add(tag)
+                axis_to_solved_tags.setdefault(
+                    equations_collector.axis_to_var.inverse[reachable_var],
+                    set()
+                ).add(tag)
 
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
