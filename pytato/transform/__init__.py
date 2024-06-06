@@ -466,11 +466,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         call = self.rec(expr._container)
         assert isinstance(call, Call)
-        return NamedCallResult(
-            call, expr.name,
-            axes=expr.axes,
-            tags=expr.tags,
-            non_equality_tags=expr.non_equality_tags)
+        return call[expr.name]
 
 
 class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
@@ -708,11 +704,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                               *args: Any, **kwargs: Any) -> Array:
         call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(call, Call)
-        return NamedCallResult(
-            call, expr.name,
-            axes=expr.axes,
-            tags=expr.tags,
-            non_equality_tags=expr.non_equality_tags)
+        return call[expr.name]
 
 # }}}
 
