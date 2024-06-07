@@ -208,6 +208,7 @@ class FunctionDefinition(Taggable):
             raise NotImplementedError(self.return_type)
 
 
+@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
 class NamedCallResult(NamedArray):
     """
     One of the arrays that are returned from a call to :class:`FunctionDefinition`.
@@ -224,15 +225,6 @@ class NamedCallResult(NamedArray):
     call: Call
     name: str
     _mapper_method: ClassVar[str] = "map_named_call_result"
-
-    def __init__(self,
-                 call: Call,
-                 name: str) -> None:
-        super().__init__(call, name,
-                         axes=call.function.returns[name].axes,
-                         tags=call.function.returns[name].tags,
-                         non_equality_tags=(
-                             call.function.returns[name].non_equality_tags))
 
     def with_tagged_axis(self, iaxis: int,
                          tags: Union[Sequence[Tag], Tag]) -> Array:
@@ -300,7 +292,11 @@ class Call(AbstractResultWithNamedArrays):
         return iter(self.function.returns)
 
     def __getitem__(self, name: str) -> NamedCallResult:
-        return NamedCallResult(self, name)
+        return NamedCallResult(
+            self, name,
+            axes=self.function.returns[name].axes,
+            tags=self.function.returns[name].tags,
+            non_equality_tags=self.function.returns[name].non_equality_tags)
 
     def __len__(self) -> int:
         return len(self.function.returns)
