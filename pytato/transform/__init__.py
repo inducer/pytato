@@ -1186,9 +1186,9 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        self.map_function_definition(expr.function)
+        self.map_function_definition(expr.function, *args, **kwargs)
         for bnd in expr.bindings.values():
-            self.rec(bnd)
+            self.rec(bnd, *args, **kwargs)
 
         self.post_visit(expr)
 
