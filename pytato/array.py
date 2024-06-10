@@ -1164,6 +1164,34 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     dim: int
 
 
+def _get_einsum_access_descr_to_axis_len(
+        access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...],
+        args: tuple[Array, ...],
+        ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
+    from pytato.utils import are_shape_components_equal
+    descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
+
+    for access_descrs, arg in zip(access_descriptors,
+                                  args, strict=True):
+        assert arg.ndim == len(access_descrs)
+        for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
+            if descr in descr_to_axis_len:
+                seen_axis_len = descr_to_axis_len[descr]
+
+                if not are_shape_components_equal(seen_axis_len,
+                                                  arg_axis_len):
+                    if are_shape_components_equal(arg_axis_len, 1):
+                        # this axis would be broadcasted
+                        pass
+                    else:
+                        assert are_shape_components_equal(seen_axis_len, 1)
+                        descr_to_axis_len[descr] = arg_axis_len
+            else:
+                descr_to_axis_len[descr] = arg_axis_len
+
+    return immutabledict(descr_to_axis_len)
+
+
 @array_dataclass()
 class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
@@ -1211,28 +1239,8 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     @memoize_method
     def _access_descr_to_axis_len(self
                                   ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
-        from pytato.utils import are_shape_components_equal
-        descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
-
-        for access_descrs, arg in zip(self.access_descriptors,
-                                      self.args, strict=True):
-            assert arg.ndim == len(access_descrs)
-            for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
-                if descr in descr_to_axis_len:
-                    seen_axis_len = descr_to_axis_len[descr]
-
-                    if not are_shape_components_equal(seen_axis_len,
-                                                      arg_axis_len):
-                        if are_shape_components_equal(arg_axis_len, 1):
-                            # this axis would be broadcasted
-                            pass
-                        else:
-                            assert are_shape_components_equal(seen_axis_len, 1)
-                            descr_to_axis_len[descr] = arg_axis_len
-                else:
-                    descr_to_axis_len[descr] = arg_axis_len
-
-        return immutabledict(descr_to_axis_len)
+        return _get_einsum_access_descr_to_axis_len(
+            self.access_descriptors, self.args)
 
     @cached_property
     def shape(self) -> ShapeType:
