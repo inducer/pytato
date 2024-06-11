@@ -467,8 +467,7 @@ class Axis(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -480,8 +479,7 @@ class ReductionDescriptor(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @array_dataclass()
@@ -833,10 +831,12 @@ class Array(Taggable):
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (*self.axes[:iaxis],
-                    self.axes[iaxis].tagged(tags),
-                    *self.axes[iaxis+1:])
-        return self.copy(axes=new_axes)
+        new_axis = self.axes[iaxis].tagged(tags)
+        if new_axis is not self.axes[iaxis]:
+            return self.copy(
+                axes=(*self.axes[:iaxis], new_axis, *self.axes[iaxis+1:]))
+        else:
+            return self
 
     @memoize_method
     def __repr__(self) -> str:
