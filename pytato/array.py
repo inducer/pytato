@@ -839,10 +839,14 @@ class Array(Taggable):
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (self.axes[:iaxis]
-                    + (self.axes[iaxis].tagged(tags),)
-                    + self.axes[iaxis+1:])
-        return self.copy(axes=new_axes)
+        new_axis = self.axes[iaxis].tagged(tags)
+        if new_axis is not self.axes[iaxis]:
+            new_axes = (self.axes[:iaxis]
+                        + (self.axes[iaxis].tagged(tags),)
+                        + self.axes[iaxis+1:])
+            return self.copy(axes=new_axes)
+        else:
+            return self
 
     @memoize_method
     def __repr__(self) -> str:
