@@ -148,7 +148,7 @@ class DistributedSendRefHolder(Array):
 
     def __init__(self, send: DistributedSend, passthrough_data: Array,
                  tags: FrozenSet[Tag] = frozenset(),
-                 non_equality_tags: FrozenSet[Optional[Tag]] = frozenset()) -> None:
+                 non_equality_tags: FrozenSet[Tag] = frozenset()) -> None:
         super().__init__(axes=passthrough_data.axes, tags=tags,
                          non_equality_tags=non_equality_tags)
         object.__setattr__(self, "send", send)
@@ -232,7 +232,7 @@ def make_distributed_send_ref_holder(
         send: DistributedSend,
         passthrough_data: Array,
         tags: FrozenSet[Tag] = frozenset(),
-        non_equality_tags: FrozenSet[Optional[Tag]] = frozenset(),
+        non_equality_tags: FrozenSet[Tag] = frozenset(),
         ) -> DistributedSendRefHolder:
     """Make a :class:`DistributedSendRefHolder` object."""
     if not non_equality_tags:

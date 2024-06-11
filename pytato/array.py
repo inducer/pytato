@@ -449,9 +449,9 @@ class Array(Taggable):
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
     # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Optional[Tag]] = attrs.field(kw_only=True,
-                                                              hash=False,
-                                                              default=frozenset())
+    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
+                                                    hash=False,
+                                                    default=frozenset())
 
     _mapper_method: ClassVar[str]
 

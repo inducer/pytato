@@ -180,7 +180,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
                         tags: FrozenSet[Tag],
-                        non_equality_tags: FrozenSet[Optional[Tag]],
+                        non_equality_tags: FrozenSet[Tag],
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
 
@@ -481,7 +481,7 @@ def _index_into(
         ary: Array,
         indices: Tuple[ConvertibleToIndexExpr, ...],
         tags: FrozenSet[Tag],
-        non_equality_tags: FrozenSet[Optional[Tag]]) -> Array:
+        non_equality_tags: FrozenSet[Tag]) -> Array:
     from pytato.diagnostic import CannotBroadcastError
     from pytato.array import _get_default_axes
 
