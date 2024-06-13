@@ -215,6 +215,7 @@ class FunctionDefinition(Taggable):
             return tuple(call_site[f"_{iarg}"]
                          for iarg in range(len(self.returns)))
         elif self.return_type == ReturnType.DICT_OF_ARRAYS:
+            # FIXME: Should this be immutabledict?
             return {kw: call_site[kw] for kw in self.returns}
         else:
             raise NotImplementedError(self.return_type)
