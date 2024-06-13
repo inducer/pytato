@@ -482,9 +482,6 @@ class PytatoKeyBuilder(LoopyKeyBuilder):  # type: ignore[misc]
         # CL Array
         self.rec(key_hash, key.get())
 
-    def update_for_function(self, key_hash: Any, key: Any) -> None:
-        self.rec(key_hash, key.__module__ + key.__qualname__)
-
     update_for_BitwiseAnd = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_BitwiseNot = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
     update_for_BitwiseOr = LoopyKeyBuilder.update_for_pymbolic_expression  # noqa: N815, E501
