@@ -33,7 +33,7 @@ import pymbolic.primitives as prim
 from pymbolic import var
 
 from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
-                    Any, List, Type, TYPE_CHECKING)
+                    Any, List, Type, TYPE_CHECKING, Sequence)
 
 
 from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
@@ -975,6 +975,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
                        ImplStored, Named, PrefixNamed]),
                    axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset(),
+                   repetitive_calls: Optional[List] = None
                    ) -> BoundProgram:
     r"""Code generation entry point.
 
@@ -1080,6 +1081,15 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
     # InlinedResult is emitted for both invocations and we would be required to
     # avoid such reduction iname collisions.
     t_unit = lp.make_reduction_inames_unique(state.t_unit)
+
+    # Why call to_batched?
+    # Simplify code gen when there are repetitive calls.
+    if repetitive_calls:
+        nbatches: Union[str, int] = repetitive_calls[0]
+        changes: Sequence[str] = repetitive_calls[1:]
+        t_unit = lp.to_batched(t_unit, nbatches, changes)
+        # We want to move the batch indices to the inner loop.
+        t_unit = lp.tag_inames(t_unit, dict(ibatch="ilp"))
 
     # Disable bounds checking if there is no hand-written LoopyCall in the DAG.
     if not cg_mapper.has_loopy_call:
