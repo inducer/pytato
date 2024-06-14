@@ -968,6 +968,8 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                 if inp.name in expr.parameters:
                     # drop, reference to argument
                     pass
+                # FIXME: Checked upon function definition creation in arraycontext
+                # now, can probably drop this
                 else:
                     raise ValueError("function definition refers to non-argument "
                                      f"placeholder named '{inp.name}'")
