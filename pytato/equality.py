@@ -122,8 +122,7 @@ class EqualityComparer:
     def map_index_lambda(self, expr1: IndexLambda, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.expr == expr2.expr
-                and (frozenset(expr1.bindings.keys())
-                     == frozenset(expr2.bindings.keys()))
+                and set(expr1.bindings.keys()) == set(expr2.bindings.keys())
                 and all(self.rec(expr1.bindings[name], expr2.bindings[name])
                         for name in expr1.bindings)
                 and len(expr1.shape) == len(expr2.shape)
@@ -231,7 +230,7 @@ class EqualityComparer:
         return (expr1.__class__ is expr2.__class__
                 and expr1.translation_unit == expr2.translation_unit
                 and expr1.entrypoint == expr2.entrypoint
-                and frozenset(expr1.bindings) == frozenset(expr2.bindings)
+                and set(expr1.bindings) == set(expr2.bindings)
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
                         if isinstance(bnd, Array)
@@ -249,7 +248,7 @@ class EqualityComparer:
 
     def map_dict_of_named_arrays(self, expr1: DictOfNamedArrays, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
-                and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
+                and set(expr1._data.keys()) == set(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
                         for name in expr1._data)
                 and expr1.tags == expr2.tags
@@ -280,7 +279,7 @@ class EqualityComparer:
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.parameters == expr2.parameters
-                and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
+                and set(expr1.returns.keys()) == set(expr2.returns.keys())
                 and all(self.rec(expr1.returns[k], expr2.returns[k])
                         for k in expr1.returns)
                 and expr1.tags == expr2.tags
@@ -289,7 +288,7 @@ class EqualityComparer:
     def map_call(self, expr1: Call, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and self.map_function_definition(expr1.function, expr2.function)
-                and frozenset(expr1.bindings) == frozenset(expr2.bindings)
+                and set(expr1.bindings) == set(expr2.bindings)
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
                         for name, bnd in expr1.bindings.items())
