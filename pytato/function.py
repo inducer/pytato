@@ -17,6 +17,17 @@ __doc__ = """
 
     A type variable corresponding to the return type of the function
     :func:`pytato.trace_call`.
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
+
+.. class:: AxesT
+
+    A :class:`tuple` of :class:`pytato.array.Axis` objects.
 """
 
 __copyright__ = """
