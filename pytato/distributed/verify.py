@@ -189,8 +189,8 @@ def _run_partition_diagnostics(
             {x: gp.name_to_output[x] for x in part.output_names}))
             for part in gp.parts.values()]
 
-    logger.info(f"find_partition: Split {get_num_nodes(outputs)} nodes into "
-        f"{len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
+    logger.info(f"find_distributed_partition: Split {get_num_nodes(outputs)} nodes "
+        f"into {len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
         "partition.")
 
 # }}}

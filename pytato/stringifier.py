@@ -97,6 +97,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
+        # pylint: disable=not-an-iterable
         fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         fields = tuple(field for field in fields if field != "non_equality_tags")
@@ -155,6 +156,7 @@ class Reprifier(Mapper):
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
+        # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
                         for field in attrs.fields(type(expr)))
@@ -171,6 +173,7 @@ class Reprifier(Mapper):
             else:
                 return repr(getattr(expr, field))
 
+        # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
                         for field in attrs.fields(type(expr)))
