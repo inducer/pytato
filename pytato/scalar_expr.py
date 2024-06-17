@@ -273,6 +273,12 @@ class Reduce(ExpressionBase):
                 tuple(self.bounds.keys()),
                 tuple(self.bounds.values())))
 
+    def update_persistent_hash(self, key_hash: Any, key_builder: Any) -> None:
+        key_builder.rec(key_hash, self.inner_expr)
+        key_builder.rec(key_hash, self.op)
+        key_builder.rec(key_hash, tuple(self.bounds.keys()))
+        key_builder.rec(key_hash, tuple(self.bounds.values()))
+
     def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
 

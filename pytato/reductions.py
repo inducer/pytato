@@ -90,6 +90,9 @@ class ReductionOperation(ABC):
 
 
 class _StatelessReductionOperation(ReductionOperation):
+    def update_persistent_hash(self, key_hash: Any, key_builder: Any) -> None:
+        key_builder.rec(key_hash, type(self))
+
     def __hash__(self) -> int:
         return hash(type(self))
 
