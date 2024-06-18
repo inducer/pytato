@@ -393,16 +393,17 @@ class NodeCountMapper(CachedWalkMapper):
     def __init__(self) -> None:
         from collections import defaultdict
         super().__init__()
-        self.counts = defaultdict(int)
+        self.counts = defaultdict(int)   # type: Dict[Type[Any], int]
 
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
+    def get_cache_key(self, expr: ArrayOrNames) -> ArrayOrNames:
         # does NOT account for duplicate nodes
         return expr
 
     def post_visit(self, expr: Any) -> None:
         self.counts[type(expr)] += 1
 
-def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type, int]:
+
+def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
@@ -415,6 +416,7 @@ def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type,
     ncm(outputs)
 
     return ncm.counts
+
 
 def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     """Returns the number of nodes in DAG *outputs*."""

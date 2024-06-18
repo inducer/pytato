@@ -610,6 +610,7 @@ def test_empty_dag_count():
     counts = get_node_type_counts(empty_dag)
     assert len(counts) == 1
 
+
 def test_single_node_dag_count():
     from pytato.analysis import get_num_nodes, get_node_type_counts
 
@@ -626,7 +627,7 @@ def test_single_node_dag_count():
 
     # Get total number of nodes
     total_nodes = get_num_nodes(single_node_dag)
-    
+
     assert total_nodes - 1 == 1
 
 
@@ -636,15 +637,15 @@ def test_small_dag_count():
     # Make a DAG using two nodes and one operation
     a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
     b = a + 1
-    dag = pt.make_dict_of_named_arrays({"result": b}) # b = a + 1
+    dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
 
     # Verify that get_num_nodes returns 2 for a DAG with two nodes
     assert get_num_nodes(dag) - 1 == 2
 
     counts = get_node_type_counts(dag)
     assert len(counts) - 1 == 2
-    assert counts[pt.array.Placeholder] == 1 # "a"
-    assert counts[pt.array.IndexLambda] == 1 # single operation
+    assert counts[pt.array.Placeholder] == 1   # "a"
+    assert counts[pt.array.IndexLambda] == 1   # single operation
 
 
 def test_large_dag_count():
@@ -661,7 +662,7 @@ def test_large_dag_count():
     counts = get_node_type_counts(dag)
     assert len(counts) >= 1
     assert counts[pt.array.Placeholder] == 1
-    assert counts[pt.array.IndexLambda] == 100 # 100 operations
+    assert counts[pt.array.IndexLambda] == 100   # 100 operations
     assert sum(counts.values()) - 1 == iterations + 1
 
 
@@ -670,9 +671,10 @@ def test_random_dag_count():
     from pytato.analysis import get_num_nodes
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
-        
+
         # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
         assert get_num_nodes(dag) - 1 == len(pt.transform.DependencyMapper()(dag))
+
 
 def test_random_dag_with_comm_count():
     from testlib import get_random_pt_dag_with_send_recv_nodes
