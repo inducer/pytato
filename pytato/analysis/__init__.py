@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    TYPE_CHECKING)
+                    Type, TYPE_CHECKING)
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
@@ -48,6 +48,8 @@ __doc__ = """
 .. autofunction:: is_einsum_similar_to_subscript
 
 .. autofunction:: get_num_nodes
+
+.. autofunction:: get_node_type_counts
 
 .. autofunction:: get_num_call_sites
 
@@ -381,23 +383,38 @@ class DirectPredecessorsGetter(Mapper):
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
-    Counts the number of nodes in a DAG.
+    Counts the number of nodes of a given type in a DAG.
 
-    .. attribute:: count
+    .. attribute:: counts
 
-       The number of nodes.
+       Dictionary mapping node types to number of nodes of that type.
     """
 
     def __init__(self) -> None:
+        from collections import defaultdict
         super().__init__()
-        self.count = 0
+        self.counts = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
+        # does NOT account for duplicate nodes
+        return expr
 
     def post_visit(self, expr: Any) -> None:
-        self.count += 1
+        self.counts[type(expr)] += 1
 
+def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type, int]:
+    """
+    Returns a dictionary mapping node types to node count for that type
+    in DAG *outputs*.
+    """
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    ncm = NodeCountMapper()
+    ncm(outputs)
+
+    return ncm.counts
 
 def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     """Returns the number of nodes in DAG *outputs*."""
@@ -408,7 +425,7 @@ def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
     ncm = NodeCountMapper()
     ncm(outputs)
 
-    return ncm.count
+    return sum(ncm.counts.values())
 
 # }}}
 
