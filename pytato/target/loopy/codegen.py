@@ -975,7 +975,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
                    array_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset([
                        ImplStored, Named, PrefixNamed]),
                    axis_tag_t_to_not_propagate: FrozenSet[Type[Tag]] = frozenset(),
-                   repetitive_calls: Optional[List] = None
+                   repetitive_calls: Optional[List[str]] = None
                    ) -> BoundProgram:
     r"""Code generation entry point.
 
@@ -1089,7 +1089,7 @@ def generate_loopy(result: Union[Array, DictOfNamedArrays, Dict[str, Array]],
         changes: Sequence[str] = repetitive_calls[1:]
         t_unit = lp.to_batched(t_unit, nbatches, changes)
         # We want to move the batch indices to the inner loop.
-        t_unit = lp.tag_inames(t_unit, dict(ibatch="ilp"))
+        t_unit = lp.tag_inames(t_unit, {"ibatch":"ilp"})
 
     # Disable bounds checking if there is no hand-written LoopyCall in the DAG.
     if not cg_mapper.has_loopy_call:
