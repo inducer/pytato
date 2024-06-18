@@ -1775,7 +1775,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-    def map_named_call(self, expr: NamedCallResult, *args: Any) -> None:
+    def map_named_call_result(self, expr: NamedCallResult, *args: Any) -> None:
         assert isinstance(expr._container, Call)
         for bnd in expr._container.bindings.values():
             self.node_to_users.setdefault(bnd, set()).add(expr)
