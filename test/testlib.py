@@ -334,6 +334,7 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
         value = rng.uniform(1, 10)
         current = operation(current, value)
 
+    # DAG should have `iterations` number of operations
     return pt.make_dict_of_named_arrays({"result": current})
 
 # }}}

@@ -46,7 +46,6 @@ sys._BUILDING_SPHINX_DOCS = True
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"typing_extensions(.+)"],
-    ["py:class", r"numpy.bool_"],
     # As of 2023-10-05, it doesn't look like there's sphinx documentation
     # available.
     ["py:class", r"immutabledict(.*)"],
