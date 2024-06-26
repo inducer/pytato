@@ -590,10 +590,10 @@ def test_empty_dag_count():
     empty_dag = pt.make_dict_of_named_arrays({})
 
     # Verify that get_num_nodes returns 0 for an empty DAG
-    assert get_num_nodes(empty_dag) - 1 == 0
+    assert get_num_nodes(empty_dag) == 0
 
     counts = get_node_type_counts(empty_dag)
-    assert len(counts) == 1
+    assert len(counts) == 0
 
 
 def test_single_node_dag_count():
@@ -606,14 +606,13 @@ def test_single_node_dag_count():
     node_counts = get_node_type_counts(single_node_dag)
 
     # Assert that there is only one node of type DataWrapper and one node of DictOfNamedArrays
-    # DictOfNamedArrays is automatically added
-    assert node_counts == {pt.DataWrapper: 1, pt.DictOfNamedArrays: 1}
-    assert sum(node_counts.values()) - 1 == 1  # Total node count is 1
+    assert node_counts == {pt.DataWrapper: 1}
+    assert sum(node_counts.values()) == 1  # Total node count is 1
 
     # Get total number of nodes
     total_nodes = get_num_nodes(single_node_dag)
 
-    assert total_nodes - 1 == 1
+    assert total_nodes == 1
 
 
 def test_small_dag_count():
@@ -625,10 +624,10 @@ def test_small_dag_count():
     dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
 
     # Verify that get_num_nodes returns 2 for a DAG with two nodes
-    assert get_num_nodes(dag) - 1 == 2
+    assert get_num_nodes(dag) == 2
 
     counts = get_node_type_counts(dag)
-    assert len(counts) - 1 == 2
+    assert len(counts) == 2
     assert counts[pt.array.Placeholder] == 1   # "a"
     assert counts[pt.array.IndexLambda] == 1   # single operation
 
@@ -641,14 +640,14 @@ def test_large_dag_count():
     dag = make_large_dag(iterations, seed=42)
 
     # Verify that the number of nodes is equal to iterations + 1 (placeholder)
-    assert get_num_nodes(dag) - 1 == iterations + 1
+    assert get_num_nodes(dag) == iterations + 1
 
     # Verify that the counts dictionary has correct counts for the complicated DAG
     counts = get_node_type_counts(dag)
     assert len(counts) >= 1
     assert counts[pt.array.Placeholder] == 1
     assert counts[pt.array.IndexLambda] == 100   # 100 operations
-    assert sum(counts.values()) - 1 == iterations + 1
+    assert sum(counts.values()) == iterations + 1
 
 
 def test_random_dag_count():
@@ -658,7 +657,7 @@ def test_random_dag_count():
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
         # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
-        assert get_num_nodes(dag) - 1 == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
 def test_random_dag_with_comm_count():
@@ -670,7 +669,7 @@ def test_random_dag_with_comm_count():
         dag = get_random_pt_dag_with_send_recv_nodes(seed=i, rank=rank, size=size)
 
         # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
-        assert get_num_nodes(dag) - 1 == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
 def test_rec_get_user_nodes():
