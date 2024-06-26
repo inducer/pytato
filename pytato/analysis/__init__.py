@@ -392,15 +392,16 @@ class NodeCountMapper(CachedWalkMapper):
        Dictionary mapping node types to number of nodes of that type.
     """
 
-    def __init__(self, count_duplicates=False) -> None:  # added parameter
+    def __init__(self, count_duplicates: bool = False) -> None:
         from collections import defaultdict
         super().__init__()
-        self.expr_type_counts = defaultdict(int)   # type: Dict[Type[Any], int]
+        self.expr_type_counts = defaultdict(int)  # type: Dict[Type[Any], int]
         self.count_duplicates = count_duplicates
-        self.expr_call_counts = defaultdict(int)
+        self.expr_call_counts = defaultdict(int)  # type: Dict[Any, int]
 
-    def get_cache_key(self, expr: ArrayOrNames) -> ArrayOrNames:
-        return id(expr) if self.count_duplicates else expr  # returns unique nodes only if count_duplicates is True
+    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+        # Returns unique nodes only if count_duplicates is True
+        return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
         if type(expr) is not DictOfNamedArrays:
@@ -408,7 +409,10 @@ class NodeCountMapper(CachedWalkMapper):
             self.expr_call_counts[expr] += 1
 
 
-def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays], count_duplicates=False) -> Dict[Type[Any], int]:
+def get_node_type_counts(
+        outputs: Union[Array, DictOfNamedArrays],
+        count_duplicates: bool = False
+        ) -> Dict[Type[Any], int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
@@ -425,7 +429,10 @@ def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays], count_duplica
     return ncm.expr_type_counts
 
 
-def get_num_nodes(outputs: Union[Array, DictOfNamedArrays], count_duplicates=False) -> int:
+def get_num_nodes(
+        outputs: Union[Array, DictOfNamedArrays],
+        count_duplicates: bool = False
+        ) -> int:
     """
     Returns the number of nodes in DAG *outputs*.
 
@@ -441,7 +448,14 @@ def get_num_nodes(outputs: Union[Array, DictOfNamedArrays], count_duplicates=Fal
     return sum(ncm.expr_type_counts.values())
 
 
-def get_expr_calls(outputs: Union[Array, DictOfNamedArrays], count_duplicates=False) -> Dict[Type[Any], int]:
+def get_expr_calls(
+        outputs: Union[Array, DictOfNamedArrays],
+        count_duplicates: bool = False
+        ) -> Dict[Type[Any], int]:
+    """
+    Returns the count of calls per `expr`.
+    """
+    
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 

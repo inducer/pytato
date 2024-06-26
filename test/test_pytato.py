@@ -600,12 +600,13 @@ def test_single_node_dag_count():
     from pytato.analysis import get_num_nodes, get_node_type_counts
 
     data = np.random.rand(4, 4)
-    single_node_dag = pt.make_dict_of_named_arrays({"result": pt.make_data_wrapper(data)})
+    single_node_dag = pt.make_dict_of_named_arrays(
+        {"result": pt.make_data_wrapper(data)})
 
     # Get counts per node type
     node_counts = get_node_type_counts(single_node_dag)
 
-    # Assert that there is only one node of type DataWrapper and one node of DictOfNamedArrays
+    # Assert that there is only one node of type DataWrapper
     assert node_counts == {pt.DataWrapper: 1}
     assert sum(node_counts.values()) == 1  # Total node count is 1
 
@@ -642,7 +643,6 @@ def test_large_dag_count():
     # Verify that the number of nodes is equal to iterations + 1 (placeholder)
     assert get_num_nodes(dag) == iterations + 1
 
-    # Verify that the counts dictionary has correct counts for the complicated DAG
     counts = get_node_type_counts(dag)
     assert len(counts) >= 1
     assert counts[pt.array.Placeholder] == 1
@@ -665,7 +665,8 @@ def test_random_dag_with_comm_count():
     rank = 0
     size = 2
     for i in range(10):
-        dag = get_random_pt_dag_with_send_recv_nodes(seed=i, rank=rank, size=size)
+        dag = get_random_pt_dag_with_send_recv_nodes(
+            seed=i, rank=rank, size=size)
 
         assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
@@ -683,9 +684,11 @@ def test_duplicate_node_count():
         expr_counts = get_expr_calls(dag, count_duplicates=True)
 
         # Get difference in duplicates
-        num_duplicates = sum(count - 1 for count in expr_counts.values() if count > 1)
+        num_duplicates = sum(
+            count - 1 for count in expr_counts.values() if count > 1)
         # Check that duplicates are correctly calculated
-        assert node_count - num_duplicates == len(pt.transform.DependencyMapper()(dag))
+        assert node_count - num_duplicates == len(
+            pt.transform.DependencyMapper()(dag))
 
 
 def test_duplicate_nodes_with_comm_count():
@@ -695,7 +698,8 @@ def test_duplicate_nodes_with_comm_count():
     rank = 0
     size = 2
     for i in range(20):
-        dag = get_random_pt_dag_with_send_recv_nodes(seed=i, rank=rank, size=size)
+        dag = get_random_pt_dag_with_send_recv_nodes(
+            seed=i, rank=rank, size=size)
 
         # Get the number of types of expressions
         node_count = get_num_nodes(dag, count_duplicates=True)
@@ -704,14 +708,18 @@ def test_duplicate_nodes_with_comm_count():
         expr_counts = get_expr_calls(dag, count_duplicates=True)
 
         # Get difference in duplicates
-        num_duplicates = sum(count - 1 for count in expr_counts.values() if count > 1)
+        num_duplicates = sum(
+            count - 1 for count in expr_counts.values() if count > 1)
 
         # Check that duplicates are correctly calculated
-        assert node_count - num_duplicates == len(pt.transform.DependencyMapper()(dag))
+        assert node_count - num_duplicates == len(
+            pt.transform.DependencyMapper()(dag))
 
 
 def test_large_dag_with_duplicates_count():
-    from pytato.analysis import get_num_nodes, get_node_type_counts, get_expr_calls
+    from pytato.analysis import (
+        get_num_nodes, get_node_type_counts, get_expr_calls
+    )
     from testlib import make_large_dag
     import pytato as pt
 
@@ -725,9 +733,9 @@ def test_large_dag_with_duplicates_count():
     # Get the number of expressions and the amount they're called
     expr_counts = get_expr_calls(dag, count_duplicates=True)
 
-    num_duplicates = sum(count - 1 for count in expr_counts.values() if count > 1)
+    num_duplicates = sum(
+        count - 1 for count in expr_counts.values() if count > 1)
 
-    # Verify that the counts dictionary has correct counts for the complicated DAG
     counts = get_node_type_counts(dag, count_duplicates=True)
     assert len(counts) >= 1
     assert counts[pt.array.Placeholder] == 1
@@ -735,7 +743,8 @@ def test_large_dag_with_duplicates_count():
     assert sum(counts.values()) == iterations + 1
 
     # Check that duplicates are correctly calculated
-    assert node_count - num_duplicates == len(pt.transform.DependencyMapper()(dag))
+    assert node_count - num_duplicates == len(
+        pt.transform.DependencyMapper()(dag))
 
 
 def test_rec_get_user_nodes():
