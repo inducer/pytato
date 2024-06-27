@@ -247,7 +247,7 @@ class ToIndexLambdaMixin:
             from pytato.reductions import SumReductionOperation
             inner_expr = Reduce(inner_expr,
                                 SumReductionOperation(),
-                                redn_bounds)
+                                immutabledict(redn_bounds))
 
         return IndexLambda(expr=inner_expr,
                            shape=self._rec_shape(expr.shape),

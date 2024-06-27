@@ -28,6 +28,9 @@ from typing import (
         Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
         Iterable)
 
+import attrs
+
+
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
@@ -242,39 +245,31 @@ class ExpressionBase(prim.Expression):
         return StringifyMapper()
 
 
+@attrs.frozen(eq=True, hash=True, cache_hash=True)
 class Reduce(ExpressionBase):
     """
-    .. attribute:: inner_expr
-
-        A :class:`ScalarExpression` to be reduced over.
-
-    .. attribute:: op
-
-        A :class:`pytato.reductions.ReductionOperation`.
-
-    .. attribute:: bounds
-
-        A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
-        identifying half-open bounds intervals.  Must be hashable.
+    .. autoattribute:: inner_expr
+    .. autoattribute:: op
+    .. autoattribute:: bounds
     """
+
     inner_expr: ScalarExpression
+    """The expression to be reduced over."""
+
     op: ReductionOperation
+
     bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
-
-    def __init__(self, inner_expr: ScalarExpression,
-            op: ReductionOperation, bounds: Any) -> None:
-        self.inner_expr = inner_expr
-        self.op = op
-        self.bounds = bounds
-
-    def __hash__(self) -> int:
-        return hash((self.inner_expr,
-                self.op,
-                tuple(self.bounds.keys()),
-                tuple(self.bounds.values())))
+    """
+    A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
+    identifying half-open bounds intervals.  Must be hashable.
+    """
 
     def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
+
+    if __debug__:
+        def __attrs_post_init__(self) -> None:
+            hash(self.bounds)
 
     init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
