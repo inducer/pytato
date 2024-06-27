@@ -608,7 +608,6 @@ def test_single_node_dag_count():
 
     # Assert that there is only one node of type DataWrapper
     assert node_counts == {pt.DataWrapper: 1}
-    assert sum(node_counts.values()) == 1  # Total node count is 1
 
     # Get total number of nodes
     total_nodes = get_num_nodes(single_node_dag)

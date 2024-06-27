@@ -404,7 +404,7 @@ class NodeCountMapper(CachedWalkMapper):
         return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
-        if type(expr) is not DictOfNamedArrays:
+        if not isinstance(expr, DictOfNamedArrays):
             self.expr_type_counts[type(expr)] += 1
             self.expr_call_counts[expr] += 1
 
@@ -417,7 +417,7 @@ def get_node_type_counts(
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
 
-    `DictOfNamedArrays` are added when *outputs* is normalized and ignored.
+    Instances of `DictOfNamedArrays` are excluded from counting.
     """
 
     from pytato.codegen import normalize_outputs
@@ -436,7 +436,7 @@ def get_num_nodes(
     """
     Returns the number of nodes in DAG *outputs*.
 
-    `DictOfNamedArrays` are added when *outputs* is normalized and ignored.
+    Instances of `DictOfNamedArrays` are excluded from counting.
     """
 
     from pytato.codegen import normalize_outputs
@@ -455,7 +455,6 @@ def get_expr_calls(
     """
     Returns the count of calls per `expr`.
     """
-    
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
