@@ -51,6 +51,8 @@ __doc__ = """
 
 .. autofunction:: get_node_type_counts
 
+.. autofunction:: get_node_multiplicities
+
 .. autofunction:: get_num_call_sites
 
 .. autoclass:: DirectPredecessorsGetter
