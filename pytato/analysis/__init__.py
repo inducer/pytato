@@ -387,7 +387,6 @@ class NodeCountMapper(CachedWalkMapper):
 
     .. attribute:: expr_type_counts
     .. attribute:: count_duplicates
-    .. attribute:: expr_call_counts
 
        Dictionary mapping node types to number of nodes of that type.
     """
@@ -397,7 +396,6 @@ class NodeCountMapper(CachedWalkMapper):
         super().__init__()
         self.expr_type_counts = defaultdict(int)  # type: Dict[Type[Any], int]
         self.count_duplicates = count_duplicates
-        self.expr_call_counts = defaultdict(int)  # type: Dict[Any, int]
 
     def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
         # Returns unique nodes only if count_duplicates is True
@@ -406,7 +404,6 @@ class NodeCountMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_type_counts[type(expr)] += 1
-            self.expr_call_counts[expr] += 1
 
 
 def get_node_type_counts(
@@ -447,21 +444,43 @@ def get_num_nodes(
 
     return sum(ncm.expr_type_counts.values())
 
+# }}}
 
-def get_expr_calls(
-        outputs: Union[Array, DictOfNamedArrays],
-        count_duplicates: bool = False
-        ) -> Dict[Type[Any], int]:
+
+# {{{ NodeMultiplicityMapper
+
+
+class NodeMultiplicityMapper(CachedWalkMapper):
     """
-    Returns the count of calls per `expr`.
+    Counts the number of unique nodes by ID in a DAG.
+
+    .. attribute:: expr_multiplicity_counts
+    """
+    def __init__(self) -> None:
+        from collections import defaultdict
+        super().__init__()
+        self.expr_multiplicity_counts = defaultdict(int)  # type: Dict[Any, int]
+
+    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+        # Returns unique nodes
+        return id(expr)
+
+    def post_visit(self, expr: Any) -> None:
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_multiplicity_counts[expr] += 1
+
+
+def get_node_multiplicities(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
+    """
+    Returns the multiplicity per `expr`.
     """
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    ncm = NodeCountMapper(count_duplicates)
-    ncm(outputs)
+    nmm = NodeMultiplicityMapper()
+    nmm(outputs)
 
-    return ncm.expr_call_counts
+    return nmm.expr_multiplicity_counts
 
 # }}}
 

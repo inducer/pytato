@@ -672,7 +672,7 @@ def test_random_dag_with_comm_count():
 
 def test_duplicate_node_count():
     from testlib import get_random_pt_dag
-    from pytato.analysis import get_num_nodes, get_expr_calls
+    from pytato.analysis import get_num_nodes, get_node_multiplicities
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
@@ -680,11 +680,11 @@ def test_duplicate_node_count():
         node_count = get_num_nodes(dag, count_duplicates=True)
 
         # Get the number of expressions and the amount they're called
-        expr_counts = get_expr_calls(dag, count_duplicates=True)
+        node_multiplicity = get_node_multiplicities(dag)
 
         # Get difference in duplicates
         num_duplicates = sum(
-            count - 1 for count in expr_counts.values() if count > 1)
+            count - 1 for count in node_multiplicity.values() if count > 1)
         # Check that duplicates are correctly calculated
         assert node_count - num_duplicates == len(
             pt.transform.DependencyMapper()(dag))
@@ -692,7 +692,7 @@ def test_duplicate_node_count():
 
 def test_duplicate_nodes_with_comm_count():
     from testlib import get_random_pt_dag_with_send_recv_nodes
-    from pytato.analysis import get_num_nodes, get_expr_calls
+    from pytato.analysis import get_num_nodes, get_node_multiplicities
 
     rank = 0
     size = 2
@@ -704,11 +704,11 @@ def test_duplicate_nodes_with_comm_count():
         node_count = get_num_nodes(dag, count_duplicates=True)
 
         # Get the number of expressions and the amount they're called
-        expr_counts = get_expr_calls(dag, count_duplicates=True)
+        node_multiplicity = get_node_multiplicities(dag)
 
         # Get difference in duplicates
         num_duplicates = sum(
-            count - 1 for count in expr_counts.values() if count > 1)
+            count - 1 for count in node_multiplicity.values() if count > 1)
 
         # Check that duplicates are correctly calculated
         assert node_count - num_duplicates == len(
@@ -717,7 +717,7 @@ def test_duplicate_nodes_with_comm_count():
 
 def test_large_dag_with_duplicates_count():
     from pytato.analysis import (
-        get_num_nodes, get_node_type_counts, get_expr_calls
+        get_num_nodes, get_node_type_counts, get_node_multiplicities
     )
     from testlib import make_large_dag
     import pytato as pt
@@ -730,10 +730,10 @@ def test_large_dag_with_duplicates_count():
     assert node_count == iterations + 1
 
     # Get the number of expressions and the amount they're called
-    expr_counts = get_expr_calls(dag, count_duplicates=True)
+    node_multiplicity = get_node_multiplicities(dag)
 
     num_duplicates = sum(
-        count - 1 for count in expr_counts.values() if count > 1)
+        count - 1 for count in node_multiplicity.values() if count > 1)
 
     counts = get_node_type_counts(dag, count_duplicates=True)
     assert len(counts) >= 1
