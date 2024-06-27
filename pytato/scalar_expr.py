@@ -112,6 +112,9 @@ class CombineMapper(CombineMapperBase):
 class IdentityMapper(IdentityMapperBase):
     pass
 
+    def map_type_cast(self, expr: TypeCast, *args: Any, **kwargs: Any) -> Any:
+        return TypeCast(expr.dtype, self.rec(expr.inner_expr, *args, **kwargs))
+
 
 class SubstitutionMapper(SubstitutionMapperBase):
     def map_reduce(self, expr: Reduce) -> ScalarExpression:
@@ -184,6 +187,10 @@ class StringifyMapper(StringifyMapperBase):
                 for name, (lb, ub) in expr.bounds.items())
         bounds_expr = "{" + bounds_expr + "}"
         return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
+
+    def map_type_cast(self, expr: TypeCast, enclosing_prec: Any) -> str:
+        from pymbolic.mapper.stringifier import PREC_NONE
+        return f"cast({expr.dtype}, {self.rec(expr.inner_expr, PREC_NONE)})"
 
 # }}}
 
@@ -273,6 +280,22 @@ class Reduce(ExpressionBase):
 
     init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
+
+
+@attrs.frozen(eq=True, hash=True, cache_hash=True)
+class TypeCast(ExpressionBase):
+    """
+    .. autoattribute:: dtype
+    .. autoattribute:: dtype
+    """
+    dtype: np.dtype[Any]
+    inner_expr: ScalarExpression
+
+    def __getinitargs__(self) -> Tuple[np.dtype[Any], ScalarExpression]:
+        return (self.dtype, self.inner_expr)
+
+    init_arg_names = ("dtype", "inner_expr")
+    mapper_method = "map_type_cast"
 
 # }}}
 
