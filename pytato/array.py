@@ -169,6 +169,7 @@ Internal stuff that is only here because the documentation tool wants it
 # }}}
 
 from abc import ABC, abstractmethod
+from enum import IntEnum
 from functools import partialmethod, cached_property
 import operator
 import attrs
@@ -280,22 +281,96 @@ def normalize_shape(
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
-DtypeOrScalar = Union[_dtype_any, ScalarType]
+PyScalarType = Union[type[bool], type[int], type[float], type[complex]]
+DtypeOrPyScalarType = Union[_dtype_any, PyScalarType]
 ArrayOrScalar = Union["Array", Scalar]
 
 
-# https://github.com/numpy/numpy/issues/19302
-def _np_result_type(
-        # actual dtype:
-        #*arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
-        # our dtype:
-        *arrays_and_dtypes: DtypeOrScalar,
-        ) -> np.dtype[Any]:
-    return np.result_type(*arrays_and_dtypes)
+# https://numpy.org/neps/nep-0050-scalar-promotion.html
+class DtypeKindCategory(IntEnum):
+    BOOLEAN = 0
+    INTEGRAL = 1
+    INEXACT = 2
 
 
-def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
-    dtype = _np_result_type(arg1, arg2)
+_dtype_kind_char_to_kind_cat = {
+    "b": DtypeKindCategory.BOOLEAN,
+    "i": DtypeKindCategory.INTEGRAL,
+    "u": DtypeKindCategory.INTEGRAL,
+    "f": DtypeKindCategory.INEXACT,
+    "c": DtypeKindCategory.INEXACT,
+}
+
+
+_py_type_to_kind_cat = {
+    bool: DtypeKindCategory.BOOLEAN,
+    int: DtypeKindCategory.INTEGRAL,
+    float: DtypeKindCategory.INEXACT,
+    complex: DtypeKindCategory.INEXACT,
+}
+
+
+_float_dtype_to_complex: Dict[np.dtype[Any], np.dtype[Any]] = {
+    np.dtype(np.float32): np.dtype(np.complex64),
+    np.dtype(np.float64): np.dtype(np.complex128),
+}
+
+
+def _complexify_dtype(dtype: np.dtype[Any]) -> np.dtype[Any]:
+    if dtype.kind == "c":
+        return dtype
+    elif dtype.kind == "f":
+        return _float_dtype_to_complex[dtype]
+    else:
+        raise ValueError("can only complexify types that are already inexact")
+
+
+def _np_result_dtype(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
+    # For numpy 2.0, np.result_type does not implement numpy's type
+    # promotion behavior. Weird. Hence all this nonsense is needed.
+
+    py_types = [dtype for dtype in dtypes if isinstance(dtype, type)]
+
+    if not py_types:
+        return np.result_type(*dtypes)
+
+    np_dtypes = [dtype for dtype in dtypes if isinstance(dtype, np.dtype)]
+    np_kind_cats = {
+        _dtype_kind_char_to_kind_cat[dtype.kind] for dtype in np_dtypes}
+    py_kind_cats = {_py_type_to_kind_cat[tp] for tp in py_types}
+    kind_cats = np_kind_cats | py_kind_cats
+
+    res_kind_cat = max(kind_cats)
+    max_py_kind_cats = max(py_kind_cats)
+    max_np_kind_cats = max(np_kind_cats)
+
+    is_complex = (complex in py_types
+        or any(dtype.kind == "c" for dtype in np_dtypes))
+
+    if max_py_kind_cats > max_np_kind_cats:
+        if res_kind_cat == DtypeKindCategory.INTEGRAL:
+            # FIXME: Perhaps this should be int32 "on some systems, e.g. Windows"
+            py_promotion_dtype: np.dtype[Any] = np.dtype(np.int64)
+        elif res_kind_cat == DtypeKindCategory.INEXACT:
+            if is_complex:
+                py_promotion_dtype = np.dtype(np.complex128)
+            else:
+                py_promotion_dtype = np.dtype(np.float64)
+        else:
+            # bool won't ever be promoted to
+            raise AssertionError()
+        return np.result_type(*(np_dtypes + [py_promotion_dtype]))
+
+    else:
+        # Just ignore the python types for promotion.
+        result = np.result_type(*np_dtypes)
+        if is_complex:
+            result = _complexify_dtype(result)
+        return result
+
+
+def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
+    dtype = _np_result_dtype(*dtypes)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     # pylint: disable=no-member
     if dtype.kind in "iu":
@@ -554,11 +629,16 @@ class Array(Taggable):
 
     __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
-    def _binary_op(self,
-            op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
-            other: ArrayOrScalar,
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
-            reverse: bool = False) -> Array:
+    def _binary_op(
+                self,
+                op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
+                other: ArrayOrScalar,
+                get_result_type: Callable[
+                        [DtypeOrPyScalarType, DtypeOrPyScalarType],
+                        np.dtype[Any]] = _np_result_dtype,  # noqa
+                reverse: bool = False,
+                cast_to_result_dtype: bool = True,
+            ) -> Array:
 
         # {{{ sanity checks
 
@@ -572,15 +652,19 @@ class Array(Taggable):
 
         import pytato.utils as utils
         if reverse:
-            result = utils.broadcast_binary_op(other, self, op,
-                                               get_result_type,
-                                               tags=tags,
-                                               non_equality_tags=non_equality_tags)
+            result = utils.broadcast_binary_op(
+                         other, self, op,
+                         get_result_type,
+                         tags=tags,
+                         non_equality_tags=non_equality_tags,
+                         cast_to_result_dtype=cast_to_result_dtype)
         else:
-            result = utils.broadcast_binary_op(self, other, op,
-                                               get_result_type,
-                                               tags=tags,
-                                               non_equality_tags=non_equality_tags)
+            result = utils.broadcast_binary_op(
+                         self, other, op,
+                         get_result_type,
+                         tags=tags,
+                         non_equality_tags=non_equality_tags,
+                         cast_to_result_dtype=cast_to_result_dtype)
 
         assert isinstance(result, Array)
         return result
@@ -1355,7 +1439,7 @@ class Stack(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(*(arr.dtype for arr in self.arrays))
+        return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1388,7 +1472,7 @@ class Concatenate(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(*(arr.dtype for arr in self.arrays))
+        return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -2344,12 +2428,14 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
     import pytato.utils as utils
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
-    return utils.broadcast_binary_op(x1, x2,
-                                lambda x, y: prim.Comparison(x, which, y),
-                                lambda x, y: np.dtype(np.bool_),
-                                tags=_get_default_tags(),
-                                non_equality_tags=_get_created_at_tag(stacklevel=2),
-                                     )  # type: ignore[return-value]
+    return utils.broadcast_binary_op(
+                            x1, x2,
+                            lambda x, y: prim.Comparison(x, which, y),
+                            lambda x, y: np.dtype(np.bool_),
+                            tags=_get_default_tags(),
+                            non_equality_tags=_get_created_at_tag(stacklevel=2),
+                            cast_to_result_dtype=False
+                        )  # type: ignore[return-value]
 
 
 def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
@@ -2411,6 +2497,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      lambda x, y: np.dtype(np.bool_),
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
+                                     cast_to_result_dtype=False,
                                      )  # type: ignore[return-value]
 
 
@@ -2427,6 +2514,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      lambda x, y: np.dtype(np.bool_),
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
+                                     cast_to_result_dtype=False,
                                      )  # type: ignore[return-value]
 
 
