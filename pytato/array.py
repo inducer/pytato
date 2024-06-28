@@ -183,7 +183,7 @@ from pymbolic import var
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
+from pytato.scalar_expr import (Scalar, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
                                 INT_CLASSES, get_reduction_induction_variables)
 import re
@@ -281,7 +281,7 @@ def normalize_shape(
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
 DtypeOrScalar = Union[_dtype_any, ScalarType]
-ArrayOrScalar = Union["Array", ScalarType]
+ArrayOrScalar = Union["Array", Scalar]
 
 
 # https://github.com/numpy/numpy/issues/19302
@@ -2161,7 +2161,7 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: ScalarType,
+def full(shape: ConvertibleToShape, fill_value: Scalar,
          dtype: Any = None, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
