@@ -1,0 +1,61 @@
+[tool.ruff.lint]
+preview = true
+extend-select = [
+    "B",    # flake8-bugbear
+    "C",    # flake8-comprehensions
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    # not yet
+    # "I",    # flake8-isort
+    "N",    # pep8-naming
+    "Q",    # flake8-quotes
+    "W",    # pycodestyle
+    "NPY"   # numpy
+]
+extend-ignore = [
+  "E226",
+  "E241",
+  "E242",
+  "E265",
+  "N802",
+  "E402",
+  "N814",
+  "N817",
+  "C90",
+
+  # numpy random generators---disable for now
+  "NPY002",
+]
+[tool.ruff.lint.per-file-ignores]
+"examples/advection.py" = ["B023"]
+"test/test_linalg.py" = ["N806"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pytools", "pymbolic", "loopy"]
+known-local-folder = ["pytato"]
+lines-after-imports = 2
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+docstring-quotes = "double"
+multiline-quotes = "double"
+
+[[tool.mypy.overrides]]
+module = [
+  "islpy",
+  "loopy.*",
+  "pymbolic.*",
+  "pyopencl.*",
+  "jax.*",
+  "pygments.*",
+  "mako.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "pytato.transform",
+  "pytato.scalar_expr",
+]
+allow_subclassing_any = true

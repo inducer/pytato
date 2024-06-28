@@ -889,7 +889,7 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
     outputs = pt.make_dict_of_named_arrays({"out": res})
     partition = pt.find_distributed_partition(comm, outputs)
 
-    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+    (_distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
 
     assert next_tag == 4244
 

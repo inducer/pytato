@@ -918,7 +918,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
                  " in an error from 2023. To remove this message either"
-                 " call make_dict_of_named_arrays or pass the `tags` argument.")
+                 " call make_dict_of_named_arrays or pass the `tags` argument.",
+                 DeprecationWarning, stacklevel=2)
             tags = frozenset()
 
         object.__setattr__(self, "_data", data)
@@ -1170,8 +1171,9 @@ class Einsum(Array):
         if isinstance(redn_axis, str):
             try:
                 redn_axis_ = self.index_to_access_descr[redn_axis]
-            except KeyError:
-                raise InvalidEinsumIndex(f"'{redn_axis}': not a valid axis index.")
+            except KeyError as err:
+                raise InvalidEinsumIndex(
+                             f"'{redn_axis}': not a valid axis index.") from err
             if isinstance(redn_axis_, EinsumReductionAxis):
                 redn_axis = redn_axis_
             else:

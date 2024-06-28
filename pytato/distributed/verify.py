@@ -332,9 +332,9 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 # Add edges between sends and receives (cross-rank)
                 try:
                     sending_pid = comm_id_to_sending_pid[comm_id]
-                except KeyError:
+                except KeyError as err:
                     raise MissingSendError(
-                        f"no matching send for recv on '{comm_id}'")
+                        f"no matching send for recv on '{comm_id}'") from err
 
                 add_needed_pid(sumpart.pid, sending_pid)
 
@@ -371,8 +371,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         from pytato.distributed.verify import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)
-        except CycleError:
-            raise PartitionInducedCycleError
+        except CycleError as err:
+            raise PartitionInducedCycleError from err
 
         logger.info("verify_distributed_partition completed successfully.")
 
