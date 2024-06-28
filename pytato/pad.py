@@ -5,7 +5,7 @@
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
 from pytato.array import Array, IndexLambda
-from pytato.scalar_expr import IntegralT, INT_CLASSES, ScalarType
+from pytato.scalar_expr import IntegralT, INT_CLASSES, Scalar
 from typing import Union, Sequence, Any, Tuple, List, Dict
 from pytools import UniqueNameGenerator
 
@@ -17,7 +17,7 @@ import numpy as np
 def _get_constant_padded_idx_lambda(
     array: Array,
     pad_widths: Sequence[Tuple[IntegralT, IntegralT]],
-    constant_vals: Sequence[Tuple[ScalarType, ScalarType]]
+    constant_vals: Sequence[Tuple[Scalar, Scalar]]
 ) -> IndexLambda:
     """
     Internal routine used by :func:`pad` for constant-mode padding.
@@ -165,7 +165,7 @@ def pad(array: Array,
 
         # {{{ normalize constant_values
 
-        processed_constant_vals: Sequence[Tuple[ScalarType, ScalarType]]
+        processed_constant_vals: Sequence[Tuple[Scalar, Scalar]]
 
         try:
             constant_vals = kwargs.pop("constant_values")

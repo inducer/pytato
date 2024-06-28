@@ -10,7 +10,8 @@ from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.utils import (get_indexing_expression,
                           get_shape_after_broadcasting,
                           are_shape_components_equal)
-from pytato.scalar_expr import ScalarType, ScalarExpression, Reduce, SCALAR_CLASSES, TypeCast
+from pytato.scalar_expr import (
+    IdentityMapper, Scalar, ScalarExpression, Reduce, SCALAR_CLASSES, TypeCast)
 from pytato.reductions import ReductionOperation
 from dataclasses import dataclass
 from immutabledict import immutabledict
@@ -35,7 +36,7 @@ class HighLevelOp:
 
 @dataclass(frozen=True, eq=True, repr=True)
 class FullOp(HighLevelOp):
-    fill_value: ScalarType
+    fill_value: Scalar
 
 
 @unique

@@ -598,7 +598,7 @@ def _index_into(
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
     array_types: List[_dtype_any] = []
-    scalars: List[ScalarType] = []
+    scalars: List[Scalar] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):
