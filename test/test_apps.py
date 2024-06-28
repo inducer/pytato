@@ -143,7 +143,7 @@ def test_trace_fft(ctx_factory):
     prg = pt.generate_loopy(result).program
 
     x = np.random.randn(n).astype(np.complex128)
-    evt, (result,) = prg(queue, x=x)
+    _evt, (result,) = prg(queue, x=x)
 
     ref_result = fft(x)
 

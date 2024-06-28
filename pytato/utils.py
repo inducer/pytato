@@ -538,7 +538,7 @@ def _index_into(
         array_idx_shape = get_shape_after_broadcasting(
                 [idx for idx in indices if isinstance(idx, Array)])
     except CannotBroadcastError as e:
-        raise IndexError(str(e))
+        raise IndexError(str(e)) from None
 
     # }}}
 

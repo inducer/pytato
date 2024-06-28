@@ -689,8 +689,8 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
         try:
             loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
-        except KeyError:
-            raise NotImplementedError(expr.op)
+        except KeyError as err:
+            raise NotImplementedError(expr.op) from err
 
         unique_names_mapping = {
                 old_name: state.var_name_gen(f"_pt_{loopy_redn}" + old_name)
