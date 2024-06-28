@@ -94,7 +94,6 @@ Dict representation of DAGs
 ---------------------------
 
 .. autoclass:: UsersCollector
-.. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
 
@@ -1776,37 +1775,6 @@ def rec_get_user_nodes(expr: ArrayOrNames,
     """
     users = get_users(expr)
     return _recursively_get_all_users(users, node)
-
-
-def tag_user_nodes(
-        graph: Mapping[ArrayOrNames, Set[ArrayOrNames]],
-        tag: Any,
-        starting_point: ArrayOrNames,
-        node_to_tags: Optional[Dict[ArrayOrNames, Set[ArrayOrNames]]] = None
-        ) -> Dict[ArrayOrNames, Set[Any]]:
-    """Tags all nodes reachable from *starting_point* with *tag*.
-
-    :param graph: A :class:`dict` representation of a directed graph, mapping each
-        node to other nodes to which it is connected by edges. A possible
-        use case for this function is the graph in
-        :attr:`UsersCollector.node_to_users`.
-    :param tag: The value to tag the nodes with.
-    :param starting_point: A starting point in *graph*.
-    :param node_to_tags: The resulting mapping of nodes to tags.
-    """
-    from warnings import warn
-    warn("tag_user_nodes is set for deprecation in June, 2022",
-         DeprecationWarning)
-
-    if node_to_tags is None:
-        node_to_tags = {}
-
-    node_to_tags.setdefault(starting_point, set()).add(tag)
-
-    for user in _recursively_get_all_users(graph, starting_point):
-        node_to_tags.setdefault(user, set()).add(tag)
-
-    return node_to_tags
 
 # }}}
 
