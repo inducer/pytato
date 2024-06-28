@@ -80,6 +80,7 @@ IntegralScalarExpression = Union[IntegralT, prim.Expression]
 Scalar = Union[np.number[Any], int, np.bool_, bool, float, complex]
 
 ScalarExpression = Union[Scalar, prim.Expression]
+PYTHON_SCALAR_CLASSES = (int, float, complex, bool)
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
 

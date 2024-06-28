@@ -501,8 +501,8 @@ IndexLambda(
     dtype='int64',
     expr=Product((Subscript(Variable('_in0'),
                             (Variable('_0'), Variable('_1'))),
-                  Subscript(Variable('_in1'),
-                            (Variable('_0'), Variable('_1'))))),
+                  TypeCast(dtype('int64'), Subscript(Variable('_in1'),
+                            (Variable('_0'), Variable('_1')))))),
     bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
               '_in1': IndexLambda(
                   shape=(10, 4),

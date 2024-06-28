@@ -270,6 +270,9 @@ def reverse_args(f):
                                    "logical_or"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_scalar_array_binary_arith(ctx_factory, which, reverse):
+    from numpy.lib import NumpyVersion
+    is_old_numpy = NumpyVersion(np.__version__) < "2.0.0"
+
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -314,9 +317,18 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             out = outputs[dtype]
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
-            assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+            if not is_old_numpy:
+                assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+
             # In some cases ops are done in float32 in loopy but float64 in numpy.
-            assert np.allclose(out, out_ref), (out, out_ref)
+            is_allclose = np.allclose(out, out_ref), (out, out_ref)
+            if not is_old_numpy:
+                assert is_allclose
+            else:
+                if out_ref.dtype.itemsize == 1:
+                    pass
+                else:
+                    assert is_allclose
 
 
 @pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
