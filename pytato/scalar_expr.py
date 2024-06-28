@@ -111,7 +111,17 @@ class CombineMapper(CombineMapperBase):
 
 
 class IdentityMapper(IdentityMapperBase):
-    pass
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
+        return Reduce(
+                      self.rec(expr.inner_expr, *args, **kwargs),
+                      expr.op,
+                      immutabledict({
+                                        name: (
+                                            self.rec(lower, *args, **kwargs),
+                                            self.rec(upper, *args, **kwargs)
+                                        )
+                                        for name, (lower, upper) in expr.bounds.items()
+                                    }))
 
     def map_type_cast(self, expr: TypeCast, *args: Any, **kwargs: Any) -> Any:
         return TypeCast(expr.dtype, self.rec(expr.inner_expr, *args, **kwargs))
