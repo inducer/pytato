@@ -1178,8 +1178,8 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     np_result = np.vdot(a_in, b_in)
     _, (pt_result,) = pt.generate_loopy(pt.vdot(a, b))(cq)
 
-    assert pt_result.shape == np_result.shape
-    assert pt_result.dtype == np_result.dtype
+    assert pt_result.shape == np_result.shape  # pylint: disable=no-member
+    assert pt_result.dtype == np_result.dtype  # pylint: disable=no-member
     np.testing.assert_allclose(np_result, pt_result, rtol=1e-6)
 
 
