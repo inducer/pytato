@@ -34,7 +34,7 @@ import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable, cast)
+                    Hashable)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -200,10 +200,14 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """Mapper class that maps each node in the DAG exactly once. This loses some
     information compared to :class:`Mapper` as a node is visited only from
     one of its predecessors.
+
+    .. automethod:: clone_for_callee
     """
 
-    def __init__(self) -> None:
+    def __init__(self, err_on_collision: bool = False) -> None:
         super().__init__()
+        self._err_on_collision = err_on_collision
+        self._seen_exprs: Dict[Hashable, ArrayOrNames] = {}
         self._cache: Dict[Hashable, CachedMapperT] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
@@ -212,16 +216,35 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def rec(self, expr: ArrayOrNames) -> CachedMapperT:
         key = self.get_cache_key(expr)
         try:
-            return self._cache[key]
+            result = self._cache[key]
         except KeyError:
+            if self._err_on_collision:
+                self._seen_exprs[key] = expr
             result = super().rec(expr)
             self._cache[key] = result
-            # type-ignore-reason: Mapper.rec has imprecise func. signature
-            return result  # type: ignore[no-any-return]
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+
+        return result
 
     if TYPE_CHECKING:
         def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
             return self.rec(expr)
+
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision  # type: ignore[attr-defined]
+        )
 
 # }}}
 
@@ -235,21 +258,81 @@ class TransformMapper(CachedMapper[ArrayOrNames]):
     .. automethod:: clone_for_callee
     """
     if TYPE_CHECKING:
-        def rec(self, expr: TransformMapperResultT) -> TransformMapperResultT:
-            return cast(TransformMapperResultT, super().rec(expr))
-
         def __call__(self, expr: TransformMapperResultT) -> TransformMapperResultT:
             return self.rec(expr)
 
+    def __init__(
+            self,
+            err_on_collision: bool = False,
+            err_on_duplication: Optional[bool] = None) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_duplication: Raise an exception if mapping produces a new array
+            instance that has the same key as the input array. Requires
+            `err_on_collision=True`. Defaults to *True* if `err_on_collision` is
+            enabled.
+        """
+        super().__init__(err_on_collision=err_on_collision)
+        if err_on_duplication is None:
+            err_on_duplication = err_on_collision
+        if err_on_duplication and not err_on_collision:
+            raise ValueError(
+                "err_on_duplication=True requires err_on_collision=True.")
+        self._err_on_duplication = err_on_duplication
+        self._seen_results: Dict[Hashable, ArrayOrNames] = {}
+
+    def rec(self, expr: TransformMapperResultT) -> TransformMapperResultT:
+        key = self.get_cache_key(expr)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
+
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr)
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
+        return result  # type: ignore[return-value]
+
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        # Return self by default; if a subclass wants to implement
-        # function-specific mappings, it can override this
-        return self
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision,  # type: ignore[attr-defined]
+            err_on_duplication=self._err_on_duplication  # type: ignore[attr-defined]
+        )
 
 # }}}
 
@@ -272,8 +355,19 @@ class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                 ) -> TransformMapperResultT:
             return self.rec(expr, *args, **kwargs)
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            err_on_collision: bool = False,
+            err_on_duplication: Optional[bool] = None) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+        instances have the same key.
+        :arg err_on_duplication: Raise an exception if mapping produces a new array
+            instance that has the same key as the input array. Requires
+            `err_on_collision=True`. Defaults to *True* if `err_on_collision` is
+            enabled.
+        """
+        super().__init__(err_on_collision)
         # type-ignored as '._cache' attribute is not coherent with the base
         # class
         self._cache: Dict[Tuple[ArrayOrNames,
@@ -281,6 +375,13 @@ class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                 Tuple[Tuple[str, Any], ...]
                                 ],
                           ArrayOrNames] = {}  # type: ignore[assignment]
+        if err_on_duplication is None:
+            err_on_duplication = err_on_collision
+        if err_on_duplication and not err_on_collision:
+            raise ValueError(
+                "err_on_duplication=True requires err_on_collision=True.")
+        self._err_on_duplication = err_on_duplication
+        self._seen_results: Dict[Hashable, ArrayOrNames] = {}
 
     def get_cache_key(self,
                       expr: ArrayOrNames,
@@ -295,25 +396,54 @@ class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
             *args: Any, **kwargs: Any) -> TransformMapperResultT:
         key = self.get_cache_key(expr, *args, **kwargs)
         try:
-            # type-ignore-reason: self._cache has ArrayOrNames as its values
-            return self._cache[key]  # type: ignore[return-value]
+            result = self._cache[key]
         except KeyError:
-            result = Mapper.rec(self, expr,
-                                *args,
-                                **kwargs)
-            self._cache[key] = result
-            # type-ignore-reason: Mapper.rec is imprecise
-            return result  # type: ignore[no-any-return]
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
 
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr, *args, **kwargs)
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
+        return result  # type: ignore[return-value]
+
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        # Return self by default; if a subclass wants to implement
-        # function-specific mappings, it can override this
-        return self
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision,  # type: ignore[attr-defined]
+            err_on_duplication=self._err_on_duplication  # type: ignore[attr-defined]
+        )
 
 # }}}
 
@@ -1332,14 +1462,45 @@ class CachedMapAndCopyMapper(CopyMapper):
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
 
+    # FIXME: It's awkward to have to duplicate all of this from TransformMapper;
+    # figure out a better way
     def rec(self, expr: MappedT) -> MappedT:
-        if expr in self._cache:
-            # type-ignore-reason: parametric Mapping types aren't a thing
-            return self._cache[expr]  # type: ignore[return-value]
+        key = self.get_cache_key(expr)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
 
-        result = super().rec(self.map_fn(expr))
-        self._cache[expr] = result
-        # type-ignore-reason: map_fn has imprecise types
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, self.map_fn(expr))
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}."
+                f"{id(result)=}, {id(expr)=}")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
