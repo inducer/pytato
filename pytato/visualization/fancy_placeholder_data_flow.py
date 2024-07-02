@@ -257,9 +257,9 @@ def show_fancy_placeholder_data_flow(dag: Union[Array, DictOfNamedArrays],
     """
     try:
         from mako.template import Template
-    except ImportError:
+    except ImportError as err:
         raise RuntimeError("'show_fancy_placeholder_data_flow' requires"
-                           " mako. Install as `pip install mako`.")
+                           " mako. Install as `pip install mako`.") from err
 
     if isinstance(dag, Array):
         from pytato.array import make_dict_of_named_arrays

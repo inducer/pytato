@@ -91,7 +91,7 @@ class BoundPythonProgram(BoundProgram):
     def _bound_argment_names(self) -> Set[str]:
         return set(self.bound_arguments.keys())
 
-    def __call__(self,  *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
 
         if args:
             raise ValueError(f"'{type(self).__call__}' does not take positional"

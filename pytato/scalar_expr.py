@@ -28,6 +28,9 @@ from typing import (
         Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
         Iterable)
 
+import attrs
+
+
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
 from pymbolic.mapper.substitutor import (SubstitutionMapper as
@@ -74,9 +77,10 @@ IntegralT = Union[int, np.integer[Any]]
 BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
 IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[np.number[Any], int, np.bool_, bool, float, complex]
+Scalar = Union[np.number[Any], int, np.bool_, bool, float, complex]
 
-ScalarExpression = Union[ScalarType, prim.Expression]
+ScalarExpression = Union[Scalar, prim.Expression]
+PYTHON_SCALAR_CLASSES = (int, float, complex, bool)
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
 
@@ -107,7 +111,20 @@ class CombineMapper(CombineMapperBase):
 
 
 class IdentityMapper(IdentityMapperBase):
-    pass
+    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
+        return Reduce(
+                      self.rec(expr.inner_expr, *args, **kwargs),
+                      expr.op,
+                      immutabledict({
+                                        name: (
+                                            self.rec(lower, *args, **kwargs),
+                                            self.rec(upper, *args, **kwargs)
+                                        )
+                                        for name, (lower, upper) in expr.bounds.items()
+                                    }))
+
+    def map_type_cast(self, expr: TypeCast, *args: Any, **kwargs: Any) -> Any:
+        return TypeCast(expr.dtype, self.rec(expr.inner_expr, *args, **kwargs))
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
@@ -182,6 +199,10 @@ class StringifyMapper(StringifyMapperBase):
         bounds_expr = "{" + bounds_expr + "}"
         return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
 
+    def map_type_cast(self, expr: TypeCast, enclosing_prec: Any) -> str:
+        from pymbolic.mapper.stringifier import PREC_NONE
+        return f"cast({expr.dtype}, {self.rec(expr.inner_expr, PREC_NONE)})"
+
 # }}}
 
 
@@ -242,42 +263,50 @@ class ExpressionBase(prim.Expression):
         return StringifyMapper()
 
 
+@attrs.frozen(eq=True, hash=True, cache_hash=True)
 class Reduce(ExpressionBase):
     """
-    .. attribute:: inner_expr
-
-        A :class:`ScalarExpression` to be reduced over.
-
-    .. attribute:: op
-
-        A :class:`pytato.reductions.ReductionOperation`.
-
-    .. attribute:: bounds
-
-        A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
-        identifying half-open bounds intervals.  Must be hashable.
+    .. autoattribute:: inner_expr
+    .. autoattribute:: op
+    .. autoattribute:: bounds
     """
+
     inner_expr: ScalarExpression
+    """The expression to be reduced over."""
+
     op: ReductionOperation
+
     bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
-
-    def __init__(self, inner_expr: ScalarExpression,
-            op: ReductionOperation, bounds: Any) -> None:
-        self.inner_expr = inner_expr
-        self.op = op
-        self.bounds = bounds
-
-    def __hash__(self) -> int:
-        return hash((self.inner_expr,
-                self.op,
-                tuple(self.bounds.keys()),
-                tuple(self.bounds.values())))
+    """
+    A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
+    identifying half-open bounds intervals.  Must be hashable.
+    """
 
     def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
         return (self.inner_expr, self.op, self.bounds)
 
+    if __debug__:
+        def __attrs_post_init__(self) -> None:
+            hash(self.bounds)
+
     init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
+
+
+@attrs.frozen(eq=True, hash=True, cache_hash=True)
+class TypeCast(ExpressionBase):
+    """
+    .. autoattribute:: dtype
+    .. autoattribute:: dtype
+    """
+    dtype: np.dtype[Any]
+    inner_expr: ScalarExpression
+
+    def __getinitargs__(self) -> Tuple[np.dtype[Any], ScalarExpression]:
+        return (self.dtype, self.inner_expr)
+
+    init_arg_names = ("dtype", "inner_expr")
+    mapper_method = "map_type_cast"
 
 # }}}
 

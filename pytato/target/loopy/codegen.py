@@ -43,7 +43,7 @@ from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
 from pytato.target import BoundProgram
 from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstitution
 from pytato.transform import Mapper
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES
+from pytato.scalar_expr import ScalarExpression, INT_CLASSES, TypeCast
 from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
 from pytato.function import Call, NamedCallResult
 from pytato.loopy import LoopyCall
@@ -689,8 +689,8 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 
         try:
             loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
-        except KeyError:
-            raise NotImplementedError(expr.op)
+        except KeyError as err:
+            raise NotImplementedError(expr.op) from err
 
         unique_names_mapping = {
                 old_name: state.var_name_gen(f"_pt_{loopy_redn}" + old_name)
@@ -727,6 +727,15 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         # }}}
 
         return inner_expr
+
+    def map_type_cast(
+                self, expr: TypeCast,
+                prstnt_ctx: PersistentExpressionContext,
+                local_ctx: LocalExpressionContext,
+            ) -> ScalarExpression:
+        return lp.TypeCast(
+                    lp.to_loopy_type(expr.dtype),
+                    self.rec(expr.inner_expr, prstnt_ctx, local_ctx))
 
 # }}}
 
