@@ -130,6 +130,10 @@ class LoopyCall(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
 
+    # type-ignore-reason: AbstractResultWithNamedArrays returns a KeysView here
+    def keys(self) -> FrozenSet[str]:  # type: ignore[override]
+        return self._result_names
+
 
 @attrs.frozen(eq=False, hash=True, cache_hash=True)
 class LoopyCallResult(NamedArray):

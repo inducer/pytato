@@ -174,7 +174,7 @@ from functools import partialmethod, cached_property
 import operator
 import attrs
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
+        KeysView, Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
         FrozenSet, Collection)
 
@@ -861,6 +861,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     .. automethod:: __contains__
     .. automethod:: __getitem__
     .. automethod:: __len__
+    .. automethod:: keys
 
     .. note::
 
@@ -896,6 +897,11 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
+
+    @abstractmethod
+    def keys(self) -> KeysView[str]:
+        """Return a :class:`KeysView` of the names of the named arrays."""
+        pass
 
 
 @attrs.frozen(eq=False, init=False)
@@ -947,7 +953,12 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         return iter(self._data)
 
     def __repr__(self) -> str:
-        return "DictOfNamedArrays(" + str(self._data) + ")"
+        return f"DictOfNamedArrays(tags={self.tags!r}, data={self._data!r})"
+
+    # Note: items() and values() are not implemented here, they go through
+    # __iter__()/__getitem__() above.
+    def keys(self) -> KeysView[str]:
+        return self._data.keys()
 
 # }}}
 
