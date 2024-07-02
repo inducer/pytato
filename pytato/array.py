@@ -558,6 +558,9 @@ class Array(Taggable):
     def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
         return attrs.evolve(self, tags=tags)
 
+    def update_persistent_hash(self, key_hash: Any, key_builder: Any) -> None:
+        key_builder.rec(key_hash, hash(self))
+
     if TYPE_CHECKING:
         @property
         def shape(self) -> ShapeType:
@@ -1813,10 +1816,17 @@ class DataWrapper(InputArgumentBase):
         #    and valid by returning True
         return True
 
+    @memoize_method
     def __hash__(self) -> int:
-        # It would be better to hash the data, but we have no way of getting to
-        # it.
-        return id(self)
+        import hashlib
+
+        if hasattr(self.data, "get"):
+            d = self.data.get()
+        else:
+            d = self.data
+
+        return hash((hashlib.sha256(d).hexdigest(), self._shape,
+                     self.axes, Taggable.__hash__(self)))
 
     @property
     def shape(self) -> ShapeType:
