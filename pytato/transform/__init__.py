@@ -244,6 +244,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
             return self.rec(expr)
 
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
@@ -434,7 +435,7 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         call = self.rec(expr._container)
         assert isinstance(call, Call)
-        return NamedCallResult(call, expr.name)
+        return call[expr.name]
 
 
 class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
@@ -673,7 +674,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                               *args: Any, **kwargs: Any) -> Array:
         call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(call, Call)
-        return NamedCallResult(call, expr.name)
+        return call[expr.name]
 
 # }}}
 
@@ -793,9 +794,9 @@ class CombineMapper(Mapper, Generic[CombineT]):
                                   " must override map_function_definition.")
 
     def map_call(self, expr: Call) -> CombineT:
-        return self.combine(self.map_function_definition(expr.function),
-                            *[self.rec(bnd)
-                              for name, bnd in sorted(expr.bindings.items())])
+        raise NotImplementedError(
+            "Mapping calls is context-dependent. Derived classes must override "
+            "map_call.")
 
     def map_named_call_result(self, expr: NamedCallResult) -> CombineT:
         return self.rec(expr._container)
@@ -937,6 +938,8 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                 if inp.name in expr.parameters:
                     # drop, reference to argument
                     pass
+                # FIXME: Checked upon function definition creation in arraycontext
+                # now, can probably drop this
                 else:
                     raise ValueError("function definition refers to non-argument "
                                      f"placeholder named '{inp.name}'")
@@ -944,6 +947,12 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                 result.add(inp)
 
         return frozenset(result)
+
+    def map_call(self, expr: Call) -> FrozenSet[InputArgumentBase]:
+        return self.combine(self.map_function_definition(expr.function),
+            *[
+                self.rec(bnd)
+                for name, bnd in sorted(expr.bindings.items())])
 
 # }}}
 
@@ -1156,9 +1165,9 @@ class WalkMapper(Mapper):
         if not self.visit(expr):
             return
 
-        self.map_function_definition(expr.function)
+        self.map_function_definition(expr.function, *args, **kwargs)
         for bnd in expr.bindings.values():
-            self.rec(bnd)
+            self.rec(bnd, *args, **kwargs)
 
         self.post_visit(expr)
 
@@ -1186,6 +1195,7 @@ class CachedWalkMapper(WalkMapper):
     def __init__(self) -> None:
         super().__init__()
         self._visited_nodes: Set[Any] = set()
+        self._visited_functions: Set[FunctionDefinition] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -1198,6 +1208,24 @@ class CachedWalkMapper(WalkMapper):
 
         super().rec(expr, *args, **kwargs)
         self._visited_nodes.add(cache_key)
+
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        return type(self)()
+
+    def map_function_definition(self, expr: FunctionDefinition,
+                                *args: Any, **kwargs: Any) -> None:
+        if not self.visit(expr) or expr in self._visited_functions:
+            return
+
+        new_mapper = self.clone_for_callee(expr)
+        for subexpr in expr.returns.values():
+            new_mapper(subexpr, *args, **kwargs)
+
+        self._visited_functions.add(expr)
+
+        self.post_visit(expr, *args, **kwargs)
 
 # }}}
 
@@ -1226,7 +1254,6 @@ class TopoSortMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
@@ -1246,6 +1273,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         # type-ignore-reason: self.__init__ has a different function signature
@@ -1721,7 +1749,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-    def map_named_call(self, expr: NamedCallResult, *args: Any) -> None:
+    def map_named_call_result(self, expr: NamedCallResult, *args: Any) -> None:
         assert isinstance(expr._container, Call)
         for bnd in expr._container.bindings.values():
             self.node_to_users.setdefault(bnd, set()).add(expr)
