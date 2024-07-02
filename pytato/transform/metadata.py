@@ -639,18 +639,50 @@ class AxisTagAttacher(CopyMapper):
 
         return result
 
+    # FIXME: It's awkward to have to duplicate all of this from TransformMapper;
+    # figure out a better way
     def rec(self, expr: ArrayOrNames) -> Any:
         key = self.get_cache_key(expr)
         try:
-            return self._cache[key]
+            result = self._cache[key]
         except KeyError:
-            result = Mapper.rec(self, expr)
-            if not isinstance(expr, (AbstractResultWithNamedArrays,
-                                     DistributedSendRefHolder)):
-                assert isinstance(expr, Array)
-                result = self._attach_tags(expr, result)
-            self._cache[key] = result
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
             return result
+
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr)
+        if not isinstance(expr, (AbstractResultWithNamedArrays,
+                                 DistributedSendRefHolder)):
+            assert isinstance(expr, Array)
+            result = self._attach_tags(expr, result)  # type: ignore[arg-type]
+
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
+        return result
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
