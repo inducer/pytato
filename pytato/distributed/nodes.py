@@ -106,7 +106,7 @@ class DistributedSend(Taggable):
 
 # {{{ send ref holder
 
-@attrs.frozen(eq=False, repr=False, init=False, hash=True)
+@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -146,14 +146,6 @@ class DistributedSendRefHolder(Array):
 
     _mapper_method: ClassVar[str] = "map_distributed_send_ref_holder"
 
-    def __init__(self, send: DistributedSend, passthrough_data: Array,
-                 tags: FrozenSet[Tag] = frozenset(),
-                 non_equality_tags: FrozenSet[Tag] = frozenset()) -> None:
-        super().__init__(axes=passthrough_data.axes, tags=tags,
-                         non_equality_tags=non_equality_tags)
-        object.__setattr__(self, "send", send)
-        object.__setattr__(self, "passthrough_data", passthrough_data)
-
     @property
     def shape(self) -> ShapeType:
         return self.passthrough_data.shape
@@ -175,8 +167,9 @@ class DistributedSendRefHolder(Array):
                              f" DistributedSendRefHolder.'{set(kwargs)}'")
         return DistributedSendRefHolder(send,
                                         passthrough_data,
-                                        tags,
-                                        non_equality_tags)
+                                        axes=passthrough_data.axes,
+                                        tags=tags,
+                                        non_equality_tags=non_equality_tags)
 
 # }}}
 
@@ -239,6 +232,7 @@ def make_distributed_send_ref_holder(
         non_equality_tags = _get_created_at_tag()
     return DistributedSendRefHolder(
         send=send, passthrough_data=passthrough_data,
+        axes=passthrough_data.axes,
         tags=(tags | _get_default_tags()),
         non_equality_tags=non_equality_tags)
 
