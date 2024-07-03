@@ -404,7 +404,8 @@ class NodeCountMapper(CachedWalkMapper):
             self.counts[type(expr)] += 1
 
 
-def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
+def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]
+                         ) -> Dict[Type[Any], int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
