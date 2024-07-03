@@ -65,9 +65,10 @@ class PlaceholderSubstitutor(CopyMapper):
     def map_placeholder(self, expr: Placeholder) -> Array:
         return self.substitutions[expr.name]
 
-    def map_named_call_result(self, expr: NamedCallResult) -> NamedCallResult:
-        raise NotImplementedError(
-            "PlaceholderSubstitutor does not support functions.")
+    def map_function_definition(
+            self, expr: FunctionDefinition) -> FunctionDefinition:
+        # Only operates within the current stack frame
+        return expr
 
 
 class Inliner(CopyMapper):
