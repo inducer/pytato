@@ -185,14 +185,15 @@ class BoundPyOpenCLProgram(BoundProgram):
                     if self.program.default_entrypoint.options.no_numpy:
                         raise TypeError(f"Got numpy array for the DataWrapper {name}"
                                         ", in no_numpy=True mode. Expects a"
-                                        " pyopencl.array.Array.")
+                                        " pyopencl.array.Array.") from None
                     proc_bnd_args[name] = cla.to_device(queue, bnd_arg, allocator)
                 elif isinstance(bnd_arg, cla.Array):
                     proc_bnd_args[name] = bnd_arg
                 else:
                     raise TypeError("Data in a bound argument can be one of"
                                     " numpy array, pyopencl array or scalar."
-                                    f" Got {type(bnd_arg).__name__} for '{name}'.")
+                                    f" Got {type(bnd_arg).__name__} for '{name}'."
+                                ) from None
 
             result: Mapping[str, Any] = immutabledict(proc_bnd_args)
             assert set(result.keys()) == set(self.bound_arguments.keys())
