@@ -3,6 +3,7 @@ from __future__ import annotations
 import types
 from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
 import operator
+import re
 import pyopencl as cl
 import numpy as np
 import pytato as pt
@@ -336,6 +337,21 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
 
     # DAG should have `iterations` number of operations
     return pt.make_dict_of_named_arrays({"result": current})
+
+
+def count_dot_graph_nodes(dot_graph: str):
+    """
+    Parses a dot graph and returns a dictionary with the count of each unique node identifier.
+    """
+
+    node_pattern = re.compile(r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
+    nodes = node_pattern.findall(dot_graph)
+
+    node_counts = {}
+    for node in nodes:
+        node_counts[node] = node_counts.get(node, 0) + 1
+
+    return node_counts
 
 # }}}
 

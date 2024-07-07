@@ -29,6 +29,7 @@ THE SOFTWARE.
 from functools import partial
 import html
 import attrs
+import gc
 
 from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
@@ -51,8 +52,7 @@ from pytato.transform import CachedMapper, ArrayOrNames, InputGatherer
 from pytato.distributed.partition import (
         DistributedGraphPartition, DistributedGraphPart, PartId)
 
-if TYPE_CHECKING:
-    from pytato.distributed.nodes import DistributedSendRefHolder
+from pytato.distributed.nodes import DistributedSendRefHolder
 
 
 __doc__ = """
@@ -162,12 +162,23 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
-    def __init__(self) -> None:
-        super().__init__()
-        self.node_to_dot: Dict[ArrayOrNames, _DotNodeInfo] = {}
-        self.functions: Set[FunctionDefinition] = set()
+def get_object_by_id(object_id):
+    """Find an object by its ID."""
+    for obj in gc.get_objects():
+        if id(obj) == object_id:
+            return obj
+    return None
 
+
+class ArrayToDotNodeInfoMapper:
+    def __init__(self, count_duplicates: bool = False):
+        self.count_duplicates = count_duplicates
+        self.node_to_dot = {}
+        self.functions = set()
+
+    def get_cache_key(self, expr):
+        return id(expr) if self.count_duplicates else expr
+    
     def get_common_dot_info(self, expr: Array) -> _DotNodeInfo:
         title = type(expr).__name__
         fields = {"addr": hex(id(expr)),
@@ -180,65 +191,83 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
         return _DotNodeInfo(title, fields, edges)
 
-    # type-ignore-reason: incompatible with supertype
-    def handle_unsupported_array(self,  # type: ignore[override]
-            expr: Array) -> None:
-        # Default handler, does its best to guess how to handle fields.
-        info = self.get_common_dot_info(expr)
+    def process_node(self, expr: Array) -> None:
+        if isinstance(expr, DataWrapper):
+            self.map_data_wrapper(expr)
+        elif isinstance(expr, IndexLambda):
+            self.map_index_lambda(expr)
+        elif isinstance(expr, Stack):
+            self.map_stack(expr)
+        elif isinstance(expr, (IndexBase, IndexLambda)):
+            self.map_basic_index(expr)
+        elif isinstance(expr, Einsum):
+            self.map_einsum(expr)
+        elif isinstance(expr, DictOfNamedArrays):
+            self.map_dict_of_named_arrays(expr)
+        elif isinstance(expr, LoopyCall):
+            self.map_loopy_call(expr)
+        elif isinstance(expr, DistributedSendRefHolder):
+            self.map_distributed_send_ref_holder(expr)
+        elif isinstance(expr, Call):
+            self.map_call(expr)
+        elif isinstance(expr, NamedCallResult):
+            self.map_named_call_result(expr)
+        else:
+            self.handle_unsupported_array(expr)
 
-        # pylint: disable=not-an-iterable
+    def handle_unsupported_array(self, expr: Array) -> None:
+        info = self.get_common_dot_info(expr)
+        expr_key = self.get_cache_key(expr)
         for field in attrs.fields(type(expr)):
             if field.name in info.fields:
                 continue
             attr = getattr(expr, field.name)
-
             if isinstance(attr, Array):
-                self.rec(attr)
-                info.edges[field.name] = attr
-
+                self.process_node(attr)
+                key = self.get_cache_key(attr)
+                info.edges[field.name] = (key, attr)
             elif isinstance(attr, AbstractResultWithNamedArrays):
-                self.rec(attr)
-                info.edges[field.name] = attr
-
+                self.process_node(attr)
+                key = self.get_cache_key(attr)
+                info.edges[field.name] = (key, attr)
             elif isinstance(attr, tuple):
                 info.fields[field.name] = stringify_shape(attr)
-
             else:
                 info.fields[field.name] = str(attr)
-
-        self.node_to_dot[expr] = info
+        self.node_to_dot[expr_key] = info
 
     def map_data_wrapper(self, expr: DataWrapper) -> None:
         info = self.get_common_dot_info(expr)
         if expr.name is not None:
             info.fields["name"] = expr.name
 
-        # Only show summarized data
         import numpy as np
         with np.printoptions(threshold=4, precision=2):
             info.fields["data"] = str(expr.data)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["expr"] = str(expr.expr)
 
         for name, val in expr.bindings.items():
-            self.rec(val)
-            info.edges[name] = val
+            self.process_node(val)
+            key = self.get_cache_key(val)
+            info.edges[name] = (key, val)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     def map_stack(self, expr: Stack) -> None:
         info = self.get_common_dot_info(expr)
         info.fields["axis"] = str(expr.axis)
 
         for i, array in enumerate(expr.arrays):
-            self.rec(array)
-            info.edges[str(i)] = array
+            self.process_node(array)
+            key = self.get_cache_key(array)
+            info.edges[str(i)] = (key, array)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     map_concatenate = map_stack
 
@@ -254,9 +283,10 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
             elif isinstance(index, Array):
                 label = f"i{i}"
-                self.rec(index)
+                self.process_node(index)
+                key = self.get_cache_key(index)
                 indices_parts.append(label)
-                info.edges[label] = index
+                info.edges[label] = (key, index)
 
             elif index is None:
                 indices_parts.append("newaxis")
@@ -266,10 +296,11 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         info.fields["indices"] = ", ".join(indices_parts)
 
-        self.rec(expr.array)
-        info.edges["array"] = expr.array
+        self.process_node(expr.array)
+        key = self.get_cache_key(expr.array)
+        info.edges["array"] = (key, expr.array)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     map_contiguous_advanced_index = map_basic_index
     map_non_contiguous_advanced_index = map_basic_index
@@ -279,18 +310,20 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
                                                        expr.args)):
-            self.rec(val)
-            info.edges[f"{iarg}: {access_descr}"] = val
+            self.process_node(val)
+            key = self.get_cache_key(val)
+            info.edges[f"{iarg}: {access_descr}"] = (key, val)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
         for name, val in expr._data.items():
-            edges[name] = val
-            self.rec(val)
+            self.process_node(val)
+            key = self.get_cache_key(val)
+            edges[name] = (key, val)
 
-        self.node_to_dot[expr] = _DotNodeInfo(
+        self.node_to_dot[self.get_cache_key(expr)] = _DotNodeInfo(
                 title=type(expr).__name__,
                 fields={},
                 edges=edges)
@@ -299,10 +332,11 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
         for name, arg in expr.bindings.items():
             if isinstance(arg, Array):
-                edges[name] = arg
-                self.rec(arg)
+                self.process_node(arg)
+                key = self.get_cache_key(arg)
+                edges[name] = (key, arg)
 
-        self.node_to_dot[expr] = _DotNodeInfo(
+        self.node_to_dot[self.get_cache_key(expr)] = _DotNodeInfo(
                 title=type(expr).__name__,
                 fields={"addr": hex(id(expr)), "entrypoint": expr.entrypoint},
                 edges=edges)
@@ -312,29 +346,30 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
 
         info = self.get_common_dot_info(expr)
 
-        self.rec(expr.passthrough_data)
-        info.edges["passthrough"] = expr.passthrough_data
+        self.process_node(expr.passthrough_data)
+        key = self.get_cache_key(expr.passthrough_data)
+        info.edges["passthrough"] = (key, expr.passthrough_data)
 
-        self.rec(expr.send.data)
-        info.edges["sent"] = expr.send.data
+        self.process_node(expr.send.data)
+        key = self.get_cache_key(expr.send.data)
+        info.edges["sent"] = (key, expr.send.data)
 
         info.fields["dest_rank"] = str(expr.send.dest_rank)
-
         info.fields["comm_tag"] = str(expr.send.comm_tag)
 
-        self.node_to_dot[expr] = info
+        self.node_to_dot[self.get_cache_key(expr)] = info
 
     def map_call(self, expr: Call) -> None:
         self.functions.add(expr.function)
 
         for bnd in expr.bindings.values():
-            self.rec(bnd)
+            self.process_node(bnd)
 
-        self.node_to_dot[expr] = _DotNodeInfo(
+        self.node_to_dot[self.get_cache_key(expr)] = _DotNodeInfo(
             title=expr.__class__.__name__,
             edges={
                 "": expr.function,
-                **expr.bindings},
+                **{name: (self.get_cache_key(bnd), bnd) for name, bnd in expr.bindings.items()}},
             fields={
                 "addr": hex(id(expr)),
                 "tags": stringify_tags(expr.tags),
@@ -342,13 +377,15 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         )
 
     def map_named_call_result(self, expr: NamedCallResult) -> None:
-        self.rec(expr._container)
-        self.node_to_dot[expr] = _DotNodeInfo(
+        self.process_node(expr._container)
+        key = self.get_cache_key(expr._container)
+        self.node_to_dot[self.get_cache_key(expr)] = _DotNodeInfo(
                 title=expr.__class__.__name__,
-                edges={"": expr._container},
+                edges={"": (key, expr._container)},
                 fields={"addr": hex(id(expr)),
                         "name": expr.name},
         )
+
 
 # }}}
 
@@ -363,6 +400,11 @@ def dot_escape_leave_space(s: str) -> str:
     return html.escape(s.replace("\\", "\\\\"))
 
 
+def get_array_key(array, count_duplicates):
+    """Return a consistent key for the array."""
+    return id(array) if count_duplicates and not isinstance(array, int) else array
+
+
 # {{{ emit helpers
 
 def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
@@ -375,7 +417,7 @@ def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
 
 
 def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
-        dot_node_id: str, color: str = "white") -> None:
+                dot_node_id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
@@ -397,11 +439,20 @@ def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
          f'tooltip="{tooltip}"]')
 
 
+def preprocess_all_nodes(partition, array_to_id, id_gen, count_duplicates):
+    mapper = ArrayToDotNodeInfoMapper(count_duplicates)
+    for part in partition.parts.values():
+        for out_name in part.output_names:
+            node = partition.name_to_output[out_name]
+            mapper.process_node(node)
+
+
 def _emit_name_cluster(
         emit: DotEmitter, subgraph_path: Tuple[str, ...],
         names: Mapping[str, ArrayOrNames],
         array_to_id: Mapping[ArrayOrNames, str], id_gen: Callable[[str], str],
-        label: str) -> None:
+        label: str,
+        count_duplicates: bool = False) -> None:
     edges = []
 
     cluster_subgraph_path = subgraph_path + (f"cluster_{dot_escape(label)}",)
@@ -412,7 +463,8 @@ def _emit_name_cluster(
     for name, array in names.items():
         name_id = id_gen(dot_escape(name))
         emit_cluster('%s [label="%s"]' % (name_id, dot_escape(name)))
-        array_id = array_to_id[array]
+        array_key = get_array_key(array, count_duplicates)
+        array_id = array_to_id[array_key]
         # Edges must be outside the cluster.
         edges.append((name_id, array_id))
 
@@ -425,14 +477,16 @@ def _emit_function(
         id_gen: UniqueNameGenerator,
         node_to_dot: Mapping[ArrayOrNames, _DotNodeInfo],
         func_to_id: Mapping[FunctionDefinition, str],
-        outputs: Mapping[str, Array]) -> None:
+        outputs: Mapping[str, Array],
+        count_duplicates: bool = False) -> None:
     input_arrays: List[Array] = []
     internal_arrays: List[ArrayOrNames] = []
     array_to_id: Dict[ArrayOrNames, str] = {}
 
     emit = partial(emitter, subgraph_path)
     for array in node_to_dot:
-        array_to_id[array] = id_gen("array")
+        key = get_array_key(array, count_duplicates)
+        array_to_id[key] = id_gen("array")
         if isinstance(array, InputArgumentBase):
             input_arrays.append(array)
         else:
@@ -444,36 +498,46 @@ def _emit_function(
     emit_input('label="Arguments"')
 
     for array in input_arrays:
+        key = get_array_key(array, count_duplicates)
         _emit_array(
                 emit_input,
                 node_to_dot[array].title,
                 node_to_dot[array].fields,
-                array_to_id[array])
+                array_to_id[key])
 
     # Emit non-inputs.
     for array in internal_arrays:
+        key = get_array_key(array, count_duplicates)
         _emit_array(emit,
                     node_to_dot[array].title,
                     node_to_dot[array].fields,
-                    array_to_id[array])
+                    array_to_id[key])
 
     # Emit edges.
     for array, node in node_to_dot.items():
-        for label, tail_item in node.edges.items():
-            head = array_to_id[array]
+        key = get_array_key(array, count_duplicates)
+        for label, edge_info in node.edges.items():
+            if isinstance(edge_info, tuple):
+                tail_key, tail_item = edge_info
+            else:
+                tail_item = edge_info
+                tail_key = get_array_key(tail_item, count_duplicates)
+
+            head = array_to_id[key]
             if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
-                tail = array_to_id[tail_item]
+                tail = array_to_id[tail_key]
             elif isinstance(tail_item, FunctionDefinition):
                 tail = func_to_id[tail_item]
             else:
-                raise ValueError(
-                        f"unexpected type of tail on edge: {type(tail_item)}")
+                raise ValueError(f"unexpected type of tail on edge: {type(tail_item)}")
 
             emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
 
     # Emit output/namespace name mappings.
     _emit_name_cluster(
-            emitter, subgraph_path, outputs, array_to_id, id_gen, label="Returns")
+            emitter, subgraph_path,
+            outputs, array_to_id, id_gen,
+            label="Returns", count_duplicates=count_duplicates)
 
 # }}}
 
@@ -491,7 +555,8 @@ def _get_function_name(f: FunctionDefinition) -> Optional[str]:
 
 def _gather_partition_node_information(
         id_gen: UniqueNameGenerator,
-        partition: DistributedGraphPartition
+        partition: DistributedGraphPartition,
+        count_duplicates: bool = False
         ) -> Tuple[
                 Mapping[PartId, Mapping[FunctionDefinition, str]],
                 Mapping[Tuple[PartId, Optional[FunctionDefinition]],
@@ -502,9 +567,9 @@ def _gather_partition_node_information(
                      Dict[ArrayOrNames, _DotNodeInfo]] = {}
 
     for part in partition.parts.values():
-        mapper = ArrayToDotNodeInfoMapper()
+        mapper = ArrayToDotNodeInfoMapper(count_duplicates)
         for out_name in part.output_names:
-            mapper(partition.name_to_output[out_name])
+            mapper.process_node(partition.name_to_output[out_name])
 
         part_id_func_to_node_info[part.pid, None] = mapper.node_to_dot
         part_id_to_func_to_id[part.pid] = {}
@@ -519,9 +584,9 @@ def _gather_partition_node_information(
             if key in part_id_func_to_node_info:
                 return
 
-            mapper = ArrayToDotNodeInfoMapper()
+            mapper = ArrayToDotNodeInfoMapper(count_duplicates)
             for elem in f.returns.values():
-                mapper(elem)
+                mapper.process_node(elem)
 
             part_id_func_to_node_info[key] = mapper.node_to_dot
 
@@ -547,10 +612,12 @@ def _gather_partition_node_information(
 
     return part_id_to_func_to_id, part_id_func_to_node_info
 
+
 # }}}
 
 
-def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
+def get_dot_graph(result: Union[Array, DictOfNamedArrays],
+                  count_duplicates: bool = False) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
@@ -560,30 +627,32 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
 
     outputs: DictOfNamedArrays = normalize_outputs(result)
 
-    return get_dot_graph_from_partition(
-            DistributedGraphPartition(
-                parts={
-                    None: DistributedGraphPart(
-                        pid=None,
-                        needed_pids=frozenset(),
-                        user_input_names=frozenset(
+    partition = DistributedGraphPartition(
+        parts={
+            None: DistributedGraphPart(
+                pid=None,
+                needed_pids=frozenset(),
+                user_input_names=frozenset(
                             expr.name
                             for expr in InputGatherer()(outputs)
                             if isinstance(expr, Placeholder)
                             ),
-                        partition_input_names=frozenset(),
-                        output_names=frozenset(outputs.keys()),
-                        name_to_recv_node={},
-                        name_to_send_nodes={},
-                        )
-                    },
-                name_to_output=outputs._data,
-                overall_output_names=tuple(outputs),
-                ))
+                partition_input_names=frozenset(),
+                output_names=frozenset(outputs.keys()),
+                name_to_recv_node={},
+                name_to_send_nodes={},
+            )
+        },
+        name_to_output=outputs._data,
+        overall_output_names=tuple(outputs),
+    )
+
+    return get_dot_graph_from_partition(partition, count_duplicates)
 
 
-def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
-    r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
+def get_dot_graph_from_partition(partition: DistributedGraphPartition, 
+                                 count_duplicates: bool = False) -> str:
+    """Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the partitioned computation of *partition*.
 
     :arg partition: Outputs of :func:`~pytato.find_distributed_partition`.
@@ -595,9 +664,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     # The "None" function is the body of the partition.
 
     part_id_to_func_to_id, part_id_func_to_node_info = \
-            _gather_partition_node_information(id_gen, partition)
-
-    # }}}
+        _gather_partition_node_information(id_gen, partition, count_duplicates)
 
     emitter = DotEmitter()
     emit_root = partial(emitter, ())
@@ -606,8 +673,8 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
     emit_root("node [shape=rectangle]")
 
-    placeholder_to_id: Dict[ArrayOrNames, str] = {}
-    part_id_to_array_to_id: Dict[PartId, Dict[ArrayOrNames, str]] = {}
+    placeholder_to_id: Dict[Union[int, ArrayOrNames], str] = {}
+    part_id_to_array_to_id: Dict[PartId, Dict[Union[int, ArrayOrNames], str]] = {}
 
     part_id_to_id = {pid: dot_escape(str(pid)) for pid in partition.parts}
     assert len(set(part_id_to_id.values())) == len(partition.parts)
@@ -617,16 +684,18 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     for part in partition.parts.values():
         array_to_id = {}
         for array in part_id_func_to_node_info[part.pid, None].keys():
+            if isinstance(array, int):  # if the key is an ID
+                array = get_object_by_id(array)
+            key = get_array_key(array, count_duplicates)
             if isinstance(array, Placeholder):
-                # Placeholders are only emitted once
-                if array in placeholder_to_id:
-                    node_id = placeholder_to_id[array]
+                if key in placeholder_to_id:
+                    node_id = placeholder_to_id[key]
                 else:
                     node_id = id_gen("array")
-                    placeholder_to_id[array] = node_id
+                    placeholder_to_id[key] = node_id
             else:
                 node_id = id_gen("array")
-            array_to_id[array] = node_id
+            array_to_id[key] = node_id
         part_id_to_array_to_id[part.pid] = array_to_id
 
     # }}}
@@ -663,32 +732,34 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
             _emit_function(emitter, func_subgraph_path,
                            id_gen, part_id_func_to_node_info[part.pid, func],
                            part_id_to_func_to_id[part.pid],
-                           func.returns)
+                           func.returns,
+                           count_duplicates=count_duplicates)
 
         # }}}
 
         # {{{ emit receives nodes
 
         part_dist_recv_var_name_to_node_id = {}
-        for name, recv in (
-                part.name_to_recv_node.items()):
+        for name, recv in part.name_to_recv_node.items():
             node_id = id_gen("recv")
             _emit_array(emit_part, "DistributedRecv", {
                 "shape": stringify_shape(recv.shape),
                 "dtype": str(recv.dtype),
                 "src_rank": str(recv.src_rank),
                 "comm_tag": str(recv.comm_tag),
-                }, node_id)
+            }, node_id)
 
             part_dist_recv_var_name_to_node_id[name] = node_id
 
         # }}}
-
+        
         part_node_to_info = part_id_func_to_node_info[part.pid, None]
         input_arrays: List[Array] = []
         internal_arrays: List[ArrayOrNames] = []
 
         for array in part_node_to_info.keys():
+            if isinstance(array, int):  # if the key is an ID
+                array = get_object_by_id(array)
             if isinstance(array, InputArgumentBase):
                 input_arrays.append(array)
             else:
@@ -702,26 +773,26 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
         # subgraphs.
 
         for array in input_arrays:
+            key = array = get_array_key(array, count_duplicates)
             if not isinstance(array, Placeholder):
                 _emit_array(emit_part,
                             part_node_to_info[array].title,
                             part_node_to_info[array].fields,
-                            array_to_id[array], "deepskyblue")
+                            array_to_id[key], "deepskyblue")
             else:
                 # Is a Placeholder
-                if array in emitted_placeholders:
+                if key in emitted_placeholders:
                     continue
-
                 _emit_array(emit_root,
                             part_node_to_info[array].title,
                             part_node_to_info[array].fields,
-                            array_to_id[array], "deepskyblue")
+                            array_to_id[key], "deepskyblue")
 
                 # Emit cross-partition edges
                 if array.name in part_dist_recv_var_name_to_node_id:
                     tgt = part_dist_recv_var_name_to_node_id[array.name]
-                    emit_root(f"{tgt} -> {array_to_id[array]} [style=dotted]")
-                    emitted_placeholders.add(array)
+                    emit_root(f"{tgt} -> {array_to_id[key]} [style=dotted]")
+                    emitted_placeholders.add(key)
                 elif array.name in part.user_input_names:
                     # no arrows for these
                     pass
@@ -734,18 +805,22 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
                             break
                     assert computing_pid is not None
                     tgt = part_id_to_array_to_id[computing_pid][
-                            partition.name_to_output[array.name]]
-                    emit_root(f"{tgt} -> {array_to_id[array]} [style=dashed]")
-                    emitted_placeholders.add(array)
+                        id(partition.name_to_output[array.name])
+                        if count_duplicates
+                        else partition.name_to_output[array.name]]
+                    emit_root(f"{tgt} -> {array_to_id[key]} [style=dashed]")
+                    emitted_placeholders.add(key)
 
         # }}}
 
         # Emit internal nodes
+        
         for array in internal_arrays:
+            key = array = get_array_key(array, count_duplicates)
             _emit_array(emit_part,
                         part_node_to_info[array].title,
                         part_node_to_info[array].fields,
-                        array_to_id[array])
+                        array_to_id[key])
 
         # {{{ emit send nodes if distributed
 
@@ -756,36 +831,45 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
                     _emit_array(emit_part, "DistributedSend", {
                         "dest_rank": str(send.dest_rank),
                         "comm_tag": str(send.comm_tag),
-                        }, node_id)
+                    }, node_id)
 
                     # If an edge is emitted in a subgraph, it drags its
                     # nodes into the subgraph, too. Not what we want.
                     emit_root(
-                            f"{array_to_id[send.data]} -> {node_id}"
-                            f'[style=dotted, label="{dot_escape(name)}"]')
+                        f"{array_to_id[id(send.data) if count_duplicates else send.data]} -> {node_id}"
+                        f'[style=dotted, label="{dot_escape(name)}"]')
 
         # }}}
 
         # Emit intra-partition edges
         for array, node in part_node_to_info.items():
-            for label, tail_item in node.edges.items():
-                head = array_to_id[array]
+            key = get_array_key(array, count_duplicates)
+            for label, edge_info in node.edges.items():
+                if isinstance(edge_info, tuple):
+                    tail_key, tail_item = edge_info
+                else:
+                    tail_item = edge_info
+                    tail_key = get_array_key(tail_item, count_duplicates)
+
+                head = array_to_id[key]
 
                 if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
-                    tail = array_to_id[tail_item]
+                    tail = array_to_id[tail_key]
                 elif isinstance(tail_item, FunctionDefinition):
                     tail = part_id_to_func_to_id[part.pid][tail_item]
                 else:
                     raise ValueError(
-                            f"unexpected type of tail on edge: {type(tail_item)}")
+                        f"unexpected type of tail on edge: {type(tail_item)}")
 
                 emit_root('%s -> %s [label="%s"]' %
-                    (tail, head, dot_escape(label)))
+                          (tail, head, dot_escape(label)))
 
         _emit_name_cluster(
-                emitter, part_subgraph_path,
-                {name: partition.name_to_output[name] for name in part.output_names},
-                array_to_id, id_gen, "Part outputs")
+            emitter, part_subgraph_path,
+            {name: partition.name_to_output[name]
+             for name in part.output_names},
+            array_to_id, id_gen, "Part outputs",
+            count_duplicates)
 
     # }}}
 
@@ -795,15 +879,16 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
     # {{{ draw overall outputs
 
-    combined_array_to_id: Dict[ArrayOrNames, str] = {}
+    combined_array_to_id: Dict[Union[int, ArrayOrNames], str] = {}
     for part_id in partition.parts.keys():
         combined_array_to_id.update(part_id_to_array_to_id[part_id])
 
     _emit_name_cluster(
-            emitter, (),
-            {name: partition.name_to_output[name]
-             for name in partition.overall_output_names},
-            combined_array_to_id, id_gen, "Overall outputs")
+        emitter, (),
+        {name: partition.name_to_output[name]
+         for name in partition.overall_output_names},
+        combined_array_to_id, id_gen, "Overall outputs",
+        count_duplicates)
 
     # }}}
 
@@ -812,7 +897,8 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
 def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
                                  DistributedGraphPartition],
-        **kwargs: Any) -> None:
+                   count_duplicates: bool = False,
+                   **kwargs: Any) -> None:
     """Show a graph representing the computation of *result* in a browser.
 
     :arg result: Outputs of the computation (cf.
@@ -825,9 +911,9 @@ def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
     if isinstance(result, str):
         dot_code = result
     elif isinstance(result, DistributedGraphPartition):
-        dot_code = get_dot_graph_from_partition(result)
+        dot_code = get_dot_graph_from_partition(result, count_duplicates)
     else:
-        dot_code = get_dot_graph(result)
+        dot_code = get_dot_graph(result, count_duplicates)
 
     from pytools.graphviz import show_dot
     show_dot(dot_code, **kwargs)
