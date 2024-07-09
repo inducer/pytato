@@ -1180,7 +1180,7 @@ class WalkMapper(Mapper):
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr, *args, **kwargs):
             return
 
         new_mapper = self.clone_for_callee(expr)
@@ -1190,14 +1190,14 @@ class WalkMapper(Mapper):
         self.post_visit(expr, *args, **kwargs)
 
     def map_call(self, expr: Call, *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr, *args, **kwargs):
             return
 
         self.map_function_definition(expr.function, *args, **kwargs)
         for bnd in expr.bindings.values():
             self.rec(bnd, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
     def map_named_call_result(self, expr: NamedCallResult,
                               *args: Any, **kwargs: Any) -> None:
@@ -1244,7 +1244,7 @@ class CachedWalkMapper(WalkMapper):
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr) or expr in self._visited_functions:
+        if not self.visit(expr, *args, **kwargs) or expr in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
