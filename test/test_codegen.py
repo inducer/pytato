@@ -27,11 +27,10 @@ THE SOFTWARE.
 """
 
 from typing import Union
+import sys
 
 import itertools
 import operator
-import sys
-
 import loopy as lp
 import numpy as np
 import pyopencl as cl
@@ -2000,6 +1999,80 @@ def test_nested_function_calls(ctx_factory):
     assert result_out.keys() == expect_out.keys()
     for k in expect_out:
         np.testing.assert_allclose(result_out[k], expect_out[k])
+
+
+def test_duplicate_node_count_dot_graph():
+    from pytato.visualization.dot import get_dot_graph
+    from pytato.analysis import get_num_nodes
+    from testlib import get_random_pt_dag
+    from testlib import count_dot_graph_nodes
+
+    for i in range(80):
+        # print("curr i:", i)
+        dag = get_random_pt_dag(seed=i, axis_len=5)
+
+        # Generate dot graph with duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=True)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+        # Generate dot graph without duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=False)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        # Verify node counts without duplicates
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
+
+
+def test_duplicate_nodes_with_comm_count_dot_graph():
+    from pytato.visualization.dot import get_dot_graph
+    from pytato.analysis import get_num_nodes
+    from testlib import get_random_pt_dag_with_send_recv_nodes
+    from testlib import count_dot_graph_nodes
+
+    rank = 0
+    size = 2
+    for i in range(20):
+        dag = get_random_pt_dag_with_send_recv_nodes(seed=i, rank=rank, size=size)
+
+        # Generate dot graph with duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=True)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+        # Generate dot graph without duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=False)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        # Verify node counts without duplicates
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
+
+
+def test_large_dot_graph_with_duplicates_count():
+    from pytato.visualization.dot import get_dot_graph
+    from pytato.analysis import get_num_nodes
+    from testlib import make_large_dag
+    from testlib import count_dot_graph_nodes
+
+    iterations = 100
+    dag = make_large_dag(iterations, seed=42)
+
+    # Generate dot graph with duplicates
+    dot_graph = get_dot_graph(dag, count_duplicates=True)
+    node_counts = count_dot_graph_nodes(dot_graph)
+
+    # Verify node counts with duplicates
+    assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+    # Generate dot graph without duplicates
+    dot_graph = get_dot_graph(dag, count_duplicates=False)
+    node_counts = count_dot_graph_nodes(dot_graph)
+
+    # Verify node counts without duplicates
+    assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
+
 
 
 if __name__ == "__main__":

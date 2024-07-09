@@ -339,15 +339,17 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
     return pt.make_dict_of_named_arrays({"result": current})
 
 
-def count_dot_graph_nodes(dot_graph: str):
+def count_dot_graph_nodes(dot_graph: str) -> Dict[Any, int]:
     """
-    Parses a dot graph and returns a dictionary with the count of each unique node identifier.
+    Parses a dot graph and returns a dictionary with 
+    the count of each unique node identifier.
     """
 
-    node_pattern = re.compile(r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
+    node_pattern = re.compile(
+        r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
     nodes = node_pattern.findall(dot_graph)
 
-    node_counts = {}
+    node_counts: Dict[Any, int] = {}
     for node in nodes:
         node_counts[node] = node_counts.get(node, 0) + 1
 

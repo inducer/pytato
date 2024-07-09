@@ -472,7 +472,8 @@ class NodeMultiplicityMapper(CachedWalkMapper):
             self.expr_multiplicity_counts[expr] += 1
 
 
-def get_node_multiplicities(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
+def get_node_multiplicities(
+        outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
     """
     Returns the multiplicity per `expr`.
     """

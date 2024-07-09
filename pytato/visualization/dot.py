@@ -31,7 +31,7 @@ import html
 import attrs
 import gc
 
-from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
+from typing import (Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
 
 from pytools import UniqueNameGenerator
@@ -145,7 +145,11 @@ class DotEmitter:
 class _DotNodeInfo:
     title: str
     fields: Dict[str, Any]
-    edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]]
+    edges: Dict[str, Union[
+        ArrayOrNames,
+        FunctionDefinition,
+        Tuple[Union[int, ArrayOrNames], ArrayOrNames]],
+        Array]
 
 
 def stringify_tags(tags: FrozenSet[Optional[Tag]]) -> str:
@@ -162,7 +166,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-def get_object_by_id(object_id):
+def get_object_by_id(object_id: int) -> Union[Any, ArrayOrNames]:
     """Find an object by its ID."""
     for obj in gc.get_objects():
         if id(obj) == object_id:
@@ -170,15 +174,15 @@ def get_object_by_id(object_id):
     return None
 
 
-class ArrayToDotNodeInfoMapper:
+class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def __init__(self, count_duplicates: bool = False):
+        self.node_to_dot: Dict[Union[int, ArrayOrNames], _DotNodeInfo] = {}
+        self.functions: Set[FunctionDefinition] = set()
         self.count_duplicates = count_duplicates
-        self.node_to_dot = {}
-        self.functions = set()
 
-    def get_cache_key(self, expr):
+    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
         return id(expr) if self.count_duplicates else expr
-    
+
     def get_common_dot_info(self, expr: Array) -> _DotNodeInfo:
         title = type(expr).__name__
         fields = {"addr": hex(id(expr)),
@@ -188,17 +192,20 @@ class ArrayToDotNodeInfoMapper:
                   "non_equality_tags": expr.non_equality_tags,
                   }
 
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: Dict[str,
+                    Union[ArrayOrNames, FunctionDefinition,
+                          Tuple[Union[int, AbstractResultWithNamedArrays,
+                                      Array], Array]]] = {}
         return _DotNodeInfo(title, fields, edges)
 
-    def process_node(self, expr: Array) -> None:
+    def process_node(self, expr: ArrayOrNames) -> None:
         if isinstance(expr, DataWrapper):
             self.map_data_wrapper(expr)
         elif isinstance(expr, IndexLambda):
             self.map_index_lambda(expr)
         elif isinstance(expr, Stack):
             self.map_stack(expr)
-        elif isinstance(expr, (IndexBase, IndexLambda)):
+        elif isinstance(expr, IndexBase):
             self.map_basic_index(expr)
         elif isinstance(expr, Einsum):
             self.map_einsum(expr)
@@ -215,7 +222,9 @@ class ArrayToDotNodeInfoMapper:
         else:
             self.handle_unsupported_array(expr)
 
-    def handle_unsupported_array(self, expr: Array) -> None:
+    def handle_unsupported_array(self,
+                                 expr: Array) -> None:
+        # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
         expr_key = self.get_cache_key(expr)
         for field in attrs.fields(type(expr)):
@@ -317,7 +326,8 @@ class ArrayToDotNodeInfoMapper:
         self.node_to_dot[self.get_cache_key(expr)] = info
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition, Tuple[Union[
+            int, ArrayOrNames], Array]]] = {}
         for name, val in expr._data.items():
             self.process_node(val)
             key = self.get_cache_key(val)
@@ -329,7 +339,8 @@ class ArrayToDotNodeInfoMapper:
                 edges=edges)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition, Tuple[Union[
+            int, ArrayOrNames], Array]]] = {}
         for name, arg in expr.bindings.items():
             if isinstance(arg, Array):
                 self.process_node(arg)
@@ -369,7 +380,8 @@ class ArrayToDotNodeInfoMapper:
             title=expr.__class__.__name__,
             edges={
                 "": expr.function,
-                **{name: (self.get_cache_key(bnd), bnd) for name, bnd in expr.bindings.items()}},
+                **{name: (self.get_cache_key(bnd), bnd)
+                   for name, bnd in expr.bindings.items()}},
             fields={
                 "addr": hex(id(expr)),
                 "tags": stringify_tags(expr.tags),
@@ -400,7 +412,8 @@ def dot_escape_leave_space(s: str) -> str:
     return html.escape(s.replace("\\", "\\\\"))
 
 
-def get_array_key(array, count_duplicates):
+def get_array_key(array: Union[ArrayOrNames, FunctionDefinition, int],
+                  count_duplicates: bool = False) -> Any:
     """Return a consistent key for the array."""
     return id(array) if count_duplicates and not isinstance(array, int) else array
 
@@ -439,18 +452,11 @@ def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
          f'tooltip="{tooltip}"]')
 
 
-def preprocess_all_nodes(partition, array_to_id, id_gen, count_duplicates):
-    mapper = ArrayToDotNodeInfoMapper(count_duplicates)
-    for part in partition.parts.values():
-        for out_name in part.output_names:
-            node = partition.name_to_output[out_name]
-            mapper.process_node(node)
-
-
 def _emit_name_cluster(
         emit: DotEmitter, subgraph_path: Tuple[str, ...],
         names: Mapping[str, ArrayOrNames],
-        array_to_id: Mapping[ArrayOrNames, str], id_gen: Callable[[str], str],
+        array_to_id: Mapping[
+            Union[int, ArrayOrNames], str], id_gen: Callable[[str], str],
         label: str,
         count_duplicates: bool = False) -> None:
     edges = []
@@ -475,13 +481,13 @@ def _emit_name_cluster(
 def _emit_function(
         emitter: DotEmitter, subgraph_path: Tuple[str, ...],
         id_gen: UniqueNameGenerator,
-        node_to_dot: Mapping[ArrayOrNames, _DotNodeInfo],
+        node_to_dot: Mapping[Union[int, ArrayOrNames], _DotNodeInfo],
         func_to_id: Mapping[FunctionDefinition, str],
         outputs: Mapping[str, Array],
         count_duplicates: bool = False) -> None:
     input_arrays: List[Array] = []
-    internal_arrays: List[ArrayOrNames] = []
-    array_to_id: Dict[ArrayOrNames, str] = {}
+    internal_arrays: List[Union[int, ArrayOrNames]] = []
+    array_to_id: Dict[Union[int, ArrayOrNames], str] = {}
 
     emit = partial(emitter, subgraph_path)
     for array in node_to_dot:
@@ -529,7 +535,8 @@ def _emit_function(
             elif isinstance(tail_item, FunctionDefinition):
                 tail = func_to_id[tail_item]
             else:
-                raise ValueError(f"unexpected type of tail on edge: {type(tail_item)}")
+                raise ValueError(
+                    f"unexpected type of tail on edge: {type(tail_item)}")
 
             emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
 
@@ -558,13 +565,13 @@ def _gather_partition_node_information(
         partition: DistributedGraphPartition,
         count_duplicates: bool = False
         ) -> Tuple[
-                Mapping[PartId, Mapping[FunctionDefinition, str]],
-                Mapping[Tuple[PartId, Optional[FunctionDefinition]],
-                        Mapping[ArrayOrNames, _DotNodeInfo]]
-                ]:
+            Dict[PartId, Dict[FunctionDefinition, str]],
+            Dict[Tuple[PartId, Optional[FunctionDefinition]],
+                 Dict[Union[int, ArrayOrNames], _DotNodeInfo]]]:
     part_id_to_func_to_id: Dict[PartId, Dict[FunctionDefinition, str]] = {}
     part_id_func_to_node_info: Dict[Tuple[PartId, Optional[FunctionDefinition]],
-                     Dict[ArrayOrNames, _DotNodeInfo]] = {}
+                                    Dict[Union[int, ArrayOrNames],
+                                         _DotNodeInfo]] = {}
 
     for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper(count_duplicates)
@@ -650,7 +657,7 @@ def get_dot_graph(result: Union[Array, DictOfNamedArrays],
     return get_dot_graph_from_partition(partition, count_duplicates)
 
 
-def get_dot_graph_from_partition(partition: DistributedGraphPartition, 
+def get_dot_graph_from_partition(partition: DistributedGraphPartition,
                                  count_duplicates: bool = False) -> str:
     """Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the partitioned computation of *partition*.
@@ -752,7 +759,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition,
             part_dist_recv_var_name_to_node_id[name] = node_id
 
         # }}}
-        
+
         part_node_to_info = part_id_func_to_node_info[part.pid, None]
         input_arrays: List[Array] = []
         internal_arrays: List[ArrayOrNames] = []
@@ -814,7 +821,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition,
         # }}}
 
         # Emit internal nodes
-        
+
         for array in internal_arrays:
             key = array = get_array_key(array, count_duplicates)
             _emit_array(emit_part,
@@ -835,8 +842,9 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition,
 
                     # If an edge is emitted in a subgraph, it drags its
                     # nodes into the subgraph, too. Not what we want.
+                    data = id(send.data) if count_duplicates else send.data
                     emit_root(
-                        f"{array_to_id[id(send.data) if count_duplicates else send.data]} -> {node_id}"
+                        f"{array_to_id[data]} -> {node_id}"
                         f'[style=dotted, label="{dot_escape(name)}"]')
 
         # }}}
@@ -844,6 +852,9 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition,
         # Emit intra-partition edges
         for array, node in part_node_to_info.items():
             key = get_array_key(array, count_duplicates)
+
+            tail_item: Union[Array, AbstractResultWithNamedArrays,
+                             FunctionDefinition]
             for label, edge_info in node.edges.items():
                 if isinstance(edge_info, tuple):
                     tail_key, tail_item = edge_info
