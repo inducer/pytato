@@ -411,6 +411,9 @@ class NodeCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    def get_func_def_cache_key(self, expr: FunctionDefinition) -> int:
+        return id(expr)
+
     def post_visit(self, expr: Any) -> None:
         self.count += 1
 
@@ -448,8 +451,12 @@ class CallSiteCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    def get_func_def_cache_key(self, expr: FunctionDefinition) -> int:
+        return id(expr)
+
     def map_function_definition(self, expr: FunctionDefinition) -> None:
-        if not self.visit(expr) or expr in self._visited_functions:
+        cache_key = self.get_func_def_cache_key(expr)
+        if not self.visit(expr) or cache_key in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
@@ -457,7 +464,7 @@ class CallSiteCountMapper(CachedWalkMapper):
             new_mapper(subexpr)
         self.count += new_mapper.count
 
-        self._visited_functions.add(expr)
+        self._visited_functions.add(cache_key)
 
         self.post_visit(expr)
 

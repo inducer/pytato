@@ -42,7 +42,7 @@ from pytato.array import (
     SizeParam,
     make_dict_of_named_arrays,
 )
-from pytato.function import NamedCallResult
+from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall
 from pytato.scalar_expr import IntegralScalarExpression
 from pytato.target import Target
@@ -252,6 +252,9 @@ class NamesValidityChecker(CachedWalkMapper):
         super().__init__()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
+        return id(expr)
+
+    def get_func_def_cache_key(self, expr: FunctionDefinition) -> int:
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
