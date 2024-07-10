@@ -175,8 +175,7 @@ class FunctionDefinition(Taggable):
             self: FunctionDefinition, tags: FrozenSet[Tag]) -> FunctionDefinition:
         return attrs.evolve(self, tags=tags)
 
-    @memoize_method
-    def __call__(self, /, **kwargs: Array
+    def __call__(self, **kwargs: Array
                  ) -> Union[Array,
                             Tuple[Array, ...],
                             Dict[str, Array]]:
