@@ -30,7 +30,7 @@ from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
                           DataInterface, SizeParam, InputArgumentBase,
                           make_dict_of_named_arrays)
 
-from pytato.function import NamedCallResult
+from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 from pytato.scalar_expr import IntegralScalarExpression
@@ -238,6 +238,9 @@ class NamesValidityChecker(CachedWalkMapper):
         super().__init__()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
+        return id(expr)
+
+    def get_func_def_cache_key(self, expr: FunctionDefinition) -> int:
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
