@@ -58,7 +58,7 @@ import attrs
 import re
 import enum
 
-from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
+from typing import (Callable, FrozenSet, Tuple, Union, TypeVar, Optional,
                     Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
 from immutabledict import immutabledict
 from functools import cached_property
@@ -67,7 +67,7 @@ from pytato.array import (Array, AbstractResultWithNamedArrays,
 from pytools.tag import Tag, Taggable
 from pytools import memoize_method
 
-ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
+ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Mapping[str, Array])
 
 
 # {{{ Call/NamedCallResult
@@ -91,7 +91,7 @@ class FunctionDefinition(Taggable):
     :class:`~pytato.Array` with the inputs being
     :class:`~pytato.array.Placeholder`\ s. The outputs of the function
     can be a single :class:`pytato.Array`, a tuple of :class:`pytato.Array`\ s or an
-    instance of ``Dict[str, Array]``.
+    instance of ``Mapping[str, Array]``.
 
     .. attribute:: parameters
 
@@ -178,7 +178,7 @@ class FunctionDefinition(Taggable):
     def __call__(self, **kwargs: Array
                  ) -> Union[Array,
                             Tuple[Array, ...],
-                            Dict[str, Array]]:
+                            Mapping[str, Array]]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
 
