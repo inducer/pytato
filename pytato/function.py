@@ -61,7 +61,6 @@ from functools import cached_property
 from typing import (
     Callable,
     ClassVar,
-    Dict,
     Hashable,
     Iterable,
     Iterator,
@@ -87,7 +86,7 @@ from pytato.array import (
 )
 
 
-ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
+ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Mapping[str, Array])
 
 
 # {{{ Call/NamedCallResult
@@ -111,7 +110,7 @@ class FunctionDefinition(Taggable):
     :class:`~pytato.Array` with the inputs being
     :class:`~pytato.array.Placeholder`\ s. The outputs of the function
     can be a single :class:`pytato.Array`, a tuple of :class:`pytato.Array`\ s or an
-    instance of ``Dict[str, Array]``.
+    instance of ``Mapping[str, Array]``.
 
     .. attribute:: parameters
 
@@ -196,7 +195,7 @@ class FunctionDefinition(Taggable):
         return attrs.evolve(self, tags=tags)
 
     def __call__(self, **kwargs: Array
-                 ) -> Array | tuple[Array, ...] | dict[str, Array]:
+                 ) -> Array | tuple[Array, ...] | Mapping[str, Array]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
 
