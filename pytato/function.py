@@ -195,8 +195,7 @@ class FunctionDefinition(Taggable):
             self: FunctionDefinition, tags: frozenset[Tag]) -> FunctionDefinition:
         return attrs.evolve(self, tags=tags)
 
-    @memoize_method
-    def __call__(self, /, **kwargs: Array
+    def __call__(self, **kwargs: Array
                  ) -> Array | tuple[Array, ...] | dict[str, Array]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
