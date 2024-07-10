@@ -448,19 +448,18 @@ class CallSiteCountMapper(CachedWalkMapper):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def map_function_definition(self, /, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr) or expr in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
-            new_mapper(subexpr, *args, **kwargs)
+            new_mapper(subexpr)
         self.count += new_mapper.count
 
         self._visited_functions.add(expr)
 
-        self.post_visit(expr, *args, **kwargs)
+        self.post_visit(expr)
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):
