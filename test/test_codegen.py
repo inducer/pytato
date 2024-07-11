@@ -269,6 +269,9 @@ def reverse_args(f):
                                    "logical_or"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_scalar_array_binary_arith(ctx_factory, which, reverse):
+    from numpy.lib import NumpyVersion
+    is_old_numpy = NumpyVersion(np.__version__) < "2.0.0"
+
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -313,9 +316,18 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             out = outputs[dtype]
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
-            assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+            if not is_old_numpy:
+                assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
+
             # In some cases ops are done in float32 in loopy but float64 in numpy.
-            assert np.allclose(out, out_ref), (out, out_ref)
+            is_allclose = np.allclose(out, out_ref), (out, out_ref)
+            if not is_old_numpy:
+                assert is_allclose
+            else:
+                if out_ref.dtype.itemsize == 1:
+                    pass
+                else:
+                    assert is_allclose
 
 
 @pytest.mark.parametrize("which", ("add", "sub", "mul", "truediv", "pow",
@@ -657,7 +669,7 @@ def test_passing_bound_arguments_raises(ctx_factory):
     prg = pt.generate_loopy(42*x)
 
     with pytest.raises(ValueError):
-        evt, (out2,) = prg(queue, x=np.random.rand(10))
+        prg(queue, x=np.random.rand(10))
 
 
 @pytest.mark.parametrize("shape1, shape2", (
@@ -687,9 +699,9 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     prg = pt.generate_loopy(x+y)
 
     if "n" in prg.kernel.arg_dict:
-        evt, (out,) = prg(queue, n=n)
+        _evt, (out,) = prg(queue, n=n)
     else:
-        evt, (out,) = prg(queue)
+        _evt, (out,) = prg(queue)
 
     np.testing.assert_allclose(out, x_in+y_in)
 
@@ -737,7 +749,7 @@ def test_call_loopy(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
+    _evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
 
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
@@ -766,7 +778,7 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
 
     out = pt.make_dict_of_named_arrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
-    evt, out_dict = pt.generate_loopy(out,
+    _evt, out_dict = pt.generate_loopy(out,
                                       options=lp.Options(return_dict=True))(queue)
     np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
@@ -778,7 +790,7 @@ def test_exprs_with_named_arrays(ctx_factory):
     x = pt.make_data_wrapper(x_in)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
     res = 21*y1y2["y1"]
-    evt, (out,) = pt.generate_loopy(res)(queue)
+    _evt, (out,) = pt.generate_loopy(res)(queue)
 
     np.testing.assert_allclose(out, 42*x_in)
 
@@ -805,7 +817,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y, "m": m, "n": n})
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
+    _evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
@@ -828,7 +840,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     x = pt.make_placeholder(name="x", shape=(), dtype=float)
     y = call_loopy(knl, {"x": 3*x})["y"]
 
-    evt, (out,) = pt.generate_loopy(y)(queue, x=x_in)
+    _evt, (out,) = pt.generate_loopy(y)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
 
 
@@ -847,7 +859,7 @@ def test_reductions(ctx_factory, axis, redn, shape):
     pt_func = getattr(pt, redn)
     prg = pt.generate_loopy(pt_func(x, axis=axis))
 
-    evt, (out,) = prg(queue)
+    _evt, (out,) = prg(queue)
 
     assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-14)
 
@@ -1165,8 +1177,8 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     np_result = np.vdot(a_in, b_in)
     _, (pt_result,) = pt.generate_loopy(pt.vdot(a, b))(cq)
 
-    assert pt_result.shape == np_result.shape
-    assert pt_result.dtype == np_result.dtype
+    assert pt_result.shape == np_result.shape  # pylint: disable=no-member
+    assert pt_result.dtype == np_result.dtype  # pylint: disable=no-member
     np.testing.assert_allclose(np_result, pt_result, rtol=1e-6)
 
 
@@ -1212,7 +1224,7 @@ def test_broadcast_to(ctx_factory):
 
         x_in = rng.random(input_shape, dtype=np.float32)
         x = pt.make_data_wrapper(x_in)
-        evt, (x_brdcst,) = pt.generate_loopy(
+        _evt, (x_brdcst,) = pt.generate_loopy(
                                 pt.broadcast_to(x, broadcasted_shape))(queue)
 
         np.testing.assert_allclose(np.broadcast_to(x_in, broadcasted_shape),
@@ -1235,23 +1247,23 @@ def test_advanced_indexing_with_broadcasting(ctx_factory):
     idx2 = pt.make_data_wrapper(idx2_in)
 
     # Case 1
-    evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[:, ::-1, idx1_in, idx2_in])
 
     # Case 2
-    evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
     np.testing.assert_allclose(pt_out, x_in[-4:4:-1, idx1_in, idx2_in, :])
 
     # Case 3
-    evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
     np.testing.assert_allclose(pt_out, x_in[idx1_in, idx2_in, -2::-1, :])
 
     # Case 4 (non-contiguous advanced indices)
-    evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[:, idx1_in, -2::-1, idx2_in])
 
     # Case 5 (non-contiguous advanced indices with ellipsis)
-    evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
 
 
@@ -1306,7 +1318,7 @@ def test_advanced_indexing_fuzz(ctx_factory):
                       else pt.make_data_wrapper(idx)
                       for idx in np_indices]
 
-        evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
+        _evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
 
         np.testing.assert_allclose(pt_out, x_in[tuple(np_indices)],
                                    err_msg=(f"input_shape={input_shape}, "
@@ -1463,7 +1475,7 @@ def test_assume_non_negative_indirect_address(ctx_factory):
     for insn in pt_prg.program.default_entrypoint.instructions:
         OnRemainderRaiser()(insn.expression)
 
-    evt, (out,) = pt_prg(cq)
+    _evt, (out,) = pt_prg(cq)
 
     np.testing.assert_allclose(out, a_np[b_np])
 
@@ -1552,7 +1564,7 @@ def test_scalars_are_typed(ctx_factory):
 
     x_in = np.random.rand(3, 3)
     x = pt.make_data_wrapper(x_in)
-    evt, (pt_out,) = pt.generate_loopy(x * 3.14j)(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x * 3.14j)(cq)
     np_out = x_in * 3.14j
     assert pt_out.dtype == np_out.dtype
     np.testing.assert_allclose(pt_out, np_out)
@@ -1732,7 +1744,7 @@ def test_two_rolls(ctx_factory):
     x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float64)
 
     x_in = np.arange(1., 10.).reshape(3, 3)
-    evt, (pt_out,) = pt.generate_loopy(pt.roll(x, -2, 0) + pt.roll(x, -1, 0)
+    _evt, (pt_out,) = pt.generate_loopy(pt.roll(x, -2, 0) + pt.roll(x, -1, 0)
                                        )(cq, x=x_in)
     np_out = np.roll(x_in, -2, 0) + np.roll(x_in, -1, 0)
     np.testing.assert_allclose(np_out, pt_out)
@@ -1826,12 +1838,12 @@ def _get_masking_array_for_test_pad(array, pad_widths):
 
     def _get_mask_array_idx(*idxs):
         return np.where(
-            sum([((idx < pad_width[0])
+            sum(((idx < pad_width[0])
                   | (idx >= (pad_width[0]+axis_len))
                   ).astype(np.int32)
                  for idx, axis_len, pad_width in zip(idxs,
                                                      array.shape,
-                                                     pad_widths)]) > 1,
+                                                     pad_widths)) > 1,
             0*idxs[0],
             0*idxs[0] + 1)
 
@@ -1924,7 +1936,7 @@ def test_function_call(ctx_factory, visualize=False):
     def build_expression(tracer):
         x = pt.arange(500, dtype=np.float32)
         twice_x = tracer(f, x)
-        twice_x_2, thrice_x_2 = tracer(partial(g, tracer), x)
+        twice_x_2, _thrice_x_2 = tracer(partial(g, tracer), x)
 
         result = tracer(h, x, 2*x)
         twice_x_3 = result["twice"]

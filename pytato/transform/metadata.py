@@ -212,7 +212,7 @@ class AxesTagsEquationCollector(Mapper):
         except UnknownIndexLambdaExpr:
             from warnings import warn
             warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.")
+                 " no tags were propagated across it.", stacklevel=1)
             # no propagation semantics implemented for such cases
             return
 
