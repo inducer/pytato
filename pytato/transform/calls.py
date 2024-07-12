@@ -30,7 +30,9 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from typing_extensions import Self
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -38,9 +40,15 @@ from pytato.array import (
     DictOfNamedArrays,
     Placeholder,
 )
-from pytato.function import Call, NamedCallResult
+from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.tags import InlineCallTag
-from pytato.transform import ArrayOrNames, CopyMapper, _verify_is_array
+from pytato.transform import (
+    ArrayOrNames,
+    CopyMapper,
+    Deduplicator,
+    TransformMapperCache,
+    _verify_is_array,
+)
 
 
 if TYPE_CHECKING:
@@ -55,6 +63,11 @@ class PlaceholderSubstitutor(CopyMapper):
 
         A mapping from the placeholder name to the array that it is to be
         substituted with.
+
+    .. note::
+
+        This mapper performs a simple replacement of the specified placeholders.
+        It does not attempt to deduplicate nodes in the resulting DAG.
     """
 
     def __init__(self, substitutions: Mapping[str, Array]) -> None:
@@ -63,6 +76,16 @@ class PlaceholderSubstitutor(CopyMapper):
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
+        # Substituted-in expressions may contain placeholders with the same names
+        # as those being replaced; thus we cannot recurse into the substitution to
+        # deduplicate.
+        #
+        # As an example of how this can occur, consider a DAG that contains an input
+        # placeholder "x" as well as a function call that takes a parameter "x".
+        # When inlining this function call, we use this mapper to replace instances
+        # of the function parameter "x" in the function expression with the
+        # corresponding call binding. However, the call binding expression itself
+        # may contain the other "x", and that one should not be replaced.
         return self.substitutions[expr.name]
 
     def map_function_definition(
@@ -74,22 +97,42 @@ class PlaceholderSubstitutor(CopyMapper):
 class Inliner(CopyMapper):
     """
     Primary mapper for :func:`inline_calls`.
-    """
-    def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        # inline call sites within the callee.
-        new_expr = super().map_call(expr)
-        assert isinstance(new_expr, Call)
 
+    .. note::
+
+        This mapper may produce DAGs with duplicated nodes, as it is combining
+        expressions from multiple call stack frames.
+    """
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        # Must disable collision/duplication checking because we're combining
+        # expressions that were previously in two different call stack frames
+        # (and were thus cached separately)
+        super().__init__(
+            err_on_collision=False,
+            err_on_created_duplicate=False,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+
+    def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         if expr.tags_of_type(InlineCallTag):
-            substitutor = PlaceholderSubstitutor(new_expr.bindings)
+            substitutor = PlaceholderSubstitutor(expr.bindings)
 
             return DictOfNamedArrays(
-                {name: _verify_is_array(substitutor.rec(ret))
-                 for name, ret in new_expr.function.returns.items()},
-                tags=new_expr.tags
+                {name: _verify_is_array(self.rec(substitutor(ret)))
+                 for name, ret in expr.function.returns.items()},
+                tags=expr.tags
             )
         else:
-            return new_expr
+            return super().map_call(expr)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         new_call_or_inlined_expr = self.rec(expr._container)
@@ -113,8 +156,7 @@ def inline_calls(expr: ArrayOrNames) -> ArrayOrNames:
     Returns a copy of *expr* with call sites tagged with
     :class:`pytato.tags.InlineCallTag` inlined into the expression graph.
     """
-    inliner = Inliner()
-    return inliner(expr)
+    return Deduplicator()(Inliner()(expr))
 
 
 def tag_all_calls_to_be_inlined(expr: ArrayOrNames) -> ArrayOrNames:
