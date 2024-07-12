@@ -120,7 +120,7 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: _SelfMapper
 
     A type variable used to represent the type of a mapper in
-    :meth:`TransformMapper.clone_for_callee`.
+    :meth:`CachedMapper.clone_for_callee`.
 """
 
 transform_logger = logging.getLogger(__file__)
