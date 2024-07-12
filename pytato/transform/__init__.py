@@ -54,11 +54,9 @@ from pymbolic.mapper.optimize import optimize_mapper
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
-MappedT = TypeVar("MappedT",
-                  Array, AbstractResultWithNamedArrays, ArrayOrNames)
+MappedT = TypeVar("MappedT", bound=ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
-CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
-                            Array, AbstractResultWithNamedArrays, ArrayOrNames)
+CopyMapperResultT = TypeVar("CopyMapperResultT", bound=ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = FrozenSet[Array]
