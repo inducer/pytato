@@ -259,6 +259,7 @@ def get_random_pt_dag(seed: int,
         additional_generators = []
 
     from testlib import RandomDAGContext, make_random_dag
+    from typing import cast
 
     rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
             axis_len=axis_len, use_numpy=False,
@@ -277,7 +278,8 @@ def get_random_pt_dag(seed: int,
             else:
                 return expr
 
-        dag = pt.transform.map_and_copy(dag, make_dws_placeholder)
+        dag = cast(pt.DictOfNamedArrays,
+                   pt.transform.map_and_copy(dag, make_dws_placeholder))
 
     return dag
 
