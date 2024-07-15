@@ -58,7 +58,7 @@ import attrs
 import re
 import enum
 
-from typing import (Callable, FrozenSet, Tuple, Union, TypeVar, Optional,
+from typing import (Callable, Collection, FrozenSet, Tuple, Union, TypeVar, Optional,
                     Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
 from immutabledict import immutabledict
 from functools import cached_property
@@ -237,7 +237,7 @@ class NamedCallResult(NamedArray):
     _mapper_method: ClassVar[str] = "map_named_call_result"
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Union[Sequence[Tag], Tag]) -> Array:
+                         tags: Union[Collection[Tag], Tag]) -> Array:
         raise ValueError("Tagging a NamedCallResult's axis is illegal, use"
                          " Call.with_tagged_axis instead")
 

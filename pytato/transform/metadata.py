@@ -35,7 +35,7 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
+from typing import (TYPE_CHECKING, Collection, Type, Set, Tuple, List, Dict, FrozenSet,
                     Mapping, Iterable, Any, TypeVar, cast)
 from bidict import bidict
 from pytato.scalar_expr import SCALAR_CLASSES
@@ -594,10 +594,10 @@ class AxisTagAttacher(CopyMapper):
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]],
+                 axis_to_tags: Mapping[Tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool):
         super().__init__()
-        self.axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[Tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
     def _attach_tags(self, expr: Array, rec_expr: Array) -> Array:
