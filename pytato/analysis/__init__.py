@@ -461,7 +461,8 @@ class NodeMultiplicityMapper(CachedWalkMapper):
     def __init__(self) -> None:
         from collections import defaultdict
         super().__init__()
-        self.expr_multiplicity_counts = defaultdict(int)  # type: Dict[Any, int]
+        self.expr_multiplicity_counts: Dict[
+            Array, int] = defaultdict(int)  # type: Dict[Any, int]
 
     def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
         # Returns unique nodes
@@ -472,7 +473,8 @@ class NodeMultiplicityMapper(CachedWalkMapper):
             self.expr_multiplicity_counts[expr] += 1
 
 
-def get_node_multiplicities(outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
+def get_node_multiplicities(
+        outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
     """
     Returns the multiplicity per `expr`.
     """
