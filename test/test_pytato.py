@@ -32,6 +32,7 @@ import pytest
 import attrs
 
 import pytato as pt
+from pytato.array import _SuppliedAxesAndTagsMixin
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
@@ -1024,14 +1025,14 @@ def test_with_tagged_reduction():
 
 def test_derived_class_uses_correct_array_eq():
     @attrs.define(frozen=True)
-    class MyNewArrayT(pt.Array):
+    class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
     @attrs.define(frozen=True, eq=False)
-    class MyNewAndCorrectArrayT(pt.Array):
+    class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
