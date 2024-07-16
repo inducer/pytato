@@ -17,7 +17,7 @@ Pre-Defined Tags
 """
 
 from typing import Tuple, Hashable, Optional
-from pytools.tag import Tag, UniqueTag, IgnoredForEqualityTag
+from pytools.tag import Tag, UniqueTag
 from dataclasses import dataclass
 from traceback import FrameSummary, StackSummary
 
@@ -166,7 +166,7 @@ class _PytatoStackSummary:
 # https://mypy.readthedocs.io/en/stable/additional_features.html#caveats-known-issues
 # on why this can not be '@tag_dataclass'.
 @dataclass(init=True, eq=True, frozen=True, repr=True)
-class CreatedAt(UniqueTag, IgnoredForEqualityTag):
+class CreatedAt(UniqueTag):
     """
     A tag attached to a :class:`~pytato.Array` to store the traceback
     of where it was created.
