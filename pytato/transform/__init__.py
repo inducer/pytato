@@ -34,7 +34,7 @@ import numpy as np
 from immutabledict import immutabledict
 from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
                     List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable, cast)
+                    Hashable)
 
 from pytato.array import (
         Array, IndexLambda, Placeholder, Stack, Roll,
@@ -57,7 +57,7 @@ ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CombineT = TypeVar("CombineT")  # used in CombineMapper
-CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
+TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
                             Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
@@ -69,6 +69,8 @@ __doc__ = """
 
 .. autoclass:: Mapper
 .. autoclass:: CachedMapper
+.. autoclass:: TransformMapper
+.. autoclass:: TransformMapperWithExtraArgs
 .. autoclass:: CopyMapper
 .. autoclass:: CopyMapperWithExtraArgs
 .. autoclass:: CombineMapper
@@ -118,7 +120,7 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: _SelfMapper
 
     A type variable used to represent the type of a mapper in
-    :meth:`CopyMapper.clone_for_callee`.
+    :meth:`CachedMapper.clone_for_callee`.
 """
 
 transform_logger = logging.getLogger(__file__)
@@ -198,10 +200,14 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """Mapper class that maps each node in the DAG exactly once. This loses some
     information compared to :class:`Mapper` as a node is visited only from
     one of its predecessors.
+
+    .. automethod:: clone_for_callee
     """
 
-    def __init__(self) -> None:
+    def __init__(self, err_on_collision: bool = True) -> None:
         super().__init__()
+        self._err_on_collision = err_on_collision
+        self._seen_exprs: Dict[Hashable, ArrayOrNames] = {}
         self._cache: Dict[Hashable, CachedMapperT] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
@@ -210,109 +216,348 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     def rec(self, expr: ArrayOrNames) -> CachedMapperT:
         key = self.get_cache_key(expr)
         try:
-            return self._cache[key]
+            result = self._cache[key]
         except KeyError:
+            if self._err_on_collision:
+                self._seen_exprs[key] = expr
             result = super().rec(expr)
             self._cache[key] = result
-            # type-ignore-reason: Mapper.rec has imprecise func. signature
-            return result  # type: ignore[no-any-return]
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+
+        return result
 
     if TYPE_CHECKING:
         def __call__(self, expr: ArrayOrNames) -> CachedMapperT:
             return self.rec(expr)
 
-# }}}
-
-
-# {{{ CopyMapper
-
-class CopyMapper(CachedMapper[ArrayOrNames]):
-    """Performs a deep copy of a :class:`pytato.array.Array`.
-    The typical use of this mapper is to override individual ``map_`` methods
-    in subclasses to permit term rewriting on an expression graph.
-
-    .. automethod:: clone_for_callee
-
-    .. note::
-
-       This does not copy the data of a :class:`pytato.array.DataWrapper`.
-    """
-    if TYPE_CHECKING:
-        def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return cast(CopyMapperResultT, super().rec(expr))
-
-        def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return self.rec(expr)
-
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        return type(self)()
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision  # type: ignore[attr-defined]
+        )
 
+# }}}
+
+
+# {{{ TransformMapper
+
+class TransformMapper(CachedMapper[ArrayOrNames]):
+    """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
+    other :class:`pytato.array.Array`\\ s.
+
+    .. automethod:: clone_for_callee
+    """
+    if TYPE_CHECKING:
+        def __call__(self, expr: TransformMapperResultT) -> TransformMapperResultT:
+            return self.rec(expr)
+
+    def __init__(
+            self,
+            err_on_collision: bool = True,
+            err_on_duplication: Optional[bool] = None) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_duplication: Raise an exception if mapping produces a new array
+            instance that has the same key as the input array. Requires
+            `err_on_collision=True`. Defaults to *True* if `err_on_collision` is
+            enabled.
+        """
+        super().__init__(err_on_collision=err_on_collision)
+        if err_on_duplication is None:
+            err_on_duplication = err_on_collision
+        if err_on_duplication and not err_on_collision:
+            raise ValueError(
+                "err_on_duplication=True requires err_on_collision=True.")
+        self._err_on_duplication = err_on_duplication
+        self._seen_results: Dict[Hashable, ArrayOrNames] = {}
+
+    def rec(self, expr: TransformMapperResultT) -> TransformMapperResultT:
+        key = self.get_cache_key(expr)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
+
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr)
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
+        return result  # type: ignore[return-value]
+
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision,  # type: ignore[attr-defined]
+            err_on_duplication=self._err_on_duplication  # type: ignore[attr-defined]
+        )
+
+# }}}
+
+
+# {{{ TransformMapperWithExtraArgs
+
+class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
+    """
+    Similar to :class:`TransformMapper`, but each mapper method takes extra
+    ``*args``, ``**kwargs`` that are propagated along a path by default.
+
+    The logic in :class:`TransformMapper` purposely does not take the extra
+    arguments to keep the cost of its each call frame low.
+
+    .. automethod:: clone_for_callee
+    """
+    if TYPE_CHECKING:
+        def __call__(
+                self, expr: TransformMapperResultT, *args: Any, **kwargs: Any
+                ) -> TransformMapperResultT:
+            return self.rec(expr, *args, **kwargs)
+
+    def __init__(
+            self,
+            err_on_collision: bool = True,
+            err_on_duplication: Optional[bool] = None) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+        instances have the same key.
+        :arg err_on_duplication: Raise an exception if mapping produces a new array
+            instance that has the same key as the input array. Requires
+            `err_on_collision=True`. Defaults to *True* if `err_on_collision` is
+            enabled.
+        """
+        super().__init__(err_on_collision)
+        # type-ignored as '._cache' attribute is not coherent with the base
+        # class
+        self._cache: Dict[Tuple[ArrayOrNames,
+                                Tuple[Any, ...],
+                                Tuple[Tuple[str, Any], ...]
+                                ],
+                          ArrayOrNames] = {}  # type: ignore[assignment]
+        if err_on_duplication is None:
+            err_on_duplication = err_on_collision
+        if err_on_duplication and not err_on_collision:
+            raise ValueError(
+                "err_on_duplication=True requires err_on_collision=True.")
+        self._err_on_duplication = err_on_duplication
+        self._seen_results: Dict[Hashable, ArrayOrNames] = {}
+
+    def get_cache_key(self,
+                      expr: ArrayOrNames,
+                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
+                                                          Tuple[Any, ...],
+                                                          Tuple[Tuple[str, Any], ...]
+                                                          ]:
+        return (expr, args, tuple(sorted(kwargs.items())))
+
+    def rec(self,
+            expr: TransformMapperResultT,
+            *args: Any, **kwargs: Any) -> TransformMapperResultT:
+        key = self.get_cache_key(expr, *args, **kwargs)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
+
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr, *args, **kwargs)
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
+        return result  # type: ignore[return-value]
+
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        # type-ignore-reason: self.__init__ has a different function signature
+        # than Mapper.__init__
+        return type(self)(  # type: ignore[call-arg]
+            err_on_collision=self._err_on_collision,  # type: ignore[attr-defined]
+            err_on_duplication=self._err_on_duplication  # type: ignore[attr-defined]
+        )
+
+# }}}
+
+
+# {{{ CopyMapper
+
+class CopyMapper(TransformMapper):
+    """Performs a deep copy of a :class:`pytato.array.Array`.
+    The typical use of this mapper is to override individual ``map_`` methods
+    in subclasses to permit term rewriting on an expression graph.
+
+    .. note::
+
+       This does not copy the data of a :class:`pytato.array.DataWrapper`.
+    """
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
                               ) -> Tuple[IndexOrShapeExpr, ...]:
         # type-ignore-reason: apparently mypy cannot substitute typevars
         # here.
-        return tuple(self.rec(s) if isinstance(s, Array) else s  # type: ignore[misc]
-                     for s in situp)
+        new_situp = tuple(
+            self.rec(s) if isinstance(s, Array) else s
+            for s in situp)
+        if all(new_s is s for s, new_s in zip(situp, new_situp)):
+            return situp
+        else:
+            return new_situp  # type: ignore[return-value]
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings: Mapping[str, Array] = immutabledict({
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        new_bindings: Mapping[str, Array] = immutabledict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
-        return IndexLambda(expr=expr.expr,
-                shape=self.rec_idx_or_size_tuple(expr.shape),
-                dtype=expr.dtype,
-                bindings=bindings,
-                axes=expr.axes,
-                var_to_reduction_descr=expr.var_to_reduction_descr,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        if (
+                new_shape is expr.shape
+                and all(
+                    new_bnd is bnd
+                    for bnd, new_bnd in zip(
+                        expr.bindings.values(),
+                        new_bindings.values()))):
+            return expr
+        else:
+            return IndexLambda(expr=expr.expr,
+                    shape=new_shape,
+                    dtype=expr.dtype,
+                    bindings=new_bindings,
+                    axes=expr.axes,
+                    var_to_reduction_descr=expr.var_to_reduction_descr,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         assert expr.name is not None
-        return Placeholder(name=expr.name,
-                shape=self.rec_idx_or_size_tuple(expr.shape),
-                dtype=expr.dtype,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return Placeholder(name=expr.name,
+                    shape=new_shape,
+                    dtype=expr.dtype,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack) -> Array:
-        arrays = tuple(self.rec(arr) for arr in expr.arrays)
-        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_arrays = tuple(self.rec(arr) for arr in expr.arrays)
+        if all(new_ary is ary for ary, new_ary in zip(expr.arrays, new_arrays)):
+            return expr
+        else:
+            return Stack(arrays=new_arrays, axis=expr.axis, axes=expr.axes,
+                    tags=expr.tags, non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
-        arrays = tuple(self.rec(arr) for arr in expr.arrays)
-        return Concatenate(arrays=arrays, axis=expr.axis,
-                           axes=expr.axes, tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
+        new_arrays = tuple(self.rec(arr) for arr in expr.arrays)
+        if all(new_ary is ary for ary, new_ary in zip(expr.arrays, new_arrays)):
+            return expr
+        else:
+            return Concatenate(arrays=new_arrays, axis=expr.axis,
+                               axes=expr.axes, tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll) -> Array:
-        return Roll(array=self.rec(expr.array),
-                shift=expr.shift,
-                axis=expr.axis,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array)
+        if new_ary is expr.array:
+            return expr
+        else:
+            return Roll(array=new_ary,
+                    shift=expr.shift,
+                    axis=expr.axis,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
-        return AxisPermutation(array=self.rec(expr.array),
-                axis_permutation=expr.axis_permutation,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array)
+        if new_ary is expr.array:
+            return expr
+        else:
+            return AxisPermutation(array=new_ary,
+                    axis_permutation=expr.axis_permutation,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
-        return type(expr)(self.rec(expr.array),
-                          indices=self.rec_idx_or_size_tuple(expr.indices),
-                          axes=expr.axes,
-                          tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array)
+        new_indices = self.rec_idx_or_size_tuple(expr.indices)
+        if new_ary is expr.array and new_indices is expr.indices:
+            return expr
+        else:
+            return type(expr)(new_ary,
+                              indices=new_indices,
+                              axes=expr.axes,
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
 
     def map_basic_index(self, expr: BasicIndex) -> Array:
         return self._map_index_base(expr)
@@ -328,91 +573,131 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return self._map_index_base(expr)
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
-        return DataWrapper(
-                data=expr.data,
-                shape=self.rec_idx_or_size_tuple(expr.shape),
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return DataWrapper(
+                    data=expr.data,
+                    shape=new_shape,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
-        return SizeParam(
-            name=expr.name,
-            axes=expr.axes,
-            tags=expr.tags,
-            non_equality_tags=expr.non_equality_tags)
+        return expr
 
     def map_einsum(self, expr: Einsum) -> Array:
-        return Einsum(expr.access_descriptors,
-                      tuple(self.rec(arg) for arg in expr.args),
-                      axes=expr.axes,
-                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                      index_to_access_descr=expr.index_to_access_descr,
-                      tags=expr.tags,
-                      non_equality_tags=expr.non_equality_tags)
-
-    def map_named_array(self, expr: NamedArray) -> Array:
-        return type(expr)(self.rec(expr._container),
-                          expr.name,
+        new_args = tuple(self.rec(arg) for arg in expr.args)
+        if all(new_arg is arg for arg, new_arg in zip(expr.args, new_args)):
+            return expr
+        else:
+            return Einsum(expr.access_descriptors,
+                          new_args,
                           axes=expr.axes,
+                          redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                          index_to_access_descr=expr.index_to_access_descr,
                           tags=expr.tags,
                           non_equality_tags=expr.non_equality_tags)
 
+    def map_named_array(self, expr: NamedArray) -> Array:
+        new_container = self.rec(expr._container)
+        if new_container is expr._container:
+            return expr
+        else:
+            return type(expr)(new_container,
+                              expr.name,
+                              axes=expr.axes,
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
+
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec(val.expr)
-                                  for key, val in expr.items()},
-                                 tags=expr.tags
-                                 )
+        new_data = {
+            key: self.rec(val.expr)
+            for key, val in expr.items()}
+        if all(
+                new_data_val is val.expr
+                for val, new_data_val in zip(expr.values(), new_data.values())):
+            return expr
+        else:
+            return DictOfNamedArrays(new_data, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
-        bindings: Mapping[Any, Any] = immutabledict(
+        new_bindings: Mapping[Any, Any] = immutabledict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
-
-        return LoopyCall(translation_unit=expr.translation_unit,
-                         bindings=bindings,
-                         entrypoint=expr.entrypoint,
-                         tags=expr.tags,
-                         )
+        if all(
+                new_bnd is bnd
+                for bnd, new_bnd in zip(
+                    expr.bindings.values(),
+                    new_bindings.values())):
+            return expr
+        else:
+            return LoopyCall(translation_unit=expr.translation_unit,
+                             bindings=new_bindings,
+                             entrypoint=expr.entrypoint,
+                             tags=expr.tags,
+                             )
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
-        rec_container = self.rec(expr._container)
-        assert isinstance(rec_container, LoopyCall)
-        return LoopyCallResult(
-                container=rec_container,
-                name=expr.name,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_container = self.rec(expr._container)
+        assert isinstance(new_container, LoopyCall)
+        if new_container is expr._container:
+            return expr
+        else:
+            return LoopyCallResult(
+                    container=new_container,
+                    name=expr.name,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
-        return Reshape(self.rec(expr.array),
-                       newshape=self.rec_idx_or_size_tuple(expr.newshape),
-                       order=expr.order,
-                       axes=expr.axes,
-                       tags=expr.tags,
-                       non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array)
+        new_newshape = self.rec_idx_or_size_tuple(expr.newshape)
+        if new_ary is expr.array and new_newshape is expr.newshape:
+            return expr
+        else:
+            return Reshape(new_ary,
+                           newshape=new_newshape,
+                           order=expr.order,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
-        return DistributedSendRefHolder(
-                DistributedSend(
-                    data=self.rec(expr.send.data),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data),
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_send_data = self.rec(expr.send.data)
+        if new_send_data is expr.send.data:
+            new_send = expr.send
+        else:
+            new_send = DistributedSend(
+                data=new_send_data,
+                dest_rank=expr.send.dest_rank,
+                comm_tag=expr.send.comm_tag)
+        new_passthrough = self.rec(expr.passthrough_data)
+        if new_send is expr.send and new_passthrough is expr.passthrough_data:
+            return expr
+        else:
+            return DistributedSendRefHolder(
+                    new_send,
+                    new_passthrough,
+                    axes=new_passthrough.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
-        return DistributedRecv(
-               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-               shape=self.rec_idx_or_size_tuple(expr.shape),
-               dtype=expr.dtype, tags=expr.tags, axes=expr.axes,
-               non_equality_tags=expr.non_equality_tags)
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return DistributedRecv(
+                   src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+                   shape=new_shape, dtype=expr.dtype, tags=expr.tags,
+                   axes=expr.axes, non_equality_tags=expr.non_equality_tags)
 
     @memoize_method
     def map_function_definition(self,
@@ -422,22 +707,38 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return attrs.evolve(expr, returns=immutabledict(new_returns))
+        if all(
+                new_ret is ret
+                for ret, new_ret in zip(
+                    expr.returns.values(),
+                    new_returns.values())):
+            return expr
+        else:
+            return attrs.evolve(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        return Call(self.map_function_definition(expr.function),
-                    immutabledict({name: self.rec(bnd)
-                         for name, bnd in expr.bindings.items()}),
-                    tags=expr.tags,
-                    )
+        new_function = self.map_function_definition(expr.function)
+        new_bindings = {
+            name: self.rec(bnd)
+            for name, bnd in expr.bindings.items()}
+        if (
+                new_function is expr.function
+                and all(
+                    new_bnd is bnd
+                    for bnd, new_bnd in zip(
+                        expr.bindings.values(),
+                        new_bindings.values()))):
+            return expr
+        else:
+            return Call(new_function, immutabledict(new_bindings), tags=expr.tags)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
-        call = self.rec(expr._container)
-        assert isinstance(call, Call)
-        return NamedCallResult(call, expr.name)
+        new_call = self.rec(expr._container)
+        assert isinstance(new_call, Call)
+        return new_call[expr.name]
 
 
-class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
+class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs):
     """
     Similar to :class:`CopyMapper`, but each mapper method takes extra
     ``*args``, ``**kwargs`` that are propagated along a path by default.
@@ -445,39 +746,6 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     The logic in :class:`CopyMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
     """
-    def __init__(self) -> None:
-        super().__init__()
-        # type-ignored as '._cache' attribute is not coherent with the base
-        # class
-        self._cache: Dict[Tuple[ArrayOrNames,
-                                Tuple[Any, ...],
-                                Tuple[Tuple[str, Any], ...]
-                                ],
-                          ArrayOrNames] = {}  # type: ignore[assignment]
-
-    def get_cache_key(self,
-                      expr: ArrayOrNames,
-                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
-                                                          Tuple[Any, ...],
-                                                          Tuple[Tuple[str, Any], ...]
-                                                          ]:
-        return (expr, args, tuple(sorted(kwargs.items())))
-
-    def rec(self,
-            expr: CopyMapperResultT,
-            *args: Any, **kwargs: Any) -> CopyMapperResultT:
-        key = self.get_cache_key(expr, *args, **kwargs)
-        try:
-            # type-ignore-reason: self._cache has ArrayOrNames as its values
-            return self._cache[key]  # type: ignore[return-value]
-        except KeyError:
-            result = Mapper.rec(self, expr,
-                                *args,
-                                **kwargs)
-            self._cache[key] = result
-            # type-ignore-reason: Mapper.rec is imprecise
-            return result  # type: ignore[no-any-return]
-
     def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any
                               ) -> Tuple[IndexOrShapeExpr, ...]:
@@ -491,63 +759,93 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_index_lambda(self, expr: IndexLambda,
                          *args: Any, **kwargs: Any) -> Array:
-        bindings: Mapping[str, Array] = immutabledict({
+        new_shape = self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
+        new_bindings: Mapping[str, Array] = immutabledict({
                 name: self.rec(subexpr, *args, **kwargs)
                 for name, subexpr in sorted(expr.bindings.items())})
-        return IndexLambda(expr=expr.expr,
-                           shape=self.rec_idx_or_size_tuple(expr.shape,
-                                                            *args, **kwargs),
-                           dtype=expr.dtype,
-                           bindings=bindings,
-                           axes=expr.axes,
-                           var_to_reduction_descr=expr.var_to_reduction_descr,
-                           tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
+        if (
+                new_shape is expr.shape
+                and all(
+                    new_bnd is bnd
+                    for bnd, new_bnd in zip(
+                        expr.bindings.values(),
+                        new_bindings.values()))):
+            return expr
+        else:
+            return IndexLambda(expr=expr.expr,
+                               shape=new_shape,
+                               dtype=expr.dtype,
+                               bindings=new_bindings,
+                               axes=expr.axes,
+                               var_to_reduction_descr=expr.var_to_reduction_descr,
+                               tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
-        return Placeholder(name=expr.name,
-                           shape=self.rec_idx_or_size_tuple(expr.shape,
-                                                            *args, **kwargs),
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
-
-    def map_stack(self, expr: Stack, *args: Any, **kwargs: Any) -> Array:
-        arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
-        return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
-                     non_equality_tags=expr.non_equality_tags)
-
-    def map_concatenate(self, expr: Concatenate, *args: Any, **kwargs: Any) -> Array:
-        arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
-        return Concatenate(arrays=arrays, axis=expr.axis,
-                           axes=expr.axes, tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
-
-    def map_roll(self, expr: Roll, *args: Any, **kwargs: Any) -> Array:
-        return Roll(array=self.rec(expr.array, *args, **kwargs),
-                    shift=expr.shift,
-                    axis=expr.axis,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def map_axis_permutation(self, expr: AxisPermutation,
-                             *args: Any, **kwargs: Any) -> Array:
-        return AxisPermutation(array=self.rec(expr.array, *args, **kwargs),
-                               axis_permutation=expr.axis_permutation,
+        new_shape = self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return Placeholder(name=expr.name,
+                               shape=new_shape,
+                               dtype=expr.dtype,
                                axes=expr.axes,
                                tags=expr.tags,
                                non_equality_tags=expr.non_equality_tags)
 
+    def map_stack(self, expr: Stack, *args: Any, **kwargs: Any) -> Array:
+        new_arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
+        if all(new_ary is ary for ary, new_ary in zip(expr.arrays, new_arrays)):
+            return expr
+        else:
+            return Stack(arrays=new_arrays, axis=expr.axis, axes=expr.axes,
+                    tags=expr.tags, non_equality_tags=expr.non_equality_tags)
+
+    def map_concatenate(self, expr: Concatenate, *args: Any, **kwargs: Any) -> Array:
+        new_arrays = tuple(self.rec(arr, *args, **kwargs) for arr in expr.arrays)
+        if all(new_ary is ary for ary, new_ary in zip(expr.arrays, new_arrays)):
+            return expr
+        else:
+            return Concatenate(arrays=new_arrays, axis=expr.axis,
+                               axes=expr.axes, tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
+
+    def map_roll(self, expr: Roll, *args: Any, **kwargs: Any) -> Array:
+        new_ary = self.rec(expr.array, *args, **kwargs)
+        if new_ary is expr.array:
+            return expr
+        else:
+            return Roll(array=new_ary,
+                        shift=expr.shift,
+                        axis=expr.axis,
+                        axes=expr.axes,
+                        tags=expr.tags,
+                        non_equality_tags=expr.non_equality_tags)
+
+    def map_axis_permutation(self, expr: AxisPermutation,
+                             *args: Any, **kwargs: Any) -> Array:
+        new_ary = self.rec(expr.array, *args, **kwargs)
+        if new_ary is expr.array:
+            return expr
+        else:
+            return AxisPermutation(array=new_ary,
+                                   axis_permutation=expr.axis_permutation,
+                                   axes=expr.axes,
+                                   tags=expr.tags,
+                                   non_equality_tags=expr.non_equality_tags)
+
     def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> Array:
-        return type(expr)(self.rec(expr.array, *args, **kwargs),
-                          indices=self.rec_idx_or_size_tuple(expr.indices,
-                                                             *args, **kwargs),
-                          axes=expr.axes,
-                          tags=expr.tags,
-                          non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array, *args, **kwargs)
+        new_indices = self.rec_idx_or_size_tuple(expr.indices, *args, **kwargs)
+        if new_ary is expr.array and new_indices is expr.indices:
+            return expr
+        else:
+            return type(expr)(new_ary,
+                              indices=new_indices,
+                              axes=expr.axes,
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
 
     def map_basic_index(self, expr: BasicIndex, *args: Any, **kwargs: Any) -> Array:
         return self._map_index_base(expr, *args, **kwargs)
@@ -567,93 +865,136 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_data_wrapper(self, expr: DataWrapper,
                          *args: Any, **kwargs: Any) -> Array:
-        return DataWrapper(
-                data=expr.data,
-                shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_shape = self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return DataWrapper(
+                    data=expr.data,
+                    shape=new_shape,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return expr
 
     def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> Array:
-        return Einsum(expr.access_descriptors,
-                      tuple(self.rec(arg, *args, **kwargs) for arg in expr.args),
-                      axes=expr.axes,
-                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                      index_to_access_descr=expr.index_to_access_descr,
-                      tags=expr.tags,
-                      non_equality_tags=expr.non_equality_tags)
-
-    def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
-        return type(expr)(self.rec(expr._container, *args, **kwargs),
-                          expr.name,
+        new_args = tuple(self.rec(arg, *args, **kwargs) for arg in expr.args)
+        if all(new_arg is arg for arg, new_arg in zip(expr.args, new_args)):
+            return expr
+        else:
+            return Einsum(expr.access_descriptors,
+                          new_args,
                           axes=expr.axes,
+                          redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                          index_to_access_descr=expr.index_to_access_descr,
                           tags=expr.tags,
                           non_equality_tags=expr.non_equality_tags)
 
+    def map_named_array(self, expr: NamedArray, *args: Any, **kwargs: Any) -> Array:
+        new_container = self.rec(expr._container, *args, **kwargs)
+        if new_container is expr._container:
+            return expr
+        else:
+            return type(expr)(new_container,
+                              expr.name,
+                              axes=expr.axes,
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
+
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays, *args: Any, **kwargs: Any) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec(val.expr, *args, **kwargs)
-                                  for key, val in expr.items()},
-                                 tags=expr.tags,
-                                 )
+        new_data = {
+            key: self.rec(val.expr, *args, **kwargs)
+            for key, val in expr.items()}
+        if all(
+                new_data_val is val.expr
+                for val, new_data_val in zip(expr.values(), new_data.values())):
+            return expr
+        else:
+            return DictOfNamedArrays(new_data, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: Any, **kwargs: Any) -> LoopyCall:
-        bindings: Mapping[Any, Any] = immutabledict(
+        new_bindings: Mapping[Any, Any] = immutabledict(
                     {name: (self.rec(subexpr, *args, **kwargs)
                            if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
-
-        return LoopyCall(translation_unit=expr.translation_unit,
-                         bindings=bindings,
-                         entrypoint=expr.entrypoint,
-                         tags=expr.tags,
-                         )
+        if all(
+                new_bnd is bnd
+                for bnd, new_bnd in zip(
+                    expr.bindings.values(),
+                    new_bindings.values())):
+            return expr
+        else:
+            return LoopyCall(translation_unit=expr.translation_unit,
+                             bindings=new_bindings,
+                             entrypoint=expr.entrypoint,
+                             tags=expr.tags,
+                             )
 
     def map_loopy_call_result(self, expr: LoopyCallResult,
                               *args: Any, **kwargs: Any) -> Array:
-        rec_loopy_call = self.rec(expr._container, *args, **kwargs)
-        assert isinstance(rec_loopy_call, LoopyCall)
-        return LoopyCallResult(
-                container=rec_loopy_call,
-                name=expr.name,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_container = self.rec(expr._container, *args, **kwargs)
+        assert isinstance(new_container, LoopyCall)
+        if new_container is expr._container:
+            return expr
+        else:
+            return LoopyCallResult(
+                    container=new_container,
+                    name=expr.name,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape,
                     *args: Any, **kwargs: Any) -> Array:
-        return Reshape(self.rec(expr.array, *args, **kwargs),
-                       newshape=self.rec_idx_or_size_tuple(expr.newshape,
-                                                           *args, **kwargs),
-                       order=expr.order,
-                       axes=expr.axes,
-                       tags=expr.tags,
-                       non_equality_tags=expr.non_equality_tags)
+        new_ary = self.rec(expr.array, *args, **kwargs)
+        new_newshape = self.rec_idx_or_size_tuple(expr.newshape, *args, **kwargs)
+        if new_ary is expr.array and new_newshape is expr.newshape:
+            return expr
+        else:
+            return Reshape(new_ary,
+                           newshape=new_newshape,
+                           order=expr.order,
+                           axes=expr.axes,
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
-        return DistributedSendRefHolder(
-                DistributedSend(
-                    data=self.rec(expr.send.data, *args, **kwargs),
-                    dest_rank=expr.send.dest_rank,
-                    comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data, *args, **kwargs),
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_send_data = self.rec(expr.send.data, *args, **kwargs)
+        if new_send_data is expr.send.data:
+            new_send = expr.send
+        else:
+            new_send = DistributedSend(
+                data=new_send_data,
+                dest_rank=expr.send.dest_rank,
+                comm_tag=expr.send.comm_tag)
+        new_passthrough = self.rec(expr.passthrough_data, *args, **kwargs)
+        if new_send is expr.send and new_passthrough is expr.passthrough_data:
+            return expr
+        else:
+            return DistributedSendRefHolder(
+                    new_send,
+                    new_passthrough,
+                    axes=new_passthrough.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: Any, **kwargs: Any) -> Array:
-        return DistributedRecv(
-               src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-               shape=self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs),
-               dtype=expr.dtype, tags=expr.tags, axes=expr.axes,
-               non_equality_tags=expr.non_equality_tags)
+        new_shape = self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
+        if new_shape is expr.shape:
+            return expr
+        else:
+            return DistributedRecv(
+                   src_rank=expr.src_rank, comm_tag=expr.comm_tag,
+                   shape=new_shape, dtype=expr.dtype, tags=expr.tags,
+                   axes=expr.axes, non_equality_tags=expr.non_equality_tags)
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> FunctionDefinition:
@@ -663,17 +1004,26 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     def map_call(self, expr: Call,
                  *args: Any, **kwargs: Any) -> AbstractResultWithNamedArrays:
-        return Call(self.map_function_definition(expr.function, *args, **kwargs),
-                    immutabledict({name: self.rec(bnd, *args, **kwargs)
-                         for name, bnd in expr.bindings.items()}),
-                    tags=expr.tags,
-                    )
+        new_function = self.map_function_definition(expr.function, *args, **kwargs)
+        new_bindings = {
+            name: self.rec(bnd, *args, **kwargs)
+            for name, bnd in expr.bindings.items()}
+        if (
+                new_function is expr.function
+                and all(
+                    new_bnd is bnd
+                    for bnd, new_bnd in zip(
+                        expr.bindings.values(),
+                        new_bindings.values()))):
+            return expr
+        else:
+            return Call(new_function, immutabledict(new_bindings), tags=expr.tags)
 
     def map_named_call_result(self, expr: NamedCallResult,
                               *args: Any, **kwargs: Any) -> Array:
-        call = self.rec(expr._container, *args, **kwargs)
-        assert isinstance(call, Call)
-        return NamedCallResult(call, expr.name)
+        new_call = self.rec(expr._container, *args, **kwargs)
+        assert isinstance(new_call, Call)
+        return new_call[expr.name]
 
 # }}}
 
@@ -793,9 +1143,9 @@ class CombineMapper(Mapper, Generic[CombineT]):
                                   " must override map_function_definition.")
 
     def map_call(self, expr: Call) -> CombineT:
-        return self.combine(self.map_function_definition(expr.function),
-                            *[self.rec(bnd)
-                              for name, bnd in sorted(expr.bindings.items())])
+        raise NotImplementedError(
+            "Mapping calls is context-dependent. Derived classes must override "
+            "map_call.")
 
     def map_named_call_result(self, expr: NamedCallResult) -> CombineT:
         return self.rec(expr._container)
@@ -944,6 +1294,12 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
                 result.add(inp)
 
         return frozenset(result)
+
+    def map_call(self, expr: Call) -> FrozenSet[InputArgumentBase]:
+        return self.combine(self.map_function_definition(expr.function),
+            *[
+                self.rec(bnd)
+                for name, bnd in sorted(expr.bindings.items())])
 
 # }}}
 
@@ -1143,7 +1499,7 @@ class WalkMapper(Mapper):
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr, *args, **kwargs):
             return
 
         new_mapper = self.clone_for_callee(expr)
@@ -1153,14 +1509,14 @@ class WalkMapper(Mapper):
         self.post_visit(expr, *args, **kwargs)
 
     def map_call(self, expr: Call, *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr):
+        if not self.visit(expr, *args, **kwargs):
             return
 
-        self.map_function_definition(expr.function)
+        self.map_function_definition(expr.function, *args, **kwargs)
         for bnd in expr.bindings.values():
-            self.rec(bnd)
+            self.rec(bnd, *args, **kwargs)
 
-        self.post_visit(expr)
+        self.post_visit(expr, *args, **kwargs)
 
     def map_named_call_result(self, expr: NamedCallResult,
                               *args: Any, **kwargs: Any) -> None:
@@ -1185,19 +1541,45 @@ class CachedWalkMapper(WalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self._visited_nodes: Set[Any] = set()
+        self._visited_arrays_or_names: Set[Any] = set()
+        self._visited_functions: Set[Any] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    def get_func_def_cache_key(
+            self, expr: FunctionDefinition, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
     def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any
             ) -> None:
         cache_key = self.get_cache_key(expr, *args, **kwargs)
-        if cache_key in self._visited_nodes:
+        if cache_key in self._visited_arrays_or_names:
             return
 
         super().rec(expr, *args, **kwargs)
-        self._visited_nodes.add(cache_key)
+        self._visited_arrays_or_names.add(cache_key)
+
+    @memoize_method
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        return type(self)()
+
+    def map_function_definition(self, expr: FunctionDefinition,
+                                *args: Any, **kwargs: Any) -> None:
+        cache_key = self.get_func_def_cache_key(expr, *args, **kwargs)
+        if (
+                not self.visit(expr, *args, **kwargs)
+                or cache_key in self._visited_functions):
+            return
+
+        new_mapper = self.clone_for_callee(expr)
+        for subexpr in expr.returns.values():
+            new_mapper(subexpr, *args, **kwargs)
+
+        self._visited_functions.add(cache_key)
+
+        self.post_visit(expr, *args, **kwargs)
 
 # }}}
 
@@ -1226,7 +1608,6 @@ class TopoSortMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
@@ -1246,20 +1627,52 @@ class CachedMapAndCopyMapper(CopyMapper):
         super().__init__()
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
+    @memoize_method
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         # type-ignore-reason: self.__init__ has a different function signature
         # than Mapper.__init__ and does not have map_fn
         return type(self)(self.map_fn)  # type: ignore[call-arg,attr-defined]
 
+    # FIXME: It's awkward to have to duplicate all of this from TransformMapper;
+    # figure out a better way
     def rec(self, expr: MappedT) -> MappedT:
-        if expr in self._cache:
-            # type-ignore-reason: parametric Mapping types aren't a thing
-            return self._cache[expr]  # type: ignore[return-value]
+        key = self.get_cache_key(expr)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
+        else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result  # type: ignore[return-value]
 
-        result = super().rec(self.map_fn(expr))
-        self._cache[expr] = result
-        # type-ignore-reason: map_fn has imprecise types
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, self.map_fn(expr))
+        result_key = self.get_cache_key(result)
+
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}."
+                f"{id(result)=}, {id(expr)=}")
+
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
+
+        self._cache[key] = result
+
         return result  # type: ignore[return-value]
 
     if TYPE_CHECKING:
@@ -1461,6 +1874,7 @@ class MPMSMaterializer(Mapper):
                                  comm_tag=expr.send.comm_tag,
                                  tags=expr.send.tags),
             passthrough_data=rec_passthrough.expr,
+            axes=rec_passthrough.expr.axes,
             tags=expr.tags,
             non_equality_tags=expr.non_equality_tags,
             )
@@ -1721,7 +2135,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-    def map_named_call(self, expr: NamedCallResult, *args: Any) -> None:
+    def map_named_call_result(self, expr: NamedCallResult, *args: Any) -> None:
         assert isinstance(expr._container, Call)
         for bnd in expr._container.bindings.values():
             self.node_to_users.setdefault(bnd, set()).add(expr)

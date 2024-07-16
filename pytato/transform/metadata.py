@@ -35,7 +35,7 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
+from typing import (TYPE_CHECKING, Collection, Type, Set, Tuple, List, Dict, FrozenSet,
                     Mapping, Iterable, Any, TypeVar, cast)
 from bidict import bidict
 from pytato.scalar_expr import SCALAR_CLASSES
@@ -594,59 +594,95 @@ class AxisTagAttacher(CopyMapper):
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]],
+                 axis_to_tags: Mapping[Tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool):
         super().__init__()
-        self.axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[Tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
+    def _attach_tags(self, expr: Array, rec_expr: Array) -> Array:
+        assert rec_expr.ndim == expr.ndim
+
+        result = rec_expr
+
+        for iaxis in range(expr.ndim):
+            result = result.with_tagged_axis(
+                iaxis, self.axis_to_tags.get((expr, iaxis), []))
+
+        # {{{ tag reduction descrs
+
+        if self.tag_corresponding_redn_descr:
+            if isinstance(expr, Einsum):
+                for arg, access_descrs in zip(expr.args,
+                                              expr.access_descriptors):
+                    for iaxis, access_descr in enumerate(access_descrs):
+                        if isinstance(access_descr, EinsumReductionAxis):
+                            result = result.with_tagged_reduction(  # type: ignore[attr-defined]
+                                access_descr,
+                                self.axis_to_tags.get((arg, iaxis), [])
+                            )
+
+            if isinstance(expr, IndexLambda):
+                try:
+                    hlo = index_lambda_to_high_level_op(expr)
+                except UnknownIndexLambdaExpr:
+                    pass
+                else:
+                    if isinstance(hlo, ReduceOp):
+                        for iaxis, redn_var in hlo.axes.items():
+                            result = result.with_tagged_reduction(  # type: ignore[attr-defined]
+                                redn_var,
+                                self.axis_to_tags.get((hlo.x, iaxis), [])
+                            )
+
+        # }}}
+
+        return result
+
+    # FIXME: It's awkward to have to duplicate all of this from TransformMapper;
+    # figure out a better way
     def rec(self, expr: ArrayOrNames) -> Any:
-        if isinstance(expr, (AbstractResultWithNamedArrays,
-                             DistributedSendRefHolder)):
-            return super().rec(expr)
+        key = self.get_cache_key(expr)
+        try:
+            result = self._cache[key]
+        except KeyError:
+            pass
         else:
+            if self._err_on_collision and expr is not self._seen_exprs[key]:
+                raise ValueError(
+                    f"cache collision detected on {type(expr)} in {type(self)}.")
+            return result
+
+        if self._err_on_collision:
+            self._seen_exprs[key] = expr
+
+        result = Mapper.rec(self, expr)
+        if not isinstance(expr, (AbstractResultWithNamedArrays,
+                                 DistributedSendRefHolder)):
             assert isinstance(expr, Array)
-            key = self.get_cache_key(expr)
-            try:
-                return self._cache[key]
-            except KeyError:
-                expr_copy = Mapper.rec(self, expr)
-                assert expr_copy.ndim == expr.ndim
+            result = self._attach_tags(expr, result)  # type: ignore[arg-type]
 
-                for iaxis in range(expr.ndim):
-                    expr_copy = expr_copy.with_tagged_axis(
-                        iaxis, self.axis_to_tags.get((expr, iaxis), []))
+        result_key = self.get_cache_key(result)
 
-                # {{{ tag reduction descrs
+        # This only works if the expression has no existing duplicates (hence
+        # the err_on_collision=True requirement). Otherwise, rec() could produce a
+        # valid result that is not identical to expr due to deduplication
+        if (
+                self._err_on_duplication
+                and hash(result_key) == hash(key)
+                and result_key == key
+                and result is not expr):
+            raise ValueError(
+                f"array duplication detected on {type(expr)} in {type(self)}.")
 
-                if self.tag_corresponding_redn_descr:
-                    if isinstance(expr, Einsum):
-                        for arg, access_descrs in zip(expr.args,
-                                                      expr.access_descriptors):
-                            for iaxis, access_descr in enumerate(access_descrs):
-                                if isinstance(access_descr, EinsumReductionAxis):
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        access_descr,
-                                        self.axis_to_tags.get((arg, iaxis), [])
-                                    )
+        try:
+            result = self._seen_results[result_key]
+        except KeyError:
+            self._seen_results[result_key] = result
 
-                    if isinstance(expr, IndexLambda):
-                        try:
-                            hlo = index_lambda_to_high_level_op(expr)
-                        except UnknownIndexLambdaExpr:
-                            pass
-                        else:
-                            if isinstance(hlo, ReduceOp):
-                                for iaxis, redn_var in hlo.axes.items():
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        redn_var,
-                                        self.axis_to_tags.get((hlo.x, iaxis), [])
-                                    )
+        self._cache[key] = result
 
-                # }}}
-
-                self._cache[key] = expr_copy
-                return expr_copy
+        return result
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
