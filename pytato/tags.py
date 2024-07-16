@@ -17,14 +17,14 @@ Pre-Defined Tags
 """
 
 from typing import Tuple, Hashable, Optional
-from pytools.tag import Tag, UniqueTag
+from pytools.tag import Tag, UniqueTag, tag_dataclass
 from dataclasses import dataclass
 from traceback import FrameSummary, StackSummary
 
 
 # {{{ pre-defined tag: ImplementationStrategy
 
-@dataclass(frozen=True)
+@tag_dataclass
 class ImplementationStrategy(UniqueTag):
     """
     Metadata to be attached to :class:`pytato.Array` to convey information to a
@@ -32,7 +32,7 @@ class ImplementationStrategy(UniqueTag):
     """
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class ImplStored(ImplementationStrategy):
     """
     An :class:`ImplementationStrategy` that is tagged to an
@@ -42,7 +42,7 @@ class ImplStored(ImplementationStrategy):
     """
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class ImplInlined(ImplementationStrategy):
     """
     An :class:`ImplementationStrategy` that is tagged to an
@@ -55,7 +55,7 @@ class ImplInlined(ImplementationStrategy):
 
 # {{{ pre-defined tag: Named, CountNamed, PrefixNamed
 
-@dataclass(frozen=True)
+@tag_dataclass
 class CountNamed(UniqueTag):
     """
     Tagged to a :class:`bool`-dtyped :class:`~pytato.Array` ``A``. If ``A``
@@ -73,7 +73,7 @@ class _BaseNameTag(UniqueTag):
     pass
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class Named(_BaseNameTag):
     """
     Tagged to an :class:`~pytato.Array` to indicate the
@@ -86,7 +86,7 @@ class Named(_BaseNameTag):
     name: str
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class PrefixNamed(_BaseNameTag):
     """
     Tagged to an :class:`~pytato.Array` to indicate the
@@ -101,7 +101,7 @@ class PrefixNamed(_BaseNameTag):
 # }}}
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class AssumeNonNegative(Tag):
     """
     A tag attached to a :class:`~pytato.Array` to indicate the
@@ -162,10 +162,7 @@ class _PytatoStackSummary:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])
 
 
-# See
-# https://mypy.readthedocs.io/en/stable/additional_features.html#caveats-known-issues
-# on why this can not be '@tag_dataclass'.
-@dataclass(init=True, eq=True, frozen=True, repr=True)
+@tag_dataclass
 class CreatedAt(UniqueTag):
     """
     A tag attached to a :class:`~pytato.Array` to store the traceback
@@ -178,7 +175,7 @@ class CreatedAt(UniqueTag):
         return "CreatedAt(" + str(self.traceback) + ")"
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class ExpandedDimsReshape(UniqueTag):
     """
     A tag that can be attached to a :class:`~pytato.array.Reshape` to indicate
@@ -200,7 +197,7 @@ class ExpandedDimsReshape(UniqueTag):
     new_dims: Tuple[int, ...]
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class FunctionIdentifier(UniqueTag):
     """
     A tag that can be attached to a :class:`~pytato.function.FunctionDefinition`
@@ -213,7 +210,7 @@ class FunctionIdentifier(UniqueTag):
     identifier: Hashable
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class CallImplementationTag(UniqueTag):
     """
     A tag that can be attached to a :class:`~pytato.function.Call` node to
@@ -222,7 +219,7 @@ class CallImplementationTag(UniqueTag):
     """
 
 
-@dataclass(frozen=True)
+@tag_dataclass
 class InlineCallTag(CallImplementationTag):
     r"""
     A :class:`CallImplementationTag` that directs the
