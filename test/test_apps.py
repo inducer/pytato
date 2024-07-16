@@ -39,7 +39,7 @@ from pyopencl.tools import (  # noqa: F401
 from pytools.tag import Tag, tag_dataclass
 
 import pytato as pt
-from pytato.transform import CopyMapper, WalkMapper
+from pytato.transform import CopyMapper, Deduplicator, WalkMapper
 
 
 # {{{ Trace an FFT
@@ -78,40 +78,21 @@ class ConstantSizer(PymbolicIdentityMapper):
 
 
 class FFTRealizationMapper(CopyMapper):
-    def __init__(self, fft_vec_gatherer):
-        super().__init__()
-
-        self.fft_vec_gatherer = fft_vec_gatherer
-
-        self.old_array_to_new_array = {}
-        levels = sorted(fft_vec_gatherer.level_to_arrays, reverse=True)
-
-        lev = 0
-        arrays = fft_vec_gatherer.level_to_arrays[lev]
-        self.finalized = False
-
-        for lev in levels:
-            arrays = fft_vec_gatherer.level_to_arrays[lev]
-            rec_arrays = [self.rec(ary) for ary in arrays]
-            # reset cache so that the partial subs are not stored
-            self._cache.clear()
-            lev_array = pt.concatenate(rec_arrays, axis=0)
-            assert lev_array.shape == (fft_vec_gatherer.n,)
-
-            startidx = 0
-            for array in arrays:
-                size = array.shape[0]
-                sub_array = lev_array[startidx:startidx+size]
-                startidx += size
-                self.old_array_to_new_array[array] = sub_array
-
-            assert startidx == fft_vec_gatherer.n
-        self.finalized = True
+    def __init__(self, old_array_to_new_array):
+        # Must use err_on_created_duplicate=False, because the use of ConstantSizer
+        # in map_index_lambda creates IndexLambdas that differ only in the type of
+        # their contained constants, which changes their identity but not their
+        # equality
+        super().__init__(err_on_created_duplicate=False)
+        self.old_array_to_new_array = old_array_to_new_array
 
     def map_index_lambda(self, expr):
         tags = expr.tags_of_type(FFTIntermediate)
-        if tags and (self.finalized or expr in self.old_array_to_new_array):
-            return self.old_array_to_new_array[expr]
+        if tags:
+            try:
+                return self.old_array_to_new_array[expr]
+            except KeyError:
+                pass
 
         return super().map_index_lambda(
                 expr.copy(expr=ConstantSizer()(expr.expr)))
@@ -120,6 +101,29 @@ class FFTRealizationMapper(CopyMapper):
         from pytato.tags import ImplStored, PrefixNamed
         return super().map_concatenate(expr).tagged(
                 (ImplStored(), PrefixNamed("concat")))
+
+
+def make_fft_realization_mapper(fft_vec_gatherer):
+    old_array_to_new_array = {}
+    levels = sorted(fft_vec_gatherer.level_to_arrays, reverse=True)
+
+    for lev in levels:
+        lev_mapper = FFTRealizationMapper(old_array_to_new_array)
+        arrays = fft_vec_gatherer.level_to_arrays[lev]
+        rec_arrays = [lev_mapper(ary) for ary in arrays]
+        lev_array = pt.concatenate(rec_arrays, axis=0)
+        assert lev_array.shape == (fft_vec_gatherer.n,)
+
+        startidx = 0
+        for array in arrays:
+            size = array.shape[0]
+            sub_array = lev_array[startidx:startidx+size]
+            startidx += size
+            old_array_to_new_array[array] = sub_array
+
+        assert startidx == fft_vec_gatherer.n
+
+    return FFTRealizationMapper(old_array_to_new_array)
 
 
 def test_trace_fft(ctx_factory):
@@ -134,10 +138,11 @@ def test_trace_fft(ctx_factory):
             wrap_intermediate_with_level=(
                 lambda level, ary: ary.tagged(FFTIntermediate(level))))
 
+    result = Deduplicator()(result)
     fft_vec_gatherer = FFTVectorGatherer(n)
     fft_vec_gatherer(result)
 
-    mapper = FFTRealizationMapper(fft_vec_gatherer)
+    mapper = make_fft_realization_mapper(fft_vec_gatherer)
 
     result = mapper(result)
 
