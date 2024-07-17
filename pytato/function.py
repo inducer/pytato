@@ -253,12 +253,12 @@ class NamedCallResult(NamedArray):
     @property
     def shape(self) -> ShapeType:
         assert isinstance(self._container, Call)
-        return self._container.function.returns[self.name].shape
+        return self._container.function.returns[self.name].shape  # pylint: disable=no-member
 
     @property
     def dtype(self) -> _dtype_any:
         assert isinstance(self._container, Call)
-        return self._container.function.returns[self.name].dtype
+        return self._container.function.returns[self.name].dtype  # pylint: disable=no-member
 
 
 # eq=False to avoid equality comparison without EqualityMapper

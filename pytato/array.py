@@ -845,7 +845,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
             if non_equality_tags is None
             else non_equality_tags)
 
-        return type(self)(container=container,
+        return type(self)(_container=container,
                           name=name,
                           tags=tags,
                           axes=axes,
