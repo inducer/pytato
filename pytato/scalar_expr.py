@@ -28,7 +28,7 @@ from typing import (
         Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
         Iterable)
 
-import attrs
+import dataclasses
 
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
@@ -263,7 +263,7 @@ class ExpressionBase(prim.Expression):
         return StringifyMapper()
 
 
-@attrs.frozen(eq=True, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=True, slots=True)
 class Reduce(ExpressionBase):
     """
     .. autoattribute:: inner_expr
@@ -292,14 +292,14 @@ class Reduce(ExpressionBase):
         return (self.inner_expr, self.op, self.bounds)
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             hash(self.bounds)
 
     init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
 
 
-@attrs.frozen(eq=True, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class TypeCast(ExpressionBase):
     """
     .. autoattribute:: dtype

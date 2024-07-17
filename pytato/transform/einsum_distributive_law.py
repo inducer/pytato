@@ -33,7 +33,7 @@ THE SOFTWARE.
 
 
 from typing import Callable, Dict, Tuple, Optional, FrozenSet, Mapping
-import attrs
+import dataclasses
 from pytato.transform import ArrayOrNames, Mapper, MappedT
 from pytato.array import (Array, AxesT, Einsum, IndexLambda,
                           EinsumReductionAxis,
@@ -54,7 +54,7 @@ class EinsumDistributiveLawDescriptor:
     """
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to not apply
@@ -62,7 +62,7 @@ class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class DoDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to apply distributive
@@ -71,17 +71,17 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
     ioperand: int
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
     surrounding_args: Mapping[int, Array]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
     index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    axes: AxesT = dataclasses.field(kw_only=True)
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         # {{{ check that exactly one of the args is missing
 
         assert len(self.surrounding_args) == (

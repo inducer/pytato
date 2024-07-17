@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 from functools import partial
 import html
-import attrs
+import dataclasses
 
 from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
@@ -66,7 +66,7 @@ __doc__ = """
 
 # {{{ _DotEmitter
 
-@attrs.define
+@dataclasses.dataclass
 class _SubgraphTree:
     contents: Optional[List[str]]
     subgraphs: Dict[str, _SubgraphTree]
@@ -141,7 +141,7 @@ class DotEmitter:
 
 # {{{ array -> dot node converter
 
-@attrs.define
+@dataclasses.dataclass
 class _DotNodeInfo:
     title: str
     fields: Dict[str, Any]
@@ -187,7 +187,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         info = self.get_common_dot_info(expr)
 
         # pylint: disable=not-an-iterable
-        for field in attrs.fields(type(expr)):
+        for field in dataclasses.fields(type(expr)):
             if field.name in info.fields:
                 continue
             attr = getattr(expr, field.name)

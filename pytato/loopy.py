@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 
 import numpy as np
-import attrs
+import dataclasses
 import loopy as lp
 import pymbolic.primitives as prim
 from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
@@ -71,20 +71,19 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-@attrs.frozen(eq=False)
+@dataclasses.dataclass(frozen=True, eq=False)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
     translation_unit: "lp.TranslationUnit"
-    bindings: Mapping[str, ArrayOrScalar] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
+    bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
     _mapper_method: ClassVar[str] = "map_loopy_call"
 
-    copy = attrs.evolve
+    copy = dataclasses.replace
 
     @property
     def _result_names(self) -> FrozenSet[str]:
@@ -116,7 +115,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
             raise KeyError(name)
 
         # TODO: Attach a filtered set of tags from loopy's arg.
-        return LoopyCallResult(container=self,
+        return LoopyCallResult(_container=self,
                                name=name,
                                axes=_get_default_axes(len(self
                                                           ._entry_kernel
@@ -131,7 +130,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
         return iter(self._result_names)
 
 
-@attrs.frozen(eq=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False)
 class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.

@@ -54,7 +54,7 @@ THE SOFTWARE.
 
 from typing import Hashable, FrozenSet, Optional, Any, ClassVar
 
-import attrs
+import dataclasses
 import numpy as np
 
 from pytools.tag import Taggable, Tag
@@ -69,7 +69,7 @@ CommTagType = Hashable
 
 # {{{ send
 
-@attrs.frozen(init=True, eq=True, hash=True, cache_hash=True)
+@dataclasses.dataclass(init=True, frozen=True)
 class DistributedSend(Taggable):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
@@ -93,20 +93,20 @@ class DistributedSend(Taggable):
     data: Array
     dest_rank: int
     comm_tag: CommTagType
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True, default=frozenset())
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True, default=frozenset())
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> DistributedSend:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
     def copy(self, **kwargs: Any) -> DistributedSend:
-        return attrs.evolve(self, **kwargs)
+        return dataclasses.replace(self, **kwargs)
 
 # }}}
 
 
 # {{{ send ref holder
 
-@attrs.frozen(eq=False, repr=False, init=False, hash=True)
+@dataclasses.dataclass(eq=False, frozen=True, repr=False, init=False, unsafe_hash=True)
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -183,7 +183,7 @@ class DistributedSendRefHolder(Array):
 
 # {{{ receive
 
-@attrs.frozen(eq=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True)
 class DistributedRecv(_SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation.
 

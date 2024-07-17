@@ -43,7 +43,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import attrs
+import dataclasses
 import re
 import enum
 
@@ -71,8 +71,8 @@ class ReturnType(enum.Enum):
     TUPLE_OF_ARRAYS = 2
 
 
-# eq=False to avoid equality comparison without EqualityMaper
-@attrs.define(frozen=True, eq=False, hash=True)
+# eq=False to avoid equality comparison without EqualityMapper
+@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True)
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
@@ -125,9 +125,8 @@ class FunctionDefinition(Taggable):
     """
     parameters: FrozenSet[str]
     return_type: ReturnType
-    returns: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    returns: Mapping[str, Array]
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -161,7 +160,7 @@ class FunctionDefinition(Taggable):
 
     def _with_new_tags(
             self: FunctionDefinition, tags: FrozenSet[Tag]) -> FunctionDefinition:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
     def __call__(self, **kwargs: Array
                  ) -> Union[Array,
@@ -263,7 +262,7 @@ class NamedCallResult(NamedArray):
 
 
 # eq=False to avoid equality comparison without EqualityMapper
-@attrs.define(frozen=True, eq=False, hash=True, cache_hash=True, repr=False)
+@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True, repr=False)
 class Call(AbstractResultWithNamedArrays):
     """
     Records an invocation to a :class:`FunctionDefinition`.
@@ -279,19 +278,18 @@ class Call(AbstractResultWithNamedArrays):
 
     """
     function: FunctionDefinition
-    bindings: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
+    bindings: Mapping[str, Array]
 
     _mapper_method: ClassVar[str] = "map_call"
 
-    copy = attrs.evolve
+    copy = dataclasses.replace
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             # check that the invocation parameters and the function definition
             # parameters agree with each other.
             assert frozenset(self.bindings) == self.function.parameters
-            super().__attrs_post_init__()
+            super().__post_init__()
 
     def __contains__(self, name: object) -> bool:
         return name in self.function.returns
@@ -306,7 +304,7 @@ class Call(AbstractResultWithNamedArrays):
         return len(self.function.returns)
 
     def _with_new_tags(self: Call, tags: FrozenSet[Tag]) -> Call:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 # }}}
 

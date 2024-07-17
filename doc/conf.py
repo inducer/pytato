@@ -27,7 +27,6 @@ intersphinx_mapping = {
     "sumpy": ("https://documen.tician.de/sumpy/", None),
     "islpy": ("https://documen.tician.de/islpy/", None),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
-    "attrs": ("https://www.attrs.org/en/stable/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
     "immutabledict": ("https://immutabledict.corenting.fr/", None),
 }
