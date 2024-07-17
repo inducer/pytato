@@ -177,6 +177,7 @@ from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
         FrozenSet, Collection)
+from typing_extensions import Self
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -520,13 +521,24 @@ class Array(Taggable):
     .. attribute:: ndim
 
     """
-    axes: AxesT = dataclasses.field(kw_only=True)
-    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
+    # otherwise subclasses cannot set these
+    if TYPE_CHECKING:
+        @property
+        def axes(self) -> AxesT:
+            raise NotImplementedError
 
-    # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Tag] = dataclasses.field(kw_only=True,
-                                                    hash=False,
-                                                    default=frozenset())
+        # These are automatically excluded from equality in EqualityComparer
+        @property
+        def non_equality_tags(self) -> FrozenSet[Tag]:
+            raise NotImplementedError
+
+        @property
+        def shape(self) -> ShapeType:
+            raise NotImplementedError
+
+        @property
+        def dtype(self) -> np.dtype[Any]:
+            raise NotImplementedError
 
     _mapper_method: ClassVar[str]
 
@@ -554,18 +566,6 @@ class Array(Taggable):
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         return dataclasses.replace(self, **kwargs)
-
-    def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
-        return dataclasses.replace(self, tags=tags)
-
-    if TYPE_CHECKING:
-        @property
-        def shape(self) -> ShapeType:
-            raise NotImplementedError
-
-        @property
-        def dtype(self) -> np.dtype[Any]:
-            raise NotImplementedError
 
     @property
     def size(self) -> ShapeComponent:
@@ -784,7 +784,24 @@ class Array(Taggable):
 # }}}
 
 
+# }}}
+
+
 # {{{ mixins
+
+@dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
+class _SuppliedAxesAndTagsMixin(Taggable):
+    axes: AxesT = attrs.field(kw_only=True)
+    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+
+    # These are automatically excluded from equality in EqualityComparer
+    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
+                                                    hash=False,
+                                                    default=frozenset())
+
+    def _with_new_tags(self: Self, tags: FrozenSet[Tag]) -> Self:
+        return attrs.evolve(self, tags=tags)
+
 
 @dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
@@ -800,7 +817,7 @@ class _SuppliedShapeAndDtypeMixin:
 # {{{ dict of named arrays
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class NamedArray(Array):
+class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
     known there.
@@ -954,7 +971,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 # {{{ index lambda
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
+class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
     input indices are represented by
@@ -1067,7 +1084,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
 
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Einsum(Array):
+class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
     <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
@@ -1417,7 +1434,7 @@ def einsum(subscripts: str, *operands: Array,
 # {{{ stack
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Stack(Array):
+class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
     .. attribute:: arrays
@@ -1450,7 +1467,7 @@ class Stack(Array):
 # {{{ concatenate
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Concatenate(Array):
+class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
     .. attribute:: arrays
@@ -1510,7 +1527,7 @@ class IndexRemappingBase(Array):
 # {{{ roll
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Roll(IndexRemappingBase):
+class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
     .. attribute:: shift
@@ -1536,7 +1553,7 @@ class Roll(IndexRemappingBase):
 # {{{ axis permutation
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class AxisPermutation(IndexRemappingBase):
+class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
     .. attribute:: array
@@ -1563,7 +1580,7 @@ class AxisPermutation(IndexRemappingBase):
 # {{{ reshape
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Reshape(IndexRemappingBase):
+class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
 
@@ -1600,7 +1617,7 @@ class Reshape(IndexRemappingBase):
 # {{{ indexing
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class IndexBase(IndexRemappingBase):
+class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
 
@@ -1754,7 +1771,7 @@ class DataInterface(Protocol):
 
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False)
-class DataWrapper(InputArgumentBase):
+class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     """Takes concrete array data and packages it to be compatible with the
     :class:`Array` interface.
 
@@ -1823,7 +1840,10 @@ class DataWrapper(InputArgumentBase):
 # {{{ placeholder
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
+class Placeholder(
+                  _SuppliedAxesAndTagsMixin,
+                  _SuppliedShapeAndDtypeMixin,
+                  InputArgumentBase):
     r"""A named placeholder for an array whose concrete value is supplied by the
     user during evaluation.
 
@@ -1844,7 +1864,9 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
 # {{{ size parameter
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
-class SizeParam(InputArgumentBase):
+class SizeParam(
+                _SuppliedAxesAndTagsMixin,
+                InputArgumentBase):
     r"""A named placeholder for a scalar that may be used as a variable in symbolic
     expressions for array sizes.
 

@@ -37,6 +37,7 @@ from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic
                     Hashable, cast)
 
 from pytato.array import (
+    _SuppliedAxesAndTagsMixin,
         Array, IndexLambda, Placeholder, Stack, Roll,
         AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
@@ -399,13 +400,12 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
         return DistributedSendRefHolder(
-                DistributedSend(
+                send=DistributedSend(
                     data=self.rec(expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data),
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+                passthrough_data=self.rec(expr.passthrough_data),
+                )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         return DistributedRecv(
@@ -542,6 +542,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> Array:
+        assert isinstance(expr, _SuppliedAxesAndTagsMixin)
         return type(expr)(self.rec(expr.array, *args, **kwargs),
                           indices=self.rec_idx_or_size_tuple(expr.indices,
                                                              *args, **kwargs),
@@ -639,13 +640,11 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
         return DistributedSendRefHolder(
-                DistributedSend(
+                send=DistributedSend(
                     data=self.rec(expr.send.data, *args, **kwargs),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data, *args, **kwargs),
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+                passthrough_data=self.rec(expr.passthrough_data, *args, **kwargs))
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: Any, **kwargs: Any) -> Array:
@@ -1461,8 +1460,6 @@ class MPMSMaterializer(Mapper):
                                  comm_tag=expr.send.comm_tag,
                                  tags=expr.send.tags),
             passthrough_data=rec_passthrough.expr,
-            tags=expr.tags,
-            non_equality_tags=expr.non_equality_tags,
             )
         return MPMSMaterializerAccumulator(
             rec_passthrough.materialized_predecessors, new_expr)
