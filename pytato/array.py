@@ -791,16 +791,16 @@ class Array(Taggable):
 
 @dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
 class _SuppliedAxesAndTagsMixin(Taggable):
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    axes: AxesT = dataclasses.field(kw_only=True)
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
 
     # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
+    non_equality_tags: FrozenSet[Tag] = dataclasses.field(kw_only=True,
                                                     hash=False,
                                                     default=frozenset())
 
     def _with_new_tags(self: Self, tags: FrozenSet[Tag]) -> Self:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
