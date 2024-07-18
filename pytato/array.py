@@ -613,6 +613,8 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, Array):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
@@ -910,6 +912,8 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, AbstractResultWithNamedArrays):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
