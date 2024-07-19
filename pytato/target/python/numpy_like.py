@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
 """
@@ -27,8 +30,9 @@ import sys
 import os
 import numpy as np
 
-from typing import (Callable, Union, Optional, Mapping, Dict, TypeVar, Iterable,
-                    cast, List, Set, Tuple, Type)
+from typing import (Callable, TypedDict, Union, Optional, Mapping, Dict,
+    TypeVar, Iterable, cast, List, Set, Tuple, Type)
+from typing_extensions import NotRequired
 
 from pytools import UniqueNameGenerator
 from pytato.transform import CachedMapper
@@ -435,7 +439,14 @@ class NumpyCodegenMapper(CachedMapper[str]):
                             if are_shape_components_equal(-1, idx.stop)
                             else idx.stop)
 
-                kwargs = {}
+                from ast import expr as expr_t
+
+                class SliceKwargs(TypedDict):
+                    step: NotRequired[expr_t]
+                    lower: NotRequired[expr_t]
+                    upper: NotRequired[expr_t]
+
+                kwargs: SliceKwargs = {}
                 if step is not None:
                     assert isinstance(step, int)
                     kwargs["step"] = ast.Constant(step)
@@ -505,8 +516,9 @@ class NumpyCodegenMapper(CachedMapper[str]):
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> str:
         lhs = self.vng("_pt_tmp")
 
-        keys = []
-        values = []
+        from ast import expr as expr_t
+        keys: list[expr_t | None] = []
+        values: list[expr_t] = []
         for name, subexpr in sorted(expr._data.items()):
             keys.append(ast.Constant(name))
             values.append(ast.Name(self.rec(subexpr)))
@@ -557,6 +569,9 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
     lines = cgen_mapper.lines
     lines.append(ast.Return(ast.Name(result_var)))
 
+    from ast import expr as expr_t
+    decorator_list: list[expr_t] = [ast.Name(dec) for dec in entrypoint_decorators]
+
     module = ast.Module(
         body=[ast.Import(names=[ast.alias(name=target.numpy_like_module_name,
                                           asname=(
@@ -565,9 +580,10 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
                                           ))]),
               ast.Import(names=[ast.alias(name="numpy", asname="np")]),
               *extra_preambles,
-              ast.FunctionDef(
+              # Mypy's error here seems spurious: one of the provided 'non-matching'
+              # overloads exactly matches the types of what mypy thinks we've provided.
+              ast.FunctionDef(  # type: ignore[call-overload]
                   name=function_name,
-                  posonlyargs=[],
                   args=ast.arguments(
                       args=[],
                       posonlyargs=[],
@@ -576,7 +592,7 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
                       kw_defaults=[None for _ in cgen_mapper.arg_names],
                       defaults=[]),
                   body=lines,
-                  decorator_list=[ast.Name(dec) for dec in entrypoint_decorators])
+                  decorator_list=decorator_list)
               ],
         type_ignores=[])
 
