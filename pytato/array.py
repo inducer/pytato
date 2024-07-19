@@ -2218,7 +2218,7 @@ def make_placeholder(name: str,
                          f" expected {len(shape)}, got {len(axes)}.")
 
     return Placeholder(name=name, shape=shape, dtype=dtype, axes=axes,
-                       tags=(tags | _get_default_tags()),
+                       tags=(tags | _get_default_tags()),  # type: ignore[arg-type]
                        non_equality_tags=_get_created_at_tag(),)
 
 
@@ -2234,7 +2234,7 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags()),
+    return SizeParam(name, tags=(tags | _get_default_tags()),  # type: ignore[arg-type]
                      non_equality_tags=_get_created_at_tag(),)
 
 
@@ -2274,7 +2274,7 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),
+    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),  # type: ignore[arg-type]
                        non_equality_tags=_get_created_at_tag(),)
 
 # }}}
