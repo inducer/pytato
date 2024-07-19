@@ -29,7 +29,7 @@ import numpy as np
 import attrs
 import loopy as lp
 import pymbolic.primitives as prim
-from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
+from typing import (Dict, Optional, Any, Iterator, Union, Sequence,
                     Tuple, Iterable, Mapping, ClassVar)
 from numbers import Number
 from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
@@ -38,6 +38,8 @@ from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
                                 EvaluationMapper, IntegralT)
 from pytools import memoize_method
 from immutabledict import immutabledict
+from orderedsets import FrozenOrderedSet
+from collections.abc import Set as abc_Set
 import islpy as isl
 
 __doc__ = r"""
@@ -87,10 +89,10 @@ class LoopyCall(AbstractResultWithNamedArrays):
     copy = attrs.evolve
 
     @property
-    def _result_names(self) -> FrozenSet[str]:
-        return frozenset({name
+    def _result_names(self) -> abc_Set[str]:
+        return FrozenOrderedSet([name
                           for name, lp_arg in self._entry_kernel.arg_dict.items()
-                          if lp_arg.is_output})
+                          if lp_arg.is_output])
 
     @memoize_method
     def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
@@ -122,7 +124,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
                                                           ._entry_kernel
                                                           .arg_dict[name]
                                                           .shape)),
-                               tags=frozenset())
+                               tags=FrozenOrderedSet())  # type:ignore[arg-type]
 
     def __len__(self) -> int:
         return len(self._result_names)
@@ -265,7 +267,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
     # }}}
 
-    translation_unit = translation_unit.with_entrypoints(frozenset())
+    translation_unit = translation_unit.with_entrypoints(FrozenOrderedSet())
 
     return LoopyCall(translation_unit, bindings_new, entrypoint,
                      tags=_get_default_tags())
@@ -391,17 +393,19 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     get_size_param_deps = SizeParamGatherer()
 
-    lp_size_params: FrozenSet[str] = reduce(frozenset.union,
-                                            (lpy_get_deps(arg.shape)
-                                             for arg in knl.args
-                                             if isinstance(arg, ArrayBase)),
-                                            frozenset())
+    lp_size_params: abc_Set[str] = reduce(
+                                FrozenOrderedSet.union,  # type: ignore[arg-type]
+                                (lpy_get_deps(arg.shape)
+                                    for arg in knl.args
+                                    if isinstance(arg, ArrayBase)),
+                                FrozenOrderedSet())
 
-    pt_size_params: FrozenSet[SizeParam] = reduce(frozenset.union,
-                                                  (get_size_param_deps(bnd)
-                                                   for bnd in bindings.values()
-                                                   if isinstance(bnd, Array)),
-                                                  frozenset())
+    pt_size_params: abc_Set[SizeParam] = reduce(
+                                FrozenOrderedSet.union,  # type: ignore[arg-type]
+                                (get_size_param_deps(bnd)
+                                for bnd in bindings.values()
+                                if isinstance(bnd, Array)),
+                                FrozenOrderedSet())
 
     # {{{ mappers to map expressions to a global namespace
 

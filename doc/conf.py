@@ -29,6 +29,7 @@ intersphinx_mapping = {
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "attrs": ("https://www.attrs.org/en/stable/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
+    "orderedsets": ("https://matthiasdiener.github.io/orderedsets", None),
     "immutabledict": ("https://immutabledict.corenting.fr/", None),
 }
 

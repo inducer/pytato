@@ -38,6 +38,8 @@ from immutabledict import immutabledict
 import attrs
 
 
+from orderedsets import FrozenOrderedSet
+
 __doc__ = """
 .. currentmodule:: pytato.stringifier
 
@@ -84,7 +86,7 @@ class Reprifier(Mapper):
                                 in sorted(expr.items(),
                                           key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-        elif isinstance(expr, (frozenset, set)):
+        elif isinstance(expr, (FrozenOrderedSet, set)):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
             return f"'{expr.name}'"
