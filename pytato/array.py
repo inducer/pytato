@@ -173,6 +173,7 @@ Internal stuff that is only here because the documentation tool wants it
 
 from abc import ABC, abstractmethod
 from collections.abc import Set as abc_Set
+from enum import IntEnum
 from functools import partialmethod, cached_property
 import operator
 import attrs
@@ -180,6 +181,7 @@ from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
         FrozenSet, Collection)
+from typing_extensions import Self
 
 import numpy as np
 import pymbolic.primitives as prim
@@ -187,7 +189,7 @@ from pymbolic import var
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
-from pytato.scalar_expr import (ScalarType, SCALAR_CLASSES,
+from pytato.scalar_expr import (Scalar, SCALAR_CLASSES,
                                 ScalarExpression, IntegralT,
                                 INT_CLASSES, get_reduction_induction_variables)
 import re
@@ -284,22 +286,96 @@ def normalize_shape(
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
-DtypeOrScalar = Union[_dtype_any, ScalarType]
-ArrayOrScalar = Union["Array", ScalarType]
+PyScalarType = Union[type[bool], type[int], type[float], type[complex]]
+DtypeOrPyScalarType = Union[_dtype_any, PyScalarType]
+ArrayOrScalar = Union["Array", Scalar]
 
 
-# https://github.com/numpy/numpy/issues/19302
-def _np_result_type(
-        # actual dtype:
-        #*arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
-        # our dtype:
-        *arrays_and_dtypes: DtypeOrScalar,
-        ) -> np.dtype[Any]:
-    return np.result_type(*arrays_and_dtypes)
+# https://numpy.org/neps/nep-0050-scalar-promotion.html
+class DtypeKindCategory(IntEnum):
+    BOOLEAN = 0
+    INTEGRAL = 1
+    INEXACT = 2
 
 
-def _truediv_result_type(arg1: DtypeOrScalar, arg2: DtypeOrScalar) -> np.dtype[Any]:
-    dtype = _np_result_type(arg1, arg2)
+_dtype_kind_char_to_kind_cat = {
+    "b": DtypeKindCategory.BOOLEAN,
+    "i": DtypeKindCategory.INTEGRAL,
+    "u": DtypeKindCategory.INTEGRAL,
+    "f": DtypeKindCategory.INEXACT,
+    "c": DtypeKindCategory.INEXACT,
+}
+
+
+_py_type_to_kind_cat = {
+    bool: DtypeKindCategory.BOOLEAN,
+    int: DtypeKindCategory.INTEGRAL,
+    float: DtypeKindCategory.INEXACT,
+    complex: DtypeKindCategory.INEXACT,
+}
+
+
+_float_dtype_to_complex: Dict[np.dtype[Any], np.dtype[Any]] = {
+    np.dtype(np.float32): np.dtype(np.complex64),
+    np.dtype(np.float64): np.dtype(np.complex128),
+}
+
+
+def _complexify_dtype(dtype: np.dtype[Any]) -> np.dtype[Any]:
+    if dtype.kind == "c":
+        return dtype
+    elif dtype.kind == "f":
+        return _float_dtype_to_complex[dtype]
+    else:
+        raise ValueError("can only complexify types that are already inexact")
+
+
+def _np_result_dtype(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
+    # For numpy 2.0, np.result_type does not implement numpy's type
+    # promotion behavior. Weird. Hence all this nonsense is needed.
+
+    py_types = [dtype for dtype in dtypes if isinstance(dtype, type)]
+
+    if not py_types:
+        return np.result_type(*dtypes)
+
+    np_dtypes = [dtype for dtype in dtypes if isinstance(dtype, np.dtype)]
+    np_kind_cats = {
+        _dtype_kind_char_to_kind_cat[dtype.kind] for dtype in np_dtypes}
+    py_kind_cats = {_py_type_to_kind_cat[tp] for tp in py_types}
+    kind_cats = np_kind_cats | py_kind_cats
+
+    res_kind_cat = max(kind_cats)
+    max_py_kind_cats = max(py_kind_cats)
+    max_np_kind_cats = max(np_kind_cats)
+
+    is_complex = (complex in py_types
+        or any(dtype.kind == "c" for dtype in np_dtypes))
+
+    if max_py_kind_cats > max_np_kind_cats:
+        if res_kind_cat == DtypeKindCategory.INTEGRAL:
+            # FIXME: Perhaps this should be int32 "on some systems, e.g. Windows"
+            py_promotion_dtype: np.dtype[Any] = np.dtype(np.int64)
+        elif res_kind_cat == DtypeKindCategory.INEXACT:
+            if is_complex:
+                py_promotion_dtype = np.dtype(np.complex128)
+            else:
+                py_promotion_dtype = np.dtype(np.float64)
+        else:
+            # bool won't ever be promoted to
+            raise AssertionError()
+        return np.result_type(*(np_dtypes + [py_promotion_dtype]))
+
+    else:
+        # Just ignore the python types for promotion.
+        result = np.result_type(*np_dtypes)
+        if is_complex:
+            result = _complexify_dtype(result)
+        return result
+
+
+def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
+    dtype = _np_result_dtype(*dtypes)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     # pylint: disable=no-member
     if dtype.kind in "iu":
@@ -450,13 +526,25 @@ class Array(Taggable):
     .. attribute:: ndim
 
     """
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
-    # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Optional[Tag]] = attrs.field(kw_only=True,
-                                                              hash=False,
-                                                              default=frozenset())
+    # otherwise subclasses cannot set these
+    if TYPE_CHECKING:
+        @property
+        def axes(self) -> AxesT:
+            raise NotImplementedError
+
+        # These are automatically excluded from equality in EqualityComparer
+        @property
+        def non_equality_tags(self) -> FrozenSet[Tag]:
+            raise NotImplementedError
+
+        @property
+        def shape(self) -> ShapeType:
+            raise NotImplementedError
+
+        @property
+        def dtype(self) -> np.dtype[Any]:
+            raise NotImplementedError
 
     _mapper_method: ClassVar[str]
 
@@ -468,24 +556,22 @@ class Array(Taggable):
 
     if __debug__:
         def __attrs_post_init__(self) -> None:
+            if _ENABLE_TRACEBACK_TAG:
+                from pytato.tags import CreatedAt
+                ntags = sum(
+                    1 if isinstance(tag, CreatedAt) else 0
+                    for tag in self.non_equality_tags)
+                if ntags < 1:
+                    raise AssertionError("Array has no CreatedAt tag.")
+                elif ntags > 1:
+                    raise AssertionError("Array has multiple CreatedAt tags.")
+
             # ensure that a developer does not uses dataclass' "__eq__"
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         return attrs.evolve(self, **kwargs)
-
-    def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
-        return attrs.evolve(self, tags=tags)
-
-    if TYPE_CHECKING:
-        @property
-        def shape(self) -> ShapeType:
-            raise NotImplementedError
-
-        @property
-        def dtype(self) -> np.dtype[Any]:
-            raise NotImplementedError
 
     @property
     def size(self) -> ShapeComponent:
@@ -533,6 +619,8 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, Array):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
@@ -549,11 +637,16 @@ class Array(Taggable):
 
     __rmatmul__ = partialmethod(__matmul__, reverse=True)
 
-    def _binary_op(self,
-            op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
-            other: ArrayOrScalar,
-            get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]] = _np_result_type,  # noqa
-            reverse: bool = False) -> Array:
+    def _binary_op(
+                self,
+                op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
+                other: ArrayOrScalar,
+                get_result_type: Callable[
+                        [DtypeOrPyScalarType, DtypeOrPyScalarType],
+                        np.dtype[Any]] = _np_result_dtype,  # noqa
+                reverse: bool = False,
+                cast_to_result_dtype: bool = True,
+            ) -> Array:
 
         # {{{ sanity checks
 
@@ -567,15 +660,19 @@ class Array(Taggable):
 
         import pytato.utils as utils
         if reverse:
-            result = utils.broadcast_binary_op(other, self, op,
-                                               get_result_type,
-                                               tags=tags,
-                                               non_equality_tags=non_equality_tags)
+            result = utils.broadcast_binary_op(
+                         other, self, op,
+                         get_result_type,
+                         tags=tags,
+                         non_equality_tags=non_equality_tags,
+                         cast_to_result_dtype=cast_to_result_dtype)
         else:
-            result = utils.broadcast_binary_op(self, other, op,
-                                               get_result_type,
-                                               tags=tags,
-                                               non_equality_tags=non_equality_tags)
+            result = utils.broadcast_binary_op(
+                         self, other, op,
+                         get_result_type,
+                         tags=tags,
+                         non_equality_tags=non_equality_tags,
+                         cast_to_result_dtype=cast_to_result_dtype)
 
         assert isinstance(result, Array)
         return result
@@ -695,7 +792,24 @@ class Array(Taggable):
 # }}}
 
 
+# }}}
+
+
 # {{{ mixins
+
+@attrs.frozen(eq=False, slots=False, repr=False)
+class _SuppliedAxesAndTagsMixin(Taggable):
+    axes: AxesT = attrs.field(kw_only=True)
+    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+
+    # These are automatically excluded from equality in EqualityComparer
+    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
+                                                    hash=False,
+                                                    default=frozenset())
+
+    def _with_new_tags(self: Self, tags: FrozenSet[Tag]) -> Self:
+        return attrs.evolve(self, tags=tags)
+
 
 @attrs.frozen(eq=False, slots=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
@@ -711,7 +825,7 @@ class _SuppliedShapeAndDtypeMixin:
 # {{{ dict of named arrays
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class NamedArray(Array):
+class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
     known there.
@@ -728,16 +842,22 @@ class NamedArray(Array):
              container: Optional[AbstractResultWithNamedArrays] = None,
              name: Optional[str] = None,
              axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
+             tags: Optional[FrozenSet[Tag]] = None,
+             non_equality_tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
         axes = self.axes if axes is None else axes
+        non_equality_tags = (
+            self.non_equality_tags
+            if non_equality_tags is None
+            else non_equality_tags)
 
         return type(self)(container=container,
                           name=name,
                           tags=tags,
-                          axes=axes)
+                          axes=axes,
+                          non_equality_tags=non_equality_tags)
 
     @property
     def expr(self) -> Array:
@@ -798,6 +918,8 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, AbstractResultWithNamedArrays):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
@@ -823,7 +945,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
                  " in an error from 2023. To remove this message either"
-                 " call make_dict_of_named_arrays or pass the `tags` argument.")
+                 " call make_dict_of_named_arrays or pass the `tags` argument.",
+                 DeprecationWarning, stacklevel=2)
             tags = FrozenOrderedSet()
 
         object.__setattr__(self, "_data", data)
@@ -841,7 +964,8 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             raise KeyError(name)
         return NamedArray(self, name,
                           axes=self._data[name].axes,
-                          tags=self._data[name].tags)
+                          tags=self._data[name].tags,
+                          non_equality_tags=self._data[name].non_equality_tags)
 
     def __len__(self) -> int:
         return len(self._data)
@@ -858,7 +982,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 # {{{ index lambda
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
+class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
     input indices are represented by
@@ -936,7 +1060,8 @@ class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
                           axes=self.axes,
                           var_to_reduction_descr=immutabledict
                             (new_var_to_redn_descr),
-                          tags=self.tags)
+                          tags=self.tags,
+                          non_equality_tags=self.non_equality_tags)
 
 # }}}
 
@@ -972,7 +1097,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
 
 
 @attrs.frozen(frozen=True, eq=False, repr=False, hash=True, cache_hash=True)
-class Einsum(Array):
+class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
     <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
@@ -1073,8 +1198,9 @@ class Einsum(Array):
         if isinstance(redn_axis, str):
             try:
                 redn_axis_ = self.index_to_access_descr[redn_axis]
-            except KeyError:
-                raise InvalidEinsumIndex(f"'{redn_axis}': not a valid axis index.")
+            except KeyError as err:
+                raise InvalidEinsumIndex(
+                             f"'{redn_axis}': not a valid axis index.") from err
             if isinstance(redn_axis_, EinsumReductionAxis):
                 redn_axis = redn_axis_
             else:
@@ -1324,7 +1450,7 @@ def einsum(subscripts: str, *operands: Array,
 # {{{ stack
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Stack(Array):
+class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
     .. attribute:: arrays
@@ -1343,7 +1469,7 @@ class Stack(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(*(arr.dtype for arr in self.arrays))
+        return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1357,7 +1483,7 @@ class Stack(Array):
 # {{{ concatenate
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Concatenate(Array):
+class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
     .. attribute:: arrays
@@ -1376,7 +1502,7 @@ class Concatenate(Array):
 
     @property
     def dtype(self) -> np.dtype[Any]:
-        return _np_result_type(*(arr.dtype for arr in self.arrays))
+        return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
     def shape(self) -> ShapeType:
@@ -1417,7 +1543,7 @@ class IndexRemappingBase(Array):
 # {{{ roll
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Roll(IndexRemappingBase):
+class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
     .. attribute:: shift
@@ -1443,7 +1569,7 @@ class Roll(IndexRemappingBase):
 # {{{ axis permutation
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class AxisPermutation(IndexRemappingBase):
+class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
     .. attribute:: array
@@ -1470,7 +1596,7 @@ class AxisPermutation(IndexRemappingBase):
 # {{{ reshape
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Reshape(IndexRemappingBase):
+class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
 
@@ -1507,7 +1633,7 @@ class Reshape(IndexRemappingBase):
 # {{{ indexing
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class IndexBase(IndexRemappingBase):
+class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
 
@@ -1661,7 +1787,7 @@ class DataInterface(Protocol):
 
 
 @attrs.frozen(eq=False, repr=False, hash=False)
-class DataWrapper(InputArgumentBase):
+class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     """Takes concrete array data and packages it to be compatible with the
     :class:`Array` interface.
 
@@ -1734,7 +1860,10 @@ class DataWrapper(InputArgumentBase):
 # {{{ placeholder
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
+class Placeholder(
+                  _SuppliedAxesAndTagsMixin,
+                  _SuppliedShapeAndDtypeMixin,
+                  InputArgumentBase):
     r"""A named placeholder for an array whose concrete value is supplied by the
     user during evaluation.
 
@@ -1755,7 +1884,9 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
 # {{{ size parameter
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class SizeParam(InputArgumentBase):
+class SizeParam(
+                _SuppliedAxesAndTagsMixin,
+                InputArgumentBase):
     r"""A named placeholder for a scalar that may be used as a variable in symbolic
     expressions for array sizes.
 
@@ -2151,7 +2282,7 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: ScalarType,
+def full(shape: ConvertibleToShape, fill_value: Scalar,
          dtype: Any = None, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
@@ -2334,12 +2465,14 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
     import pytato.utils as utils
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
-    return utils.broadcast_binary_op(x1, x2,
-                                lambda x, y: prim.Comparison(x, which, y),
-                                lambda x, y: np.dtype(np.bool_),
-                                tags=_get_default_tags(),
-                                non_equality_tags=_get_created_at_tag(stacklevel=2),
-                                     )  # type: ignore[return-value]
+    return utils.broadcast_binary_op(
+                            x1, x2,
+                            lambda x, y: prim.Comparison(x, which, y),
+                            lambda x, y: np.dtype(np.bool_),
+                            tags=_get_default_tags(),
+                            non_equality_tags=_get_created_at_tag(stacklevel=2),
+                            cast_to_result_dtype=False
+                        )  # type: ignore[return-value]
 
 
 def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
@@ -2401,6 +2534,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      lambda x, y: np.dtype(np.bool_),
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
+                                     cast_to_result_dtype=False,
                                      )  # type: ignore[return-value]
 
 
@@ -2417,6 +2551,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      lambda x, y: np.dtype(np.bool_),
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
+                                     cast_to_result_dtype=False,
                                      )  # type: ignore[return-value]
 
 

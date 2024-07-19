@@ -1,14 +1,17 @@
+from __future__ import annotations
+
 import numpy as np
 import pymbolic.primitives as p
 
 from enum import Enum, auto, unique
-from typing import List, Tuple, Mapping, Sequence
+from typing import Any, List, Tuple, Mapping, Sequence
 from pytato.array import IndexLambda, ArrayOrScalar, Array, ShapeType
 from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.utils import (get_indexing_expression,
                           get_shape_after_broadcasting,
                           are_shape_components_equal)
-from pytato.scalar_expr import ScalarType, ScalarExpression, Reduce, SCALAR_CLASSES
+from pytato.scalar_expr import (
+    IdentityMapper, Scalar, ScalarExpression, Reduce, SCALAR_CLASSES, TypeCast)
 from pytato.reductions import ReductionOperation
 from dataclasses import dataclass
 from immutabledict import immutabledict
@@ -33,7 +36,7 @@ class HighLevelOp:
 
 @dataclass(frozen=True, eq=True, repr=True)
 class FullOp(HighLevelOp):
-    fill_value: ScalarType
+    fill_value: Scalar
 
 
 @unique
@@ -234,38 +237,45 @@ _COMPARISON_OP_TO_BINARY_OP_MAP = {"==": BinaryOpType.EQUAL,
                                    }
 
 
+class TypeCastDropper(IdentityMapper):
+    def map_type_cast(self, expr: TypeCast) -> Any:
+        return self.rec(expr.inner_expr)
+
+
 def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
     """
     Returns a :class:`HighLevelOp` corresponding *expr*.
     """
-    if isinstance(expr.expr, SCALAR_CLASSES):
-        return FullOp(expr.expr)
+    inner_expr = TypeCastDropper()(expr.expr)
+
+    if isinstance(inner_expr, SCALAR_CLASSES):
+        return FullOp(inner_expr)
 
     # {{{ binary ops
 
     try:
-        if isinstance(expr.expr, (p.Quotient, p.FloorDiv, p.Remainder)):
-            children = (expr.expr.numerator, expr.expr.denominator)
-            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(expr.expr)]
-        elif isinstance(expr.expr, p.Power):
-            children = (expr.expr.base, expr.expr.exponent)
-            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(expr.expr)]
-        elif (isinstance(expr.expr, p.Sum)
-                and len(expr.expr.children) == 2
-                and isinstance(expr.expr.children[1], p.Product)
-                and len(expr.expr.children[1].children) == 2
-                and expr.expr.children[1].children[0] == -1):
-            children = (expr.expr.children[0],
-                        expr.expr.children[1].children[1])
+        if isinstance(inner_expr, (p.Quotient, p.FloorDiv, p.Remainder)):
+            children = (inner_expr.numerator, inner_expr.denominator)
+            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(inner_expr)]
+        elif isinstance(inner_expr, p.Power):
+            children = (inner_expr.base, inner_expr.exponent)
+            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(inner_expr)]
+        elif (isinstance(inner_expr, p.Sum)
+                and len(inner_expr.children) == 2
+                and isinstance(inner_expr.children[1], p.Product)
+                and len(inner_expr.children[1].children) == 2
+                and inner_expr.children[1].children[0] == -1):
+            children = (inner_expr.children[0],
+                        inner_expr.children[1].children[1])
             bin_op = BinaryOpType.SUB
-        elif isinstance(expr.expr, (p.Sum, p.Product, p.LogicalAnd,
+        elif isinstance(inner_expr, (p.Sum, p.Product, p.LogicalAnd,
                                     p.LogicalOr, p.BitwiseOr, p.BitwiseAnd,
                                     p.BitwiseXor)):
-            children = expr.expr.children
-            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(expr.expr)]
-        elif isinstance(expr.expr, p.Comparison):
-            children = (expr.expr.left, expr.expr.right)
-            bin_op = _COMPARISON_OP_TO_BINARY_OP_MAP[expr.expr.operator]
+            children = inner_expr.children
+            bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(inner_expr)]
+        elif isinstance(inner_expr, p.Comparison):
+            children = (inner_expr.left, inner_expr.right)
+            bin_op = _COMPARISON_OP_TO_BINARY_OP_MAP[inner_expr.operator]
         else:
             raise UnknownIndexLambdaExpr
 
@@ -279,33 +289,33 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
 
     # }}}
 
-    if (isinstance(expr.expr, p.Call)
-        and expr.expr.function.name.startswith("pytato.c99.")
-        and expr.expr.function.name[11:] in (PT_C99UNARY_FUNCS
+    if (isinstance(inner_expr, p.Call)
+        and inner_expr.function.name.startswith("pytato.c99.")
+        and inner_expr.function.name[11:] in (PT_C99UNARY_FUNCS
                                              | PT_C99BINARY_FUNCS)):
         # TODO: Check types agree with function signature
         try:
-            return C99CallOp(expr.expr.function.name[11:],
-                             _as_array_or_scalar(expr.expr.parameters,
+            return C99CallOp(inner_expr.function.name[11:],
+                             _as_array_or_scalar(inner_expr.parameters,
                                                  expr.bindings,
                                                  expr.shape))
         except UnknownIndexLambdaExpr:
             pass
 
-    if isinstance(expr.expr, p.If):
+    if isinstance(inner_expr, p.If):
         try:
             # pylint: disable=no-value-for-parameter
-            return WhereOp(*_as_array_or_scalar((expr.expr.condition,
-                                                 expr.expr.then,
-                                                 expr.expr.else_),
+            return WhereOp(*_as_array_or_scalar((inner_expr.condition,
+                                                 inner_expr.then,
+                                                 inner_expr.else_),
                                                 expr.bindings,
                                                 expr.shape))
         except UnknownIndexLambdaExpr:
             pass
 
-    if isinstance(expr.expr, p.LogicalNot):
+    if isinstance(inner_expr, p.LogicalNot):
         try:
-            ary, = _as_array_or_scalar((expr.expr,),
+            ary, = _as_array_or_scalar((inner_expr,),
                                        expr.bindings,
                                        expr.shape)
             assert isinstance(ary, Array)
@@ -314,7 +324,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
             pass
 
     if _is_normal_reduce_expr(expr):
-        return ReduceOp(expr.expr.op,
+        return ReduceOp(inner_expr.op,
                         expr.bindings[expr
                                       .expr
                                       .inner_expr
@@ -324,14 +334,14 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
                                                           .expr
                                                           .inner_expr
                                                           .index_tuple)
-                                  if idx.name in expr.expr.bounds})
+                                  if idx.name in inner_expr.bounds})
                         )
 
     if _is_idx_lambda_broadcast_op(expr):
-        if isinstance(expr.expr, p.Subscript):
-            return BroadcastOp(expr.bindings[expr.expr.aggregate.name])
+        if isinstance(inner_expr, p.Subscript):
+            return BroadcastOp(expr.bindings[inner_expr.aggregate.name])
         else:
-            assert isinstance(expr.expr, p.Variable)
-            return BroadcastOp(expr.bindings[expr.expr.name])
+            assert isinstance(inner_expr, p.Variable)
+            return BroadcastOp(expr.bindings[inner_expr.name])
 
-    raise UnknownIndexLambdaExpr(expr.expr)
+    raise UnknownIndexLambdaExpr(inner_expr)

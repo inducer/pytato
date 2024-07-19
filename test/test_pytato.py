@@ -32,6 +32,7 @@ import pytest
 import attrs
 
 import pytato as pt
+from pytato.array import _SuppliedAxesAndTagsMixin
 
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
@@ -501,8 +502,8 @@ IndexLambda(
     dtype='int64',
     expr=Product((Subscript(Variable('_in0'),
                             (Variable('_0'), Variable('_1'))),
-                  Subscript(Variable('_in1'),
-                            (Variable('_0'), Variable('_1'))))),
+                  TypeCast(dtype('int64'), Subscript(Variable('_in1'),
+                            (Variable('_0'), Variable('_1')))))),
     bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
               '_in1': IndexLambda(
                   shape=(10, 4),
@@ -644,40 +645,6 @@ def test_rec_get_user_nodes_linear_complexity():
     SubexprRecorder()(expr)
 
     assert (expected_result == result)
-
-
-def test_tag_user_nodes_linear_complexity():
-    from numpy.random import default_rng
-
-    def construct_intestine_graph(depth=100, seed=0):
-        rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,))
-        y = x
-
-        for _ in range(depth):
-            coeff1, coeff2 = rng.integers(0, 10, 2)
-            y = coeff1 * y + coeff2 * y
-
-        return y, x
-
-    expr, inp = construct_intestine_graph()
-    user_collector = pt.transform.UsersCollector()
-    user_collector(expr)
-
-    expected_result = {}
-
-    class ExpectedResultComputer(pt.transform.CachedWalkMapper):
-        def get_cache_key(self, expr) -> int:
-            return id(expr)
-
-        def post_visit(self, expr):
-            expected_result[expr] = {"foo"}
-
-    expr, inp = construct_intestine_graph()
-    result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
-    ExpectedResultComputer()(expr)
-
-    assert expected_result == result
 
 
 def test_basic_index_equality_traverses_underlying_arrays():
@@ -1058,14 +1025,14 @@ def test_with_tagged_reduction():
 
 def test_derived_class_uses_correct_array_eq():
     @attrs.define(frozen=True)
-    class MyNewArrayT(pt.Array):
+    class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
     @attrs.define(frozen=True, eq=False)
-    class MyNewAndCorrectArrayT(pt.Array):
+    class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())

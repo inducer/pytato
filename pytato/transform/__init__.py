@@ -37,6 +37,7 @@ from typing import (Any, Callable, Dict, Union, TypeVar, Set, Generic,
                     Hashable, cast)
 
 from pytato.array import (
+    _SuppliedAxesAndTagsMixin,
         Array, IndexLambda, Placeholder, Stack, Roll,
         AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
         AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
@@ -97,7 +98,6 @@ Dict representation of DAGs
 ---------------------------
 
 .. autoclass:: UsersCollector
-.. autofunction:: tag_user_nodes
 .. autofunction:: rec_get_user_nodes
 
 
@@ -341,7 +341,11 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
 
     def map_size_param(self, expr: SizeParam) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(
+            name=expr.name,
+            axes=expr.axes,
+            tags=expr.tags,
+            non_equality_tags=expr.non_equality_tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
@@ -399,12 +403,12 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
         return DistributedSendRefHolder(
-                DistributedSend(
+                send=DistributedSend(
                     data=self.rec(expr.send.data),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data),
-                tags=expr.tags)
+                passthrough_data=self.rec(expr.passthrough_data),
+                )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         return DistributedRecv(
@@ -541,6 +545,7 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                                non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase, *args: Any, **kwargs: Any) -> Array:
+        assert isinstance(expr, _SuppliedAxesAndTagsMixin)
         return type(expr)(self.rec(expr.array, *args, **kwargs),
                           indices=self.rec_idx_or_size_tuple(expr.indices,
                                                              *args, **kwargs),
@@ -622,7 +627,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                 container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape,
                     *args: Any, **kwargs: Any) -> Array:
@@ -637,13 +643,11 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: Any, **kwargs: Any) -> Array:
         return DistributedSendRefHolder(
-                DistributedSend(
+                send=DistributedSend(
                     data=self.rec(expr.send.data, *args, **kwargs),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                self.rec(expr.passthrough_data, *args, **kwargs),
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+                passthrough_data=self.rec(expr.passthrough_data, *args, **kwargs))
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: Any, **kwargs: Any) -> Array:
@@ -1462,8 +1466,7 @@ class MPMSMaterializer(Mapper):
                                  comm_tag=expr.send.comm_tag,
                                  tags=expr.send.tags),
             passthrough_data=rec_passthrough.expr,
-            tags=expr.tags,
-        )
+            )
         return MPMSMaterializerAccumulator(
             rec_passthrough.materialized_predecessors, new_expr)
 
@@ -1775,39 +1778,6 @@ def rec_get_user_nodes(expr: ArrayOrNames,
     """
     users = get_users(expr)
     return _recursively_get_all_users(users, node)
-
-
-def tag_user_nodes(
-        graph: Mapping[ArrayOrNames, abc_Set[ArrayOrNames]],
-        tag: Any,
-        starting_point: ArrayOrNames,
-        node_to_tags: Optional[Dict[ArrayOrNames, abc_Set[ArrayOrNames]]] = None
-        ) -> Dict[ArrayOrNames, abc_Set[Any]]:
-    """Tags all nodes reachable from *starting_point* with *tag*.
-
-    :param graph: A :class:`dict` representation of a directed graph, mapping each
-        node to other nodes to which it is connected by edges. A possible
-        use case for this function is the graph in
-        :attr:`UsersCollector.node_to_users`.
-    :param tag: The value to tag the nodes with.
-    :param starting_point: A starting point in *graph*.
-    :param node_to_tags: The resulting mapping of nodes to tags.
-    """
-    from warnings import warn
-    warn("tag_user_nodes is set for deprecation in June, 2022",
-         DeprecationWarning)
-
-    if node_to_tags is None:
-        node_to_tags = {}
-
-    node_to_tags.setdefault(starting_point,
-                            OrderedSet()).add(tag)  # type: ignore[attr-defined]
-
-    for user in _recursively_get_all_users(graph, starting_point):
-        node_to_tags.setdefault(user,
-                                OrderedSet()).add(tag)  # type: ignore[attr-defined]
-
-    return node_to_tags
 
 # }}}
 

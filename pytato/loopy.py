@@ -275,7 +275,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
 # {{{ shape inference
 
-class ShapeInferenceFailure(RuntimeError):
+class ShapeInferenceFailure(RuntimeError):  # noqa: N818
     pass
 
 
