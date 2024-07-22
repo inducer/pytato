@@ -191,13 +191,14 @@ class TermCollector(TermCollectorBase):
 class StringifyMapper(StringifyMapperBase):
     def map_reduce(self, expr: Any, enclosing_prec: Any, *args: Any) -> str:
         from pymbolic.mapper.stringifier import (
-                PREC_COMPARISON as PC,
-                PREC_NONE as PN)
+                PREC_COMPARISON,
+                PREC_NONE)
         bounds_expr = " and ".join(
-                f"{self.rec(lb, PC)}<={name}<{self.rec(ub, PC)}"
+                f"{self.rec(lb, PREC_COMPARISON)}"
+                f"<={name}<{self.rec(ub, PREC_COMPARISON)}"
                 for name, (lb, ub) in expr.bounds.items())
         bounds_expr = "{" + bounds_expr + "}"
-        return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
+        return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PREC_NONE)})")
 
     def map_type_cast(self, expr: TypeCast, enclosing_prec: Any) -> str:
         from pymbolic.mapper.stringifier import PREC_NONE
@@ -222,18 +223,18 @@ def get_dependencies(expression: Any,
 
 
 def substitute(expression: Any,
-        variable_assigments: Optional[Mapping[str, Any]]) -> Any:
+        variable_assignments: Optional[Mapping[str, Any]]) -> Any:
     """Perform variable substitution in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
-    :param variable_assigments: A mapping from variable names to substitutions
+    :param variable_assignments: A mapping from variable names to substitutions
     """
-    if variable_assigments is None:
-        variable_assigments = {}
+    if variable_assignments is None:
+        variable_assignments = {}
 
     from pymbolic.mapper.substitutor import make_subst_func
-    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+    return SubstitutionMapper(make_subst_func(variable_assignments))(expression)
 
 
 def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> Any:
