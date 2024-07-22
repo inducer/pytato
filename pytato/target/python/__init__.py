@@ -88,7 +88,7 @@ class BoundPythonProgram(BoundProgram):
             self.entrypoint]
 
     @cached_property
-    def _bound_argment_names(self) -> Set[str]:
+    def _bound_argument_names(self) -> Set[str]:
         return set(self.bound_arguments.keys())
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -97,7 +97,7 @@ class BoundPythonProgram(BoundProgram):
             raise ValueError(f"'{type(self).__call__}' does not take positional"
                              " arguments.")
 
-        if set(kwargs.keys()) & self._bound_argment_names:
+        if set(kwargs.keys()) & self._bound_argument_names:
             raise ValueError("Got arguments that were previously bound: "
                     f"'{set(kwargs.keys()) & set(self.bound_arguments.keys())}'.")
 

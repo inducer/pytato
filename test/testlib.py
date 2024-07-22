@@ -244,7 +244,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
 # }}}
 
 
-# {{{ get_random_dag_w_no_placholders
+# {{{ get_random_dag_w_no_placeholders
 
 def get_random_pt_dag(seed: int,
                       *,

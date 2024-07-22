@@ -330,7 +330,7 @@ def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bo
 def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
     """
     Returns *True* iff *shape1* and *shape2* have the same dimensionality and the
-    correpsonding components are equal as defined by
+    corresponding components are equal as defined by
     :func:`~pytato.utils.are_shape_components_equal`.
     """
     return ((len(shape1) == len(shape2))
@@ -556,7 +556,7 @@ def _index_into(
                 raise IndexError("only integer arrays are valid array indices")
             if (_is_non_positive(ary.shape[i])
                     and (not are_shape_components_equal(idx.size, 0))):
-                raise IndexError("Indirect indexing into a non-postive"
+                raise IndexError("Indirect indexing into a non-positive"
                                  f" dimension (axis {i}) is illegal.")
         else:
             raise IndexError("only integers, slices, ellipsis and integer arrays"

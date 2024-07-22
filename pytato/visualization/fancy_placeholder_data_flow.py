@@ -172,7 +172,7 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         return ret_node
 
     map_stack = _map_stack_concat
-    map_concatentate = _map_stack_concat
+    map_concatenate = _map_stack_concat
 
     def _map_index_remapping(self,
                              expr: IndexRemappingBase) -> _FancyDotWriterNode:

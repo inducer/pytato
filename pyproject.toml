@@ -59,3 +59,17 @@ module = [
   "pytato.scalar_expr",
 ]
 allow_subclassing_any = true
+
+
+[tool.typos.default]
+extend-ignore-re = [
+  "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"
+]
+
+[tool.typos.default.extend-words]
+# like the numpy function, array range
+arange = "arange"
+
+[tool.typos.files]
+extend-exclude = [
+]
