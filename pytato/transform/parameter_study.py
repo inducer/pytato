@@ -52,14 +52,12 @@ from pytato.array import (
     AxisPermutation,
     Concatenate,
     Einsum,
-    EinsumElementwiseAxis,
     IndexBase,
     IndexLambda,
     NormalizedSlice,
     Placeholder,
     Reshape,
     Roll,
-    ShapeType,
     Stack,
 )
 
@@ -134,7 +132,8 @@ class ExpansionMapper(CopyMapper):
                     studies: Iterable[ParameterStudyAxisTag],
                     new_shape: KnownShapeType, new_axes: AxesT,
                     study_to_arrays: Dict[FrozenSet[ParameterStudyAxisTag], ArraysT]) \
-                            -> Tuple[KnownShapeType, AxesT, Dict[Array, Tuple[int, ...]]]:
+                            -> Tuple[KnownShapeType, AxesT, Dict[Array,
+                                                                 Tuple[int, ...]]]:
 
         # This is where we specify the canonical ordering.
 
@@ -332,43 +331,8 @@ class ExpansionMapper(CopyMapper):
                            non_equality_tags=expr.non_equality_tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
-        
+
         return super().map_einsum(expr)
-
-        """
-        new_arrays = tuple([self.rec(arg) for arg in expr.args])
-        studies_shape, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessor(expr, new_predecessors) # noqa
-        new_axes_for_end, cur_studies, _ = self._studies_from_multiple_pred(new_arrays)
-
-
-        # Access Descriptors hold the Einsum notation.
-        new_access_descriptors = list(expr.access_descriptors)
-        study_to_axis_number: Dict[ParameterStudyAxisTag, int] = {}
-
-        new_shape = expr.shape
-
-        for study in cur_studies:
-            if isinstance(study, ParameterStudyAxisTag):
-                # Just defensive programming
-                # The active studies are added to the end.
-                study_to_axis_number[study] = len(new_shape)
-                new_shape = *new_shape, study.axis_size,
-
-        for ind, array in enumerate(new_arrays):
-            for _, axis in enumerate(array.axes):
-                axis_tags = list(axis.tags_of_type(ParameterStudyAxisTag))
-                if axis_tags:
-                    assert len(axis_tags) == 1
-                    new_access_descriptors[ind] = new_access_descriptors[ind] + \
-                                                (EinsumElementwiseAxis(dim=study_to_axis_number[axis_tags[0]]),)
-
-        return Einsum(tuple(new_access_descriptors), new_arrays,
-                     axes=expr.axes + new_axes_for_end,
-                     redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                     index_to_access_descr=expr.index_to_access_descr,
-                     tags=expr.tags,
-                     non_equality_tags=expr.non_equality_tags)
-        """
 
     # }}} Operations with multiple predecessors.
 
