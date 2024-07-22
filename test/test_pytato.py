@@ -1048,6 +1048,138 @@ def test_lower_to_index_lambda():
     assert isinstance(binding, Reshape)
 
 
+# {{{ Expansion Mapper tests.
+def test_expansion_mapper_placeholder():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    name = "my_array"
+    my_study = ParameterStudyAxisTag(0, 10)
+    name_to_studies = {name: frozenset((my_study,))}
+    expr = pt.make_placeholder(name, (15, 5), dtype=int)
+    assert expr.shape == (15, 5)
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(expr)
+    assert new_expr.shape == (15, 5, 10)
+
+    for i, axis in enumerate(new_expr.axes):
+        tags = axis.tags_of_type(ParameterStudyAxisTag)
+        if i == 2:
+            assert tags
+        else:
+            assert not tags
+
+
+def test_expansion_mapper_basic_index():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    name = "my_array"
+    my_study = ParameterStudyAxisTag(0, 10)
+    name_to_studies = {name: frozenset((my_study,))}
+    expr = pt.make_placeholder(name, (15, 5), dtype=int)[14, 0]
+
+    assert expr.shape == ()
+
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(expr)
+    assert new_expr.shape == (10,)
+    assert new_expr.axes[0].tags_of_type(ParameterStudyAxisTag)
+
+
+def test_expansion_mapper_index_lambda():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    name = "my_array"
+    my_study = ParameterStudyAxisTag(0, 10)
+    name_to_studies = {name: frozenset((my_study,))}
+    expr = pt.make_placeholder(name, (15, 5), dtype=int)[14, 0] + pt.ones(100)
+
+    assert expr.shape == (100,)
+
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(expr)
+    assert new_expr.shape == (100, 10)
+    assert isinstance(new_expr, pt.IndexLambda)
+    assert new_expr.axes[1].tags_of_type(ParameterStudyAxisTag)
+
+
+def test_expansion_mapper_roll():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    name = "my_array"
+    my_study = ParameterStudyAxisTag(0, 10)
+    name_to_studies = {name: frozenset((my_study,))}
+    expr = pt.make_placeholder(name, (15, 5), dtype=int)[14, 0] + pt.ones(100)
+    expr = pt.roll(expr, axis=0, shift=22)
+
+    assert expr.shape == (100,)
+    assert not any(axis.tags_of_type(ParameterStudyAxisTag) for axis in expr.axes)
+
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(expr)
+    assert new_expr.shape == (100, 10,)
+    assert isinstance(new_expr, pt.Roll)
+    assert new_expr.axes[1].tags_of_type(ParameterStudyAxisTag)
+
+
+def test_expansion_mapper_axis_permutation():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    name = "my_array"
+    my_study = ParameterStudyAxisTag(0, 10)
+    name_to_studies = {name: frozenset((my_study,))}
+    expr = pt.transpose(pt.make_placeholder(name, (15, 5), dtype=int))
+    assert expr.shape == (5, 15)
+
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(expr)
+    assert new_expr.shape == (5, 15, 10)
+    assert isinstance(new_expr, pt.AxisPermutation)
+
+    for i, axis in enumerate(new_expr.axes):
+        tags = axis.tags_of_type(ParameterStudyAxisTag)
+        if i == 2:
+            assert tags
+        else:
+            assert not tags
+
+
+def test_expansion_mapper_stack():
+    from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
+
+    class Study2(ParameterStudyAxisTag):
+        pass
+
+    class Study1(ParameterStudyAxisTag):
+        pass
+    name = "my_array"
+    study1 = Study1(0, 10)
+    arr2 = "foo"
+    study2 = Study2(0, 1000)
+    name_to_studies = {name: frozenset((study1,)), arr2: frozenset((study2,))}
+    expr = pt.transpose(pt.make_placeholder(name, (15, 5), dtype=int))
+    expr2 = pt.transpose(pt.make_placeholder(arr2, (15, 5), dtype=int))
+
+    out_expr = pt.stack([expr, expr2], axis=0)
+    assert out_expr.shape == (2, 5, 15)
+
+    my_mapper = ExpansionMapper(name_to_studies)
+    new_expr = my_mapper(out_expr)
+    assert new_expr.shape == (2, 5, 15, 10, 1000)
+    assert isinstance(new_expr, pt.Stack)
+
+    for i, axis in enumerate(new_expr.axes):
+        tags = axis.tags_of_type(ParameterStudyAxisTag)
+        if i > 2:
+            assert tags
+        else:
+            assert not tags
+
+    assert not new_expr.axes[3].tags_of_type(Study2)
+    assert not new_expr.axes[4].tags_of_type(Study1)
+
+# }}}
+
+
 def test_cached_walk_mapper_with_extra_args():
     from testlib import RandomDAGContext, make_random_dag
 

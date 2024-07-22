@@ -144,11 +144,13 @@ class ExpansionMapper(CopyMapper):
                                            key=lambda x: str(x.__class__))):
             new_shape = (*new_shape, study.axis_size)
             studies_axes = (*studies_axes, Axis(tags=frozenset((study,))))
-            for arr in study_to_arrays[frozenset((study,))]:
-                if arr in array_to_canonical_ordered_studies.keys():
-                    array_to_canonical_ordered_studies[arr] = (*array_to_canonical_ordered_studies[arr], ind) # noqa
-                else:
-                    array_to_canonical_ordered_studies[arr] = (ind,)
+            print(study_to_arrays)
+            if study_to_arrays:
+                for arr in study_to_arrays[frozenset((study,))]:
+                    if arr in array_to_canonical_ordered_studies.keys():
+                        array_to_canonical_ordered_studies[arr] = (*array_to_canonical_ordered_studies[arr], ind) # noqa
+                    else:
+                        array_to_canonical_ordered_studies[arr] = (ind,)
 
         return new_shape, studies_axes, array_to_canonical_ordered_studies
 
