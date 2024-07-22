@@ -3,6 +3,7 @@ from __future__ import annotations
 import types
 from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
 import operator
+import re
 import pyopencl as cl
 import numpy as np
 import pytato as pt
@@ -310,6 +311,49 @@ def get_random_pt_dag_with_send_recv_nodes(
         axis_len=axis_len,
         convert_dws_to_placeholders=convert_dws_to_placeholders,
         additional_generators=[(comm_fake_probability, gen_comm)])
+
+
+def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
+    """
+    Builds a DAG with emphasis on number of operations.
+    """
+    import random
+    import operator
+
+    rng = np.random.default_rng(seed)
+    random.seed(seed)
+
+    # Begin with a placeholder
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+    # DAG should have `iterations` number of operations
+    return pt.make_dict_of_named_arrays({"result": current})
+
+
+def count_dot_graph_nodes(dot_graph: str) -> Dict[Any, int]:
+    """
+    Parses a dot graph and returns a dictionary with 
+    the count of each unique node identifier.
+    """
+
+    node_pattern = re.compile(
+        r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
+    nodes = node_pattern.findall(dot_graph)
+
+    node_counts: Dict[Any, int] = {}
+    for node in nodes:
+        node_counts[node] = node_counts.get(node, 0) + 1
+
+    return node_counts
 
 # }}}
 

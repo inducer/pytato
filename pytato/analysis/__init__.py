@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    TYPE_CHECKING)
+                    Type, TYPE_CHECKING)
 from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
                           DictOfNamedArrays, NamedArray,
                           IndexBase, IndexRemappingBase, InputArgumentBase,
@@ -48,6 +48,10 @@ __doc__ = """
 .. autofunction:: is_einsum_similar_to_subscript
 
 .. autofunction:: get_num_nodes
+
+.. autofunction:: get_node_type_counts
+
+.. autofunction:: get_node_multiplicities
 
 .. autofunction:: get_num_call_sites
 
@@ -381,34 +385,105 @@ class DirectPredecessorsGetter(Mapper):
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
-    Counts the number of nodes in a DAG.
+    Counts the number of nodes of a given type in a DAG.
 
-    .. attribute:: count
+    .. attribute:: expr_type_counts
+    .. attribute:: count_duplicates
 
-       The number of nodes.
+       Dictionary mapping node types to number of nodes of that type.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, count_duplicates: bool = False) -> None:
+        from collections import defaultdict
         super().__init__()
-        self.count = 0
+        self.expr_type_counts = defaultdict(int)  # type: Dict[Type[Any], int]
+        self.count_duplicates = count_duplicates
 
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
+    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+        # Returns unique nodes only if count_duplicates is True
+        return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
-        self.count += 1
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_type_counts[type(expr)] += 1
 
 
-def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
-    """Returns the number of nodes in DAG *outputs*."""
+def get_node_type_counts(
+        outputs: Union[Array, DictOfNamedArrays],
+        count_duplicates: bool = False
+        ) -> Dict[Type[Any], int]:
+    """
+    Returns a dictionary mapping node types to node count for that type
+    in DAG *outputs*.
+
+    Instances of `DictOfNamedArrays` are excluded from counting.
+    """
 
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    ncm = NodeCountMapper()
+    ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
 
-    return ncm.count
+    return ncm.expr_type_counts
+
+
+def get_num_nodes(
+        outputs: Union[Array, DictOfNamedArrays],
+        count_duplicates: bool = False
+        ) -> int:
+    """
+    Returns the number of nodes in DAG *outputs*.
+
+    Instances of `DictOfNamedArrays` are excluded from counting.
+    """
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    ncm = NodeCountMapper(count_duplicates)
+    ncm(outputs)
+
+    return sum(ncm.expr_type_counts.values())
+
+# }}}
+
+
+# {{{ NodeMultiplicityMapper
+
+
+class NodeMultiplicityMapper(CachedWalkMapper):
+    """
+    Counts the number of unique nodes by ID in a DAG.
+
+    .. attribute:: expr_multiplicity_counts
+    """
+    def __init__(self) -> None:
+        from collections import defaultdict
+        super().__init__()
+        self.expr_multiplicity_counts = defaultdict(int)  # type: Dict[Any, int]
+
+    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+        # Returns unique nodes
+        return id(expr)
+
+    def post_visit(self, expr: Any) -> None:
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_multiplicity_counts[expr] += 1
+
+
+def get_node_multiplicities(
+        outputs: Union[Array, DictOfNamedArrays]) -> Dict[Type[Any], int]:
+    """
+    Returns the multiplicity per `expr`.
+    """
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    nmm = NodeMultiplicityMapper()
+    nmm(outputs)
+
+    return nmm.expr_multiplicity_counts
 
 # }}}
 
