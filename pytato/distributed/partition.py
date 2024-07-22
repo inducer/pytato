@@ -383,11 +383,11 @@ def _make_distributed_partition(
     name_to_output = {}
     parts: Dict[PartId, DistributedGraphPart] = {}
 
-    for part_id, name_to_ouput in enumerate(name_to_output_per_part):
+    for part_id, name_to_part_output in enumerate(name_to_output_per_part):
         comm_replacer = _DistributedInputReplacer(
-            recvd_ary_to_name, sptpo_ary_to_name, name_to_ouput)
+            recvd_ary_to_name, sptpo_ary_to_name, name_to_part_output)
 
-        for name, val in name_to_ouput.items():
+        for name, val in name_to_part_output.items():
             assert name not in name_to_output
             name_to_output[name] = comm_replacer(val)
 
@@ -406,7 +406,7 @@ def _make_distributed_partition(
                 user_input_names=frozenset(comm_replacer.user_input_names),
                 partition_input_names=frozenset(
                     comm_replacer.partition_input_name_to_placeholder.keys()),
-                output_names=frozenset(name_to_ouput.keys()),
+                output_names=frozenset(name_to_part_output.keys()),
                 name_to_recv_node=immutabledict({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
@@ -562,7 +562,7 @@ def _schedule_task_batches_counted(
 def _calculate_dependency_levels(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
         ) -> Tuple[Mapping[TaskType, int], int]:
-    """Calculate the minimum dependendency level needed before a task of
+    """Calculate the minimum dependency level needed before a task of
     type TaskType can be scheduled. We assume that any number of tasks
     can be scheduled at the same time. To attain complexity linear in the
     number of nodes, we assume that each task has a constant number of direct
