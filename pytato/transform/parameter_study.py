@@ -232,7 +232,6 @@ class ExpansionMapper(CopyMapper):
 
     def map_stack(self, expr: Stack) -> Array:
         new_arrays, new_axes_for_end = self._mult_pred_same_shape(expr)
-
         return Stack(arrays=new_arrays,
                      axis=expr.axis,
                      axes=expr.axes + new_axes_for_end,
@@ -265,8 +264,8 @@ class ExpansionMapper(CopyMapper):
         corrected_new_arrays: ArraysT = ()
         for iarr, array in enumerate(new_predecessors):
             tmp = cp_map(array)  # Get a copy of the array.
-            if len(array.axes) < len(new_axes):
-                # We need to grow the array to the new size.
+            # We need to grow the array to the new size.
+            if arrays_to_study_num_present:
                 studies_present = arrays_to_study_num_present[array]
                 for ind, size in enumerate(studies_shape):
                     if ind not in studies_present:
@@ -278,6 +277,7 @@ class ExpansionMapper(CopyMapper):
                                     axes=new_axes[:ind],
                                     tags=tmp.tags,
                                     non_equality_tags=tmp.non_equality_tags)
+            corrected_new_arrays = (*corrected_new_arrays, tmp)
 
         return corrected_new_arrays, new_axes
 
