@@ -601,7 +601,7 @@ def test_single_node_dag_count():
 
     data = np.random.rand(4, 4)
     single_node_dag = pt.make_dict_of_named_arrays(
-        {'result': pt.make_data_wrapper(data)})
+        {"result": pt.make_data_wrapper(data)})
 
     # Get counts per node type
     node_counts = get_node_type_counts(single_node_dag)
@@ -619,9 +619,9 @@ def test_small_dag_count():
     from pytato.analysis import get_num_nodes, get_node_type_counts
 
     # Make a DAG using two nodes and one operation
-    a = pt.make_placeholder(name='a', shape=(2, 2), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
     b = a + 1
-    dag = pt.make_dict_of_named_arrays({'result': b})   # b = a + 1
+    dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
 
     # Verify that get_num_nodes returns 2 for a DAG with two nodes
     assert get_num_nodes(dag) == 2

@@ -1628,8 +1628,9 @@ def test_zero_size_cl_array_dedup(ctx_factory):
 
     dedup_dw_out = pt.transform.deduplicate_data_wrappers(out)
 
-    num_nodes_old = pt.analysis.get_num_nodes(out)
-    num_nodes_new = pt.analysis.get_num_nodes(dedup_dw_out)
+    num_nodes_old = pt.analysis.get_num_nodes(out, count_duplicates=True)
+    num_nodes_new = pt.analysis.get_num_nodes(
+        dedup_dw_out, count_duplicates=True)
     # 'x2' would be merged with 'x1' as both of them point to the same data
     # 'x3' would be merged with 'x4' as both of them point to the same data
     assert num_nodes_new == (num_nodes_old - 2)
