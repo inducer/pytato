@@ -52,7 +52,7 @@ Stuff that's only here because the documentation tool wants it
 import sys
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 import numpy as np
 from immutabledict import immutabledict
@@ -85,7 +85,7 @@ class LoopyTarget(Target):
     .. automethod:: bind_program
     """
 
-    def get_loopy_target(self) -> "loopy.TargetBase":
+    def get_loopy_target(self) -> loopy.TargetBase:
         """Return the corresponding :mod:`loopy` target."""
         raise NotImplementedError
 
@@ -110,7 +110,7 @@ class LoopyPyOpenCLTarget(LoopyTarget):
         :class:`loopy.PyOpenCLTarget`, or *None*.
     """
 
-    def __init__(self, device: Optional[pyopencl.Device] = None):
+    def __init__(self, device: pyopencl.Device | None = None):
         if device is not None:
             from warnings import warn
             warn("Passing 'device' is deprecated and will stop working in 2023.",
@@ -137,14 +137,14 @@ class BoundPyOpenCLProgram(BoundProgram):
     .. automethod:: bind_to_context
     """
     program: loopy.TranslationUnit
-    _processed_bound_args_cache: Dict[pyopencl.Context,
+    _processed_bound_args_cache: dict[pyopencl.Context,
                                       Mapping[str, Any]] = \
                                         field(default_factory=dict)
 
     def copy(self, *,
-             program: Optional[loopy.TranslationUnit] = None,
-             bound_arguments: Optional[Mapping[str, Any]] = None,
-             target: Optional[Target] = None
+             program: loopy.TranslationUnit | None = None,
+             bound_arguments: Mapping[str, Any] | None = None,
+             target: Target | None = None
              ) -> BoundPyOpenCLProgram:
         if program is None:
             program = self.program
@@ -167,18 +167,18 @@ class BoundPyOpenCLProgram(BoundProgram):
         """
         return self.copy(program=f(self.program))
 
-    def _get_processed_bound_arguments(self,
-                                       queue: pyopencl.CommandQueue,
-                                       allocator: Optional[Callable[
-                                           [int], pyopencl.MemoryObject]],
-                                       ) -> Mapping[str, Any]:
+    def _get_processed_bound_arguments(
+                self,
+                queue: pyopencl.CommandQueue,
+                allocator: Callable[[int], pyopencl.MemoryObject] | None,
+            ) -> Mapping[str, Any]:
         import pyopencl.array as cla
 
         cache_key = queue.context
         try:
             return self._processed_bound_args_cache[cache_key]
         except KeyError:
-            proc_bnd_args: Dict[str, Any] = {}
+            proc_bnd_args: dict[str, Any] = {}
             for name, bnd_arg in self.bound_arguments.items():
                 if np.isscalar(bnd_arg):
                     proc_bnd_args[name] = bnd_arg
@@ -210,7 +210,7 @@ class BoundPyOpenCLProgram(BoundProgram):
                    for arg in self.bound_arguments.values())
 
     def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore
-                 allocator=None, wait_for=None, out_host: Optional[bool] = None,
+                 allocator=None, wait_for=None, out_host: bool | None = None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
@@ -243,15 +243,14 @@ class BoundPyOpenCLProgram(BoundProgram):
                             **updated_kwargs)
 
     @property
-    def kernel(self) -> "loopy.LoopKernel":
+    def kernel(self) -> loopy.LoopKernel:
         if isinstance(self.program, loopy.LoopKernel):
             return self.program
         else:
             return self.program.default_entrypoint
 
     def bind_to_context(self, context: pyopencl.Context,
-                        allocator: Optional[Callable[
-                            [int], pyopencl.MemoryObject]] = None
+                        allocator: Callable[[int], pyopencl.MemoryObject] | None = None
                         ) -> BoundPyOpenCLExecutable:
         if not self.program.default_entrypoint.options.no_numpy:
             raise ValueError("numpy compatibility for arguments is not supported "
@@ -304,7 +303,7 @@ class BoundPyOpenCLExecutable(BoundProgram):
         """
         return all(np.isscalar(arg) for arg in self.bound_arguments.values())
 
-    def __call__(self, queue: "pyopencl.CommandQueue",  # type: ignore
+    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore
                  allocator=None, wait_for=None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
@@ -330,7 +329,7 @@ class BoundPyOpenCLExecutable(BoundProgram):
                             **updated_kwargs)
 
     @property
-    def kernel(self) -> "loopy.LoopKernel":
+    def kernel(self) -> loopy.LoopKernel:
         return self.program.t_unit.default_entrypoint
 
 

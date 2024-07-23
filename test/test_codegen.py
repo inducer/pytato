@@ -31,7 +31,6 @@ THE SOFTWARE.
 import itertools
 import operator
 import sys
-from typing import Union
 
 import numpy as np
 import pytest
@@ -1398,8 +1397,7 @@ def test_named_temporaries(ctx_factory):
                                         })
     dag = pt.transform.materialize_with_mpms(dag)
 
-    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
-                                                  pt.AbstractResultWithNamedArrays]
+    def mark_materialized_nodes_as_cse(ary: pt.Array | pt.AbstractResultWithNamedArrays
                                        ) -> pt.Array:
         if isinstance(ary, pt.AbstractResultWithNamedArrays):
             return ary

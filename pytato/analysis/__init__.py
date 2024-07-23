@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Mapping, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Mapping
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
@@ -84,8 +84,8 @@ class NUserCollector(Mapper):
     def __init__(self) -> None:
         from collections import defaultdict
         super().__init__()
-        self._visited_ids: Set[int] = set()
-        self.nusers: Dict[Array, int] = defaultdict(lambda: 0)
+        self._visited_ids: set[int] = set()
+        self.nusers: dict[Array, int] = defaultdict(lambda: 0)
 
     # type-ignore reason: NUserCollector.rec's type does not match
     # Mapper.rec's type
@@ -198,7 +198,7 @@ class NUserCollector(Mapper):
 # }}}
 
 
-def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
+def get_nusers(outputs: Array | DictOfNamedArrays) -> Mapping[Array, int]:
     """
     For the DAG *outputs*, returns the mapping from each node to the number of
     nodes using its value within the DAG given by *outputs*.
@@ -214,7 +214,7 @@ def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
 
 def _get_indices_from_input_subscript(subscript: str,
                                       is_output: bool,
-                                      ) -> Tuple[str, ...]:
+                                      ) -> tuple[str, ...]:
     from pytato.array import EINSUM_FIRST_INDEX
 
     acc = subscript.strip()
@@ -273,7 +273,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     in_spec, out_spec = subscripts.split("->")
 
     # build up a mapping from index names to axis descriptors
-    index_to_descrs: Dict[str, EinsumAxisDescriptor] = {}
+    index_to_descrs: dict[str, EinsumAxisDescriptor] = {}
 
     for idim, idx in enumerate(_get_indices_from_input_subscript(out_spec,
                                                                  is_output=True)):
@@ -321,26 +321,26 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> FrozenSet[Array]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[Array]:
         return frozenset({dim for dim in shape if isinstance(dim, Array)})
 
-    def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> frozenset[Array]:
         return (frozenset(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> FrozenSet[Array]:
+    def map_stack(self, expr: Stack) -> frozenset[Array]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
+    def map_concatenate(self, expr: Concatenate) -> frozenset[Array]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
+    def map_einsum(self, expr: Einsum) -> frozenset[Array]:
         return (frozenset(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
+    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[Array]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
@@ -349,7 +349,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> FrozenSet[Array]:
+    def _map_index_base(self, expr: IndexBase) -> frozenset[Array]:
         return (frozenset([expr.array])
                 | frozenset(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -360,29 +360,29 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> FrozenSet[Array]:
+                                  ) -> frozenset[Array]:
         return frozenset([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> FrozenSet[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[Array]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> FrozenSet[Array]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[Array]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[Array]:
+                                        ) -> frozenset[Array]:
         return frozenset([expr.passthrough_data])
 
-    def map_named_call_result(self, expr: NamedCallResult) -> FrozenSet[Array]:
+    def map_named_call_result(self, expr: NamedCallResult) -> frozenset[Array]:
         raise NotImplementedError(
             "DirectPredecessorsGetter does not yet support expressions containing "
             "functions.")
@@ -414,7 +414,7 @@ class NodeCountMapper(CachedWalkMapper):
         self.count += 1
 
 
-def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
+def get_num_nodes(outputs: Array | DictOfNamedArrays) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
     from pytato.codegen import normalize_outputs
@@ -465,7 +465,7 @@ class CallSiteCountMapper(CachedWalkMapper):
             self.count += 1
 
 
-def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
+def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
     from pytato.codegen import normalize_outputs

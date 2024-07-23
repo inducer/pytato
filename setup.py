@@ -1,5 +1,4 @@
 #! /usr/bin/env python
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from setuptools import find_packages, setup
@@ -16,7 +15,7 @@ setup(
     name="pytato",
     version=ver_dic["VERSION_TEXT"],
     description="Get Descriptions of Array Computations via Lazy Evaluation",
-    long_description=open("README.rst", "r").read(),
+    long_description=open("README.rst").read(),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

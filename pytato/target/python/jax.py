@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 import ast
-from typing import Mapping, Optional, Union
+from typing import Mapping
 
 from pytato.array import Array, DictOfNamedArrays
 from pytato.target.python import BoundJAXPythonProgram, JAXPythonTarget
@@ -38,9 +38,9 @@ __doc__ = """
 """
 
 
-def generate_jax(expr: Union[Array, Mapping[str, Array], DictOfNamedArrays],
+def generate_jax(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                  *,
-                 target: Optional[JAXPythonTarget] = None,
+                 target: JAXPythonTarget | None = None,
                  jit: bool = False,
                  function_name: str = "_pt_kernel",
                  show_code: bool = False,

@@ -26,15 +26,9 @@ THE SOFTWARE.
 from typing import (
     Any,
     Callable,
-    Dict,
-    FrozenSet,
     Iterable,
-    List,
-    Optional,
     Sequence,
-    Tuple,
     TypeVar,
-    Union,
 )
 
 import islpy as isl
@@ -94,8 +88,8 @@ Tpart = TypeVar("Tpart")
 
 
 def partition(pred: Callable[[Tpart], bool],
-              iterable: Iterable[Tpart]) -> Tuple[List[Tpart],
-                                                  List[Tpart]]:
+              iterable: Iterable[Tpart]) -> tuple[list[Tpart],
+                                                  list[Tpart]]:
     """
     Use a predicate to partition entries into false entries and true
     entries
@@ -110,7 +104,7 @@ def partition(pred: Callable[[Tpart], bool],
 
 
 def get_shape_after_broadcasting(
-        exprs: Iterable[Union[Array, ScalarExpression]]) -> ShapeType:
+        exprs: Iterable[Array | ScalarExpression]) -> ShapeType:
     """
     Returns the shape after broadcasting *exprs* in an operation.
     """
@@ -122,7 +116,7 @@ def get_shape_after_broadcasting(
     # append leading dimensions of all the shapes with 1's to match result_dim.
     augmented_shapes = [((1,)*(result_dim-len(s)) + s) for s in shapes]
 
-    def _get_result_axis_length(axis_lengths: List[IntegralScalarExpression]
+    def _get_result_axis_length(axis_lengths: list[IntegralScalarExpression]
                                 ) -> IntegralScalarExpression:
         result_axis_len = axis_lengths[0]
         for axis_len in axis_lengths[1:]:
@@ -143,7 +137,7 @@ def get_shape_after_broadcasting(
 
 
 def get_indexing_expression(shape: ShapeType,
-                            result_shape: ShapeType) -> Tuple[ScalarExpression, ...]:
+                            result_shape: ShapeType) -> tuple[ScalarExpression, ...]:
     """
     Returns the indices while broadcasting an array of shape *shape* into one of
     shape *result_shape*.
@@ -171,8 +165,8 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
 
 
 def _extract_dtypes(
-        exprs: Sequence[ArrayOrScalar]) -> List[DtypeOrPyScalarType]:
-    dtypes: List[DtypeOrPyScalarType] = []
+        exprs: Sequence[ArrayOrScalar]) -> list[DtypeOrPyScalarType]:
+    dtypes: list[DtypeOrPyScalarType] = []
     for expr in exprs:
         if isinstance(expr, Array):
             dtypes.append(expr.dtype)
@@ -188,7 +182,7 @@ def _extract_dtypes(
 
 def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
-                                             bindings: Dict[str, Array],
+                                             bindings: dict[str, Array],
                                              result_shape: ShapeType
                                              ) -> ScalarExpression:
     """
@@ -216,8 +210,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrPyScalarType, DtypeOrPyScalarType], np.dtype[Any]],  # noqa:E501
                         *,
-                        tags: FrozenSet[Tag],
-                        non_equality_tags: FrozenSet[Tag],
+                        tags: frozenset[Tag],
+                        non_equality_tags: frozenset[Tag],
                         cast_to_result_dtype: bool,
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
@@ -231,7 +225,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     dtypes = _extract_dtypes([a1, a2])
     result_dtype = get_result_type(*dtypes)
 
-    bindings: Dict[str, Array] = {}
+    bindings: dict[str, Array] = {}
 
     expr1 = update_bindings_and_get_broadcasted_expr(a1, "_in0", bindings,
                                                      result_shape)
@@ -275,9 +269,9 @@ class ShapeExpressionMapper(Mapper):
     """
     def __init__(self, var_name_gen: UniqueNameGenerator):
         super().__init__()
-        self.cache: Dict[Array, ScalarExpression] = {}
+        self.cache: dict[Array, ScalarExpression] = {}
         self.var_name_gen = var_name_gen
-        self.bindings: Dict[str, SizeParam] = {}
+        self.bindings: dict[str, SizeParam] = {}
 
     def rec(self, expr: Array) -> ScalarExpression:  # type: ignore
         if expr in self.cache:
@@ -298,9 +292,9 @@ class ShapeExpressionMapper(Mapper):
 
 
 def dim_to_index_lambda_components(expr: ShapeComponent,
-                                   vng: Optional[UniqueNameGenerator] = None,
-                                   ) -> Tuple[ScalarExpression,
-                                              Dict[str, SizeParam]]:
+                                   vng: UniqueNameGenerator | None = None,
+                                   ) -> tuple[ScalarExpression,
+                                              dict[str, SizeParam]]:
     """
     Returns the scalar expressions and bindings to use the shape
     component within an index lambda.
@@ -378,7 +372,7 @@ class ShapeToISLExpressionMapper(Mapper):
     """
     def __init__(self, space: isl.Space):
         super().__init__()
-        self.cache: Dict[Array, isl.Aff] = {}
+        self.cache: dict[Array, isl.Aff] = {}
         self.space = space
 
     # type-ignore reason: incompatible return type with super class
@@ -531,9 +525,9 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 def _index_into(
         ary: Array,
-        indices: Tuple[ConvertibleToIndexExpr, ...],
-        tags: FrozenSet[Tag],
-        non_equality_tags: FrozenSet[Tag]) -> Array:
+        indices: tuple[ConvertibleToIndexExpr, ...],
+        tags: frozenset[Tag],
+        non_equality_tags: frozenset[Tag]) -> Array:
     from pytato.array import _get_default_axes
     from pytato.diagnostic import CannotBroadcastError
 
@@ -598,7 +592,7 @@ def _index_into(
 
     # {{{ normalize slices
 
-    normalized_indices: List[IndexExpr] = [_normalize_slice(idx, axis_len)
+    normalized_indices: list[IndexExpr] = [_normalize_slice(idx, axis_len)
                                            if isinstance(idx, slice)
                                            else idx
                                            for idx, axis_len in zip(indices,
@@ -649,8 +643,8 @@ def _index_into(
 
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
-    array_types: List[_dtype_any] = []
-    scalars: List[Scalar] = []
+    array_types: list[_dtype_any] = []
+    scalars: list[Scalar] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):
@@ -694,7 +688,7 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         [acc_descr_to_index[EinsumElementwiseAxis(idim)]
          for idim in range(expr.ndim)]
     )
-    arg_subscripts: List[str] = []
+    arg_subscripts: list[str] = []
 
     for acc_descrs in expr.access_descriptors:
         arg_subscripts.append("".join(acc_descr_to_index[acc_descr]

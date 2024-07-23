@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Tuple, cast
+from typing import Any, cast
 
 import attrs
 import numpy as np
@@ -68,7 +68,7 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
-        self._cache: Dict[Tuple[int, int], str] = {}
+        self._cache: dict[tuple[int, int], str] = {}
 
     def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)

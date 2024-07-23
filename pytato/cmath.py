@@ -56,7 +56,6 @@ __doc__ = """
 
 # }}}
 
-from typing import Optional, Tuple
 
 import numpy as np
 from immutabledict import immutabledict
@@ -76,10 +75,10 @@ from pytato.array import (
 from pytato.scalar_expr import SCALAR_CLASSES
 
 
-def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
+def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
                           func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None,
-                          np_func_name: Optional[str] = None
+                          ret_dtype: _dtype_any | None = None,
+                          np_func_name: str | None = None
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         if np_func_name is None:

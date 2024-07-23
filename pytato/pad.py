@@ -7,7 +7,7 @@ from __future__ import annotations
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
 import collections.abc as abc
-from typing import Any, Dict, List, Sequence, Tuple, Union
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -20,8 +20,8 @@ from pytato.scalar_expr import INT_CLASSES, IntegralT, Scalar
 
 def _get_constant_padded_idx_lambda(
     array: Array,
-    pad_widths: Sequence[Tuple[IntegralT, IntegralT]],
-    constant_vals: Sequence[Tuple[Scalar, Scalar]]
+    pad_widths: Sequence[tuple[IntegralT, IntegralT]],
+    constant_vals: Sequence[tuple[Scalar, Scalar]]
 ) -> IndexLambda:
     """
     Internal routine used by :func:`pad` for constant-mode padding.
@@ -30,7 +30,7 @@ def _get_constant_padded_idx_lambda(
     assert array.ndim == len(pad_widths) == len(constant_vals)
 
     array_name_in_expr = "in_0"
-    bindings: Dict[str, Array] = {array_name_in_expr: array}
+    bindings: dict[str, Array] = {array_name_in_expr: array}
     vng = UniqueNameGenerator()
     vng.add_name(array_name_in_expr)
 
@@ -68,9 +68,9 @@ def _get_constant_padded_idx_lambda(
 
 def _normalize_pad_width(
         array: Array,
-        pad_width: Union[IntegralT, Sequence[IntegralT]],
-        ) -> Sequence[Tuple[IntegralT, IntegralT]]:
-    processed_pad_widths: List[Tuple[IntegralT, IntegralT]]
+        pad_width: IntegralT | Sequence[IntegralT],
+        ) -> Sequence[tuple[IntegralT, IntegralT]]:
+    processed_pad_widths: list[tuple[IntegralT, IntegralT]]
 
     if isinstance(pad_width, INT_CLASSES):
         processed_pad_widths = [(pad_width, pad_width)
@@ -114,7 +114,7 @@ def _normalize_pad_width(
 
 
 def pad(array: Array,
-        pad_width: Union[IntegralT, Sequence[IntegralT]],
+        pad_width: IntegralT | Sequence[IntegralT],
         mode: str = "constant",
         **kwargs: Any) -> Array:
     r"""
@@ -169,7 +169,7 @@ def pad(array: Array,
 
         # {{{ normalize constant_values
 
-        processed_constant_vals: Sequence[Tuple[Scalar, Scalar]]
+        processed_constant_vals: Sequence[tuple[Scalar, Scalar]]
 
         try:
             constant_vals = kwargs.pop("constant_values")

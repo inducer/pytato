@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Collection, FrozenSet, List, Set, Tuple, Union
+from typing import Any, Collection
 
 from pytools import UniqueNameGenerator
 
@@ -79,10 +79,10 @@ class NoShowNode(_FancyDotWriterNode):
 
 def _get_dot_node_from_predecessors(node_id: str,
                                     predecessors: Collection[_FancyDotWriterNode],
-                                    ) -> Tuple[_FancyDotWriterNode,
-                                               FrozenSet[Tuple[str, str]]]:
+                                    ) -> tuple[_FancyDotWriterNode,
+                                               frozenset[tuple[str, str]]]:
 
-    new_edges: Set[Tuple[str, str]] = set()
+    new_edges: set[tuple[str, str]] = set()
 
     for pred in predecessors:
         if isinstance(pred, PlainOldDotNode):
@@ -101,8 +101,8 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         super().__init__()
         self.vng = UniqueNameGenerator()
 
-        self.node_decls: List[str] = []
-        self.edges: Set[Tuple[str, str]] = set()
+        self.node_decls: list[str] = []
+        self.edges: set[tuple[str, str]] = set()
 
     def map_placeholder(self, expr: Placeholder) -> _FancyDotWriterNode:
         node_decl = (f"{expr.name} [color={PLACEHOLDER_COLOR}, "
@@ -172,7 +172,7 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         return ret_node
 
     def _map_stack_concat(self,
-                          expr: Union[Stack, Concatenate]) -> _FancyDotWriterNode:
+                          expr: Stack | Concatenate) -> _FancyDotWriterNode:
         node_id = self.vng("_pt_stack_concat")
         node_decl = (f'{node_id} [label="",'
                      f" color={STACK_CONCAT_COLOR},"
@@ -215,10 +215,10 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
     map_axis_permutation = _map_index_remapping
     map_basic_index = _map_index_remapping
 
-    def _map_advanced_index(self,
-                            expr: Union[AdvancedIndexInContiguousAxes,
-                                        AdvancedIndexInNoncontiguousAxes]
-                            ) -> _FancyDotWriterNode:
+    def _map_advanced_index(
+                self,
+                expr: AdvancedIndexInContiguousAxes | AdvancedIndexInNoncontiguousAxes
+            ) -> _FancyDotWriterNode:
         node_id = self.vng("_pt_adv")
         node_decl = (f"{node_id}"
                      f' [label="",color={INDIRECTION_COLOR},'
@@ -257,7 +257,7 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         return NoShowNode()
 
 
-def show_fancy_placeholder_data_flow(dag: Union[Array, DictOfNamedArrays],
+def show_fancy_placeholder_data_flow(dag: Array | DictOfNamedArrays,
                                      **kwargs: Any) -> None:
     """
     Visualizes the data-flow from the placeholders into outputs.

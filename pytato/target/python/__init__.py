@@ -39,7 +39,7 @@ __doc__ = """
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Callable, Dict, FrozenSet, Mapping, Set
+from typing import Any, Callable, Mapping
 
 import numpy as np
 
@@ -58,7 +58,7 @@ class PythonTarget(Target, ABC):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """
         :arg program: The python code containing the compiled routine.
@@ -76,12 +76,12 @@ class BoundPythonProgram(BoundProgram):
     .. automethod:: copy
     .. automethod:: with_transformed_program
     """
-    expected_arguments: FrozenSet[str]
+    expected_arguments: frozenset[str]
     entrypoint: str
 
     @cached_property
     def _compiled_function(self) -> Callable[..., Any]:
-        variables_after_execution: Dict[str, Any] = {
+        variables_after_execution: dict[str, Any] = {
             "_MODULE_SOURCE_CODE": self.program  # helps pudb
         }
         exec(self.program, variables_after_execution)
@@ -90,7 +90,7 @@ class BoundPythonProgram(BoundProgram):
             self.entrypoint]
 
     @cached_property
-    def _bound_argument_names(self) -> Set[str]:
+    def _bound_argument_names(self) -> set[str]:
         return set(self.bound_arguments.keys())
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -137,7 +137,7 @@ class NumpyLikePythonTarget(Target, ABC):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundPythonProgram:
         pass
 
@@ -181,7 +181,7 @@ class JAXPythonTarget(NumpyLikePythonTarget):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundJAXPythonProgram:
         return BoundJAXPythonProgram(target=self, program=program,
                                      entrypoint=entrypoint,

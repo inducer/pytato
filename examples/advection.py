@@ -9,7 +9,7 @@ from dg_tools import DGDiscr1D, DGOps1D, DGOps1DRef, integrate
 memoized = functools.lru_cache(maxsize=None)
 
 
-class AdvectionOperator(object):
+class AdvectionOperator:
     """A class representing a DG advection operator."""
 
     def __init__(self, discr, c, flux_type, dg_ops):

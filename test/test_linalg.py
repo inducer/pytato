@@ -60,8 +60,8 @@ def test_apply_einsum_distributive_law_0():
     y = (7*A1 + 8*A2) @ (2*x1-3*x2)
     y_transformed = apply_distributive_property_to_einsums(y, how_to_distribute)
 
-    assert y_transformed == ((2 * ((7*A1 + 8*A2) @ x1) - 3 * ((7*A1 + 8*A2) @
-                                                              x2)))
+    assert y_transformed == (2 * ((7*A1 + 8*A2) @ x1) - 3 * ((7*A1 + 8*A2) @
+                                                              x2))
 
 
 def test_apply_einsum_distributive_law_1():
