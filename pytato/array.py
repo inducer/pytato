@@ -1185,7 +1185,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         Returns a copy of *self* with the :class:`ReductionDescriptor`
         associated with *redn_axis* tagged with *tag*.
         """
-        from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
         # {{{ sanity checks
 
         if redn_axis in self.redn_axis_to_redn_descr:
