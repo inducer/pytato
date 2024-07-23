@@ -89,7 +89,7 @@ def _generate_name_for_temp(
             prefix_tag, = expr.tags_of_type(PrefixNamed)
             return var_name_gen(prefix_tag.prefix)
         else:
-            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
+            raise NotImplementedError(type(next(iter(expr.tags_of_type(_BaseNameTag)))))
     else:
         return var_name_gen(default_prefix)
 

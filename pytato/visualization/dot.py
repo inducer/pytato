@@ -427,7 +427,7 @@ def _emit_name_cluster(
         label: str) -> None:
     edges = []
 
-    cluster_subgraph_path = subgraph_path + (f"cluster_{dot_escape(label)}",)
+    cluster_subgraph_path = (*subgraph_path, f"cluster_{dot_escape(label)}")
     emit_cluster = partial(emit, cluster_subgraph_path)
     emit_cluster("node [shape=ellipse]")
     emit_cluster(f'label="{label}"')
@@ -462,7 +462,7 @@ def _emit_function(
             internal_arrays.append(array)
 
     # Emit inputs.
-    input_subgraph_path = subgraph_path + ("cluster_inputs",)
+    input_subgraph_path = (*subgraph_path, "cluster_inputs")
     emit_input = partial(emitter, input_subgraph_path)
     emit_input('label="Arguments"')
 
@@ -677,7 +677,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
         # Here we're relying on the part_id_to_func_to_id dict to preserve order.
 
         for func, fid in part_id_to_func_to_id[part.pid].items():
-            func_subgraph_path = part_subgraph_path + (f"cluster_{fid}",)
+            func_subgraph_path = (*part_subgraph_path, f"cluster_{fid}")
             label = _get_function_name(func) or fid
 
             emitter(func_subgraph_path, f'label="{label}"')

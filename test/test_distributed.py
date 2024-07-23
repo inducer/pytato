@@ -25,7 +25,7 @@ import os
 import sys
 
 import numpy as np
-import pytest  # noqa
+import pytest
 
 import pyopencl as cl
 import pyopencl.array as cla
@@ -289,7 +289,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
             elif comm_tag % 5 == 3:
                 tag = (_RandomDAGTag, comm_tag)
             else:
-                tag = (comm_tag, _RandomDAGTag)  # noqa: B023
+                tag = (comm_tag, _RandomDAGTag)
 
             inner = make_random_dag(rdagc)
             return pt.staple_distributed_send(

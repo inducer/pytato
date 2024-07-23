@@ -383,7 +383,7 @@ def _np_result_dtype(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
         else:
             # bool won't ever be promoted to
             raise AssertionError()
-        return np.result_type(*(np_dtypes + [py_promotion_dtype]))
+        return np.result_type(*([*np_dtypes, py_promotion_dtype]))
 
     else:
         # Just ignore the python types for promotion.
@@ -661,14 +661,14 @@ class Array(Taggable):
                 other: ArrayOrScalar,
                 get_result_type: Callable[
                         [DtypeOrPyScalarType, DtypeOrPyScalarType],
-                        np.dtype[Any]] = _np_result_dtype,  # noqa
+                        np.dtype[Any]] = _np_result_dtype,
                 reverse: bool = False,
                 cast_to_result_dtype: bool = True,
             ) -> Array:
 
         # {{{ sanity checks
 
-        if not isinstance(other, (Array,) + SCALAR_CLASSES):
+        if not isinstance(other, (Array, *SCALAR_CLASSES)):
             return NotImplemented
 
         # }}}
@@ -1713,13 +1713,13 @@ class AdvancedIndexInContiguousAxes(IndexBase):
 
         # type-ignored because mypy cannot figure out basic-indices only refer
         # to slices
-        pre_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        pre_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                     for i_idx in i_basic_indices
                                     if i_idx < i_adv_indices[0])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
         # to slices
-        post_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        post_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                      for i_idx in i_basic_indices
                                      if i_idx > i_adv_indices[-1])
 
@@ -1759,7 +1759,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                                                       for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
-        basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                 for i_idx in i_basic_indices)
 
         return adv_idx_shape + basic_idx_shape

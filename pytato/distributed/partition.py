@@ -917,9 +917,8 @@ def find_distributed_partition(
     # result sizes potentially quadratic in the number of materialized arrays.
     mso_array_dep_mapper = SubsetDependencyMapper(frozenset(mso_arrays))
 
-    mso_ary_to_first_dep_send_part_id: Dict[Array, int] = {
-        ary: nparts
-        for ary in mso_arrays}
+    mso_ary_to_first_dep_send_part_id: Dict[Array, int] = \
+        dict.fromkeys(mso_arrays, nparts)
     for send_id, send_node in lsrdg.local_send_id_to_send_node.items():
         for ary in mso_array_dep_mapper(send_node.data):
             mso_ary_to_first_dep_send_part_id[ary] = min(

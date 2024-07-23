@@ -32,13 +32,13 @@ import sys
 from typing import Union
 
 import numpy as np
-import pytest  # noqa
+import pytest
 from testlib import assert_allclose_to_numpy, get_random_pt_dag
 
 import loopy as lp
 import pymbolic.primitives as p
 import pyopencl as cl
-import pyopencl.array as cl_array  # noqa
+import pyopencl.array as cl_array
 import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
@@ -188,7 +188,7 @@ def test_data_wrapper(ctx_factory):
     assert (x_out == x_in).all()
 
 
-def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
+def test_codegen_with_DictOfNamedArrays(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
