@@ -33,11 +33,11 @@ import attrs
 
 from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
         IdentityMapperBase)
-from pymbolic.mapper.substitutor import (SubstitutionMapper as
+from pymbolic.mapper.substitutor import (CachedSubstitutionMapper as
         SubstitutionMapperBase)
-from pymbolic.mapper.dependency import (DependencyMapper as
+from pymbolic.mapper.dependency import (CachedDependencyMapper as
         DependencyMapperBase)
-from pymbolic.mapper.evaluator import (EvaluationMapper as
+from pymbolic.mapper.evaluator import (CachedEvaluationMapper as
         EvaluationMapperBase)
 from pymbolic.mapper.distributor import (DistributeMapper as
         DistributeMapperBase)
