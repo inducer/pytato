@@ -8,6 +8,7 @@ Execution
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -32,22 +33,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, TYPE_CHECKING, Mapping
-
-
-from pytato.array import make_dict_of_named_arrays
-from pytato.target import BoundProgram
-from pytato.scalar_expr import INT_CLASSES
+import logging
+from typing import TYPE_CHECKING, Any, Dict, Hashable, Mapping, Optional, Tuple
 
 import numpy as np
 
-
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend)
+from pytato.array import make_dict_of_named_arrays
+from pytato.distributed.nodes import DistributedRecv, DistributedSend
 from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart, PartId)
+    DistributedGraphPart,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.scalar_expr import INT_CLASSES
+from pytato.target import BoundProgram
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 

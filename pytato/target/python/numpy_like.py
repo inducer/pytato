@@ -26,33 +26,65 @@ THE SOFTWARE.
 """
 
 import ast
-import sys
 import os
-import numpy as np
+import sys
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypedDict,
+    TypeVar,
+    Union,
+    cast,
+)
 
-from typing import (Callable, TypedDict, Union, Optional, Mapping, Dict,
-    TypeVar, Iterable, cast, List, Set, Tuple, Type)
+import numpy as np
+from immutabledict import immutabledict
 from typing_extensions import NotRequired
 
 from pytools import UniqueNameGenerator
-from pytato.transform import CachedMapper
-from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
-                          Placeholder, SizeParam, Roll,
-                          AxisPermutation, Einsum,
-                          Reshape, Array, DictOfNamedArrays, IndexBase,
-                          DataInterface, NormalizedSlice, ShapeComponent,
-                          IndexExpr, ArrayOrScalar, NamedArray)
-from immutabledict import immutabledict
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.utils import are_shape_components_equal
-from pytato.raising import BinaryOpType, C99CallOp
 
-from pytato.target.python import (NumpyLikePythonTarget,
-                                  BoundPythonProgram)
-from pytato.reductions import (ReductionOperation, SumReductionOperation,
-                               ProductReductionOperation,
-                               MaxReductionOperation, MinReductionOperation,
-                               AllReductionOperation, AnyReductionOperation)
+from pytato.array import (
+    Array,
+    ArrayOrScalar,
+    AxisPermutation,
+    Concatenate,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexExpr,
+    IndexLambda,
+    NamedArray,
+    NormalizedSlice,
+    Placeholder,
+    Reshape,
+    Roll,
+    ShapeComponent,
+    SizeParam,
+    Stack,
+)
+from pytato.raising import BinaryOpType, C99CallOp
+from pytato.reductions import (
+    AllReductionOperation,
+    AnyReductionOperation,
+    MaxReductionOperation,
+    MinReductionOperation,
+    ProductReductionOperation,
+    ReductionOperation,
+    SumReductionOperation,
+)
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
+from pytato.transform import CachedMapper
+from pytato.utils import are_shape_components_equal
 
 
 T = TypeVar("T")
@@ -100,7 +132,7 @@ def first_true(iterable: Iterable[T], default: T,
 
 
 def _get_einsum_subscripts(einsum: Einsum) -> str:
-    from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
+    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
     idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
     idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
@@ -191,10 +223,15 @@ class NumpyCodegenMapper(CachedMapper[str]):
         return lhs
 
     def map_index_lambda(self, expr: IndexLambda) -> str:
-        from pytato.raising import index_lambda_to_high_level_op
-        from pytato.raising import (FullOp, BinaryOp, WhereOp,
-                                    BroadcastOp, ReduceOp,
-                                    BinaryOpType)
+        from pytato.raising import (
+            BinaryOp,
+            BinaryOpType,
+            BroadcastOp,
+            FullOp,
+            ReduceOp,
+            WhereOp,
+            index_lambda_to_high_level_op,
+        )
         hlo = index_lambda_to_high_level_op(expr)
         lhs = self.vng("_pt_tmp")
         rhs: ast.expr
@@ -537,6 +574,7 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
                         colorize_show_code: Optional[bool] = None,
                         ) -> BoundPythonProgram:
     import collections
+
     from pytato.transform import InputGatherer
 
     if ((not isinstance(expr, DictOfNamedArrays))
@@ -605,8 +643,8 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
 
         if _can_colorize_output() and colorize_show_code:
             from pygments import highlight
-            from pygments.lexers import PythonLexer
             from pygments.formatters import TerminalTrueColorFormatter
+            from pygments.lexers import PythonLexer
             print(highlight(program,
                             formatter=TerminalTrueColorFormatter(),
                             lexer=PythonLexer()))

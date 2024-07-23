@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pytools import memoize_method
 
+
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
 Copyright (C) 2020-21 Kaushik Kulkarni
@@ -28,30 +29,65 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import attrs
 import logging
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    Generic,
+    Hashable,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
+
+import attrs
 import numpy as np
 from immutabledict import immutabledict
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable, cast)
+
+from pymbolic.mapper.optimize import optimize_mapper
 
 from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    IndexRemappingBase,
+    InputArgumentBase,
+    NamedArray,
+    Placeholder,
+    Reshape,
+    Roll,
+    SizeParam,
+    Stack,
     _SuppliedAxesAndTagsMixin,
-        Array, IndexLambda, Placeholder, Stack, Roll,
-        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
-        AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase,
-        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase, DataInterface)
-
+)
 from pytato.distributed.nodes import (
-        DistributedSendRefHolder, DistributedRecv, DistributedSend)
+    DistributedRecv,
+    DistributedSend,
+    DistributedSendRefHolder,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
-from pytato.function import Call, NamedCallResult, FunctionDefinition
-from dataclasses import dataclass
 from pytato.tags import ImplStored
-from pymbolic.mapper.optimize import optimize_mapper
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
@@ -1781,8 +1817,8 @@ def rec_get_user_nodes(expr: ArrayOrNames,
 def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     import sys
     if "pyopencl" in sys.modules:
-        from pyopencl.array import Array as CLArray
         from pyopencl import MemoryObjectHolder
+        from pyopencl.array import Array as CLArray
         try:
             from pyopencl import SVMPointer
         except ImportError:

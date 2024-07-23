@@ -20,12 +20,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
 import numpy as np
+import pytest
+
 import pytato as pt
+
 
 pytest.importorskip("jax")
 from jax import config
+
+
 config.update("jax_enable_x64", True)
 
 
@@ -87,7 +91,7 @@ def test_einsum(spec, argshapes, jit):
 def test_random_dag_against_numpy(jit):
     from testlib import RandomDAGContext, make_random_dag
     axis_len = 5
-    from warnings import filterwarnings, catch_warnings
+    from warnings import catch_warnings, filterwarnings
     with catch_warnings():
         # We'd like to know if Numpy divides by zero.
         filterwarnings("error")

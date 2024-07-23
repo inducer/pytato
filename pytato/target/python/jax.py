@@ -23,12 +23,12 @@ THE SOFTWARE.
 """
 
 import ast
-
-from typing import Union, Optional, Mapping
+from typing import Mapping, Optional, Union
 
 from pytato.array import Array, DictOfNamedArrays
-from pytato.target.python import JAXPythonTarget, BoundJAXPythonProgram
+from pytato.target.python import BoundJAXPythonProgram, JAXPythonTarget
 from pytato.target.python.numpy_like import generate_numpy_like
+
 
 __doc__ = """
 .. autofunction:: generate_jax

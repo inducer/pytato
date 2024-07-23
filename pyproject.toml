@@ -5,8 +5,7 @@ extend-select = [
     "C",    # flake8-comprehensions
     "E",    # pycodestyle
     "F",    # pyflakes
-    # not yet
-    # "I",    # flake8-isort
+    "I",    # flake8-isort
     "N",    # pep8-naming
     "Q",    # flake8-quotes
     "W",    # pycodestyle
@@ -31,7 +30,7 @@ extend-ignore = [
 "test/test_linalg.py" = ["N806"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["pytools", "pymbolic", "loopy"]
+known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]
 known-local-folder = ["pytato"]
 lines-after-imports = 2
 combine-as-imports = true

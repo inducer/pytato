@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 """
@@ -24,31 +25,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import re
 from typing import (
-        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
-        Iterable)
+    TYPE_CHECKING,
+    Any,
+    FrozenSet,
+    Iterable,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 import attrs
-
-
-from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
-        IdentityMapperBase)
-from pymbolic.mapper.substitutor import (SubstitutionMapper as
-        SubstitutionMapperBase)
-from pymbolic.mapper.dependency import (DependencyMapper as
-        DependencyMapperBase)
-from pymbolic.mapper.evaluator import (EvaluationMapper as
-        EvaluationMapperBase)
-from pymbolic.mapper.distributor import (DistributeMapper as
-        DistributeMapperBase)
-from pymbolic.mapper.stringifier import (StringifyMapper as
-        StringifyMapperBase)
-from pymbolic.mapper import CombineMapper as CombineMapperBase
-from pymbolic.mapper.collector import TermCollector as TermCollectorBase
-from immutabledict import immutabledict
-import pymbolic.primitives as prim
 import numpy as np
-import re
+from immutabledict import immutabledict
+
+import pymbolic.primitives as prim
+from pymbolic.mapper import (
+    CombineMapper as CombineMapperBase,
+    IdentityMapper as IdentityMapperBase,
+    WalkMapper as WalkMapperBase,
+)
+from pymbolic.mapper.collector import TermCollector as TermCollectorBase
+from pymbolic.mapper.dependency import DependencyMapper as DependencyMapperBase
+from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
+from pymbolic.mapper.evaluator import EvaluationMapper as EvaluationMapperBase
+from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
+from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
+
 
 if TYPE_CHECKING:
     from pytato.reductions import ReductionOperation
@@ -190,9 +196,7 @@ class TermCollector(TermCollectorBase):
 
 class StringifyMapper(StringifyMapperBase):
     def map_reduce(self, expr: Any, enclosing_prec: Any, *args: Any) -> str:
-        from pymbolic.mapper.stringifier import (
-                PREC_COMPARISON,
-                PREC_NONE)
+        from pymbolic.mapper.stringifier import PREC_COMPARISON, PREC_NONE
         bounds_expr = " and ".join(
                 f"{self.rec(lb, PREC_COMPARISON)}"
                 f"<={name}<{self.rec(ub, PREC_COMPARISON)}"

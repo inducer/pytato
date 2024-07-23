@@ -37,6 +37,7 @@ Internal stuff that is only here because the documentation tool wants it
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -61,32 +62,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from functools import reduce
 import collections
+from functools import reduce
 from typing import (
-        Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
+    TYPE_CHECKING,
+    AbstractSet,
+    Any,
+    Dict,
+    FrozenSet,
+    Hashable,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    cast,
+)
 
 import attrs
 from immutabledict import immutabledict
 
-from pytools.graph import CycleError
-from pytools import memoize_method
-
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import UniqueNameGenerator
+from pytools import UniqueNameGenerator, memoize_method
+from pytools.graph import CycleError
 
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.array import (Array, DictOfNamedArrays, Placeholder, make_placeholder)
-from pytato.transform import (ArrayOrNames, CopyMapper,
-                              CachedWalkMapper,
-                              CombineMapper)
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend, DistributedSendRefHolder)
-from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
-
+from pytato.array import Array, DictOfNamedArrays, Placeholder, make_placeholder
+from pytato.distributed.nodes import (
+    CommTagType,
+    DistributedRecv,
+    DistributedSend,
+    DistributedSendRefHolder,
+)
 from pytato.function import FunctionDefinition, NamedCallResult
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
+
 
 if TYPE_CHECKING:
     import mpi4py.MPI
@@ -619,8 +634,8 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
+        from pytato.tags import ImplStored
 
         if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
             self.materialized_arrays.add(expr)
@@ -772,9 +787,9 @@ def find_distributed_partition(
     - Gather sent arrays into
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
-    from pytato.transform import SubsetDependencyMapper
-
     import mpi4py.MPI as MPI
+
+    from pytato.transform import SubsetDependencyMapper
 
     local_rank = mpi_communicator.rank
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -23,24 +24,36 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Union, Dict, Tuple, List, Any, Optional, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+
 from immutabledict import immutabledict
 
-from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
-                          DataInterface, SizeParam, InputArgumentBase,
-                          make_dict_of_named_arrays)
-
-from pytato.function import NamedCallResult
-from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
-
-from pytato.scalar_expr import IntegralScalarExpression
-from pytato.transform import (CopyMapper, CachedWalkMapper,
-                              SubsetDependencyMapper, ArrayOrNames)
-from pytato.target import Target
-from pytato.loopy import LoopyCall
-from pytools import UniqueNameGenerator
 import loopy as lp
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import UniqueNameGenerator
+
+from pytato.array import (
+    Array,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    InputArgumentBase,
+    Placeholder,
+    SizeParam,
+    make_dict_of_named_arrays,
+)
+from pytato.function import NamedCallResult
+from pytato.loopy import LoopyCall
+from pytato.scalar_expr import IntegralScalarExpression
+from pytato.target import Target
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CopyMapper,
+    SubsetDependencyMapper,
+)
+from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
+
 
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -61,7 +74,7 @@ __doc__ = """
 def _generate_name_for_temp(
         expr: Array, var_name_gen: UniqueNameGenerator,
         default_prefix: str = "_pt_temp") -> str:
-    from pytato.tags import _BaseNameTag, Named, PrefixNamed
+    from pytato.tags import Named, PrefixNamed, _BaseNameTag
     if expr.tags_of_type(_BaseNameTag):
         if expr.tags_of_type(Named):
             name_tag, = expr.tags_of_type(Named)

@@ -28,6 +28,7 @@ Redirections for the documentation tool
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -52,18 +53,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Hashable, FrozenSet, Optional, Any, ClassVar
+from typing import Any, ClassVar, FrozenSet, Hashable, Optional
 
 import attrs
 import numpy as np
 
-from pytools.tag import Taggable, Tag
+from pytools.tag import Tag, Taggable
 
 from pytato.array import (
-        _SuppliedAxesAndTagsMixin,
-        Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
-        _get_default_axes, _get_default_tags, ConvertibleToShape,
-        normalize_shape, _get_created_at_tag)
+    Array,
+    AxesT,
+    ConvertibleToShape,
+    ShapeType,
+    _get_created_at_tag,
+    _get_default_axes,
+    _get_default_tags,
+    _SuppliedAxesAndTagsMixin,
+    _SuppliedShapeAndDtypeMixin,
+    normalize_shape,
+)
+
 
 CommTagType = Hashable
 

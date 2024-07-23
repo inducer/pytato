@@ -4,14 +4,16 @@
 
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
-from pytato.array import Array, IndexLambda
-from pytato.scalar_expr import IntegralT, INT_CLASSES, Scalar
-from typing import Union, Sequence, Any, Tuple, List, Dict
+import collections.abc as abc
+from typing import Any, Dict, List, Sequence, Tuple, Union
+
+import numpy as np
+
+import pymbolic.primitives as prim
 from pytools import UniqueNameGenerator
 
-import collections.abc as abc
-import pymbolic.primitives as prim
-import numpy as np
+from pytato.array import Array, IndexLambda
+from pytato.scalar_expr import INT_CLASSES, IntegralT, Scalar
 
 
 def _get_constant_padded_idx_lambda(

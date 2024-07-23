@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -26,30 +27,52 @@ THE SOFTWARE.
 """
 
 
-from functools import partial
 import html
+from functools import partial
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
+
 import attrs
 
-from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
-        Mapping, Any, FrozenSet, Set, Optional)
-
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
-from pytato.loopy import LoopyCall
-from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.tags import FunctionIdentifier
 from pytools.codegen import remove_common_indentation
+from pytools.tag import Tag
 
 from pytato.array import (
-        Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays,
-        IndexBase)
-
+    AbstractResultWithNamedArrays,
+    Array,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    InputArgumentBase,
+    Placeholder,
+    ShapeType,
+    Stack,
+)
 from pytato.codegen import normalize_outputs
-from pytato.transform import CachedMapper, ArrayOrNames, InputGatherer
-
 from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart, PartId)
+    DistributedGraphPart,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.loopy import LoopyCall
+from pytato.tags import FunctionIdentifier
+from pytato.transform import ArrayOrNames, CachedMapper, InputGatherer
+
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedSendRefHolder

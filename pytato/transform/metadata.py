@@ -35,31 +35,62 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
-                    Mapping, Iterable, Any, TypeVar, cast)
+import logging
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    cast,
+)
+
 from bidict import bidict
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, Mapper, CopyMapper
-
-from pytato.array import (InputArgumentBase, Stack, Concatenate, IndexLambda,
-                          AxisPermutation, BasicIndex,
-                          AdvancedIndexInContiguousAxes,
-                          Array, Reshape, Einsum, NormalizedSlice,
-                          DictOfNamedArrays, NamedArray,
-                          AbstractResultWithNamedArrays, ArrayOrScalar,
-                          EinsumReductionAxis)
-from pytato.function import NamedCallResult
-from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-from pytato.utils import are_shape_components_equal, are_shapes_equal
-from pytato.raising import (index_lambda_to_high_level_op,
-                            BinaryOp, FullOp, WhereOp,
-                            BroadcastOp, C99CallOp, ReduceOp)
-
-from pytato.diagnostic import UnknownIndexLambdaExpr
 
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
-import logging
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    Array,
+    ArrayOrScalar,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DictOfNamedArrays,
+    Einsum,
+    EinsumReductionAxis,
+    IndexLambda,
+    InputArgumentBase,
+    NamedArray,
+    NormalizedSlice,
+    Reshape,
+    Stack,
+)
+from pytato.diagnostic import UnknownIndexLambdaExpr
+from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+from pytato.function import NamedCallResult
+from pytato.raising import (
+    BinaryOp,
+    BroadcastOp,
+    C99CallOp,
+    FullOp,
+    ReduceOp,
+    WhereOp,
+    index_lambda_to_high_level_op,
+)
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.transform import ArrayOrNames, CopyMapper, Mapper
+from pytato.utils import are_shape_components_equal, are_shapes_equal
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -370,7 +401,7 @@ class AxesTagsEquationCollector(Mapper):
         indices adds an equality equation for each non-broadcasted axis of an
         indexing array to its corresponding axis in *expr*.
         """
-        from pytato.utils import partition, get_shape_after_broadcasting
+        from pytato.utils import get_shape_after_broadcasting, partition
 
         self.rec(expr.array)
         for idx in expr.indices:
@@ -482,7 +513,7 @@ class AxesTagsEquationCollector(Mapper):
         :func:`pytato.einsum` thereby having the same the
         :class:`~pytato.array.EinsumAxisDescriptor`.
         """
-        from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
+        from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
         for arg in expr.args:
             self.rec(arg)
