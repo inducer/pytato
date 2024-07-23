@@ -3,6 +3,8 @@
 
 .. autofunction:: rewrite_einsums_with_no_broadcasts
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 

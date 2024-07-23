@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __doc__ = """
 Pre-Defined Tags
 ----------------

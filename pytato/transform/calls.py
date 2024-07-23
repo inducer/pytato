@@ -4,6 +4,9 @@
 .. autofunction:: inline_calls
 .. autofunction:: tag_all_calls_to_be_inlined
 """
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
 __license__ = """
