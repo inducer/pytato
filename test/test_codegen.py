@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020-2021 Andreas Kloeckner
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -26,26 +28,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Union
-
 import itertools
 import operator
 import sys
 
-import loopy as lp
 import numpy as np
+import pytest
+from testlib import assert_allclose_to_numpy, get_random_pt_dag
+
+import loopy as lp
+import pymbolic.primitives as p
 import pyopencl as cl
-import pyopencl.array as cl_array  # noqa
+import pyopencl.array as cl_array
 import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
 
 import pytato as pt
-from testlib import assert_allclose_to_numpy, get_random_pt_dag
-import pymbolic.primitives as p
 
 
 def test_basic_codegen(ctx_factory):
@@ -187,7 +189,7 @@ def test_data_wrapper(ctx_factory):
     assert (x_out == x_in).all()
 
 
-def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
+def test_codegen_with_DictOfNamedArrays(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -684,6 +686,7 @@ def test_passing_bound_arguments_raises(ctx_factory):
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
     from numpy.random import default_rng
+
     from pymbolic.mapper.evaluator import evaluate
 
     queue = cl.CommandQueue(ctx_factory())
@@ -823,8 +826,10 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
 
 
 def test_call_loopy_with_scalar_array_inputs(ctx_factory):
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
     from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
@@ -966,9 +971,11 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
 
 
 def test_call_loopy_shape_inference1(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -996,9 +1003,11 @@ def test_call_loopy_shape_inference1(ctx_factory):
 
 
 def test_call_loopy_shape_inference2(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -1388,8 +1397,7 @@ def test_named_temporaries(ctx_factory):
                                         })
     dag = pt.transform.materialize_with_mpms(dag)
 
-    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
-                                                  pt.AbstractResultWithNamedArrays]
+    def mark_materialized_nodes_as_cse(ary: pt.Array | pt.AbstractResultWithNamedArrays
                                        ) -> pt.Array:
         if isinstance(ary, pt.AbstractResultWithNamedArrays):
             return ary
@@ -1454,6 +1462,7 @@ def test_random_dag_against_numpy(ctx_factory):
 
 def test_assume_non_negative_indirect_address(ctx_factory):
     from numpy.random import default_rng
+
     from pytato.scalar_expr import WalkMapper
 
     ctx = ctx_factory()
@@ -1482,7 +1491,7 @@ def test_assume_non_negative_indirect_address(ctx_factory):
 
 
 def test_axis_tag_to_loopy_iname_tag_propagate():
-    from testlib import FooInameTag, BarInameTag, BazInameTag
+    from testlib import BarInameTag, BazInameTag, FooInameTag
 
     x = pt.make_placeholder("x", (10, 4), np.float32)
     y = 2 * x
@@ -1538,7 +1547,7 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
 
 
 def test_array_tags_propagated_to_loopy():
-    from testlib import FooTag, BarTag, BazTag
+    from testlib import BarTag, BazTag, FooTag
 
     x1 = pt.make_placeholder("x1", (10, 4), dtype=np.float64)
     x2 = pt.make_placeholder("x2", (10, 4), dtype=np.float64)

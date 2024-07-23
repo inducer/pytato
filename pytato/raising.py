@@ -1,20 +1,30 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum, auto, unique
+from typing import Any, Mapping, Sequence
+
 import numpy as np
+from immutabledict import immutabledict
+
 import pymbolic.primitives as p
 
-from enum import Enum, auto, unique
-from typing import Any, List, Tuple, Mapping, Sequence
-from pytato.array import IndexLambda, ArrayOrScalar, Array, ShapeType
+from pytato.array import Array, ArrayOrScalar, IndexLambda, ShapeType
 from pytato.diagnostic import UnknownIndexLambdaExpr
-from pytato.utils import (get_indexing_expression,
-                          get_shape_after_broadcasting,
-                          are_shape_components_equal)
-from pytato.scalar_expr import (
-    IdentityMapper, Scalar, ScalarExpression, Reduce, SCALAR_CLASSES, TypeCast)
 from pytato.reductions import ReductionOperation
-from dataclasses import dataclass
-from immutabledict import immutabledict
+from pytato.scalar_expr import (
+    SCALAR_CLASSES,
+    IdentityMapper,
+    Reduce,
+    Scalar,
+    ScalarExpression,
+    TypeCast,
+)
+from pytato.utils import (
+    are_shape_components_equal,
+    get_indexing_expression,
+    get_shape_after_broadcasting,
+)
 
 
 __doc__ = """
@@ -74,7 +84,7 @@ class BinaryOp(HighLevelOp):
 @dataclass(frozen=True, eq=True, repr=True)
 class C99CallOp(HighLevelOp):
     function: str
-    args: Tuple[ArrayOrScalar, ...]
+    args: tuple[ArrayOrScalar, ...]
 
 
 @dataclass(frozen=True, eq=True, repr=True)
@@ -119,7 +129,7 @@ PT_C99BINARY_FUNCS = {"atan2"}
 def _as_array_or_scalar(exprs: Sequence[ScalarExpression],
                         bindings: Mapping[str, Array],
                         out_shape: ShapeType
-                        ) -> Tuple[ArrayOrScalar, ...]:
+                        ) -> tuple[ArrayOrScalar, ...]:
     """
     Helper routine invoked in :func:`index_lambda_to_high_level_op`. For every
     expression in *exprs* either infers (and returns) it as a scalar or infers
@@ -127,7 +137,7 @@ def _as_array_or_scalar(exprs: Sequence[ScalarExpression],
     an :class:`~pytato.array.IndexLambda` of *out_shape* shape.
     """
 
-    result: List[ArrayOrScalar] = []
+    result: list[ArrayOrScalar] = []
     if out_shape != get_shape_after_broadcasting(bindings.values()):
         raise UnknownIndexLambdaExpr()
 
