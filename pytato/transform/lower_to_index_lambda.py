@@ -3,6 +3,8 @@
 
 .. autofunction:: to_index_lambda
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 

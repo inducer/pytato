@@ -3,6 +3,8 @@
 
 .. autofunction:: show_fancy_placeholder_data_flow
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Collection, FrozenSet, List, Set, Tuple, Union
 

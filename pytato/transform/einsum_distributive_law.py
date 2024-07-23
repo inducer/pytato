@@ -8,6 +8,8 @@
 
 .. autofunction:: apply_distributive_property_to_einsums
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 

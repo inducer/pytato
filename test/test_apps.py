@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2022 Isuru Fernando
