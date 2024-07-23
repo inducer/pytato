@@ -25,16 +25,21 @@ THE SOFTWARE.
 """
 
 import sys
+
 import numpy as np
-import pytato as pt
+
 from pyopencl.tools import (  # noqa: F401
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+
+import pytato as pt
 
 
 def test_apply_einsum_distributive_law_0():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 
@@ -59,8 +64,9 @@ def test_apply_einsum_distributive_law_0():
 
 def test_apply_einsum_distributive_law_1():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 
@@ -84,8 +90,9 @@ def test_apply_einsum_distributive_law_1():
 
 def test_apply_einsum_distributive_law_2():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 

@@ -3,15 +3,25 @@
 
 .. autofunction:: show_fancy_placeholder_data_flow
 """
-from pytato.transform import CachedMapper
 from dataclasses import dataclass
+from typing import Any, Collection, FrozenSet, List, Set, Tuple, Union
+
 from pytools import UniqueNameGenerator
-from typing import FrozenSet, Set, List, Tuple, Collection, Union, Any
-from pytato.array import (Array, DictOfNamedArrays, Einsum, Stack,
-                          Concatenate, IndexLambda, Placeholder, DataWrapper,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          IndexRemappingBase)
+
+from pytato.array import (
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    Concatenate,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexLambda,
+    IndexRemappingBase,
+    Placeholder,
+    Stack,
+)
+from pytato.transform import CachedMapper
 
 
 # {{{ Graph node colors
@@ -102,9 +112,15 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         return NoShowNode()
 
     def map_index_lambda(self, expr: IndexLambda) -> _FancyDotWriterNode:
-        from pytato.raising import (index_lambda_to_high_level_op,
-                                    FullOp, BinaryOp, C99CallOp,
-                                    WhereOp, BroadcastOp, LogicalNotOp)
+        from pytato.raising import (
+            BinaryOp,
+            BroadcastOp,
+            C99CallOp,
+            FullOp,
+            LogicalNotOp,
+            WhereOp,
+            index_lambda_to_high_level_op,
+        )
 
         hlo = index_lambda_to_high_level_op(expr)
 

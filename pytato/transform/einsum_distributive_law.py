@@ -32,19 +32,33 @@ THE SOFTWARE.
 """
 
 
-from typing import Callable, Dict, Tuple, Optional, FrozenSet, Mapping
+from typing import Callable, Dict, FrozenSet, Mapping, Optional, Tuple
+
 import attrs
-from pytato.transform import ArrayOrNames, Mapper, MappedT
-from pytato.array import (Array, AxesT, Einsum, IndexLambda,
-                          EinsumReductionAxis,
-                          EinsumAxisDescriptor, ReductionDescriptor,
-                          Stack, Concatenate, Roll, AxisPermutation,
-                          IndexBase, Reshape, InputArgumentBase)
-from pytato.raising import HighLevelOp
-from immutabledict import immutabledict
-from pytools.tag import Tag
-from pytato.utils import are_shapes_equal
 import numpy as np
+from immutabledict import immutabledict
+
+from pytools.tag import Tag
+
+from pytato.array import (
+    Array,
+    AxesT,
+    AxisPermutation,
+    Concatenate,
+    Einsum,
+    EinsumAxisDescriptor,
+    EinsumReductionAxis,
+    IndexBase,
+    IndexLambda,
+    InputArgumentBase,
+    ReductionDescriptor,
+    Reshape,
+    Roll,
+    Stack,
+)
+from pytato.raising import HighLevelOp
+from pytato.transform import ArrayOrNames, MappedT, Mapper
+from pytato.utils import are_shapes_equal
 
 
 class EinsumDistributiveLawDescriptor:
@@ -182,8 +196,7 @@ class EinsumDistributiveLawMapper(Mapper):
                          expr: IndexLambda,
                          ctx: Optional[_EinsumDistributiveLawMapperContext],
                          ) -> Array:
-        from pytato.raising import (index_lambda_to_high_level_op,
-                                    BinaryOp, BinaryOpType)
+        from pytato.raising import BinaryOp, BinaryOpType, index_lambda_to_high_level_op
 
         hlo = index_lambda_to_high_level_op(expr)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -27,15 +28,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Optional, Tuple, Union, Sequence, Dict, List, Mapping
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-from pytato.array import ShapeType, Array, make_index_lambda, ReductionDescriptor
-from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
 from immutabledict import immutabledict
+
 import pymbolic.primitives as prim
+
+from pytato.array import Array, ReductionDescriptor, ShapeType, make_index_lambda
+from pytato.scalar_expr import INT_CLASSES, Reduce, ScalarExpression
+
 
 # {{{ docs
 

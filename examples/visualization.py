@@ -2,9 +2,10 @@
 """Demonstrates graph visualization with Graphviz."""
 
 import logging
-import numpy as np
 import shutil
 import subprocess
+
+import numpy as np
 
 import pytato as pt
 

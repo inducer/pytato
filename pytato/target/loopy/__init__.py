@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -49,17 +50,17 @@ Stuff that's only here because the documentation tool wants it
 """
 
 import sys
-import numpy as np
 from dataclasses import dataclass, field
 from functools import cached_property
+from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Optional
 
-from typing import Any, Mapping, Optional, Callable, Dict, TYPE_CHECKING
+import numpy as np
 from immutabledict import immutabledict
 
-from pytato.target import Target, BoundProgram
-from pytato.tags import ImplementationStrategy
-
 import loopy
+
+from pytato.tags import ImplementationStrategy
+from pytato.target import BoundProgram, Target
 
 
 class ImplSubstitution(ImplementationStrategy):

@@ -5,7 +5,7 @@
 .. automodule:: pytato.visualization.fancy_placeholder_data_flow
 """
 
-from .dot import get_dot_graph, show_dot_graph, get_dot_graph_from_partition
+from .dot import get_dot_graph, get_dot_graph_from_partition, show_dot_graph
 from .fancy_placeholder_data_flow import show_fancy_placeholder_data_flow
 
 

@@ -1,16 +1,26 @@
 from __future__ import annotations
 
-import types
-from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
 import operator
-import pyopencl as cl
+import types
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
 import numpy as np
-import pytato as pt
-from pytato.transform import Mapper
-from pytato.array import (Array, Placeholder, Stack, Roll,
-                          AxisPermutation, DataWrapper, Reshape,
-                          Concatenate)
+
+import pyopencl as cl
 from pytools.tag import Tag
+
+import pytato as pt
+from pytato.array import (
+    Array,
+    AxisPermutation,
+    Concatenate,
+    DataWrapper,
+    Placeholder,
+    Reshape,
+    Roll,
+    Stack,
+)
+from pytato.transform import Mapper
 
 
 # {{{ tools for comparison to numpy
@@ -258,8 +268,9 @@ def get_random_pt_dag(seed: int,
     if additional_generators is None:
         additional_generators = []
 
-    from testlib import RandomDAGContext, make_random_dag
     from typing import cast
+
+    from testlib import RandomDAGContext, make_random_dag
 
     rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
             axis_len=axis_len, use_numpy=False,

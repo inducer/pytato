@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -22,37 +23,66 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from abc import ABC, abstractmethod
-import sys
-import islpy as isl
-import loopy as lp
-import pytools
 import re
-import pytato.scalar_expr as scalar_expr
+import sys
+from abc import ABC, abstractmethod
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
+
+import attrs
+import islpy as isl
+
+import loopy as lp
 import pymbolic.primitives as prim
+import pytools
 from pymbolic import var
+from pytools.tag import Tag
 
-from typing import (Union, Optional, Mapping, Dict, Tuple, FrozenSet, Set,
-                    Any, List, Type, TYPE_CHECKING)
-
-
-from pytato.array import (Array, DictOfNamedArrays, ShapeType, IndexLambda,
-                          SizeParam, Placeholder, NamedArray, DataWrapper,
-                          ReductionDescriptor, InputArgumentBase)
-
-from pytato.target import BoundProgram
-from pytato.target.loopy import LoopyPyOpenCLTarget, LoopyTarget, ImplSubstitution
-from pytato.transform import Mapper
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES, TypeCast
-from pytato.codegen import preprocess, normalize_outputs, SymbolicIndex
+import pytato.reductions as red
+import pytato.scalar_expr as scalar_expr
+from pytato.array import (
+    Array,
+    DataWrapper,
+    DictOfNamedArrays,
+    IndexLambda,
+    InputArgumentBase,
+    NamedArray,
+    Placeholder,
+    ReductionDescriptor,
+    ShapeType,
+    SizeParam,
+)
+from pytato.codegen import (
+    SymbolicIndex,
+    _generate_name_for_temp,
+    normalize_outputs,
+    preprocess,
+)
 from pytato.function import Call, NamedCallResult
 from pytato.loopy import LoopyCall
-from pytato.tags import (ImplStored, ImplInlined, Named, PrefixNamed,
-                         ImplementationStrategy)
-from pytools.tag import Tag
-import pytato.reductions as red
-from pytato.codegen import _generate_name_for_temp
-import attrs
+from pytato.scalar_expr import INT_CLASSES, ScalarExpression, TypeCast
+from pytato.tags import (
+    ImplementationStrategy,
+    ImplInlined,
+    ImplStored,
+    Named,
+    PrefixNamed,
+)
+from pytato.target import BoundProgram
+from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
+from pytato.transform import Mapper
+
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):

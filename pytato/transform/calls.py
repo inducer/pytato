@@ -27,12 +27,16 @@ THE SOFTWARE.
 """
 
 from typing import Mapping
-from pytato.transform import (ArrayOrNames, CopyMapper)
-from pytato.array import (AbstractResultWithNamedArrays, Array,
-                          DictOfNamedArrays, Placeholder)
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    DictOfNamedArrays,
+    Placeholder,
+)
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
+from pytato.transform import ArrayOrNames, CopyMapper
 
 
 # {{{ inlining

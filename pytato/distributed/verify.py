@@ -10,6 +10,7 @@ Verification
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -35,22 +36,29 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, List, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Set
 
 import attrs
 import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
 
-from pytato.array import DictOfNamedArrays, make_dict_of_named_arrays, Placeholder
-from pytato.transform import ArrayOrNames, CachedWalkMapper
+from pytato.array import (
+    DictOfNamedArrays,
+    Placeholder,
+    ShapeType,
+    make_dict_of_named_arrays,
+)
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.distributed.partition import (
-        PartId, DistributedGraphPartition, CommunicationOpIdentifier)
-from pytato.array import ShapeType
+    CommunicationOpIdentifier,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.transform import ArrayOrNames, CachedWalkMapper
 
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -367,7 +375,8 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # Do a topological sort to check for any cycles
 
-        from pytools.graph import compute_topological_order, CycleError
+        from pytools.graph import CycleError, compute_topological_order
+
         from pytato.distributed.verify import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)

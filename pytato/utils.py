@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = "Copyright (C) 2021 Kaushik Kulkarni"
 
 __license__ = """
@@ -22,25 +23,56 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import islpy as isl
-import pymbolic.primitives as prim
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
-from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
-                    Optional, Iterable, TypeVar, FrozenSet)
-from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
-                          DtypeOrPyScalarType, ArrayOrScalar, BasicIndex,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any, Einsum)
-from pytato.scalar_expr import (
-    PYTHON_SCALAR_CLASSES, ScalarExpression, IntegralScalarExpression,
-    SCALAR_CLASSES, INT_CLASSES, BoolT, Scalar, TypeCast)
-from pytools import UniqueNameGenerator
-from pytato.transform import Mapper
-from pytools.tag import Tag
+import islpy as isl
+import numpy as np
 from immutabledict import immutabledict
+
+import pymbolic.primitives as prim
+from pytools import UniqueNameGenerator
+from pytools.tag import Tag
+
+from pytato.array import (
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    ArrayOrScalar,
+    BasicIndex,
+    ConvertibleToIndexExpr,
+    DtypeOrPyScalarType,
+    Einsum,
+    IndexExpr,
+    IndexLambda,
+    NormalizedSlice,
+    ShapeComponent,
+    ShapeType,
+    SizeParam,
+    _dtype_any,
+)
+from pytato.scalar_expr import (
+    INT_CLASSES,
+    PYTHON_SCALAR_CLASSES,
+    SCALAR_CLASSES,
+    BoolT,
+    IntegralScalarExpression,
+    Scalar,
+    ScalarExpression,
+    TypeCast,
+)
+from pytato.transform import Mapper
 
 
 __doc__ = """
@@ -70,7 +102,7 @@ def partition(pred: Callable[[Tpart], bool],
     """
     # Inspired from https://docs.python.org/3/library/itertools.html
     # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
-    from itertools import tee, filterfalse
+    from itertools import filterfalse, tee
     t1, t2 = tee(iterable)
     return list(filterfalse(pred, t1)), list(filter(pred, t2))
 
@@ -502,8 +534,8 @@ def _index_into(
         indices: Tuple[ConvertibleToIndexExpr, ...],
         tags: FrozenSet[Tag],
         non_equality_tags: FrozenSet[Tag]) -> Array:
-    from pytato.diagnostic import CannotBroadcastError
     from pytato.array import _get_default_axes
+    from pytato.diagnostic import CannotBroadcastError
 
     # {{{ handle ellipsis
 

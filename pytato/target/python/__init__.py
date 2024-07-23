@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2021 Kaushik Kulkarni"""
 
 __license__ = """
@@ -35,13 +36,14 @@ __doc__ = """
 .. autoclass:: BoundJAXPythonProgram
 """
 
-import numpy as np
-from dataclasses import dataclass
 from abc import ABC, abstractmethod, abstractproperty
+from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Mapping, FrozenSet, Callable, Dict, Set
+from typing import Any, Callable, Dict, FrozenSet, Mapping, Set
 
-from pytato.target import Target, BoundProgram
+import numpy as np
+
+from pytato.target import BoundProgram, Target
 
 
 # {{{ abstract types

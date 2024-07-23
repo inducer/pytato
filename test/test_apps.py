@@ -25,19 +25,19 @@ THE SOFTWARE.
 """
 
 import sys
+
 import numpy as np
 import numpy.linalg as la
 
 import pyopencl as cl
+from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
+from pyopencl.tools import (  # noqa: F401
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+from pytools.tag import Tag, tag_dataclass
 
 import pytato as pt
-from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
 from pytato.transform import CopyMapper, WalkMapper
-
-from pyopencl.tools import (  # noqa: F401
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-
-from pytools.tag import Tag, tag_dataclass
 
 
 # {{{ Trace an FFT

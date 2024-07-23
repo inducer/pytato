@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,19 +25,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
-from pytato.array import (AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, AxisPermutation,
-                          BasicIndex, Concatenate, DataWrapper, Einsum,
-                          IndexBase, IndexLambda, NamedArray,
-                          Reshape, Roll, Stack, AbstractResultWithNamedArrays,
-                          Array, DictOfNamedArrays, Placeholder, SizeParam)
-from pytato.function import Call, NamedCallResult, FunctionDefinition
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Union
+
 from pytools import memoize_method
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    NamedArray,
+    Placeholder,
+    Reshape,
+    Roll,
+    SizeParam,
+    Stack,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+
+
 if TYPE_CHECKING:
-    from pytato.loopy import LoopyCall, LoopyCallResult
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """
 .. autoclass:: EqualityComparer

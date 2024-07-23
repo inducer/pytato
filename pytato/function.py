@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __doc__ = """
 .. currentmodule:: pytato
 
@@ -43,17 +44,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import attrs
-import re
 import enum
-
-from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
-                    Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
-from immutabledict import immutabledict
+import re
 from functools import cached_property
-from pytato.array import (Array, AbstractResultWithNamedArrays,
-                          Placeholder, NamedArray, ShapeType, _dtype_any)
+from typing import (
+    Callable,
+    ClassVar,
+    Dict,
+    FrozenSet,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
+
+import attrs
+from immutabledict import immutabledict
+
 from pytools.tag import Tag, Taggable
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    NamedArray,
+    Placeholder,
+    ShapeType,
+    _dtype_any,
+)
+
 
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
 
@@ -338,8 +361,8 @@ def trace_call(f: Callable[..., ReturnT],
         :class:`~pytato.tags.FunctionIdentifier` tag, if ``_Guess`` the
         function identifier is guessed from ``f.__name__``.
     """
-    from pytato.tags import FunctionIdentifier
     from pytato.array import _get_default_tags
+    from pytato.tags import FunctionIdentifier
 
     if identifier is _Guess:
         # partials might not have a __name__ attribute

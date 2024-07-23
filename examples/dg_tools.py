@@ -1,7 +1,9 @@
-import numpy as np
-import numpy.polynomial.legendre as leg
-import numpy.linalg as la
 import contextlib
+
+import numpy as np
+import numpy.linalg as la
+import numpy.polynomial.legendre as leg
+
 
 __doc__ = """
 Notation convention for operator shapes

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+import functools
+
 import numpy as np
 import pytest
-import functools
-from dg_tools import DGDiscr1D, integrate, DGOps1D, DGOps1DRef
+from dg_tools import DGDiscr1D, DGOps1D, DGOps1DRef, integrate
+
 
 memoized = functools.lru_cache(maxsize=None)
 
@@ -138,8 +140,9 @@ def test_advection_convergence(order, flux_type):
     errors = []
     hs = []
 
-    import pytato as pt
     import pyopencl as cl
+
+    import pytato as pt
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -169,8 +172,9 @@ def test_advection_convergence(order, flux_type):
 
 
 def main():
-    import pytato as pt
     import pyopencl as cl
+
+    import pytato as pt
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
