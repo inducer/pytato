@@ -33,7 +33,7 @@ from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeCompone
                           AdvancedIndexInContiguousAxes,
                           AdvancedIndexInNoncontiguousAxes,
                           ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any, Einsum, EinsumAxisDescriptor)
+                          _dtype_any, Einsum)
 from pytato.scalar_expr import (
     PYTHON_SCALAR_CLASSES, ScalarExpression, IntegralScalarExpression,
     SCALAR_CLASSES, INT_CLASSES, BoolT, Scalar, TypeCast)
@@ -649,22 +649,15 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
 
         >>> A = pt.make_placeholder("A", (10, 6), np.float64)
         >>> B = pt.make_placeholder("B", (6, 5), np.float64)
-        >>> C = pt.make_placeholder("B", (5, 4), np.float64)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
         >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
         >>> get_einsum_subscript_str(ABC)
         'ij,jk,kl->il'
     """
     from pytato.array import EinsumElementwiseAxis
-    from pytools import unique
-    all_access_descriptors: Tuple[EinsumAxisDescriptor, ...] = ()
-    for descr in expr.access_descriptors:
-        all_access_descriptors = (*all_access_descriptors, *descr)
 
-    unique_descrs: List[EinsumAxisDescriptor] = list(unique(all_access_descriptors))
-
-    base_chr_num = ord("a")
-    access_descr_to_index = {descr: chr(base_chr_num + idim) for idim, descr
-                                in enumerate(unique_descrs)}
+    access_descr_to_index = {descr: key for key, descr
+                             in expr.index_to_access_descriptor.items()}
 
     arg_subscripts: List[str] = []
 
@@ -672,8 +665,8 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         arg_subscripts.append("".join([access_descr_to_index[descr]
                                        for descr in input_descriptors]))
 
-    output_subscripts = "".join([access_descr_to_index[acc_desc] for acc_desc in
-                                 unique_descrs
+    output_subscripts = "".join([index for acc_desc, index in
+                                 access_descr_to_index.items()
                                  if isinstance(acc_desc, EinsumElementwiseAxis)])
 
     return f"{','.join(arg_subscripts)}->{output_subscripts}"

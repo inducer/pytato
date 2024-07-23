@@ -1005,21 +1005,25 @@ def test_with_tagged_reduction():
     x_colsum = pt.einsum("ij->j", x)
 
     with pytest.raises(NotAReductionAxis):
-        # 'j': not being reduced over.
+        # 'j': unknown axis.
         x_colsum.with_tagged_reduction("j", FooRednTag())
 
     with pytest.raises(InvalidEinsumIndex):
         # 'k': unknown axis
         x_colsum.with_tagged_reduction("k", FooRednTag())
 
-    with pytest.raises(NotAReductionAxis):
-        # 'i': not being reduced over.
+    with pytest.raises(InvalidEinsumIndex):
+        # 'i': unknown axis.
         x_trace.with_tagged_reduction("i", FooRednTag())
 
-    x_colsum = x_colsum.with_tagged_reduction("i", FooRednTag())
+    with pytest.raises(NotAReductionAxis):
+        # 'a': 0th axis is not a reduction axis.
+        x_trace.with_tagged_reduction("a", FooRednTag())
+
+    x_colsum = x_colsum.with_tagged_reduction("a", FooRednTag())
 
     assert (x_colsum
-            .redn_axis_to_redn_descr[x_colsum.index_to_access_descr["i"]]
+            .redn_axis_to_redn_descr[x_colsum.index_to_access_descriptor["a"]]
             .tags_of_type(FooRednTag))
 
 

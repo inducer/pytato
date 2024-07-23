@@ -1159,6 +1159,21 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         return immutabledict(descr_to_axis_len)
 
     @cached_property
+    def index_to_access_descriptor(self) -> Mapping[str, EinsumAxisDescriptor]:
+        from pytools import unique
+        all_descriptors: Tuple[EinsumAxisDescriptor, ...] = ()
+        for descr in self.access_descriptors:
+            all_descriptors = (*all_descriptors, *descr)
+        unique_descrs: List[EinsumAxisDescriptor] = list(unique(all_descriptors))
+
+        base_chr_num = ord("a")
+
+        assert all_descriptors[0] == unique_descrs[0]
+
+        return {chr(base_chr_num + idim): descr for idim, descr
+                in enumerate(unique_descrs)}
+
+    @cached_property
     def shape(self) -> ShapeType:
         iaxis_to_len: Dict[int, ShapeComponent] = {}
 
@@ -1179,13 +1194,31 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         return np.result_type(*[arg.dtype for arg in self.args])
 
     def with_tagged_reduction(self,
-                              redn_axis: EinsumReductionAxis,
+                              redn_axis: Union[EinsumReductionAxis, str],
                               tag: Tag) -> Einsum:
         """
         Returns a copy of *self* with the :class:`ReductionDescriptor`
         associated with *redn_axis* tagged with *tag*.
         """
+        from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+
         # {{{ sanity checks
+        if isinstance(redn_axis, str):
+            try:
+                redn_axis_ = self.index_to_access_descriptor[redn_axis]
+            except KeyError as err:
+                raise InvalidEinsumIndex(
+                        f"'{redn_axis}': not a valid axis index.") from err
+            if isinstance(redn_axis_, EinsumReductionAxis):
+                redn_axis = redn_axis_
+            else:
+                raise NotAReductionAxis(f"'{redn_axis}' is not"
+                                        " a reduction axis.")
+        elif isinstance(redn_axis, EinsumReductionAxis):
+            pass
+        else:
+            raise TypeError("Argument 'redn_axis' expected to be"
+                            f" EinsumReductionAxis, got {type(redn_axis)}")
 
         if redn_axis in self.redn_axis_to_redn_descr:
             assert any(redn_axis in access_descrs
