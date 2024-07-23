@@ -77,7 +77,6 @@ class _EinsumDistributiveLawMapperContext:
     surrounding_args: Mapping[int, Array]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
     axes: AxesT = attrs.field(kw_only=True)
     tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
@@ -106,7 +105,6 @@ def _wrap_einsum_from_ctx(expr: Array,
             ctx.access_descriptors,
             new_args,
             ctx.redn_axis_to_redn_descr,
-            ctx.index_to_access_descr,
             tags=ctx.tags,
             axes=ctx.axes
         )
@@ -251,7 +249,6 @@ class EinsumDistributiveLawMapper(Mapper):
                          for iarg, arg in enumerate(expr.args)
                          if iarg != distributive_law_descr.ioperand}),
                     immutabledict(expr.redn_axis_to_redn_descr),
-                    immutabledict(expr.index_to_access_descr),
                     tags=expr.tags,
                     axes=expr.axes,
                 )
@@ -262,7 +259,6 @@ class EinsumDistributiveLawMapper(Mapper):
                 expr.access_descriptors,
                 tuple(self.rec(arg, None) for arg in expr.args),
                 expr.redn_axis_to_redn_descr,
-                index_to_access_descr=expr.index_to_access_descr,
                 tags=expr.tags,
                 axes=expr.axes
             )

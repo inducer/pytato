@@ -64,7 +64,6 @@ class EinsumWithNoBroadcastsRewriter(CopyMapper):
         return Einsum(tuple(new_access_descriptors),
                       tuple(new_args),
                       expr.redn_axis_to_redn_descr,
-                      expr.index_to_access_descr,
                       tags=expr.tags,
                       axes=expr.axes,)
 

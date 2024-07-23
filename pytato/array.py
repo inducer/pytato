@@ -1130,8 +1130,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                      ReductionDescriptor] = \
         attrs.field(validator=attrs.validators.instance_of(immutabledict))
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
     _mapper_method: ClassVar[str] = "map_einsum"
 
     @memoize_method
@@ -1181,7 +1179,7 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         return np.result_type(*[arg.dtype for arg in self.args])
 
     def with_tagged_reduction(self,
-                              redn_axis: Union[EinsumReductionAxis, str],
+                              redn_axis: EinsumReductionAxis,
                               tag: Tag) -> Einsum:
         """
         Returns a copy of *self* with the :class:`ReductionDescriptor`
@@ -1189,23 +1187,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         """
         from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
         # {{{ sanity checks
-
-        if isinstance(redn_axis, str):
-            try:
-                redn_axis_ = self.index_to_access_descr[redn_axis]
-            except KeyError as err:
-                raise InvalidEinsumIndex(
-                             f"'{redn_axis}': not a valid axis index.") from err
-            if isinstance(redn_axis_, EinsumReductionAxis):
-                redn_axis = redn_axis_
-            else:
-                raise NotAReductionAxis(f"'{redn_axis}' is not"
-                                        " a reduction axis.")
-        elif isinstance(redn_axis, EinsumReductionAxis):
-            pass
-        else:
-            raise TypeError("Argument 'redn_axis' expected to be"
-                            f" EinsumReductionAxis, got {type(redn_axis)}")
 
         if redn_axis in self.redn_axis_to_redn_descr:
             assert any(redn_axis in access_descrs
@@ -1227,7 +1208,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
                           redn_axis_to_redn_descr=immutabledict
                             (new_redn_axis_to_redn_descr),
                           tags=self.tags,
-                          index_to_access_descr=self.index_to_access_descr,
                           non_equality_tags=self.non_equality_tags,
                           )
 
@@ -1434,7 +1414,6 @@ def einsum(subscripts: str, *operands: Array,
                                                             EinsumElementwiseAxis)})
                                          ),
                   redn_axis_to_redn_descr=immutabledict(redn_axis_to_redn_descr),
-                  index_to_access_descr=index_to_descr,
                   non_equality_tags=_get_created_at_tag(),
                   )
 

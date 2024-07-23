@@ -632,8 +632,11 @@ def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
 
 def get_einsum_subscript_str(expr: Einsum) -> str:
     """
-    Returns the index subscript expression that was used in constructing *expr*
-    using the :func:`pytato.einsum` routine.
+    Returns the index subscript expression that can be 
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
+    Note this is not ensured to be the same string as what you entered
+    when you called :func:`pytato.einsum`.
 
 
     .. testsetup::
@@ -652,21 +655,28 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         'ij,jk,kl->il'
     """
     from pytato.array import EinsumElementwiseAxis
+    from pytools import unique
+    all_access_descriptors = ()
+    for descr in expr.access_descriptors:
+        all_access_descriptors = (*all_access_descriptors, *descr)
 
-    acc_descr_to_index = {
-        acc_descr: idx
-        for idx, acc_descr in expr.index_to_access_descr.items()
-    }
 
-    output_subscripts = "".join(
-        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
-         for idim in range(expr.ndim)]
-    )
+    unique_descriptors = list(unique(all_access_descriptors))
+    
+    base_chr_num = ord("a")
+    access_descr_to_index = { descr: chr(base_chr_num + idim) for idim, descr
+                                in enumerate(unique_descriptors) }
+
     arg_subscripts: List[str] = []
 
-    for acc_descrs in expr.access_descriptors:
-        arg_subscripts.append("".join(acc_descr_to_index[acc_descr]
-                                      for acc_descr in acc_descrs))
+    for input_descriptors in expr.access_descriptors:
+        arg_subscripts.append("".join([access_descr_to_index[descr]
+                                       for descr in input_descriptors]))
+
+    output_subscripts = "".join([access_descr_to_index[acc_desc] for acc_desc in
+                                 unique_descriptors
+                                 if isinstance(acc_desc, EinsumElementwiseAxis)])
+
 
     return f"{','.join(arg_subscripts)}->{output_subscripts}"
 
