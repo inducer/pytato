@@ -116,7 +116,7 @@ def execute_distributed_partition(
 
     if any(part.name_to_recv_node for part in partition.parts.values()):
         recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
-            (name,) + _post_receive(mpi_communicator, recv)
+            (name, *_post_receive(mpi_communicator, recv))
             for part in partition.parts.values()
             for name, recv in part.name_to_recv_node.items()])
         recv_names = list(recv_names_tup)

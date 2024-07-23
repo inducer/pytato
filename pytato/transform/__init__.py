@@ -1446,7 +1446,7 @@ class MPMSMaterializer(Mapper):
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
-                                    (rec_array,) + tuple(rec_indices.values())
+                                    (rec_array, *tuple(rec_indices.values()))
                                     )
 
     map_basic_index = _map_index_base

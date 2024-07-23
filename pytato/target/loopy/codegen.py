@@ -399,7 +399,7 @@ class CodeGenMapper(Mapper):
                                                         self
                                                         .array_tag_t_to_not_propagate
                                                         ))
-        kernel = state.kernel.copy(args=state.kernel.args + [arg])
+        kernel = state.kernel.copy(args=[*state.kernel.args, arg])
         state.update_kernel(kernel)
         assert expr.name is not None
         result = StoredResult(expr.name, expr.ndim, frozenset())
@@ -423,7 +423,7 @@ class CodeGenMapper(Mapper):
                 tags=_filter_tags_not_of_type(expr,
                                               self
                                               .array_tag_t_to_not_propagate))
-        kernel = state.kernel.copy(args=state.kernel.args + [arg])
+        kernel = state.kernel.copy(args=[*state.kernel.args, arg])
         state.update_kernel(kernel)
         assert expr.name is not None
         result = StoredResult(expr.name, expr.ndim, frozenset())
@@ -611,7 +611,7 @@ class CodeGenMapper(Mapper):
         tvs = state.kernel.temporary_variables.copy()
         tvs.update(new_tvs)
 
-        kernel = kernel.copy(instructions=kernel.instructions+[new_insn],
+        kernel = kernel.copy(instructions=[*kernel.instructions, new_insn],
                              temporary_variables=tvs,
                              domains=kernel.domains+domains)
 
@@ -743,7 +743,7 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
             redn_iname: self.rec(bounds, prstnt_ctx, local_ctx)
             for redn_iname, bounds in new_bounds.items()})
         kernel = state.kernel
-        state.update_kernel(kernel.copy(domains=kernel.domains+[domain]))
+        state.update_kernel(kernel.copy(domains=[*kernel.domains, domain]))
 
         # {{{ pytato tags -> loopy tags
 
@@ -794,7 +794,7 @@ def shape_to_scalar_expression(shape: ShapeType,
 def domain_for_shape(dim_names: Tuple[str, ...],
          shape: Tuple[ScalarExpression, ...],
          reductions: Dict[str, Tuple[ScalarExpression, ScalarExpression]],
-         ) -> isl.BasicSet:  # noqa
+         ) -> isl.BasicSet:
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape* having reduction
     dimensions *reductions*.
@@ -932,7 +932,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 tags=_filter_tags_not_of_type(expr,
                                               cgen_mapper
                                               .array_tag_t_to_not_propagate))
-        kernel = kernel.copy(args=kernel.args + [arg],
+        kernel = kernel.copy(args=[*kernel.args, arg],
                 domains=kernel.domains + additional_domains,
                 instructions=kernel.instructions + additional_insns)
 
