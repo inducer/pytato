@@ -52,6 +52,7 @@ from pytato.array import (
     AxisPermutation,
     Concatenate,
     Einsum,
+    EinsumElementwiseAxis,
     IndexBase,
     IndexLambda,
     NormalizedSlice,
@@ -333,6 +334,27 @@ class ExpansionMapper(CopyMapper):
                            non_equality_tags=expr.non_equality_tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
+
+        new_predecessors = tuple(self.rec(arg) for arg in expr.args)
+        _, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessor(expr, new_predecessors) # noqa
+        
+        access_descriptors = ()
+        for ival, array in enumerate(new_predecessors):
+            one_descr = expr.access_descriptors[ival]
+            if arrays_to_study_num_present:
+                for ind in arrays_to_study_num_present[array]:
+                    one_descr = (*one_descr,
+                                 # Adding in new element axes to the end of the arrays.
+                                 EinsumElementwiseAxis(dim=len(expr.shape) + ind))
+            access_descriptors = (*access_descriptors, one_descr)
+        out = Einsum(access_descriptors,
+                     new_predecessors,
+                     axes=expr.axes + new_axes,
+                     redn_axis_to_redn_descr = expr.redn_axis_to_redn_descr,
+                     index_to_access_descr = expr.index_to_access_descr,
+                     tags = expr.tags,
+                     non_equality_tags = expr.non_equality_tags)
+        breakpoint()
 
         return super().map_einsum(expr)
 

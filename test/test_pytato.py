@@ -1084,6 +1084,7 @@ def test_expansion_mapper_basic_index():
     assert new_expr.shape == (10,)
     assert new_expr.axes[0].tags_of_type(ParameterStudyAxisTag)
 
+
 def test_expansion_mapper_advanced_index_contiguous_axes():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
 
@@ -1092,7 +1093,7 @@ def test_expansion_mapper_advanced_index_contiguous_axes():
     name_to_studies = {name: frozenset((my_study,))}
     expr = pt.make_placeholder(name, (15, 5), dtype=int)[pt.arange(10, dtype=int)]
 
-    assert expr.shape == (10,5)
+    assert expr.shape == (10, 5)
 
     my_mapper = ExpansionMapper(name_to_studies)
     new_expr = my_mapper(expr)
@@ -1102,14 +1103,15 @@ def test_expansion_mapper_advanced_index_contiguous_axes():
     assert isinstance(new_expr, pt.AdvancedIndexInContiguousAxes)
     assert isinstance(expr, type(new_expr))
 
+
 def test_expansion_mapper_advanced_index_non_contiguous_axes():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(0, 10)
     name_to_studies = {name: frozenset((my_study,))}
-    ind0 = pt.arange(10, dtype=int).reshape(10,1)
-    ind1 = pt.arange(2, dtype=int).reshape(1,2)
+    ind0 = pt.arange(10, dtype=int).reshape(10, 1)
+    ind1 = pt.arange(2, dtype=int).reshape(1, 2)
     expr = pt.make_placeholder(name, (15, 1000, 5), dtype=int)[ind0, :, ind1]
 
     assert isinstance(expr, pt.AdvancedIndexInNoncontiguousAxes)
@@ -1122,6 +1124,7 @@ def test_expansion_mapper_advanced_index_non_contiguous_axes():
 
     assert isinstance(new_expr, pt.AdvancedIndexInNoncontiguousAxes)
     assert isinstance(expr, type(new_expr))
+
 
 def test_expansion_mapper_index_lambda():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
@@ -1182,6 +1185,7 @@ def test_expansion_mapper_axis_permutation():
             assert tags
         else:
             assert not tags
+
 
 def test_expansion_mapper_reshape():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
@@ -1252,6 +1256,7 @@ def test_expansion_mapper_stack():
     assert not new_expr.axes[3].tags_of_type(Study2)
     assert not new_expr.axes[4].tags_of_type(Study1)
 
+
 def test_expansion_mapper_concatenate():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
 
@@ -1286,6 +1291,7 @@ def test_expansion_mapper_concatenate():
     assert not new_expr.axes[2].tags_of_type(Study2)
     assert not new_expr.axes[3].tags_of_type(Study1)
 
+
 def test_expansion_mapper_einsum_matmul():
     from pytato.transform.parameter_study import ParameterStudyAxisTag, ExpansionMapper
 
@@ -1299,12 +1305,12 @@ def test_expansion_mapper_einsum_matmul():
     arr2 = "foo"
     study2 = Study2(0, 1000)
     name_to_studies = {name: frozenset((study1,)), arr2: frozenset((study2,))}
-   
+
     # Matmul gets expanded correctly.
     a = pt.make_placeholder(name, (47, 42), dtype=int)
     b = pt.make_placeholder(arr2, (42, 5), dtype=int)
 
-    c = pt.matmul(a,b)
+    c = pt.matmul(a, b)
     assert isinstance(c, pt.Einsum)
     assert c.shape == (47, 5)
 
@@ -1312,7 +1318,6 @@ def test_expansion_mapper_einsum_matmul():
     updated_c = my_mapper(c)
 
     assert updated_c.shape == (47, 5, 10, 1000)
-
 
 
 def test_expansion_mapper_does_nothing_if_tags_not_there():
@@ -1329,7 +1334,6 @@ def test_expansion_mapper_does_nothing_if_tags_not_there():
     study2 = Study2(0, 1000)
     name_to_studies = {name: frozenset((study1,)), arr2: frozenset((study2,))}
     from testlib import RandomDAGContext, make_random_dag
-    import pickle
     from pytools import UniqueNameGenerator
     axis_len = 5
 
