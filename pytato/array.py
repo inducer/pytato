@@ -1184,10 +1184,10 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         used to determine an appropriate input string to 'func': with_tagged_reduction.
         """
         from pytools import unique
-        all_descriptors: Tuple[EinsumAxisDescriptor, ...] = ()
+        all_descriptors: tuple[EinsumAxisDescriptor, ...] = ()
         for descr in self.access_descriptors:
             all_descriptors = (*all_descriptors, *descr)
-        unique_descrs: List[EinsumAxisDescriptor] = list(unique(all_descriptors))
+        unique_descrs: list[EinsumAxisDescriptor] = list(unique(all_descriptors))
 
         base_chr_num = ord("a")
 

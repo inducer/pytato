@@ -686,7 +686,7 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
                              in expr.index_to_access_descriptor.items()}
 
     output_subscripts = "".join(
-        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
+        [access_descr_to_index[EinsumElementwiseAxis(idim)]
          for idim in range(expr.ndim)]
     )
     arg_subscripts: list[str] = []
