@@ -30,17 +30,10 @@ import os
 import sys
 from typing import (
     Callable,
-    Dict,
     Iterable,
-    List,
     Mapping,
-    Optional,
-    Set,
-    Tuple,
-    Type,
     TypedDict,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -119,7 +112,7 @@ def _c99_callop_numpy_name(hlo: C99CallOp) -> str:
 
 
 def first_true(iterable: Iterable[T], default: T,
-               pred: Optional[Callable[[T], bool]] = None) -> T:
+               pred: Callable[[T], bool] | None = None) -> T:
     """
     Returns the first true value in *iterable*. If no true value is found,
     returns *default* If *pred* is not None, returns the first item for which
@@ -136,7 +129,7 @@ def _get_einsum_subscripts(einsum: Einsum) -> str:
 
     idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
     idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
-    axis_descr_to_idx: Dict[EinsumAxisDescriptor, str] = {}
+    axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
     input_specs = []
     for access_descr in einsum.access_descriptors:
         spec = ""
@@ -190,7 +183,7 @@ LOGICAL_OP_TO_CALL = {BinaryOpType.LOGICAL_OR:  "logical_or",
                       BinaryOpType.LOGICAL_AND: "logical_and",
                       }
 
-PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[Type[ReductionOperation], str] = {
+PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
     SumReductionOperation: "sum",
     ProductReductionOperation: "product",
     MaxReductionOperation: "max",
@@ -213,9 +206,9 @@ class NumpyCodegenMapper(CachedMapper[str]):
         self.numpy_backend = numpy_backend
         self.vng = vng
 
-        self.lines: List[ast.stmt] = []
-        self.arg_names: Set[str] = set()
-        self.bound_arguments: Dict[str, DataInterface] = {}
+        self.lines: list[ast.stmt] = []
+        self.arg_names: set[str] = set()
+        self.bound_arguments: dict[str, DataInterface] = {}
 
     def _record_line_and_return_lhs(self, lhs: str, rhs: ast.expr) -> str:
         self.lines.append(ast.Assign(targets=[ast.Name(lhs)],
@@ -565,13 +558,13 @@ class NumpyCodegenMapper(CachedMapper[str]):
         return self._record_line_and_return_lhs(lhs, rhs)
 
 
-def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArrays],
+def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                         target: NumpyLikePythonTarget,
                         function_name: str,
                         show_code: bool,
-                        entrypoint_decorators: Tuple[str, ...],
-                        extra_preambles: Tuple[ast.stmt, ...],
-                        colorize_show_code: Optional[bool] = None,
+                        entrypoint_decorators: tuple[str, ...],
+                        extra_preambles: tuple[ast.stmt, ...],
+                        colorize_show_code: bool | None = None,
                         ) -> BoundPythonProgram:
     import collections
 

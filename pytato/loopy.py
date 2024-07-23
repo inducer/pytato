@@ -30,15 +30,10 @@ from numbers import Number
 from typing import (
     Any,
     ClassVar,
-    Dict,
-    FrozenSet,
     Iterable,
     Iterator,
     Mapping,
-    Optional,
     Sequence,
-    Tuple,
-    Union,
 )
 
 import attrs
@@ -103,7 +98,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
-    translation_unit: "lp.TranslationUnit"
+    translation_unit: lp.TranslationUnit
     bindings: Mapping[str, ArrayOrScalar] = \
         attrs.field(validator=attrs.validators.instance_of(immutabledict))
     entrypoint: str
@@ -113,7 +108,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     copy = attrs.evolve
 
     @property
-    def _result_names(self) -> FrozenSet[str]:
+    def _result_names(self) -> frozenset[str]:
         return frozenset({name
                           for name, lp_arg in self._entry_kernel.arg_dict.items()
                           if lp_arg.is_output})
@@ -189,9 +184,9 @@ class LoopyCallResult(NamedArray):
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 
-def call_loopy(translation_unit: "lp.TranslationUnit",
-               bindings: Dict[str, ArrayOrScalar],
-               entrypoint: Optional[str] = None) -> LoopyCall:
+def call_loopy(translation_unit: lp.TranslationUnit,
+               bindings: dict[str, ArrayOrScalar],
+               entrypoint: str | None = None) -> LoopyCall:
     """
     Invokes an entry point of a :class:`loopy.TranslationUnit` on the array inputs as
     specified by *bindings*.
@@ -328,7 +323,7 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
 
 def solve_constraints(variables: Iterable[str],
                       parameters: Iterable[str],
-                      constraints: Sequence[Tuple[ScalarExpression,
+                      constraints: Sequence[tuple[ScalarExpression,
                                                   ScalarExpression]],
 
                       ) -> Mapping[str, ScalarExpression]:
@@ -387,12 +382,12 @@ def _lp_var_from_global_namespace(name: str) -> str:
     return name[4:]
 
 
-def _pt_var_to_global_namespace(name: Optional[str]) -> str:
+def _pt_var_to_global_namespace(name: str | None) -> str:
     assert name is not None  # size params are always named
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
+def _get_pt_dim_expr(dim: IntegralT | Array) -> ScalarExpression:
     from pymbolic.mapper.substitutor import substitute
 
     from pytato.utils import dim_to_index_lambda_components
@@ -420,13 +415,13 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     get_size_param_deps = SizeParamGatherer()
 
-    lp_size_params: FrozenSet[str] = reduce(frozenset.union,
+    lp_size_params: frozenset[str] = reduce(frozenset.union,
                                             (lpy_get_deps(arg.shape)
                                              for arg in knl.args
                                              if isinstance(arg, ArrayBase)),
                                             frozenset())
 
-    pt_size_params: FrozenSet[SizeParam] = reduce(frozenset.union,
+    pt_size_params: frozenset[SizeParam] = reduce(frozenset.union,
                                                   (get_size_param_deps(bnd)
                                                    for bnd in bindings.values()
                                                    if isinstance(bnd, Array)),

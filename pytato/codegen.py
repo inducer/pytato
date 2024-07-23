@@ -24,7 +24,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Mapping, Tuple
 
 from immutabledict import immutabledict
 
@@ -119,13 +119,13 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     """
 
     def __init__(self, target: Target,
-                 kernels_seen: Optional[Dict[str, lp.LoopKernel]] = None
+                 kernels_seen: dict[str, lp.LoopKernel] | None = None
                  ) -> None:
         super().__init__()
-        self.bound_arguments: Dict[str, DataInterface] = {}
+        self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
-        self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
+        self.kernels_seen: dict[str, lp.LoopKernel] = kernels_seen or {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
@@ -219,8 +219,9 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 # }}}
 
 
-def normalize_outputs(result: Union[Array, DictOfNamedArrays,
-                                    Dict[str, Array]]) -> DictOfNamedArrays:
+def normalize_outputs(
+            result: Array | DictOfNamedArrays | dict[str, Array]
+        ) -> DictOfNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
     Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
@@ -247,7 +248,7 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper):
     def __init__(self) -> None:
-        self.name_to_input: Dict[str, InputArgumentBase] = {}
+        self.name_to_input: dict[str, InputArgumentBase] = {}
         super().__init__()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
@@ -280,8 +281,8 @@ def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class PreprocessResult:
     outputs: DictOfNamedArrays
-    compute_order: Tuple[str, ...]
-    bound_arguments: Dict[str, DataInterface]
+    compute_order: tuple[str, ...]
+    bound_arguments: dict[str, DataInterface]
 
 
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
@@ -311,7 +312,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                   - frozenset([name]))
            for name, val in deps.items()}
 
-    output_order: List[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
+    output_order: list[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
 
     # }}}
 

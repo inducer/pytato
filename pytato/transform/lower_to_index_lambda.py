@@ -28,7 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from immutabledict import immutabledict
 
@@ -60,7 +60,7 @@ from pytato.transform import Mapper
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
-def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
+def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     if expr.array.shape == ():
         # RHS must be a scalar i.e. RHS' indices are empty
         assert expr.size == 1
@@ -69,7 +69,7 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
     if expr.order != "C":
         raise NotImplementedError(expr.order)
 
-    newstrides: List[IntegralT] = [1]  # reshaped array strides
+    newstrides: list[IntegralT] = [1]  # reshaped array strides
     for new_axis_len in reversed(expr.shape[1:]):
         assert isinstance(new_axis_len, INT_CLASSES)
         newstrides.insert(0, newstrides[0]*new_axis_len)
@@ -77,7 +77,7 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
     flattened_idx = sum(prim.Variable(f"_{i}")*stride
                         for i, stride in enumerate(newstrides))
 
-    oldstrides: List[IntegralT] = [1]  # input array strides
+    oldstrides: list[IntegralT] = [1]  # input array strides
     for axis_len in reversed(expr.array.shape[1:]):
         assert isinstance(axis_len, INT_CLASSES)
         oldstrides.insert(0, oldstrides[0]*axis_len)
@@ -165,8 +165,8 @@ class ToIndexLambdaMixin:
                      for i in range(len(expr.shape))]
             return Subscript(aggregate, tuple(index))
 
-        lbounds: List[Any] = [0]
-        ubounds: List[Any] = [expr.arrays[0].shape[expr.axis]]
+        lbounds: list[Any] = [0]
+        ubounds: list[Any] = [expr.arrays[0].shape[expr.axis]]
 
         for i, array in enumerate(expr.arrays[1:], start=1):
             ubounds.append(ubounds[i-1]+array.shape[expr.axis])
@@ -215,8 +215,8 @@ class ToIndexLambdaMixin:
         )
 
         bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
-        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
-        args_as_pym_expr: List[prim.Subscript] = []
+        redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
+        args_as_pym_expr: list[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
         var_to_redn_descr = {}
 

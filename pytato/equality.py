@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Union
 
 from pytools import memoize_method
 
@@ -83,7 +83,7 @@ class EqualityComparer:
           more on this.
     """
     def __init__(self) -> None:
-        self._cache: Dict[Tuple[int, int], bool] = {}
+        self._cache: dict[tuple[int, int], bool] = {}
 
     def rec(self, expr1: ArrayOrNames, expr2: Any) -> bool:
         cache_key = id(expr1), id(expr2)
@@ -91,7 +91,7 @@ class EqualityComparer:
             return self._cache[cache_key]
         except KeyError:
 
-            method: Callable[[Union[Array, AbstractResultWithNamedArrays], Any],
+            method: Callable[[Array | AbstractResultWithNamedArrays, Any],
                              bool]
 
             try:

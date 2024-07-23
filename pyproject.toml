@@ -11,6 +11,7 @@ extend-select = [
     "W",    # pycodestyle
     "NPY",   # numpy
     "RUF",
+    "UP",
 ]
 extend-ignore = [
   "E226",

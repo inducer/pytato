@@ -34,7 +34,7 @@ THE SOFTWARE.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Hashable, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Hashable, Mapping
 
 import numpy as np
 
@@ -81,7 +81,7 @@ def generate_code_for_partition(partition: DistributedGraphPartition) \
 # {{{ distributed execute
 
 def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
-                 recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
+                 recv: DistributedRecv) -> tuple[Any, np.ndarray[Any, Any]]:
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
 
@@ -103,11 +103,11 @@ def _mpi_send(mpi_communicator: Any, send_node: DistributedSend,
 
 def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
-        Dict[Hashable, BoundProgram],
+        dict[Hashable, BoundProgram],
         queue: Any, mpi_communicator: Any,
         *,
-        allocator: Optional[Any] = None,
-        input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        allocator: Any | None = None,
+        input_args: dict[str, Any] | None = None) -> dict[str, Any]:
 
     if input_args is None:
         input_args = {}
@@ -130,7 +130,7 @@ def execute_distributed_partition(
         recv_requests = []
         recv_buffers = []
 
-    context: Dict[str, Any] = input_args.copy()
+    context: dict[str, Any] = input_args.copy()
 
     pids_to_execute = set(partition.parts)
     pids_executed = set()
@@ -146,8 +146,8 @@ def execute_distributed_partition(
 
     @memoize_on_first_arg
     def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
-            -> Dict[str, int]:
-        partition_input_names_refcount: Dict[str, int] = {}
+            -> dict[str, int]:
+        partition_input_names_refcount: dict[str, int] = {}
         for pid in set(partition.parts):
             for name in partition.parts[pid].all_input_names():
                 if name in partition_input_names_refcount:

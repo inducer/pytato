@@ -21,7 +21,7 @@ Pre-Defined Tags
 
 from dataclasses import dataclass
 from traceback import FrameSummary, StackSummary
-from typing import Hashable, Optional, Tuple
+from typing import Hashable
 
 from pytools.tag import Tag, UniqueTag, tag_dataclass
 
@@ -119,9 +119,9 @@ class _PytatoFrameSummary:
     """Class to store a single call frame, similar to
     :class:`traceback.FrameSummary`, but immutable."""
     filename: str
-    lineno: Optional[int]
+    lineno: int | None
     name: str
-    line: Optional[str]
+    line: str | None
 
     def short_str(self, maxlen: int = 100) -> str:
         s = f"{self.filename}:{self.lineno}, in {self.name}():\n{self.line}"
@@ -139,7 +139,7 @@ class _PytatoFrameSummary:
 class _PytatoStackSummary:
     """Class to store a list of :class:`_PytatoFrameSummary` call frames,
     similar to :class:`traceback.StackSummary`, but immutable."""
-    frames: Tuple[_PytatoFrameSummary, ...]
+    frames: tuple[_PytatoFrameSummary, ...]
 
     def to_stacksummary(self) -> StackSummary:
         frames = [FrameSummary(f.filename, f.lineno, f.name, line=f.line)
@@ -198,7 +198,7 @@ class ExpandedDimsReshape(UniqueTag):
         >>> pt.expand_dims(x, (0, 2, 4)).tags_of_type(pt.tags.ExpandedDimsReshape)
         frozenset({ExpandedDimsReshape(new_dims=(0, 2, 4))})
     """
-    new_dims: Tuple[int, ...]
+    new_dims: tuple[int, ...]
 
 
 @tag_dataclass
