@@ -172,7 +172,7 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import partialmethod, cached_property
 import operator
-import attrs
+import dataclasses
 from typing import (
         Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
         Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
@@ -380,7 +380,7 @@ def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
         return dtype
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class NormalizedSlice:
     """
     A normalized version of :class:`slice`. "Normalized" is explained in
@@ -405,7 +405,7 @@ class NormalizedSlice:
     step: IntegralT
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class Axis(Taggable):
     """
     A type for recording the information about an :class:`~pytato.Array`'s
@@ -414,11 +414,11 @@ class Axis(Taggable):
     tags: FrozenSet[Tag]
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> Axis:
-        from attrs import evolve as replace
+        from dataclasses import replace
         return replace(self, tags=tags)
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class ReductionDescriptor(Taggable):
     """
     Records information about a reduction dimension in an
@@ -427,11 +427,11 @@ class ReductionDescriptor(Taggable):
     tags: FrozenSet[Tag]
 
     def _with_new_tags(self, tags: FrozenSet[Tag]) -> ReductionDescriptor:
-        from attrs import evolve as replace
+        from dataclasses import replace
         return replace(self, tags=tags)
 
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Array(Taggable):
     r"""
     A base class (abstract interface + supplemental functionality) for lazily
@@ -521,7 +521,6 @@ class Array(Taggable):
     .. attribute:: ndim
 
     """
-
     # otherwise subclasses cannot set these
     if TYPE_CHECKING:
         @property
@@ -550,7 +549,7 @@ class Array(Taggable):
         return self.__class__.__eq__ is Array.__eq__
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             if _ENABLE_TRACEBACK_TAG:
                 from pytato.tags import CreatedAt
                 ntags = sum(
@@ -566,7 +565,7 @@ class Array(Taggable):
             assert self._is_eq_valid()
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
-        return attrs.evolve(self, **kwargs)
+        return dataclasses.replace(self, **kwargs)
 
     @property
     def size(self) -> ShapeComponent:
@@ -792,21 +791,21 @@ class Array(Taggable):
 
 # {{{ mixins
 
-@attrs.frozen(eq=False, slots=False, repr=False)
+@dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
 class _SuppliedAxesAndTagsMixin(Taggable):
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    axes: AxesT = dataclasses.field(kw_only=True)
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
 
     # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
+    non_equality_tags: FrozenSet[Tag] = dataclasses.field(kw_only=True,
                                                     hash=False,
                                                     default=frozenset())
 
     def _with_new_tags(self: Self, tags: FrozenSet[Tag]) -> Self:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
-@attrs.frozen(eq=False, slots=False, repr=False)
+@dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
     """A mixin class for when an array must store its own *shape* and *dtype*,
     rather than when it can derive them easily from inputs.
@@ -819,7 +818,7 @@ class _SuppliedShapeAndDtypeMixin:
 
 # {{{ dict of named arrays
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
@@ -848,7 +847,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
             if non_equality_tags is None
             else non_equality_tags)
 
-        return type(self)(container=container,
+        return type(self)(_container=container,
                           name=name,
                           tags=tags,
                           axes=axes,
@@ -870,7 +869,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
         return self.expr.dtype
 
 
-@attrs.frozen(eq=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True)
 class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
@@ -886,14 +885,14 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
 
         This container deliberately does not implement arithmetic.
     """
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    tags: FrozenSet[Tag] = dataclasses.field(kw_only=True)
     _mapper_method: ClassVar[str]
 
     def _is_eq_valid(self) -> bool:
         return self.__class__.__eq__ is AbstractResultWithNamedArrays.__eq__
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             # ensure that a developer does not uses dataclass' "__eq__"
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
@@ -920,7 +919,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         return EqualityComparer()(self, other)
 
 
-@attrs.frozen(eq=False, init=False)
+@dataclasses.dataclass(frozen=True, eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -929,8 +928,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     .. automethod:: __init__
     """
-    _data: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
+    _data: Mapping[str, Array]
 
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
 
@@ -976,7 +974,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
 # {{{ index lambda
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
@@ -1012,10 +1010,8 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
     .. automethod:: with_tagged_reduction
     """
     expr: prim.Expression
-    bindings: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
-    var_to_reduction_descr: Mapping[str, ReductionDescriptor] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
+    bindings: Mapping[str, Array]
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
     _mapper_method: ClassVar[str] = "map_index_lambda"
 
@@ -1071,7 +1067,7 @@ class EinsumAxisDescriptor:
     pass
 
 
-@attrs.frozen(order=True)
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
@@ -1081,7 +1077,7 @@ class EinsumElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@attrs.frozen(order=True)
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
@@ -1091,7 +1087,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@attrs.frozen(frozen=True, eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
@@ -1128,10 +1124,8 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
     args: Tuple[Array, ...]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
-                                     ReductionDescriptor] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
+                                     ReductionDescriptor]
+    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
     _mapper_method: ClassVar[str] = "map_einsum"
 
     @memoize_method
@@ -1443,7 +1437,7 @@ def einsum(subscripts: str, *operands: Array,
 
 # {{{ stack
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
@@ -1476,7 +1470,7 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ concatenate
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
@@ -1513,7 +1507,7 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ index remapping
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class IndexRemappingBase(Array):
     """Base class for operations that remap the indices of an array.
 
@@ -1536,7 +1530,7 @@ class IndexRemappingBase(Array):
 
 # {{{ roll
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
@@ -1562,7 +1556,7 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ axis permutation
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
@@ -1589,7 +1583,7 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ reshape
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
@@ -1612,10 +1606,10 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     _mapper_method: ClassVar[str] = "map_reshape"
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             # FIXME: Get rid of this restriction
             assert self.order == "C"
-            super().__attrs_post_init__()
+            super().__post_init__()
 
     @property
     def shape(self) -> ShapeType:
@@ -1626,7 +1620,7 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ indexing
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
@@ -1740,7 +1734,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
 
 # {{{ base class for arguments
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class InputArgumentBase(Array):
     r"""Base class for input arguments.
 
@@ -1780,7 +1774,7 @@ class DataInterface(Protocol):
         pass
 
 
-@attrs.frozen(eq=False, repr=False, hash=False)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False)
 class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     """Takes concrete array data and packages it to be compatible with the
     :class:`Array` interface.
@@ -1821,7 +1815,7 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
         (i.e. the very same instance).
     """
     data: DataInterface
-    _shape: ShapeType
+    shape: ShapeType
 
     _mapper_method: ClassVar[str] = "map_data_wrapper"
 
@@ -1841,10 +1835,6 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
         return id(self)
 
     @property
-    def shape(self) -> ShapeType:
-        return self._shape
-
-    @property
     def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
@@ -1853,7 +1843,7 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
 
 # {{{ placeholder
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class Placeholder(
                   _SuppliedAxesAndTagsMixin,
                   _SuppliedShapeAndDtypeMixin,
@@ -1877,7 +1867,7 @@ class Placeholder(
 
 # {{{ size parameter
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
 class SizeParam(
                 _SuppliedAxesAndTagsMixin,
                 InputArgumentBase):
@@ -1890,7 +1880,7 @@ class SizeParam(
         begins.
     """
     name: str
-    axes: AxesT = attrs.field(kw_only=True, default=())
+    axes: AxesT = dataclasses.field(kw_only=True, default=())
 
     _mapper_method: ClassVar[str] = "map_size_param"
 
@@ -2354,7 +2344,7 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
 
 # {{{ arange
 
-@attrs.define
+@dataclasses.dataclass
 class _ArangeInfo:
     start: Optional[int]
     stop: Optional[int]

@@ -52,7 +52,7 @@ from pytato.tags import (ImplStored, ImplInlined, Named, PrefixNamed,
 from pytools.tag import Tag
 import pytato.reductions as red
 from pytato.codegen import _generate_name_for_temp
-import attrs
+import dataclasses
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
@@ -107,7 +107,7 @@ ReductionBounds = Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
 # {{{ LoopyExpressionContexts
 
-@attrs.define(init=True, repr=False, eq=False)
+@dataclasses.dataclass(init=True, repr=False, eq=False)
 class PersistentExpressionContext(object):
     """
     Mutable state used while generating :mod:`loopy` expressions for a
@@ -131,8 +131,7 @@ class PersistentExpressionContext(object):
 
     """
     state: CodeGenState
-    _depends_on: FrozenSet[str] = \
-            attrs.field(factory=frozenset)
+    _depends_on: FrozenSet[str] = dataclasses.field(default_factory=frozenset)
 
     @property
     def depends_on(self) -> FrozenSet[str]:
@@ -142,7 +141,7 @@ class PersistentExpressionContext(object):
         self._depends_on = self._depends_on | other
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class LocalExpressionContext:
     """
     Records context being to be conveyed from a parent expression to its
@@ -267,7 +266,7 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-@attrs.define(frozen=True, eq=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class SubstitutionRuleResult(ImplementedResult):
     """
     An array expression generated as a
@@ -291,7 +290,7 @@ class SubstitutionRuleResult(ImplementedResult):
 
 # {{{ codegen state
 
-@attrs.define(init=True, repr=False, eq=False)
+@dataclasses.dataclass(init=True, repr=False, eq=False)
 class CodeGenState:
     """A container for data kept by :class:`CodeGenMapper`.
 
@@ -313,10 +312,10 @@ class CodeGenState:
     _t_unit: lp.TranslationUnit
     results: Dict[Array, ImplementedResult]
 
-    var_name_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
-    insn_id_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
+    var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
+    insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         self.var_name_gen = self._t_unit.default_entrypoint.get_var_name_generator()
         self.insn_id_gen = (
                 self._t_unit.default_entrypoint.get_instruction_id_generator())
@@ -970,7 +969,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    return CodeGenState(t_unit=kernel, results={})
+    return CodeGenState(_t_unit=kernel, results={})
 
 
 # {{{ generate_loopy

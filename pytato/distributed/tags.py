@@ -101,7 +101,7 @@ def number_distributed_tags(
     else:
         sym_tag_to_int_tag, next_tag = mpi_communicator.bcast(None, root=root_rank)
 
-    from attrs import evolve as replace
+    from dataclasses import replace
     return DistributedGraphPartition(
             parts={
                 pid: replace(part,

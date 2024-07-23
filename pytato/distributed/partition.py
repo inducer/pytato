@@ -67,7 +67,7 @@ from typing import (
         Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
         List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
 
-import attrs
+import dataclasses
 from immutabledict import immutabledict
 
 from pytools.graph import CycleError
@@ -92,7 +92,7 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class CommunicationOpIdentifier:
     """Identifies a communication operation (consisting of a pair of
     a send and a receive).
@@ -181,7 +181,7 @@ class _OrderedSet(collections.abc.MutableSet[_ValueT]):
 PartId = Hashable
 
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPart:
     """For one graph part, record send/receive information for input/
     output names.
@@ -241,7 +241,7 @@ class DistributedGraphPart:
 
 # {{{ distributed graph partition
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPartition:
     """
     .. attribute:: parts
@@ -360,7 +360,7 @@ class _DistributedInputReplacer(CopyMapper):
 # }}}
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
