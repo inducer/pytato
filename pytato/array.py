@@ -1179,6 +1179,10 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
     @cached_property
     def index_to_access_descriptor(self) -> Mapping[str, EinsumAxisDescriptor]:
+        """
+        A mapping from variable names to a access descriptor. This can be
+        used to determine an appropriate input string to 'func': with_tagged_reduction.
+        """
         from pytools import unique
         all_descriptors: Tuple[EinsumAxisDescriptor, ...] = ()
         for descr in self.access_descriptors:
