@@ -400,7 +400,7 @@ class NodeCountMapper(CachedWalkMapper):
         self.count_duplicates = count_duplicates
 
     def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
-        # Returns unique nodes only if count_duplicates is True
+        # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
@@ -464,7 +464,7 @@ class NodeMultiplicityMapper(CachedWalkMapper):
         self.expr_multiplicity_counts: Dict[Array, int] = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
-        # Returns unique nodes
+        # Returns each node, including nodes that are duplicates
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:

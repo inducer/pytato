@@ -677,15 +677,15 @@ def test_duplicate_node_count():
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
-        # Get the number of types of expressions
+        # Get the number of expressions
         node_count = get_num_nodes(dag, count_duplicates=True)
 
-        # Get the number of expressions and the amount they're called
+        # Get the number of occurrences of each unique expression
         node_multiplicity = get_node_multiplicities(dag)
 
         # Get difference in duplicates
         num_duplicates = sum(
-            count - 1 for count in node_multiplicity.values() if count > 1)
+            count - 1 for count in node_multiplicity.values())
         # Check that duplicates are correctly calculated
         assert node_count - num_duplicates == len(
             pt.transform.DependencyMapper()(dag))
@@ -701,15 +701,15 @@ def test_duplicate_nodes_with_comm_count():
         dag = get_random_pt_dag_with_send_recv_nodes(
             seed=i, rank=rank, size=size)
 
-        # Get the number of types of expressions
+        # Get the number of expressions
         node_count = get_num_nodes(dag, count_duplicates=True)
 
-        # Get the number of expressions and the amount they're called
+        # Get the number of occurrences of each unique expression
         node_multiplicity = get_node_multiplicities(dag)
 
         # Get difference in duplicates
         num_duplicates = sum(
-            count - 1 for count in node_multiplicity.values() if count > 1)
+            count - 1 for count in node_multiplicity.values())
 
         # Check that duplicates are correctly calculated
         assert node_count - num_duplicates == len(
@@ -730,11 +730,11 @@ def test_large_dag_with_duplicates_count():
     node_count = get_num_nodes(dag, count_duplicates=True)
     assert node_count == iterations + 1
 
-    # Get the number of expressions and the amount they're called
+    # Get the number of occurrences of each unique expression
     node_multiplicity = get_node_multiplicities(dag)
 
     num_duplicates = sum(
-        count - 1 for count in node_multiplicity.values() if count > 1)
+        count - 1 for count in node_multiplicity.values())
 
     counts = get_node_type_counts(dag, count_duplicates=True)
     assert len(counts) >= 1
