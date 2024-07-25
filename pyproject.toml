@@ -5,12 +5,13 @@ extend-select = [
     "C",    # flake8-comprehensions
     "E",    # pycodestyle
     "F",    # pyflakes
-    # not yet
-    # "I",    # flake8-isort
+    "I",    # flake8-isort
     "N",    # pep8-naming
     "Q",    # flake8-quotes
     "W",    # pycodestyle
-    "NPY"   # numpy
+    "NPY",   # numpy
+    "RUF",
+    "UP",
 ]
 extend-ignore = [
   "E226",
@@ -26,15 +27,24 @@ extend-ignore = [
   # numpy random generators---disable for now
   "NPY002",
 ]
+
+allowed-confusables = [
+  "∪", # union
+  " ", # nbsp
+  ]
+
 [tool.ruff.lint.per-file-ignores]
 "examples/advection.py" = ["B023"]
 "test/test_linalg.py" = ["N806"]
+"doc/*.py" = ["I002"]
+"examples/*.py" = ["I002"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["pytools", "pymbolic", "loopy"]
+known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]
 known-local-folder = ["pytato"]
 lines-after-imports = 2
 combine-as-imports = true
+required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"

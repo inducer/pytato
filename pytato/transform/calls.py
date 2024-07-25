@@ -4,6 +4,9 @@
 .. autofunction:: inline_calls
 .. autofunction:: tag_all_calls_to_be_inlined
 """
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
 __license__ = """
@@ -27,12 +30,16 @@ THE SOFTWARE.
 """
 
 from typing import Mapping
-from pytato.transform import (ArrayOrNames, CopyMapper)
-from pytato.array import (AbstractResultWithNamedArrays, Array,
-                          DictOfNamedArrays, Placeholder)
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    DictOfNamedArrays,
+    Placeholder,
+)
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
+from pytato.transform import ArrayOrNames, CopyMapper
 
 
 # {{{ inlining
