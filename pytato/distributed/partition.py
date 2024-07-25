@@ -303,7 +303,6 @@ class _DistributedInputReplacer(CopyMapper):
         self.user_input_names: set[str] = set()
         self.partition_input_name_to_placeholder: dict[str, Placeholder] = {}
 
-    @memoize_method
     def clone_for_callee(
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
         # Function definitions aren't allowed to contain receives,
