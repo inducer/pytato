@@ -91,8 +91,6 @@ MappedT = TypeVar("MappedT",
 CombineT = TypeVar("CombineT")  # used in CombineMapper
 TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
                             Array, AbstractResultWithNamedArrays, ArrayOrNames)
-CopyMapperResultT = TypeVar("CopyMapperResultT",  # used in CopyMapper
-                            Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = FrozenSet[Array]
@@ -344,32 +342,15 @@ class TransformMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
 # {{{ CopyMapper
 
-class CopyMapper(CachedMapper[ArrayOrNames]):
+class CopyMapper(TransformMapper):
     """Performs a deep copy of a :class:`pytato.array.Array`.
     The typical use of this mapper is to override individual ``map_`` methods
     in subclasses to permit term rewriting on an expression graph.
-
-    .. automethod:: clone_for_callee
 
     .. note::
 
        This does not copy the data of a :class:`pytato.array.DataWrapper`.
     """
-    if TYPE_CHECKING:
-        def rec(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return cast(CopyMapperResultT, super().rec(expr))
-
-        def __call__(self, expr: CopyMapperResultT) -> CopyMapperResultT:
-            return self.rec(expr)
-
-    def clone_for_callee(
-            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
-        """
-        Called to clone *self* before starting traversal of a
-        :class:`pytato.function.FunctionDefinition`.
-        """
-        return type(self)()
-
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
                               ) -> tuple[IndexOrShapeExpr, ...]:
         # type-ignore-reason: apparently mypy cannot substitute typevars
@@ -553,57 +534,14 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         return call[expr.name]
 
 
-class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
+class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs):
     """
     Similar to :class:`CopyMapper`, but each mapper method takes extra
     ``*args``, ``**kwargs`` that are propagated along a path by default.
 
     The logic in :class:`CopyMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
-
-    .. automethod:: clone_for_callee
     """
-    def __init__(self) -> None:
-        super().__init__()
-        # type-ignored as '._cache' attribute is not coherent with the base
-        # class
-        self._cache: dict[tuple[ArrayOrNames,
-                                tuple[Any, ...],
-                                tuple[tuple[str, Any], ...]
-                                ],
-                          ArrayOrNames] = {}  # type: ignore[assignment]
-
-    def get_cache_key(self,
-                      expr: ArrayOrNames,
-                      *args: Any, **kwargs: Any) -> tuple[ArrayOrNames,
-                                                          tuple[Any, ...],
-                                                          tuple[tuple[str, Any], ...]
-                                                          ]:
-        return (expr, args, tuple(sorted(kwargs.items())))
-
-    def rec(self,
-            expr: CopyMapperResultT,
-            *args: Any, **kwargs: Any) -> CopyMapperResultT:
-        key = self.get_cache_key(expr, *args, **kwargs)
-        try:
-            # type-ignore-reason: self._cache has ArrayOrNames as its values
-            return self._cache[key]  # type: ignore[return-value]
-        except KeyError:
-            result = Mapper.rec(self, expr,
-                                *args,
-                                **kwargs)
-            self._cache[key] = result
-            # type-ignore-reason: Mapper.rec is imprecise
-            return result  # type: ignore[no-any-return]
-
-    def clone_for_callee(
-            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
-        """
-        Called to clone *self* before starting traversal of a
-        :class:`pytato.function.FunctionDefinition`.
-        """
-        return type(self)()
-
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any
                               ) -> tuple[IndexOrShapeExpr, ...]:
