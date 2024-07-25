@@ -310,7 +310,10 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 # {{{ DirectPredecessorsGetter
 
+from collections.abc import Set as abc_Set
+
 from orderedsets import FrozenOrderedSet
+
 
 class DirectPredecessorsGetter(Mapper):
     """
@@ -318,6 +321,7 @@ class DirectPredecessorsGetter(Mapper):
     `direct predecessors
     <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
     of a node.
+
     .. note::
         We only consider the predecessors of a nodes in a data-flow sense.
     """
@@ -341,7 +345,7 @@ class DirectPredecessorsGetter(Mapper):
                 | self._get_preds_from_shape(expr.shape))
 
     def map_loopy_call_result(self, expr: NamedArray) -> abc_Set[Array]:
-        from pytato.loopy import LoopyCallResult, LoopyCall
+        from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
         return (FrozenOrderedSet(ary

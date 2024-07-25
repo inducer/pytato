@@ -926,10 +926,12 @@ class SubsetDependencyMapper(DependencyMapper):
 
     def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
         from functools import reduce
+
         from pytools import unique
-        return reduce(lambda acc, arg: unique(tuple(acc) + tuple(set(arg) & self.universe)),
+        return reduce(lambda acc, arg:
+                      unique(tuple(acc) + tuple(set(arg) & self.universe)),
                       args,
-                      tuple())
+                      ())
 
 # }}}
 

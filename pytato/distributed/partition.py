@@ -476,10 +476,10 @@ class _LocalSendRecvDepGatherer(
         self.local_rank = local_rank
 
     def combine(
-            self, *args: Tuple[CommunicationOpIdentifier]
-            ) -> Tuple[CommunicationOpIdentifier]:
+            self, *args: tuple[CommunicationOpIdentifier]
+            ) -> tuple[CommunicationOpIdentifier]:
         from pytools import unique
-        return reduce(lambda x, y: tuple(unique(x+y)), args, tuple())
+        return reduce(lambda x, y: tuple(unique(x+y)), args, ())
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
@@ -497,8 +497,8 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> Tuple[CommunicationOpIdentifier]:
-        return tuple()
+    def _map_input_base(self, expr: Array) -> tuple[CommunicationOpIdentifier]:
+        return ()
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
@@ -506,21 +506,21 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> Tuple[CommunicationOpIdentifier]:
+            ) -> tuple[CommunicationOpIdentifier]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
             from pytato.distributed.verify import DuplicateRecvError
             raise DuplicateRecvError(f"Multiple receives found for '{recv_id}'")
 
-        self.local_comm_ids_to_needed_comm_ids[recv_id] = tuple()
+        self.local_comm_ids_to_needed_comm_ids[recv_id] = ()
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
         return (recv_id,)
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> Tuple[CommunicationOpIdentifier]:
+            self, expr: NamedCallResult) -> tuple[CommunicationOpIdentifier]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
 
@@ -558,7 +558,7 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches: Sequence[List[TaskType]] = [list() for _ in range(nlevels)]
+    task_batches: Sequence[list[TaskType]] = [[] for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
         task_batches[dep_level].append(task_id)
@@ -624,7 +624,7 @@ class _MaterializedArrayCollector(CachedWalkMapper):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.materialized_arrays: List[Array] = []
+        self.materialized_arrays: list[Array] = []
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
@@ -658,7 +658,7 @@ def _set_dict_union_mpi(
     assert mpi_data_type is None
     result = dict(dict_a)
     for key, values in dict_b.items():
-        result[key] = result.get(key, tuple()) + values
+        result[key] = result.get(key, ()) + values
     return result
 
 # }}}
@@ -783,9 +783,9 @@ def find_distributed_partition(
     - Gather sent arrays into
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
-    from pytools import unique
-
     import mpi4py.MPI as MPI
+
+    from pytools import unique
 
     from pytato.transform import SubsetDependencyMapper
 
@@ -837,9 +837,9 @@ def find_distributed_partition(
     # {{{ create (local) parts out of batch ids
 
 
-    part_comm_ids: List[_PartCommIDs] = []
+    part_comm_ids: list[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: Tuple[CommunicationOpIdentifier] = tuple()
+        recv_ids: tuple[CommunicationOpIdentifier] = ()
         for batch in comm_batches:
             send_ids = tuple(
                 comm_id for comm_id in unique(batch)
@@ -857,12 +857,12 @@ def find_distributed_partition(
             part_comm_ids.append(
                 _PartCommIDs(
                     recv_ids=recv_ids,
-                    send_ids=tuple()))
+                    send_ids=()))
     else:
         part_comm_ids.append(
             _PartCommIDs(
-                recv_ids=tuple(),
-                send_ids=tuple()))
+                recv_ids=(),
+                send_ids=()))
 
     nparts = len(part_comm_ids)
 
@@ -908,7 +908,9 @@ def find_distributed_partition(
         - set(sent_arrays)
 
     from pytools import unique
-    materialized_arrays = tuple(a for a in materialized_arrays_collector.materialized_arrays if a in materialized_arrays_set)
+    materialized_arrays = tuple(
+        a for a in materialized_arrays_collector.materialized_arrays
+        if a in materialized_arrays_set)
 
     # "mso" for "materialized/sent/output"
     output_arrays = tuple(outputs._data.values())
@@ -927,7 +929,8 @@ def find_distributed_partition(
                 comm_id_to_part_id[send_id])
 
     if __debug__:
-        recvd_array_dep_mapper = SubsetDependencyMapper(frozenset(received_arrays))
+        recvd_array_dep_mapper = SubsetDependencyMapper(frozenset
+                                                        (received_arrays))
 
         mso_ary_to_last_dep_recv_part_id: dict[Array, int] = {
                 ary: max(
