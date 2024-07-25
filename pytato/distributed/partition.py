@@ -503,7 +503,8 @@ def _schedule_task_batches_counted(
     task_batches: Sequence[list[TaskType]] = [[] for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
-        task_batches[dep_level].append(task_id)
+        if task_id not in task_batches[dep_level]:
+            task_batches[dep_level].append(task_id)
 
     return task_batches, visits_in_depend + len(task_to_dep_level.keys())
 
@@ -566,7 +567,7 @@ class _MaterializedArrayCollector(CachedWalkMapper):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.materialized_arrays: list[Array] = []
+        self.materialized_arrays: dict[Array, None] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
@@ -576,15 +577,15 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         from pytato.tags import ImplStored
 
         if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
-            self.materialized_arrays.append(expr)
+            self.materialized_arrays[expr] = None
 
         if isinstance(expr, LoopyCallResult):
-            self.materialized_arrays.append(expr)
+            self.materialized_arrays[expr] = None
             from pytato.loopy import LoopyCall
             assert isinstance(expr._container, LoopyCall)
             for _, subexpr in sorted(expr._container.bindings.items()):
                 if isinstance(subexpr, Array):
-                    self.materialized_arrays.append(subexpr)
+                    self.materialized_arrays[subexpr] = None
                 else:
                     assert isinstance(subexpr, SCALAR_CLASSES)
 
@@ -596,11 +597,12 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 def _set_dict_union_mpi(
         dict_a: Mapping[_KeyT, Sequence[_ValueT]],
         dict_b: Mapping[_KeyT, Sequence[_ValueT]],
-        mpi_data_type: mpi4py.MPI.Datatype) -> Mapping[_KeyT, Sequence[_ValueT]]:
+        mpi_data_type: mpi4py.MPI.Datatype | None) -> Mapping[_KeyT, Sequence[_ValueT]]:
     assert mpi_data_type is None
+    from pytools import unique
     result = dict(dict_a)
     for key, values in dict_b.items():
-        result[key] = result.get(key, ()) + values
+        result[key] = tuple(unique(result.get(key, ()) + values))
     return result
 
 # }}}
@@ -833,10 +835,10 @@ def find_distributed_partition(
     # The sets of arrays below must have a deterministic order in order to ensure
     # that the resulting partition is also deterministic
 
-    sent_arrays = tuple(
-        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
+    sent_arrays = tuple(unique(
+        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values()))
 
-    received_arrays = tuple(lsrdg.local_recv_id_to_recv_node.values())
+    received_arrays = tuple(unique(lsrdg.local_recv_id_to_recv_node.values()))
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
@@ -849,13 +851,13 @@ def find_distributed_partition(
         - set(sent_arrays)
 
     from pytools import unique
-    materialized_arrays = tuple(
+    materialized_arrays = tuple(unique(
         a for a in materialized_arrays_collector.materialized_arrays
-        if a in materialized_arrays_set)
+        if a in materialized_arrays_set))
 
     # "mso" for "materialized/sent/output"
-    output_arrays = tuple(outputs._data.values())
-    mso_arrays = materialized_arrays + sent_arrays + output_arrays
+    output_arrays = tuple(unique(outputs._data.values()))
+    mso_arrays = tuple(unique(materialized_arrays + sent_arrays + output_arrays))
 
     # FIXME: This gathers up materialized_arrays recursively, leading to
     # result sizes potentially quadratic in the number of materialized arrays.
@@ -870,8 +872,7 @@ def find_distributed_partition(
                 comm_id_to_part_id[send_id])
 
     if __debug__:
-        recvd_array_dep_mapper = SubsetDependencyMapper(frozenset
-                                                        (received_arrays))
+        recvd_array_dep_mapper = SubsetDependencyMapper(frozenset(received_arrays))
 
         mso_ary_to_last_dep_recv_part_id: dict[Array, int] = {
                 ary: max(
