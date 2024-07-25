@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2021 Kaushik Kulkarni
@@ -27,15 +29,17 @@ THE SOFTWARE.
 
 import sys
 
+import attrs
 import numpy as np
 import pytest
-import attrs
-
-import pytato as pt
+from testlib import RandomDAGContext, make_random_dag
 
 from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from testlib import RandomDAGContext, make_random_dag
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+
+import pytato as pt
+from pytato.array import _SuppliedAxesAndTagsMixin
 
 
 def test_matmul_input_validation():
@@ -242,9 +246,10 @@ def test_accessing_dict_of_named_arrays_validation():
 
 
 def test_call_loopy_shape_inference():
+    import loopy as lp
+
     from pytato.loopy import call_loopy
     from pytato.utils import are_shapes_equal
-    import loopy as lp
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -309,8 +314,14 @@ def test_toposortmapper():
     tm = pt.transform.TopoSortMapper()
     tm(y)
 
-    from pytato.array import (AxisPermutation, IndexLambda,
-                              Placeholder, Einsum, SizeParam, Stack)
+    from pytato.array import (
+        AxisPermutation,
+        Einsum,
+        IndexLambda,
+        Placeholder,
+        SizeParam,
+        Stack,
+    )
 
     assert isinstance(tm.topological_order[0], SizeParam)
     assert isinstance(tm.topological_order[1], Placeholder)
@@ -323,10 +334,11 @@ def test_toposortmapper():
 
 def test_userscollector():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.transform import UsersCollector
-    from pytato.analysis import get_nusers
 
     from pytools.graph import reverse_graph
+
+    from pytato.analysis import get_nusers
+    from pytato.transform import UsersCollector
 
     # Check that nodes without users are correctly reversed
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
@@ -371,9 +383,10 @@ def test_userscollector():
 
 def test_linear_complexity_inequality():
     # See https://github.com/inducer/pytato/issues/163
+    from numpy.random import default_rng
+
     import pytato as pt
     from pytato.equality import EqualityComparer
-    from numpy.random import default_rng
 
     def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
@@ -587,6 +600,7 @@ def test_repr_array_is_deterministic():
 
 def test_nodecountmapper():
     from testlib import RandomDAGContext, make_random_dag
+
     from pytato.analysis import get_num_nodes
 
     axis_len = 5
@@ -654,13 +668,18 @@ def test_basic_index_equality_traverses_underlying_arrays():
 
 
 def test_idx_lambda_to_hlo():
-    from pytato.raising import index_lambda_to_high_level_op
     from immutabledict import immutabledict
-    from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
-                                C99CallOp, BroadcastOp)
 
-    from pytato.reductions import (SumReductionOperation,
-                                   ProductReductionOperation)
+    from pytato.raising import (
+        BinaryOp,
+        BinaryOpType,
+        BroadcastOp,
+        C99CallOp,
+        FullOp,
+        ReduceOp,
+        index_lambda_to_high_level_op,
+    )
+    from pytato.reductions import ProductReductionOperation, SumReductionOperation
 
     a = pt.make_placeholder("a", (10, 4))
     b = pt.make_placeholder("b", (10, 4))
@@ -880,8 +899,10 @@ def test_created_at():
 
 
 def test_pickling_and_unpickling_is_equal():
-    from testlib import RandomDAGContext, make_random_dag
     import pickle
+
+    from testlib import RandomDAGContext, make_random_dag
+
     from pytools import UniqueNameGenerator
     axis_len = 5
 
@@ -986,8 +1007,9 @@ def test_expand_dims_input_validate():
 
 def test_with_tagged_reduction():
     from testlib import FooRednTag
-    from pytato.raising import index_lambda_to_high_level_op
+
     from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+    from pytato.raising import index_lambda_to_high_level_op
     x = pt.make_placeholder("x", shape=(10, 10))
     x_sum = pt.sum(x)
 
@@ -1024,14 +1046,14 @@ def test_with_tagged_reduction():
 
 def test_derived_class_uses_correct_array_eq():
     @attrs.define(frozen=True)
-    class MyNewArrayT(pt.Array):
+    class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
     @attrs.define(frozen=True, eq=False)
-    class MyNewAndCorrectArrayT(pt.Array):
+    class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
@@ -1079,8 +1101,9 @@ def test_cached_walk_mapper_with_extra_args():
 
 
 def test_unify_axes_tags():
+    from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
+
     from pytato.array import EinsumReductionAxis
-    from testlib import FooTag, BarTag, BazTag, QuuxTag, TestlibTag
 
     # {{{ 1. broadcasting + expand_dims
 

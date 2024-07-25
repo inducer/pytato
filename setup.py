@@ -1,7 +1,8 @@
 #! /usr/bin/env python
-# -*- coding: utf-8 -*-
+from __future__ import annotations
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
+
 
 ver_dic = {}
 version_file_name = "pytato/version.py"
@@ -14,7 +15,7 @@ setup(
     name="pytato",
     version=ver_dic["VERSION_TEXT"],
     description="Get Descriptions of Array Computations via Lazy Evaluation",
-    long_description=open("README.rst", "r").read(),
+    long_description=open("README.rst").read(),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -35,7 +36,7 @@ setup(
     python_requires="~=3.8",
     install_requires=[
         "loopy>=2020.2",
-        "pytools>=2022.1.13",
+        "pytools>=2024.1.9",
         "immutabledict",
         "attrs",
         "bidict",
