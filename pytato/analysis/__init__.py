@@ -396,7 +396,7 @@ class NodeCountMapper(CachedWalkMapper):
     def __init__(self, count_duplicates: bool = False) -> None:
         from collections import defaultdict
         super().__init__()
-        self.expr_type_counts = defaultdict(int)  # type: Dict[Type[Any], int]
+        self.expr_type_counts: Dict[Type[Any], int] = defaultdict(int)
         self.count_duplicates = count_duplicates
 
     def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
@@ -454,7 +454,10 @@ def get_num_nodes(
 
 class NodeMultiplicityMapper(CachedWalkMapper):
     """
-    Counts the number of unique nodes by ID in a DAG.
+    Computes the multiplicity of each unique node in a DAG.
+    
+    The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
+    that equal `x`.
 
     .. attribute:: expr_multiplicity_counts
     """
@@ -463,7 +466,7 @@ class NodeMultiplicityMapper(CachedWalkMapper):
         super().__init__()
         self.expr_multiplicity_counts: Dict[Array, int] = defaultdict(int)
 
-    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
