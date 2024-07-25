@@ -67,7 +67,6 @@ from typing import (
     TYPE_CHECKING,
     AbstractSet,
     Any,
-    FrozenSet,
     Hashable,
     Mapping,
     Sequence,
@@ -316,8 +315,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: frozenset[CommunicationOpIdentifier]
-    send_ids: frozenset[CommunicationOpIdentifier]
+    recv_ids: tuple[CommunicationOpIdentifier]
+    send_ids: tuple[CommunicationOpIdentifier]
 
 
 # {{{ _make_distributed_partition
@@ -403,12 +402,12 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+        CombineMapper[tuple[CommunicationOpIdentifier]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
                 dict[CommunicationOpIdentifier,
-                     frozenset[CommunicationOpIdentifier]] = {}
+                     tuple[CommunicationOpIdentifier]] = {}
 
         self.local_recv_id_to_recv_node: \
                 dict[CommunicationOpIdentifier, DistributedRecv] = {}
@@ -425,7 +424,7 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[CommunicationOpIdentifier]:
+                                        ) -> tuple[CommunicationOpIdentifier]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -476,7 +475,7 @@ TaskType = TypeVar("TaskType")
 
 def _schedule_task_batches(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Sequence[AbstractSet[TaskType]]:
+        -> Sequence[list[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -491,7 +490,7 @@ def _schedule_task_batches(
 
 def _schedule_task_batches_counted(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> tuple[Sequence[AbstractSet[TaskType]], int]:
+        -> tuple[Sequence[list[TaskType]], int]:
     """
     Static type checkers need the functions to return the same type regardless
     of the input. The testing code needs to know about the number of tasks visited
@@ -773,7 +772,7 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[AbstractSet[CommunicationOpIdentifier]],
+                Sequence[list[CommunicationOpIdentifier]],
                 comm_batches_or_exc)
 
     # }}}
@@ -928,7 +927,7 @@ def find_distributed_partition(
 
     direct_preds_getter = DirectPredecessorsGetter()
 
-    def get_materialized_predecessors(ary: Array) -> tuple[Array]:
+    def get_materialized_predecessors(ary: Array) -> tuple[Array, ...]:
         materialized_preds: dict[Array, None] = {}
         for pred in direct_preds_getter(ary):
             if pred in materialized_arrays:
