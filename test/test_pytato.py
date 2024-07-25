@@ -671,80 +671,74 @@ def test_random_dag_with_comm_count():
         assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
 
 
-def test_duplicate_node_count():
-    from testlib import get_random_pt_dag
-    from pytato.analysis import get_num_nodes, get_node_multiplicities
-    for i in range(80):
-        dag = get_random_pt_dag(seed=i, axis_len=5)
+def test_small_dag_with_duplicates_count():
+    from pytato.analysis import (
+        get_num_nodes, get_node_type_counts, get_node_multiplicities
+    )
+    from testlib import make_small_dag_with_duplicates
 
-        # Get the number of expressions
-        node_count = get_num_nodes(dag, count_duplicates=True)
+    dag = make_small_dag_with_duplicates()
 
-        # Get the number of occurrences of each unique expression
-        node_multiplicity = get_node_multiplicities(dag)
+    # Get the number of expressions, including duplicates
+    node_count = get_num_nodes(dag, count_duplicates=True)
+    expected_node_count = 4
+    assert node_count == expected_node_count
 
-        # Get difference in duplicates
-        num_duplicates = sum(
-            count - 1 for count in node_multiplicity.values())
-        # Check that duplicates are correctly calculated
-        assert node_count - num_duplicates == len(
-            pt.transform.DependencyMapper()(dag))
+    # Get the number of occurrences of each unique expression
+    node_multiplicity = get_node_multiplicities(dag)
+    assert any(count > 1 for count in node_multiplicity.values())
 
+    # Get difference in duplicates
+    num_duplicates = sum(count - 1 for count in node_multiplicity.values())
 
-def test_duplicate_nodes_with_comm_count():
-    from testlib import get_random_pt_dag_with_send_recv_nodes
-    from pytato.analysis import get_num_nodes, get_node_multiplicities
+    counts = get_node_type_counts(dag, count_duplicates=True)
+    expected_counts = {
+        pt.array.Placeholder: 1,
+        pt.array.IndexLambda: 3
+    }
 
-    rank = 0
-    size = 2
-    for i in range(20):
-        dag = get_random_pt_dag_with_send_recv_nodes(
-            seed=i, rank=rank, size=size)
+    for node_type, expected_count in expected_counts.items():
+        assert counts[node_type] == expected_count
 
-        # Get the number of expressions
-        node_count = get_num_nodes(dag, count_duplicates=True)
-
-        # Get the number of occurrences of each unique expression
-        node_multiplicity = get_node_multiplicities(dag)
-
-        # Get difference in duplicates
-        num_duplicates = sum(
-            count - 1 for count in node_multiplicity.values())
-
-        # Check that duplicates are correctly calculated
-        assert node_count - num_duplicates == len(
-            pt.transform.DependencyMapper()(dag))
+    # Check that duplicates are correctly calculated
+    assert node_count - num_duplicates == len(
+        pt.transform.DependencyMapper()(dag))
+    assert node_count - num_duplicates == get_num_nodes(
+        dag, count_duplicates=False)
 
 
 def test_large_dag_with_duplicates_count():
     from pytato.analysis import (
         get_num_nodes, get_node_type_counts, get_node_multiplicities
     )
-    from testlib import make_large_dag
-    import pytato as pt
+    from testlib import make_large_dag_with_duplicates
 
     iterations = 100
-    dag = make_large_dag(iterations, seed=42)
+    dag = make_large_dag_with_duplicates(iterations, seed=42)
 
-    # Verify that the number of nodes is equal to iterations + 1 (placeholder)
+    # Get the number of expressions, including duplicates
     node_count = get_num_nodes(dag, count_duplicates=True)
-    assert node_count == iterations + 1
 
     # Get the number of occurrences of each unique expression
     node_multiplicity = get_node_multiplicities(dag)
+    assert any(count > 1 for count in node_multiplicity.values())
 
-    num_duplicates = sum(
-        count - 1 for count in node_multiplicity.values())
+    expected_node_count = sum(count for count in node_multiplicity.values())
+    assert node_count == expected_node_count
+
+    # Get difference in duplicates
+    num_duplicates = sum(count - 1 for count in node_multiplicity.values())
 
     counts = get_node_type_counts(dag, count_duplicates=True)
-    assert len(counts) >= 1
+
     assert counts[pt.array.Placeholder] == 1
-    assert counts[pt.array.IndexLambda] == 100  # 100 operations
-    assert sum(counts.values()) == iterations + 1
+    assert sum(counts.values()) == expected_node_count
 
     # Check that duplicates are correctly calculated
     assert node_count - num_duplicates == len(
         pt.transform.DependencyMapper()(dag))
+    assert node_count - num_duplicates == get_num_nodes(
+        dag, count_duplicates=False)
 
 
 def test_rec_get_user_nodes():

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
 import operator
 import pyopencl as cl
 import numpy as np
+import random
 import pytato as pt
 from pytato.transform import Mapper
 from pytato.array import (Array, Placeholder, Stack, Roll,
@@ -322,7 +323,6 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
     rng = np.random.default_rng(seed)
     random.seed(seed)
 
-    # Begin with a placeholder
     a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
     current = a
 
@@ -336,6 +336,51 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
 
     # DAG should have `iterations` number of operations
     return pt.make_dict_of_named_arrays({"result": current})
+
+
+def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+
+    expr1 = 2 * x
+    expr2 = 2 * x
+
+    y = expr1 + expr2
+
+    # Should have duplicates of the 2*x operation
+    return pt.make_dict_of_named_arrays({"result": y})
+
+
+def make_large_dag_with_duplicates(iterations: int,
+                                   seed: int = 0) -> pt.DictOfNamedArrays:
+
+    rng = np.random.default_rng(seed)
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+    duplicates = []
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+        # Introduce duplicates intentionally
+        if rng.uniform() > 0.2:
+            dup1 = operation(a, value)
+            dup2 = operation(a, value)
+            duplicates.append(dup1)
+            duplicates.append(dup2)
+            current = operation(current, dup1)
+
+    all_exprs = [current] + duplicates
+    print(type(duplicates))
+    print(len(duplicates))
+    combined_expr = pt.stack(all_exprs, axis=0)
+
+    result = pt.sum(combined_expr, axis=0)
+    return pt.make_dict_of_named_arrays({"result": result})
 
 # }}}
 
