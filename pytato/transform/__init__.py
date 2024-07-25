@@ -474,6 +474,8 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
 
     The logic in :class:`CopyMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
+
+    .. automethod:: clone_for_callee
     """
     def __init__(self) -> None:
         super().__init__()
@@ -507,6 +509,14 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
             self._cache[key] = result
             # type-ignore-reason: Mapper.rec is imprecise
             return result  # type: ignore[no-any-return]
+
+    def clone_for_callee(
+            self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        return type(self)()
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any
