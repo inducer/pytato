@@ -389,8 +389,6 @@ def make_large_dag_with_duplicates(iterations: int,
             current = operation(current, dup1)
 
     all_exprs = [current, *duplicates]
-    print(type(duplicates))
-    print(len(duplicates))
     combined_expr = pt.stack(all_exprs, axis=0)
 
     result = pt.sum(combined_expr, axis=0)
