@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import operator
+import random
 import types
 from typing import Any, Callable, Sequence
 
 import numpy as np
+
 import pyopencl as cl
 from pytools.tag import Tag
-import random
+
 import pytato as pt
 from pytato.array import (
     Array,
@@ -331,8 +333,6 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
     """
     Builds a DAG with emphasis on number of operations.
     """
-    import random
-    import operator
 
     rng = np.random.default_rng(seed)
     random.seed(seed)
@@ -388,7 +388,7 @@ def make_large_dag_with_duplicates(iterations: int,
             duplicates.append(dup2)
             current = operation(current, dup1)
 
-    all_exprs = [current] + duplicates
+    all_exprs = [current, *duplicates]
     print(type(duplicates))
     print(len(duplicates))
     combined_expr = pt.stack(all_exprs, axis=0)

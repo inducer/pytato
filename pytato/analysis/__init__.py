@@ -26,15 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    Type, TYPE_CHECKING)
-from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
-                          DictOfNamedArrays, NamedArray,
-                          IndexBase, IndexRemappingBase, InputArgumentBase,
-                          ShapeType)
-from pytato.function import FunctionDefinition, Call, NamedCallResult
-from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
-from pytato.loopy import LoopyCall
+from typing import TYPE_CHECKING, Any, Mapping
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
@@ -419,10 +411,10 @@ class NodeCountMapper(CachedWalkMapper):
     def __init__(self, count_duplicates: bool = False) -> None:
         from collections import defaultdict
         super().__init__()
-        self.expr_type_counts: Dict[Type[Any], int] = defaultdict(int)
+        self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
         self.count_duplicates = count_duplicates
 
-    def get_cache_key(self, expr: ArrayOrNames) -> Union[int, ArrayOrNames]:
+    def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
@@ -432,9 +424,9 @@ class NodeCountMapper(CachedWalkMapper):
 
 
 def get_node_type_counts(
-        outputs: Union[Array, DictOfNamedArrays],
+        outputs: Array | DictOfNamedArrays,
         count_duplicates: bool = False
-        ) -> Dict[Type[Any], int]:
+        ) -> dict[type[Any], int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
@@ -452,7 +444,7 @@ def get_node_type_counts(
 
 
 def get_num_nodes(
-        outputs: Union[Array, DictOfNamedArrays],
+        outputs: Array | DictOfNamedArrays,
         count_duplicates: bool = False
         ) -> int:
     """
@@ -478,7 +470,7 @@ def get_num_nodes(
 class NodeMultiplicityMapper(CachedWalkMapper):
     """
     Computes the multiplicity of each unique node in a DAG.
-    
+
     The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
     that equal `x`.
 
@@ -487,7 +479,7 @@ class NodeMultiplicityMapper(CachedWalkMapper):
     def __init__(self) -> None:
         from collections import defaultdict
         super().__init__()
-        self.expr_multiplicity_counts: Dict[Array, int] = defaultdict(int)
+        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
@@ -499,7 +491,7 @@ class NodeMultiplicityMapper(CachedWalkMapper):
 
 
 def get_node_multiplicities(
-        outputs: Union[Array, DictOfNamedArrays]) -> Dict[Array, int]:
+        outputs: Array | DictOfNamedArrays) -> dict[Array, int]:
     """
     Returns the multiplicity per `expr`.
     """

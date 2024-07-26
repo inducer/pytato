@@ -28,6 +28,7 @@ THE SOFTWARE.
 """
 
 import sys
+
 import attrs
 import numpy as np
 import pytest
@@ -598,7 +599,7 @@ def test_repr_array_is_deterministic():
 
 
 def test_empty_dag_count():
-    from pytato.analysis import get_num_nodes, get_node_type_counts
+    from pytato.analysis import get_node_type_counts, get_num_nodes
 
     empty_dag = pt.make_dict_of_named_arrays({})
 
@@ -610,7 +611,7 @@ def test_empty_dag_count():
 
 
 def test_single_node_dag_count():
-    from pytato.analysis import get_num_nodes, get_node_type_counts
+    from pytato.analysis import get_node_type_counts, get_num_nodes
 
     data = np.random.rand(4, 4)
     single_node_dag = pt.make_dict_of_named_arrays(
@@ -629,7 +630,7 @@ def test_single_node_dag_count():
 
 
 def test_small_dag_count():
-    from pytato.analysis import get_num_nodes, get_node_type_counts
+    from pytato.analysis import get_node_type_counts, get_num_nodes
 
     # Make a DAG using two nodes and one operation
     a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
@@ -646,8 +647,9 @@ def test_small_dag_count():
 
 
 def test_large_dag_count():
-    from pytato.analysis import get_num_nodes, get_node_type_counts
     from testlib import make_large_dag
+
+    from pytato.analysis import get_node_type_counts, get_num_nodes
 
     iterations = 100
     dag = make_large_dag(iterations, seed=42)
@@ -664,6 +666,7 @@ def test_large_dag_count():
 
 def test_random_dag_count():
     from testlib import get_random_pt_dag
+
     from pytato.analysis import get_num_nodes
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
@@ -673,6 +676,7 @@ def test_random_dag_count():
 
 def test_random_dag_with_comm_count():
     from testlib import get_random_pt_dag_with_send_recv_nodes
+
     from pytato.analysis import get_num_nodes
     rank = 0
     size = 2
@@ -684,10 +688,13 @@ def test_random_dag_with_comm_count():
 
 
 def test_small_dag_with_duplicates_count():
-    from pytato.analysis import (
-        get_num_nodes, get_node_type_counts, get_node_multiplicities
-    )
     from testlib import make_small_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_node_multiplicities,
+        get_node_type_counts,
+        get_num_nodes,
+    )
 
     dag = make_small_dag_with_duplicates()
 
@@ -720,10 +727,13 @@ def test_small_dag_with_duplicates_count():
 
 
 def test_large_dag_with_duplicates_count():
-    from pytato.analysis import (
-        get_num_nodes, get_node_type_counts, get_node_multiplicities
-    )
     from testlib import make_large_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_node_multiplicities,
+        get_node_type_counts,
+        get_num_nodes,
+    )
 
     iterations = 100
     dag = make_large_dag_with_duplicates(iterations, seed=42)
