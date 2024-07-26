@@ -1005,6 +1005,12 @@ class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
         return self.combine(*[self.rec(ret)
                               for ret in expr.returns.values()])
 
+    def map_call(self, expr: Call) -> frozenset[SizeParam]:
+        return self.combine(self.map_function_definition(expr.function),
+            *[
+                self.rec(bnd)
+                for name, bnd in sorted(expr.bindings.items())])
+
 # }}}
 
 
