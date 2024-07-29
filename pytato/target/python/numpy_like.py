@@ -77,7 +77,7 @@ from pytato.reductions import (
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 from pytato.transform import CachedMapper
-from pytato.utils import are_shape_components_equal, get_einsum_subscript_str
+from pytato.utils import are_shape_components_equal, get_einsum_specification
 
 
 T = TypeVar("T")
@@ -125,7 +125,7 @@ def first_true(iterable: Iterable[T], default: T,
 
 
 def _get_einsum_subscripts(expr: Einsum) -> str:
-    return get_einsum_subscript_str(expr).replace(",", ", ").replace("->", " -> ")
+    return get_einsum_specification(expr).replace(",", ", ").replace("->", " -> ")
 
 
 def _is_slice_trivial(slice_: NormalizedSlice,

@@ -661,6 +661,35 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
     Returns the index subscript expression that can be
     used in constructing *expr* using the :func:`pytato.einsum` routine.
 
+    Deprecated: use get_einsum_specification_str instead.
+
+    .. testsetup::
+
+        >>> import pytato as pt
+        >>> import numpy as np
+        >>> from pytato.utils import get_einsum_subscript_str
+
+    .. doctest::
+
+        >>> A = pt.make_placeholder("A", (10, 6), np.float64)
+        >>> B = pt.make_placeholder("B", (6, 5), np.float64)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> get_einsum_subscript_str(ABC)
+        'ij,jk,kl->il'
+    """
+    from warnings import warn
+
+    warn("get_einsum_subscript_str has been deprecated. Use "
+         " get_einsum_specification instead.", DeprecationWarning, stacklevel=2)
+    return get_einsum_specification(expr)
+
+
+def get_einsum_specification(expr: Einsum) -> str:
+    """
+    Returns the index subscript expression that can be
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
     Note this is not ensured to be the same string as what you entered
     when you called :func:`pytato.einsum`.
 
@@ -680,11 +709,6 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         >>> get_einsum_subscript_str(ABC)
         'ij,jk,kl->il'
     """
-    from warnings import warn
-
-    warn("The einsum subscript string will no longer return user defined"
-         " indices but a canonical string based upon ASCII characters"
-         " starting with 'i'.", DeprecationWarning, stacklevel=2)
 
     from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
@@ -707,5 +731,4 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
                           for i in range(expr.ndim))
 
     return f"{','.join(input_specs)}->{output_spec}"
-
 # vim: fdm=marker
