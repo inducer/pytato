@@ -678,12 +678,29 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         >>> C = pt.make_placeholder("C", (5, 4), np.float64)
         >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
         >>> get_einsum_subscript_str(ABC)
-        'ij,jk,kl->il'
+        'ab,bc,cd->ad'
     """
-    from pytato.array import EinsumElementwiseAxis
+    from warnings import warn
 
-    access_descr_to_index = {descr: key for key, descr
-                             in expr.index_to_access_descriptor.items()}
+    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
+    warn("The einsum subscript string will no longer return user defined"
+         " indices but a canonical string based upon ASCII characters"
+         " starting with 'a'.", DeprecationWarning, stacklevel=2)
+
+    from pytools import unique
+    all_descriptors: tuple[EinsumAxisDescriptor, ...] = ()
+    for descr in expr.access_descriptors:
+        all_descriptors = (*all_descriptors, *descr)
+
+    # Unique will return the descriptors preserving order.
+    unique_descrs: list[EinsumAxisDescriptor] = list(unique(all_descriptors))
+
+    base_chr_num = ord("a")
+
+    assert all_descriptors[0] == unique_descrs[0]
+
+    access_descr_to_index = {descr: chr(base_chr_num + ind) for ind, descr
+                             in enumerate(unique_descrs)}
 
     output_subscripts = "".join(
         [access_descr_to_index[EinsumElementwiseAxis(idim)]
