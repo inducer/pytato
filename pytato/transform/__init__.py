@@ -1228,7 +1228,6 @@ class CachedWalkMapper(WalkMapper):
     def __init__(self) -> None:
         super().__init__()
         self._visited_nodes: set[Any] = set()
-        self._visited_functions: set[FunctionDefinition] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -1245,20 +1244,6 @@ class CachedWalkMapper(WalkMapper):
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
         return type(self)()
-
-    def map_function_definition(self, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
-        if not self.visit(expr, *args, **kwargs) or expr in self._visited_functions:
-            return
-
-        new_mapper = self.clone_for_callee(expr)
-        for subexpr in expr.returns.values():
-            new_mapper(subexpr, *args, **kwargs)
-
-        self._visited_functions.add(expr)
-
-        self.post_visit(expr, *args, **kwargs)
-
 # }}}
 
 
@@ -1286,6 +1271,7 @@ class TopoSortMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
+    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
