@@ -1227,24 +1227,20 @@ class CachedWalkMapper(WalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self._visited_arrays_or_names: set[Any] = set()
-        self._visited_functions: set[Any] = set()
+        self._visited_nodes: set[Any] = set()
+        self._visited_functions: set[FunctionDefinition] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
-
-    def get_func_def_cache_key(
-            self, expr: FunctionDefinition, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
     def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any
             ) -> None:
         cache_key = self.get_cache_key(expr, *args, **kwargs)
-        if cache_key in self._visited_arrays_or_names:
+        if cache_key in self._visited_nodes:
             return
 
         super().rec(expr, *args, **kwargs)
-        self._visited_arrays_or_names.add(cache_key)
+        self._visited_nodes.add(cache_key)
 
     def clone_for_callee(
             self: _SelfMapper, function: FunctionDefinition) -> _SelfMapper:
@@ -1252,17 +1248,14 @@ class CachedWalkMapper(WalkMapper):
 
     def map_function_definition(self, expr: FunctionDefinition,
                                 *args: Any, **kwargs: Any) -> None:
-        cache_key = self.get_func_def_cache_key(expr, *args, **kwargs)
-        if (
-                not self.visit(expr, *args, **kwargs)
-                or cache_key in self._visited_functions):
+        if not self.visit(expr, *args, **kwargs) or expr in self._visited_functions:
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
             new_mapper(subexpr, *args, **kwargs)
 
-        self._visited_functions.add(cache_key)
+        self._visited_functions.add(expr)
 
         self.post_visit(expr, *args, **kwargs)
 
