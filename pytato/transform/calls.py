@@ -58,6 +58,7 @@ class PlaceholderSubstitutor(CopyMapper):
     """
 
     def __init__(self, substitutions: Mapping[str, Array]) -> None:
+        # Ignoring function cache, not needed
         super().__init__()
         self.substitutions = substitutions
 

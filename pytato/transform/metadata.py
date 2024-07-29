@@ -90,9 +90,9 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping
+    from collections.abc import Collection, Hashable, Mapping
 
-    from pytato.function import NamedCallResult
+    from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.loopy import LoopyCall
 
 
@@ -101,7 +101,7 @@ GraphNodeT = TypeVar("GraphNodeT")
 
 # {{{ AxesTagsEquationCollector
 
-class AxesTagsEquationCollector(Mapper[None, []]):
+class AxesTagsEquationCollector(Mapper[None, None, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
     operation. This mapper implements a default set of propagation rules,
@@ -595,8 +595,9 @@ class AxisTagAttacher(CopyMapper):
     """
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
-                 tag_corresponding_redn_descr: bool):
-        super().__init__()
+                 tag_corresponding_redn_descr: bool,
+                 _function_cache: dict[Hashable, FunctionDefinition] | None = None):
+        super().__init__(_function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 

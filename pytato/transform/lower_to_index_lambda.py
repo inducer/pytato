@@ -637,7 +637,7 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
 
-class ToIndexLambdaMapper(Mapper[Array, []], ToIndexLambdaMixin):
+class ToIndexLambdaMapper(Mapper[Array, None, []], ToIndexLambdaMixin):
 
     def handle_unsupported_array(self, expr: Any) -> Any:
         raise CannotBeLoweredToIndexLambda(type(expr))

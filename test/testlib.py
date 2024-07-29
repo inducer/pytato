@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper[Any, []]):
+class NumpyBasedEvaluator(Mapper[Any, None, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.
