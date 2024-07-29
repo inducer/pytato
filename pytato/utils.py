@@ -678,44 +678,34 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
         >>> C = pt.make_placeholder("C", (5, 4), np.float64)
         >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
         >>> get_einsum_subscript_str(ABC)
-        'ab,bc,cd->ad'
+        'ij,jk,kl->il'
     """
     from warnings import warn
 
-    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
     warn("The einsum subscript string will no longer return user defined"
          " indices but a canonical string based upon ASCII characters"
-         " starting with 'a'.", DeprecationWarning, stacklevel=2)
+         " starting with 'i'.", DeprecationWarning, stacklevel=2)
 
-    from pytools import unique
-    all_descriptors: tuple[EinsumAxisDescriptor, ...] = ()
-    for descr in expr.access_descriptors:
-        all_descriptors = (*all_descriptors, *descr)
+    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
-    # Unique will return the descriptors preserving order.
-    unique_descrs: list[EinsumAxisDescriptor] = list(unique(all_descriptors))
+    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
+    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+    axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
+    input_specs = []
+    for access_descr in expr.access_descriptors:
+        spec = ""
+        for axis_descr in access_descr:
+            try:
+                spec += axis_descr_to_idx[axis_descr]
+            except KeyError:
+                axis_descr_to_idx[axis_descr] = idx_gen()
+                spec += axis_descr_to_idx[axis_descr]
 
-    base_chr_num = ord("a")
+        input_specs.append(spec)
 
-    assert all_descriptors[0] == unique_descrs[0]
+    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
+                          for i in range(expr.ndim))
 
-    access_descr_to_index = {descr: chr(base_chr_num + ind) for ind, descr
-                             in enumerate(unique_descrs)}
-
-    output_subscripts = "".join(
-        [access_descr_to_index[EinsumElementwiseAxis(idim)]
-         for idim in range(expr.ndim)]
-    )
-    arg_subscripts: list[str] = []
-
-    for input_descriptors in expr.access_descriptors:
-        arg_subscripts.append("".join([access_descr_to_index[descr]
-                                       for descr in input_descriptors]))
-
-    output_subscripts = "".join([index for acc_desc, index in
-                                 access_descr_to_index.items()
-                                 if isinstance(acc_desc, EinsumElementwiseAxis)])
-
-    return f"{','.join(arg_subscripts)}->{output_subscripts}"
+    return f"{','.join(input_specs)}->{output_spec}"
 
 # vim: fdm=marker
