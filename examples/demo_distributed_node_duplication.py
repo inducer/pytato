@@ -4,9 +4,11 @@ An example to demonstrate the behavior of
 partitioning routine is to recompute expressions that appear in multiple
 partitions but are not materialized.
 """
-import pytato as pt
 import numpy as np
 from mpi4py import MPI
+
+import pytato as pt
+
 
 comm = MPI.COMM_WORLD
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __doc__ = """
 .. currentmodule:: pytato
 
@@ -43,17 +44,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import attrs
-import re
 import enum
-
-from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
-                    Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping)
-from immutabledict import immutabledict
+import re
 from functools import cached_property
-from pytato.array import (Array, AbstractResultWithNamedArrays,
-                          Placeholder, NamedArray, ShapeType, _dtype_any)
+from typing import (
+    Callable,
+    ClassVar,
+    Dict,
+    Hashable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
+
+import attrs
+from immutabledict import immutabledict
+
 from pytools.tag import Tag, Taggable
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    NamedArray,
+    Placeholder,
+    ShapeType,
+    _dtype_any,
+)
+
 
 ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
 
@@ -123,11 +143,11 @@ class FunctionDefinition(Taggable):
         distributed-memory communication nodes (:class:`~pytato.DistributedSend`,
         :class:`~pytato.DistributedRecv`) within function bodies.
     """
-    parameters: FrozenSet[str]
+    parameters: frozenset[str]
     return_type: ReturnType
     returns: Mapping[str, Array] = attrs.field(
         validator=attrs.validators.instance_of(immutabledict))
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    tags: frozenset[Tag] = attrs.field(kw_only=True)
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -135,7 +155,7 @@ class FunctionDefinition(Taggable):
 
         mapper = InputGatherer()
 
-        all_placeholders: FrozenSet[Placeholder] = frozenset()
+        all_placeholders: frozenset[Placeholder] = frozenset()
         for ary in self.returns.values():
             new_placeholders = frozenset({
                 arg for arg in mapper(ary)
@@ -160,13 +180,11 @@ class FunctionDefinition(Taggable):
         return self._placeholders[name]
 
     def _with_new_tags(
-            self: FunctionDefinition, tags: FrozenSet[Tag]) -> FunctionDefinition:
+            self: FunctionDefinition, tags: frozenset[Tag]) -> FunctionDefinition:
         return attrs.evolve(self, tags=tags)
 
     def __call__(self, **kwargs: Array
-                 ) -> Union[Array,
-                            Tuple[Array, ...],
-                            Dict[str, Array]]:
+                 ) -> Array | tuple[Array, ...] | dict[str, Array]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
 
@@ -235,17 +253,17 @@ class NamedCallResult(NamedArray):
                              call.function.returns[name].non_equality_tags))
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Union[Sequence[Tag], Tag]) -> Array:
+                         tags: Sequence[Tag] | Tag) -> Array:
         raise ValueError("Tagging a NamedCallResult's axis is illegal, use"
                          " Call.with_tagged_axis instead")
 
     def tagged(self,
-               tags: Union[Iterable[Tag], Tag, None]) -> NamedCallResult:
+               tags: Iterable[Tag] | Tag | None) -> NamedCallResult:
         raise ValueError("Tagging a NamedCallResult is illegal, use"
                          " Call.tagged instead")
 
     def without_tags(self,
-                     tags: Union[Iterable[Tag], Tag, None],
+                     tags: Iterable[Tag] | Tag | None,
                      verify_existence: bool = True,
                      ) -> NamedCallResult:
         raise ValueError("Untagging a NamedCallResult is illegal, use"
@@ -305,7 +323,7 @@ class Call(AbstractResultWithNamedArrays):
     def __len__(self) -> int:
         return len(self.function.returns)
 
-    def _with_new_tags(self: Call, tags: FrozenSet[Tag]) -> Call:
+    def _with_new_tags(self: Call, tags: frozenset[Tag]) -> Call:
         return attrs.evolve(self, tags=tags)
 
 # }}}
@@ -322,7 +340,7 @@ RE_ARGNAME = re.compile(r"^_pt_(\d+)$")
 
 def trace_call(f: Callable[..., ReturnT],
                *args: Array,
-               identifier: Optional[Hashable] = _Guess,
+               identifier: Hashable | None = _Guess,
                **kwargs: Array) -> ReturnT:
     """
     Returns the expressions returned after calling *f* with the arguments
@@ -338,8 +356,8 @@ def trace_call(f: Callable[..., ReturnT],
         :class:`~pytato.tags.FunctionIdentifier` tag, if ``_Guess`` the
         function identifier is guessed from ``f.__name__``.
     """
-    from pytato.tags import FunctionIdentifier
     from pytato.array import _get_default_tags
+    from pytato.tags import FunctionIdentifier
 
     if identifier is _Guess:
         # partials might not have a __name__ attribute

@@ -1,6 +1,9 @@
 import numpy as np
-import pytato as pt
+
 import pyopencl as cl
+
+import pytato as pt
+
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)

@@ -28,6 +28,7 @@ Redirections for the documentation tool
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -52,18 +53,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Hashable, FrozenSet, Optional, Any, ClassVar
+from typing import Any, ClassVar, Hashable
 
 import attrs
 import numpy as np
 
-from pytools.tag import Taggable, Tag
+from pytools.tag import Tag, Taggable
 
 from pytato.array import (
-        _SuppliedAxesAndTagsMixin,
-        Array, _SuppliedShapeAndDtypeMixin, ShapeType, AxesT,
-        _get_default_axes, _get_default_tags, ConvertibleToShape,
-        normalize_shape, _get_created_at_tag)
+    Array,
+    AxesT,
+    ConvertibleToShape,
+    ShapeType,
+    _get_created_at_tag,
+    _get_default_axes,
+    _get_default_tags,
+    _SuppliedAxesAndTagsMixin,
+    _SuppliedShapeAndDtypeMixin,
+    normalize_shape,
+)
+
 
 CommTagType = Hashable
 
@@ -94,9 +103,9 @@ class DistributedSend(Taggable):
     data: Array
     dest_rank: int
     comm_tag: CommTagType
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True, default=frozenset())
+    tags: frozenset[Tag] = attrs.field(kw_only=True, default=frozenset())
 
-    def _with_new_tags(self, tags: FrozenSet[Tag]) -> DistributedSend:
+    def _with_new_tags(self, tags: frozenset[Tag]) -> DistributedSend:
         return attrs.evolve(self, tags=tags)
 
     def copy(self, **kwargs: Any) -> DistributedSend:
@@ -160,11 +169,11 @@ class DistributedSendRefHolder(Array):
         return self.passthrough_data.axes
 
     @property
-    def tags(self) -> FrozenSet[Tag]:
+    def tags(self) -> frozenset[Tag]:
         return self.passthrough_data.tags
 
     @property
-    def non_equality_tags(self) -> FrozenSet[Tag]:
+    def non_equality_tags(self) -> frozenset[Tag]:
         return self.passthrough_data.non_equality_tags
 
 # }}}
@@ -210,7 +219,7 @@ class DistributedRecv(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Ar
 # {{{ constructor functions
 
 def make_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
-                          send_tags: FrozenSet[Tag] = frozenset()) -> \
+                          send_tags: frozenset[Tag] = frozenset()) -> \
          DistributedSend:
     """Make a :class:`DistributedSend` object."""
     return DistributedSend(data=sent_data, dest_rank=dest_rank, comm_tag=comm_tag,
@@ -229,7 +238,7 @@ def make_distributed_send_ref_holder(
 
 def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagType,
                           stapled_to: Array, *,
-                          send_tags: FrozenSet[Tag] = frozenset(),
+                          send_tags: frozenset[Tag] = frozenset(),
                           ) -> DistributedSendRefHolder:
     """Make a :class:`DistributedSend` object wrapped in a
     :class:`DistributedSendRefHolder` object."""
@@ -243,8 +252,8 @@ def staple_distributed_send(sent_data: Array, dest_rank: int, comm_tag: CommTagT
 
 def make_distributed_recv(src_rank: int, comm_tag: CommTagType,
                           shape: ConvertibleToShape, dtype: Any,
-                          axes: Optional[AxesT] = None,
-                          tags: FrozenSet[Tag] = frozenset()
+                          axes: AxesT | None = None,
+                          tags: frozenset[Tag] = frozenset()
                           ) -> DistributedRecv:
     """Make a :class:`DistributedRecv` object."""
     shape = normalize_shape(shape)

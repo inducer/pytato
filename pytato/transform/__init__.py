@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pytools import memoize_method
 
+
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
 Copyright (C) 2020-21 Kaushik Kulkarni
@@ -28,30 +29,60 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import attrs
 import logging
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    FrozenSet,
+    Generic,
+    Hashable,
+    Iterable,
+    Mapping,
+    TypeVar,
+    Union,
+    cast,
+)
+
+import attrs
 import numpy as np
 from immutabledict import immutabledict
-from typing import (Any, Callable, Dict, FrozenSet, Union, TypeVar, Set, Generic,
-                    List, Mapping, Iterable, Tuple, Optional, TYPE_CHECKING,
-                    Hashable, cast)
+
+from pymbolic.mapper.optimize import optimize_mapper
 
 from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    IndexRemappingBase,
+    InputArgumentBase,
+    NamedArray,
+    Placeholder,
+    Reshape,
+    Roll,
+    SizeParam,
+    Stack,
     _SuppliedAxesAndTagsMixin,
-        Array, IndexLambda, Placeholder, Stack, Roll,
-        AxisPermutation, DataWrapper, SizeParam, DictOfNamedArrays,
-        AbstractResultWithNamedArrays, Reshape, Concatenate, NamedArray,
-        IndexRemappingBase, Einsum, InputArgumentBase,
-        BasicIndex, AdvancedIndexInContiguousAxes, AdvancedIndexInNoncontiguousAxes,
-        IndexBase, DataInterface)
-
+)
 from pytato.distributed.nodes import (
-        DistributedSendRefHolder, DistributedRecv, DistributedSend)
+    DistributedRecv,
+    DistributedSend,
+    DistributedSendRefHolder,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
-from pytato.function import Call, NamedCallResult, FunctionDefinition
-from dataclasses import dataclass
 from pytato.tags import ImplStored
-from pymbolic.mapper.optimize import optimize_mapper
 
 
 ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
@@ -154,19 +185,19 @@ class Mapper:
         :class:`pytato.Array` subclasses for which a mapper
         method does not exist in this mapper.
         """
-        raise UnsupportedArrayError("%s cannot handle expressions of type %s"
-                % (type(self).__name__, type(expr)))
+        raise UnsupportedArrayError(
+                f"{type(self).__name__} cannot handle expressions of type {type(expr)}")
 
     def map_foreign(self, expr: Any, *args: Any, **kwargs: Any) -> Any:
         """Mapper method that is invoked for an object of class for which a
         mapper method does not exist in this mapper.
         """
-        raise ValueError("%s encountered invalid foreign object: %s"
-                % (type(self).__name__, repr(expr)))
+        raise ValueError(
+                f"{type(self).__name__} encountered invalid foreign object: {expr!r}")
 
     def rec(self, expr: MappedT, *args: Any, **kwargs: Any) -> Any:
         """Call the mapper method of *expr* and return the result."""
-        method: Optional[Callable[..., Array]]
+        method: Callable[..., Array] | None
 
         try:
             method = getattr(self, expr._mapper_method)
@@ -203,7 +234,7 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
 
     def __init__(self) -> None:
         super().__init__()
-        self._cache: Dict[Hashable, CachedMapperT] = {}
+        self._cache: dict[Hashable, CachedMapperT] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
         return expr
@@ -253,8 +284,8 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
         """
         return type(self)()
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
-                              ) -> Tuple[IndexOrShapeExpr, ...]:
+    def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
+                              ) -> tuple[IndexOrShapeExpr, ...]:
         # type-ignore-reason: apparently mypy cannot substitute typevars
         # here.
         return tuple(self.rec(s) if isinstance(s, Array) else s  # type: ignore[misc]
@@ -449,17 +480,17 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
         super().__init__()
         # type-ignored as '._cache' attribute is not coherent with the base
         # class
-        self._cache: Dict[Tuple[ArrayOrNames,
-                                Tuple[Any, ...],
-                                Tuple[Tuple[str, Any], ...]
+        self._cache: dict[tuple[ArrayOrNames,
+                                tuple[Any, ...],
+                                tuple[tuple[str, Any], ...]
                                 ],
                           ArrayOrNames] = {}  # type: ignore[assignment]
 
     def get_cache_key(self,
                       expr: ArrayOrNames,
-                      *args: Any, **kwargs: Any) -> Tuple[ArrayOrNames,
-                                                          Tuple[Any, ...],
-                                                          Tuple[Tuple[str, Any], ...]
+                      *args: Any, **kwargs: Any) -> tuple[ArrayOrNames,
+                                                          tuple[Any, ...],
+                                                          tuple[tuple[str, Any], ...]
                                                           ]:
         return (expr, args, tuple(sorted(kwargs.items())))
 
@@ -478,9 +509,9 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
             # type-ignore-reason: Mapper.rec is imprecise
             return result  # type: ignore[no-any-return]
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
+    def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any
-                              ) -> Tuple[IndexOrShapeExpr, ...]:
+                              ) -> tuple[IndexOrShapeExpr, ...]:
         # type-ignore-reason: apparently mypy cannot substitute typevars
         # here.
         return tuple(
@@ -688,10 +719,10 @@ class CombineMapper(Mapper, Generic[CombineT]):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.cache: Dict[ArrayOrNames, CombineT] = {}
+        self.cache: dict[ArrayOrNames, CombineT] = {}
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...]
-                              ) -> Tuple[CombineT, ...]:
+    def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
+                              ) -> tuple[CombineT, ...]:
         return tuple(self.rec(s) for s in situp if isinstance(s, Array))
 
     def rec(self, expr: ArrayOrNames) -> CombineT:  # type: ignore
@@ -889,11 +920,11 @@ class SubsetDependencyMapper(DependencyMapper):
     Mapper to combine the dependencies of an expression that are a subset of
     *universe*.
     """
-    def __init__(self, universe: FrozenSet[Array]):
+    def __init__(self, universe: frozenset[Array]):
         self.universe = universe
         super().__init__()
 
-    def combine(self, *args: FrozenSet[Array]) -> FrozenSet[Array]:
+    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
         from functools import reduce
         return reduce(lambda acc, arg: acc | (arg & self.universe),
                       args,
@@ -909,28 +940,28 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
     Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
     """
-    def combine(self, *args: FrozenSet[InputArgumentBase]
-                ) -> FrozenSet[InputArgumentBase]:
+    def combine(self, *args: frozenset[InputArgumentBase]
+                ) -> frozenset[InputArgumentBase]:
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
-    def map_placeholder(self, expr: Placeholder) -> FrozenSet[InputArgumentBase]:
+    def map_placeholder(self, expr: Placeholder) -> frozenset[InputArgumentBase]:
         return self.combine(frozenset([expr]), super().map_placeholder(expr))
 
-    def map_data_wrapper(self, expr: DataWrapper) -> FrozenSet[InputArgumentBase]:
+    def map_data_wrapper(self, expr: DataWrapper) -> frozenset[InputArgumentBase]:
         return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
 
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
+    def map_size_param(self, expr: SizeParam) -> frozenset[SizeParam]:
         return frozenset([expr])
 
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FrozenSet[InputArgumentBase]:
+                                ) -> frozenset[InputArgumentBase]:
         # get rid of placeholders local to the function.
         new_mapper = InputGatherer()
         all_callee_inputs = new_mapper.combine(*[new_mapper(ret)
                                                  for ret in expr.returns.values()])
-        result: Set[InputArgumentBase] = set()
+        result: set[InputArgumentBase] = set()
         for inp in all_callee_inputs:
             if isinstance(inp, Placeholder):
                 if inp.name in expr.parameters:
@@ -954,17 +985,17 @@ class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
     Mapper to combine all instances of :class:`pytato.array.SizeParam` that
     an array expression depends on.
     """
-    def combine(self, *args: FrozenSet[SizeParam]
-                ) -> FrozenSet[SizeParam]:
+    def combine(self, *args: frozenset[SizeParam]
+                ) -> frozenset[SizeParam]:
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
-    def map_size_param(self, expr: SizeParam) -> FrozenSet[SizeParam]:
+    def map_size_param(self, expr: SizeParam) -> frozenset[SizeParam]:
         return frozenset([expr])
 
     @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
-                                ) -> FrozenSet[SizeParam]:
+                                ) -> frozenset[SizeParam]:
         return self.combine(*[self.rec(ret)
                               for ret in expr.returns.values()])
 
@@ -1002,7 +1033,7 @@ class WalkMapper(Mapper):
         """
         pass
 
-    def rec_idx_or_size_tuple(self, situp: Tuple[IndexOrShapeExpr, ...],
+    def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...],
                               *args: Any, **kwargs: Any) -> None:
         for comp in situp:
             if isinstance(comp, Array):
@@ -1184,7 +1215,7 @@ class CachedWalkMapper(WalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self._visited_nodes: Set[Any] = set()
+        self._visited_nodes: set[Any] = set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -1217,7 +1248,7 @@ class TopoSortMapper(CachedWalkMapper):
 
     def __init__(self) -> None:
         super().__init__()
-        self.topological_order: List[Array] = []
+        self.topological_order: list[Array] = []
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
@@ -1276,7 +1307,7 @@ class MPMSMaterializerAccumulator:
     contains the set of materialized predecessors and the rewritten expression
     (i.e. the expression with tags for materialization applied).
     """
-    materialized_predecessors: FrozenSet[Array]
+    materialized_predecessors: frozenset[Array]
     expr: Array
 
 
@@ -1291,7 +1322,7 @@ def _materialize_if_mpms(expr: Array,
     """
     from functools import reduce
 
-    materialized_predecessors: FrozenSet[Array] = reduce(
+    materialized_predecessors: frozenset[Array] = reduce(
                                                     frozenset.union,
                                                     (pred.materialized_predecessors
                                                      for pred in predecessors),
@@ -1315,7 +1346,7 @@ class MPMSMaterializer(Mapper):
     def __init__(self, nsuccessors: Mapping[Array, int]):
         super().__init__()
         self.nsuccessors = nsuccessors
-        self.cache: Dict[ArrayOrNames, MPMSMaterializerAccumulator] = {}
+        self.cache: dict[ArrayOrNames, MPMSMaterializerAccumulator] = {}
 
     # type-ignore reason: return type not compatible with Mapper.rec's type
     def rec(self, expr: ArrayOrNames) -> MPMSMaterializerAccumulator:  # type: ignore
@@ -1410,7 +1441,7 @@ class MPMSMaterializer(Mapper):
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
-                                    (rec_array,) + tuple(rec_indices.values())
+                                    (rec_array, *tuple(rec_indices.values()))
                                     )
 
     map_basic_index = _map_index_base
@@ -1496,7 +1527,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     return DictOfNamedArrays(data, tags=source_dict.tags)
 
 
-def get_dependencies(expr: DictOfNamedArrays) -> Dict[str, FrozenSet[Array]]:
+def get_dependencies(expr: DictOfNamedArrays) -> dict[str, frozenset[Array]]:
     """Returns the dependencies of each named array in *expr*.
     """
     dep_mapper = DependencyMapper()
@@ -1596,8 +1627,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.node_to_users: Dict[ArrayOrNames,
-                Set[Union[DistributedSend, ArrayOrNames]]] = {}
+        self.node_to_users: dict[ArrayOrNames,
+                set[DistributedSend | ArrayOrNames]] = {}
 
     # type-ignore-reason: incompatible with superclass (args/kwargs, return type)
     def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
@@ -1606,7 +1637,7 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.rec(expr)
 
     def rec_idx_or_size_tuple(
-            self, expr: Array, situp: Tuple[IndexOrShapeExpr, ...]
+            self, expr: Array, situp: tuple[IndexOrShapeExpr, ...]
             ) -> None:
         for dim in situp:
             if isinstance(dim, Array):
@@ -1726,8 +1757,8 @@ class UsersCollector(CachedMapper[ArrayOrNames]):
         self.rec(expr._container)
 
 
-def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
-                                          Set[ArrayOrNames]]:
+def get_users(expr: ArrayOrNames) -> dict[ArrayOrNames,
+                                          set[ArrayOrNames]]:
     """
     Returns a mapping from node in *expr* to its direct users.
     """
@@ -1741,11 +1772,11 @@ def get_users(expr: ArrayOrNames) -> Dict[ArrayOrNames,
 # {{{ operations on graphs in dict form
 
 def _recursively_get_all_users(
-        direct_users: Mapping[ArrayOrNames, Set[ArrayOrNames]],
-        node: ArrayOrNames) -> FrozenSet[ArrayOrNames]:
+        direct_users: Mapping[ArrayOrNames, set[ArrayOrNames]],
+        node: ArrayOrNames) -> frozenset[ArrayOrNames]:
     result = set()
     queue = list(direct_users.get(node, set()))
-    ids_already_noted_to_visit: Set[int] = set()
+    ids_already_noted_to_visit: set[int] = set()
 
     while queue:
         current_node = queue[0]
@@ -1766,7 +1797,7 @@ def _recursively_get_all_users(
 
 def rec_get_user_nodes(expr: ArrayOrNames,
                        node: ArrayOrNames,
-                       ) -> FrozenSet[ArrayOrNames]:
+                       ) -> frozenset[ArrayOrNames]:
     """
     Returns all direct and indirect users of *node* in *expr*.
     """
@@ -1781,8 +1812,8 @@ def rec_get_user_nodes(expr: ArrayOrNames,
 def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
     import sys
     if "pyopencl" in sys.modules:
-        from pyopencl.array import Array as CLArray
         from pyopencl import MemoryObjectHolder
+        from pyopencl.array import Array as CLArray
         try:
             from pyopencl import SVMPointer
         except ImportError:
@@ -1837,7 +1868,7 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
         job of deduplication.
     """
 
-    data_wrapper_cache: Dict[Hashable, DataWrapper] = {}
+    data_wrapper_cache: dict[Hashable, DataWrapper] = {}
     data_wrappers_encountered = 0
 
     def cached_data_wrapper_if_present(ary: ArrayOrNames) -> ArrayOrNames:
