@@ -51,6 +51,7 @@ from pytato.array import (
     AxisPermutation,
     Concatenate,
     Einsum,
+    EinsumAxisDescriptor,
     EinsumElementwiseAxis,
     IndexBase,
     IndexLambda,
@@ -285,7 +286,7 @@ class ExpansionMapper(CopyMapper):
         new_bindings: dict[str, Array] = {name: self.rec(bnd)
                                              for name, bnd in
                                           sorted(expr.bindings.items())}
-        new_arrays = list(new_bindings.values())
+        new_arrays = (*new_bindings.values(),)
 
         array_to_bnd_name: dict[Array, str] = {bnd: name for name, bnd
                                                in sorted(new_bindings.items())}
@@ -315,7 +316,7 @@ class ExpansionMapper(CopyMapper):
         new_predecessors = tuple(self.rec(arg) for arg in expr.args)
         _, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
 
-        access_descriptors = ()
+        access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...] = ()
         for ival, array in enumerate(new_predecessors):
             one_descr = expr.access_descriptors[ival]
             if arrays_to_study_num_present:
@@ -370,7 +371,6 @@ class ParamAxisExpander(IdentityMapper):
         # We know that a variable is a leaf node. So we only need to update it
         # if the variable is part of a study.
 
-        breakpoint()
         if expr.name in varname_to_studies.keys():
             #  These are the single instance information.
             #  In the multiple instance we will need to index into the variable.
