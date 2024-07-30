@@ -350,10 +350,10 @@ class ExpansionMapper(CopyMapper):
         raise NotImplementedError(" Expanding functions is not yet supported.")
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
-        raise NotImplementedError(" Expanding functions is not yet suppported.")
+        raise NotImplementedError(" Expanding functions is not yet supported.")
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        raise NotImplementedError(" Expanding functions is not yet suppported.")
+        raise NotImplementedError(" Expanding functions is not yet supported.")
 
     # }}}
 
