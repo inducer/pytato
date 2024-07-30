@@ -695,7 +695,7 @@ def get_einsum_specification(expr: Einsum) -> str:
     Note this function may not return the exact same string as the
     string you input as part of a call to :func:`pytato.einsum'.
     Instead you will get a canonical version of the specification
-    starting the indicies with the letter 'i'.
+    starting the indices with the letter 'i'.
 
 
     .. testsetup::
