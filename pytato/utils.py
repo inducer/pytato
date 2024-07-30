@@ -712,8 +712,7 @@ def get_einsum_specification(expr: Einsum) -> str:
 
     from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
-    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+    index_letters = (chr(i) for i in range(ord("i"), ord("z")))
     axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
     input_specs = []
     for access_descr in expr.access_descriptors:
