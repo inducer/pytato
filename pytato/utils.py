@@ -680,8 +680,10 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
     """
     from warnings import warn
 
-    warn("get_einsum_subscript_str has been deprecated. Use "
-         " get_einsum_specification instead.", DeprecationWarning, stacklevel=2)
+    warn("get_einsum_subscript_str has been deprecated and will be removed in "
+         " Oct 2024. Use get_einsum_specification instead.",
+         DeprecationWarning, stacklevel=2)
+
     return get_einsum_specification(expr)
 
 
@@ -690,8 +692,10 @@ def get_einsum_specification(expr: Einsum) -> str:
     Returns the index subscript expression that can be
     used in constructing *expr* using the :func:`pytato.einsum` routine.
 
-    Note this is not ensured to be the same string as what you entered
-    when you called :func:`pytato.einsum`.
+    Note this function may not return the exact same string as the one
+    you input as part of a call to :func:`pytato.einsum'.
+    Instead you will get a canonical version of the specification
+    starting the indicies with the letter 'i'.
 
 
     .. testsetup::
@@ -705,7 +709,7 @@ def get_einsum_specification(expr: Einsum) -> str:
         >>> A = pt.make_placeholder("A", (10, 6), np.float64)
         >>> B = pt.make_placeholder("B", (6, 5), np.float64)
         >>> C = pt.make_placeholder("C", (5, 4), np.float64)
-        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> ABC = pt.einsum("ab,bc,cd->ad", A, B, C)
         >>> get_einsum_subscript_str(ABC)
         'ij,jk,kl->il'
     """

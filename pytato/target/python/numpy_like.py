@@ -124,10 +124,6 @@ def first_true(iterable: Iterable[T], default: T,
     return next(filter(pred, iterable), default)
 
 
-def _get_einsum_subscripts(expr: Einsum) -> str:
-    return get_einsum_specification(expr).replace(",", ", ").replace("->", " -> ")
-
-
 def _is_slice_trivial(slice_: NormalizedSlice,
                       dim: ShapeComponent) -> bool:
     """
@@ -500,7 +496,7 @@ class NumpyCodegenMapper(CachedMapper[str]):
         lhs = self.vng("_pt_tmp")
         args = [ast.Name(self.rec(arg)) for arg in expr.args]
         rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend), "einsum"),
-                        args=[ast.Constant(_get_einsum_subscripts(expr)),
+                        args=[ast.Constant(get_einsum_specification(expr)),
                               *args],
                        keywords=[],
                        )
