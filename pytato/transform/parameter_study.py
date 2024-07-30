@@ -45,6 +45,7 @@ import pymbolic.primitives as prim
 from pytools.tag import UniqueTag
 
 from pytato.array import (
+    AbstractResultWithNamedArrays,
     Array,
     AxesT,
     Axis,
@@ -60,6 +61,15 @@ from pytato.array import (
     Reshape,
     Roll,
     Stack,
+)
+from pytato.distributed.nodes import (
+    DistributedRecv,
+    DistributedSendRefHolder,
+)
+from pytato.function import (
+    Call,
+    FunctionDefinition,
+    NamedCallResult,
 )
 from pytato.scalar_expr import IdentityMapper, IntegralT
 from pytato.transform import CopyMapper
@@ -197,7 +207,7 @@ class ExpansionMapper(CopyMapper):
         new_predecessor = self.rec(expr.array)
         postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                              (new_predecessor,))
-        # Update the indicies.
+        # Update the indices.
         new_indices = expr.indices
         for shape in postpend_shape:
             new_indices = (*new_indices, NormalizedSlice(0, shape, 1))
@@ -325,16 +335,42 @@ class ExpansionMapper(CopyMapper):
                                  # Adding in new element axes to the end of the arrays.
                                  EinsumElementwiseAxis(dim=len(expr.shape) + ind))
             access_descriptors = (*access_descriptors, one_descr)
-        out = Einsum(access_descriptors,
+
+        return Einsum(access_descriptors,
                      new_predecessors,
                      axes=expr.axes + new_axes,
                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                      tags=expr.tags,
                      non_equality_tags=expr.non_equality_tags)
 
-        return out
-
     # }}} Operations with multiple predecessors.
+
+    # {{{ Function definitions
+    def map_function_definition(self, expr: FunctionDefinition) -> FunctionDefinition:
+        raise NotImplementedError(" Expanding functions is not yet supported.")
+
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError(" Expanding functions is not yet suppported.")
+
+    def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
+        raise NotImplementedError(" Expanding functions is not yet suppported.")
+
+    # }}}
+
+    # {{{ Distributed Programming Constructs
+    def map_distributed_recv(self, expr: DistributedRecv) -> DistributedRecv:
+        # This data will depend solely on the rank sending it to you.
+        raise NotImplementedError(" Expanding distributed programming constructs is"
+                                  " not yet supported.")
+
+    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder) \
+                                        -> Array:
+        # We are sending the data. This data may increase in size due to the
+        # parameter studies.
+        raise NotImplementedError(" Expanding distributed programming constructs is"
+                                  " not yet supported.")
+
+    # }}}
 
 
 class ParamAxisExpander(IdentityMapper):
