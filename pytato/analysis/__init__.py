@@ -402,8 +402,8 @@ class NodeCountMapper(CachedWalkMapper):
     """
     Counts the number of nodes of a given type in a DAG.
 
-    .. attribute:: expr_type_counts
-    .. attribute:: count_duplicates
+    .. autoattribute:: expr_type_counts
+    .. autoattribute:: count_duplicates
 
        Dictionary mapping node types to number of nodes of that type.
     """
@@ -474,7 +474,7 @@ class NodeMultiplicityMapper(CachedWalkMapper):
     The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
     that equal `x`.
 
-    .. attribute:: expr_multiplicity_counts
+    .. autoattribute:: expr_multiplicity_counts
     """
     def __init__(self) -> None:
         from collections import defaultdict
