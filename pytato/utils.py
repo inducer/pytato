@@ -692,8 +692,8 @@ def get_einsum_specification(expr: Einsum) -> str:
     Returns the index subscript expression that can be
     used in constructing *expr* using the :func:`pytato.einsum` routine.
 
-    Note this function may not return the exact same string as the one
-    you input as part of a call to :func:`pytato.einsum'.
+    Note this function may not return the exact same string as the
+    string you input as part of a call to :func:`pytato.einsum'.
     Instead you will get a canonical version of the specification
     starting the indicies with the letter 'i'.
 
