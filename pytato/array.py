@@ -1206,6 +1206,13 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         """
 
         # {{{ sanity checks
+        if isinstance(redn_axis, str):
+            raise TypeError("Argument `redn_axis' as a string is no longer"
+                            " accepted as a valid index type."
+                            " Use the actual EinsumReductionAxis object instead.")
+        elif not isinstance(redn_axis, EinsumReductionAxis):
+            raise TypeError(f"Argument `redn_axis' expected to be"
+                            f" EinsumReductionAxis, got {type(redn_axis)}")
 
         if redn_axis in self.redn_axis_to_redn_descr:
             assert any(redn_axis in access_descrs

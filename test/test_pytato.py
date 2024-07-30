@@ -1024,7 +1024,7 @@ def test_with_tagged_reduction():
 
     x_colsum = pt.einsum("ij->j", x)
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(TypeError):
         # no longer support indexing by string.
         x_colsum.with_tagged_reduction("j", FooRednTag())
 
