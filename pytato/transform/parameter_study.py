@@ -74,15 +74,14 @@ from pytato.transform import CopyMapper
 @dataclass(frozen=True)
 class ParameterStudyAxisTag(UniqueTag):
     """
-        A tag for acting on axes of arrays.
-        To enable multiple parameter studies on the same variable name
-        specify a different axis number and potentially a different size.
-
-        Currently does not allow multiple variables of different names to be in
-        the same parameter study.
+        A tag to indicate that the axis is being used
+        for independent trials like in a parameter study.
+        If you want to vary multiple input variables in the
+        same study then you need to have the same type of
+        class: 'ParameterStudyAxisTag'.
     """
-    axis_num: int
     axis_size: int
+    assert axis_size > 0
 
 
 StudiesT = Tuple[ParameterStudyAxisTag, ...]
@@ -96,12 +95,11 @@ class ExpansionMapper(CopyMapper):
         super().__init__()
         self.placeholder_name_to_parameter_studies = placeholder_name_to_parameter_studies  # noqa
 
-    def _shapes_and_axes_from_predecessor(self, curr_expr: Array,
+    def _shapes_and_axes_from_predecessors(self, curr_expr: Array,
                                          mapped_preds: ArraysT) -> \
                                                  Tuple[KnownShapeType,
                                                        AxesT,
                                                        Dict[Array, Tuple[int, ...]]]:
-        # Initialize with something for the typing.
 
         assert not any(axis.tags_of_type(ParameterStudyAxisTag) for
                        axis in curr_expr.axes)
@@ -118,6 +116,7 @@ class ExpansionMapper(CopyMapper):
             for axis in arr.axes:
                 tags = axis.tags_of_type(ParameterStudyAxisTag)
                 if tags:
+                    assert len(tags) == 1 # only one study per axis.
                     active_studies = active_studies.union(tags)
                     if tags in study_to_arrays.keys():
                         study_to_arrays[tags] = (*study_to_arrays[tags], arr)
@@ -136,7 +135,7 @@ class ExpansionMapper(CopyMapper):
                             -> Tuple[KnownShapeType, AxesT, Dict[Array,
                                                                  Tuple[int, ...]]]:
 
-        # This is where we specify the canonical ordering.
+        # This is where we specify the canonical ordering of the studies.
 
         array_to_canonical_ordered_studies: Dict[Array, Tuple[int, ...]] = {}
         studies_axes = new_axes
@@ -178,7 +177,7 @@ class ExpansionMapper(CopyMapper):
 
     def map_roll(self, expr: Roll) -> Array:
         new_predecessor = self.rec(expr.array)
-        _, new_axes, _ = self._shapes_and_axes_from_predecessor(expr,
+        _, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                 (new_predecessor,))
 
         return Roll(array=new_predecessor,
@@ -190,7 +189,7 @@ class ExpansionMapper(CopyMapper):
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessor(expr,
+        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                              (new_predecessor,))
         # Include the axes we are adding to the system.
         axis_permute = expr.axis_permutation + tuple([i + len(expr.axis_permutation)
@@ -204,7 +203,7 @@ class ExpansionMapper(CopyMapper):
 
     def _map_index_base(self, expr: IndexBase) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessor(expr,
+        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                              (new_predecessor,))
         # Update the indicies.
         new_indices = expr.indices
@@ -219,7 +218,7 @@ class ExpansionMapper(CopyMapper):
 
     def map_reshape(self, expr: Reshape) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessor(expr,
+        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                              (new_predecessor,))
         return Reshape(new_predecessor,
                        newshape=self.rec_idx_or_size_tuple(expr.newshape +
@@ -251,9 +250,16 @@ class ExpansionMapper(CopyMapper):
     def _mult_pred_same_shape(self, expr: Union[Stack, Concatenate]) -> Tuple[ArraysT,
                                                                               AxesT]:
 
+        """
+            This method will convert predecessors who were originally the same
+            shape in a single instance program to the same shape in this multiple
+            instance program.
+        """
+        assert isinstance(expr, [Stack, Concatenate])
+
         new_predecessors = tuple(self.rec(arr) for arr in expr.arrays)
 
-        studies_shape, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessor(expr, new_predecessors) # noqa
+        studies_shape, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
 
         # This is going to be expensive.
 
@@ -278,6 +284,8 @@ class ExpansionMapper(CopyMapper):
                                     axes=new_axes[:ind],
                                     tags=tmp.tags,
                                     non_equality_tags=tmp.non_equality_tags)
+
+            assert tmp.shape[-(1 + len(studies_shape)):] == studies_shape
             corrected_new_arrays = (*corrected_new_arrays, tmp)
 
         return corrected_new_arrays, new_axes
@@ -290,35 +298,12 @@ class ExpansionMapper(CopyMapper):
 
         # Determine the new parameter studies that are being conducted.
         from pytools import unique
+        postpend_shape, new_axes, array_to_studies = self._shapes_and_axes_from_predecessors(expr,
+                                                                             (new_bindings,))
 
-        all_axis_tags: StudiesT = ()
-        varname_to_studies: Dict[str, Dict[UniqueTag, bool]] = {}
-        for name, bnd in sorted(new_bindings.items()):
-            axis_tags_for_bnd: Set[Tag] = set()
-            varname_to_studies[name] = {}
-            for i in range(len(bnd.axes)):
-                axis_tags_for_bnd = axis_tags_for_bnd.union(bnd.axes[i].tags_of_type(ParameterStudyAxisTag)) # noqa
-            for tag in axis_tags_for_bnd:
-                if isinstance(tag, ParameterStudyAxisTag):
-                    # Defense
-                    varname_to_studies[name][tag] = True
-                    all_axis_tags = *all_axis_tags, tag,
+        varname_to_studies = { array.name: studies for array,
+                              studies in array_to_studies.items()}
 
-        cur_studies: Sequence[ParameterStudyAxisTag] = list(unique(all_axis_tags))
-        study_to_axis_number: Dict[ParameterStudyAxisTag, int] = {}
-
-        new_shape = expr.shape
-        new_axes = expr.axes
-
-        for study in cur_studies:
-            if isinstance(study, ParameterStudyAxisTag):
-                # Just defensive programming
-                # The active studies are added to the end of the bindings.
-                study_to_axis_number[study] = len(new_shape)
-                new_shape = (*new_shape, study.axis_size,)
-                new_axes = (*new_axes, Axis(tags=frozenset((study,))),)
-                #  This assumes that the axis only has 1 tag,
-                #  because there should be no dependence across instances.
 
         # Now we need to update the expressions.
         scalar_expr = ParamAxisExpander()(expr.expr, varname_to_studies,
@@ -336,7 +321,7 @@ class ExpansionMapper(CopyMapper):
     def map_einsum(self, expr: Einsum) -> Array:
 
         new_predecessors = tuple(self.rec(arg) for arg in expr.args)
-        _, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessor(expr, new_predecessors) # noqa
+        _, new_axes, arrays_to_study_num_present = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
         
         access_descriptors = ()
         for ival, array in enumerate(new_predecessors):
@@ -364,8 +349,7 @@ class ExpansionMapper(CopyMapper):
 class ParamAxisExpander(IdentityMapper):
 
     def map_subscript(self, expr: prim.Subscript,
-                      varname_to_studies: Mapping[str,
-                                                  Mapping[ParameterStudyAxisTag, bool]],
+                      varname_to_studies: Mapping[str,StudiesT],
                       study_to_axis_number: Mapping[ParameterStudyAxisTag, int]) -> \
                                                                     prim.Subscript:
         # We know that we are not changing the variable that we are indexing into.
