@@ -1206,7 +1206,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         """
 
         # {{{ sanity checks
-        assert isinstance(redn_axis, EinsumReductionAxis)
 
         if redn_axis in self.redn_axis_to_redn_descr:
             assert any(redn_axis in access_descrs
