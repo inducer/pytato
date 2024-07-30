@@ -721,7 +721,7 @@ def get_einsum_specification(expr: Einsum) -> str:
             try:
                 spec += axis_descr_to_idx[axis_descr]
             except KeyError:
-                axis_descr_to_idx[axis_descr] = idx_gen()
+                axis_descr_to_idx[axis_descr] = next(index_letters)
                 spec += axis_descr_to_idx[axis_descr]
 
         input_specs.append(spec)
