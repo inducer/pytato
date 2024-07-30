@@ -380,7 +380,6 @@ class CopyMapper(CachedMapper[ArrayOrNames]):
                       tuple(self.rec(arg) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags,
                       non_equality_tags=expr.non_equality_tags)
 
@@ -615,7 +614,6 @@ class CopyMapperWithExtraArgs(CachedMapper[ArrayOrNames]):
                       tuple(self.rec(arg, *args, **kwargs) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                      index_to_access_descr=expr.index_to_access_descr,
                       tags=expr.tags,
                       non_equality_tags=expr.non_equality_tags)
 
@@ -1478,7 +1476,6 @@ class MPMSMaterializer(Mapper):
         new_expr = Einsum(expr.access_descriptors,
                           tuple(ary.expr for ary in rec_arrays),
                           expr.redn_axis_to_redn_descr,
-                          expr.index_to_access_descr,
                           axes=expr.axes,
                           tags=expr.tags,
                           non_equality_tags=expr.non_equality_tags)
