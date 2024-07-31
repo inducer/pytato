@@ -604,7 +604,7 @@ def test_empty_dag_count():
     empty_dag = pt.make_dict_of_named_arrays({})
 
     # Verify that get_num_nodes returns 0 for an empty DAG
-    assert get_num_nodes(empty_dag) == 0
+    assert get_num_nodes(empty_dag, count_duplicates=False) == 0
 
     counts = get_node_type_counts(empty_dag)
     assert len(counts) == 0
@@ -624,7 +624,7 @@ def test_single_node_dag_count():
     assert node_counts == {pt.DataWrapper: 1}
 
     # Get total number of nodes
-    total_nodes = get_num_nodes(single_node_dag)
+    total_nodes = get_num_nodes(single_node_dag, count_duplicates=False)
 
     assert total_nodes == 1
 
@@ -638,7 +638,7 @@ def test_small_dag_count():
     dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
 
     # Verify that get_num_nodes returns 2 for a DAG with two nodes
-    assert get_num_nodes(dag) == 2
+    assert get_num_nodes(dag, count_duplicates=False) == 2
 
     counts = get_node_type_counts(dag)
     assert len(counts) == 2
@@ -655,7 +655,7 @@ def test_large_dag_count():
     dag = make_large_dag(iterations, seed=42)
 
     # Verify that the number of nodes is equal to iterations + 1 (placeholder)
-    assert get_num_nodes(dag) == iterations + 1
+    assert get_num_nodes(dag, count_duplicates=False) == iterations + 1
 
     counts = get_node_type_counts(dag)
     assert len(counts) >= 1
@@ -671,7 +671,8 @@ def test_random_dag_count():
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
-        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag, count_duplicates=False) == len(
+            pt.transform.DependencyMapper()(dag))
 
 
 def test_random_dag_with_comm_count():
@@ -684,7 +685,8 @@ def test_random_dag_with_comm_count():
         dag = get_random_pt_dag_with_send_recv_nodes(
             seed=i, rank=rank, size=size)
 
-        assert get_num_nodes(dag) == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag, count_duplicates=False) == len(
+            pt.transform.DependencyMapper()(dag))
 
 
 def test_small_dag_with_duplicates_count():

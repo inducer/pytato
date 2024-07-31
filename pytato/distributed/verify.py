@@ -194,12 +194,14 @@ def _run_partition_diagnostics(
 
     from pytato.analysis import get_num_nodes
     num_nodes_per_part = [get_num_nodes(make_dict_of_named_arrays(
-            {x: gp.name_to_output[x] for x in part.output_names}))
+            {x: gp.name_to_output[x] for x in part.output_names}),
+            count_duplicates=False)
             for part in gp.parts.values()]
 
-    logger.info(f"find_distributed_partition: Split {get_num_nodes(outputs)} nodes "
-        f"into {len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
-        "partition.")
+    logger.info("find_distributed_partition: "
+                f"Split {get_num_nodes(outputs, count_duplicates=False)} nodes "
+                f"into {len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
+                "partition.")
 
 # }}}
 

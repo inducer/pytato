@@ -445,13 +445,20 @@ def get_node_type_counts(
 
 def get_num_nodes(
         outputs: Array | DictOfNamedArrays,
-        count_duplicates: bool = False
+        count_duplicates: bool | None = None
         ) -> int:
     """
     Returns the number of nodes in DAG *outputs*.
-
     Instances of `DictOfNamedArrays` are excluded from counting.
     """
+    if count_duplicates is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_duplicates' will change "
+            "from True to False in 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_duplicates = True
 
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)

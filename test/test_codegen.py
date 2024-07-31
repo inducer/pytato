@@ -1611,7 +1611,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
     _, (pt_result,) = knl(cq)
 
     from pytato.analysis import get_num_nodes
-    print(get_num_nodes(pt_dag))
+    print(get_num_nodes(pt_dag, count_duplicates=False))
 
     np.testing.assert_allclose(pt_result, np_result)
 
