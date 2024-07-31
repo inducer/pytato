@@ -658,8 +658,44 @@ def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
 
 def get_einsum_subscript_str(expr: Einsum) -> str:
     """
-    Returns the index subscript expression that was used in constructing *expr*
-    using the :func:`pytato.einsum` routine.
+    Returns the index subscript expression that can be
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
+    Deprecated: use get_einsum_specification_str instead.
+
+    .. testsetup::
+
+        >>> import pytato as pt
+        >>> import numpy as np
+        >>> from pytato.utils import get_einsum_subscript_str
+
+    .. doctest::
+
+        >>> A = pt.make_placeholder("A", (10, 6), np.float64)
+        >>> B = pt.make_placeholder("B", (6, 5), np.float64)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> get_einsum_subscript_str(ABC)
+        'ij,jk,kl->il'
+    """
+    from warnings import warn
+
+    warn("get_einsum_subscript_str has been deprecated and will be removed in "
+         " Oct 2024. Use get_einsum_specification instead.",
+         DeprecationWarning, stacklevel=2)
+
+    return get_einsum_specification(expr)
+
+
+def get_einsum_specification(expr: Einsum) -> str:
+    """
+    Returns the index subscript expression that can be
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
+    Note this function may not return the exact same string as the
+    string you input as part of a call to :func:`pytato.einsum'.
+    Instead you will get a canonical version of the specification
+    starting the indices with the letter 'i'.
 
 
     .. testsetup::
@@ -672,28 +708,30 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
 
         >>> A = pt.make_placeholder("A", (10, 6), np.float64)
         >>> B = pt.make_placeholder("B", (6, 5), np.float64)
-        >>> C = pt.make_placeholder("B", (5, 4), np.float64)
-        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ab,bc,cd->ad", A, B, C)
         >>> get_einsum_subscript_str(ABC)
         'ij,jk,kl->il'
     """
-    from pytato.array import EinsumElementwiseAxis
 
-    acc_descr_to_index = {
-        acc_descr: idx
-        for idx, acc_descr in expr.index_to_access_descr.items()
-    }
+    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
-    output_subscripts = "".join(
-        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
-         for idim in range(expr.ndim)]
-    )
-    arg_subscripts: list[str] = []
+    index_letters = (chr(i) for i in range(ord("i"), ord("z")))
+    axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
+    input_specs = []
+    for access_descr in expr.access_descriptors:
+        spec = ""
+        for axis_descr in access_descr:
+            try:
+                spec += axis_descr_to_idx[axis_descr]
+            except KeyError:
+                axis_descr_to_idx[axis_descr] = next(index_letters)
+                spec += axis_descr_to_idx[axis_descr]
 
-    for acc_descrs in expr.access_descriptors:
-        arg_subscripts.append("".join(acc_descr_to_index[acc_descr]
-                                      for acc_descr in acc_descrs))
+        input_specs.append(spec)
 
-    return f"{','.join(arg_subscripts)}->{output_subscripts}"
+    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
+                          for i in range(expr.ndim))
 
+    return f"{','.join(input_specs)}->{output_spec}"
 # vim: fdm=marker
