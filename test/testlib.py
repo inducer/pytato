@@ -367,6 +367,7 @@ def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
 def make_large_dag_with_duplicates(iterations: int,
                                    seed: int = 0) -> pt.DictOfNamedArrays:
 
+    random.seed(seed)
     rng = np.random.default_rng(seed)
     a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
     current = a
