@@ -42,6 +42,7 @@ from typing import (
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
+from pytools import unique
 from pytools.tag import UniqueTag
 
 from pytato.array import (
@@ -126,10 +127,22 @@ class ExpansionMapper(CopyMapper):
                     else:
                         study_to_arrays[tags] = (arr,)
 
-        return self._studies_to_shape_and_axes_and_arrays_in_canonical_order(active_studies, # noqa
+        ps, na, arr_to_studies = self._studies_to_shape_and_axes_and_arrays_in_canonical_order(active_studies, # noqa
                                                                              new_shape,
                                                                              studies_axes,
                                                                              study_to_arrays)
+        # Add in the arrays that are not a part of a parameter study.
+        # This is done to avoid any KeyErrors later.
+
+        for arr in unique(mapped_preds):  # pytools unique maintains the order.
+            if arr not in arr_to_studies.keys():
+                arr_to_studies[arr] = ()
+            else:
+                assert len(arr_to_studies[arr]) > 0
+
+        assert len(arr_to_studies) == len(list(unique(mapped_preds)))
+
+        return ps, na, arr_to_studies
 
     def _studies_to_shape_and_axes_and_arrays_in_canonical_order(self,
                     studies: Iterable[ParameterStudyAxisTag],
@@ -232,23 +245,6 @@ class ExpansionMapper(CopyMapper):
 
         # {{{ Operations with multiple predecessors.
 
-    def map_stack(self, expr: Stack) -> Array:
-        new_arrays, new_axes_for_end = self._mult_pred_same_shape(expr)
-        return Stack(arrays=new_arrays,
-                     axis=expr.axis,
-                     axes=expr.axes + new_axes_for_end,
-                     tags=expr.tags,
-                     non_equality_tags=expr.non_equality_tags)
-
-    def map_concatenate(self, expr: Concatenate) -> Array:
-        new_arrays, new_axes_for_end = self._mult_pred_same_shape(expr)
-
-        return Concatenate(arrays=new_arrays,
-                           axis=expr.axis,
-                           axes=expr.axes + new_axes_for_end,
-                           tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
-
     def _mult_pred_same_shape(self, expr: Stack | Concatenate) -> tuple[ArraysT,
                                                                         AxesT]:
 
@@ -286,10 +282,31 @@ class ExpansionMapper(CopyMapper):
                                     tags=tmp.tags,
                                     non_equality_tags=tmp.non_equality_tags)
 
-            assert tmp.shape[-(len(studies_shape)):] == studies_shape
+            if studies_shape:
+                assert tmp.shape[-(len(studies_shape)):] == studies_shape
+            else:
+                assert tmp.shape[-(len(studies_shape)):] == tmp.shape
+
             corrected_new_arrays = (*corrected_new_arrays, tmp)
 
         return corrected_new_arrays, new_axes
+
+    def map_stack(self, expr: Stack) -> Array:
+        new_arrays, new_axes_for_end = self._mult_pred_same_shape(expr)
+        return Stack(arrays=new_arrays,
+                     axis=expr.axis,
+                     axes=expr.axes + new_axes_for_end,
+                     tags=expr.tags,
+                     non_equality_tags=expr.non_equality_tags)
+
+    def map_concatenate(self, expr: Concatenate) -> Array:
+        new_arrays, new_axes_for_end = self._mult_pred_same_shape(expr)
+
+        return Concatenate(arrays=new_arrays,
+                           axis=expr.axis,
+                           axes=expr.axes + new_axes_for_end,
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         # Update bindings first.
@@ -389,7 +406,7 @@ class ParamAxisExpander(IdentityMapper):
                              num_original_inds)
 
             new_vars: tuple[prim.Variable, ...] = ()
-            my_studies: tuple[int, ...] = varname_to_studies_num[expr.name]
+            my_studies: tuple[int, ...] = varname_to_studies_num[name]
 
             for num in my_studies:
                 new_vars = *new_vars, prim.Variable(f"_{num_original_inds + num}"),
