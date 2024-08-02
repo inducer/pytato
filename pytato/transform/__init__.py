@@ -232,6 +232,8 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
     """Mapper class that maps each node in the DAG exactly once. This loses some
     information compared to :class:`Mapper` as a node is visited only from
     one of its predecessors.
+
+    .. automethod:: get_cache_key
     """
 
     def __init__(self) -> None:
@@ -263,6 +265,10 @@ class CachedMapper(Mapper, Generic[CachedMapperT]):
 class TransformMapper(CachedMapper[ArrayOrNames]):
     """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
     other :class:`pytato.array.Array`\\ s.
+
+    Enables certain operations that can only be done if the mapping results are also
+    arrays (e.g., calling :meth:`~CachedMapper.get_cache_key` on them). Does not
+    implement default mapper methods; for that, see :class:`CopyMapper`.
 
     .. automethod:: clone_for_callee
     """
