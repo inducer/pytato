@@ -154,6 +154,7 @@ class ExpansionMapper(CopyMapper):
         new_shape: KnownShapeType = ()
         studies_axes: AxesT = ()
 
+        num_studies: int = 0
         for ind, study in enumerate(sorted(studies,
                                            key=lambda x: str(x.__class__))):
             new_shape = (*new_shape, study.axis_size)
@@ -164,20 +165,17 @@ class ExpansionMapper(CopyMapper):
                         array_num_to_study_nums[arr_num] = (*array_num_to_study_nums[arr_num], ind) # noqa
                     else:
                         array_num_to_study_nums[arr_num] = (ind,)
+            num_studies += 1
 
-        assert len(new_shape) == len(studies)
-        assert len(studies_axes) == len(studies)
+        assert len(new_shape) == num_studies
+        assert len(new_shape) == len(studies_axes)
 
         return new_shape, studies_axes, array_num_to_study_nums
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         # This is where we could introduce extra axes.
         if expr.name in self.placeholder_name_to_parameter_studies.keys():
-            new_axes = expr.axes
             studies = self.placeholder_name_to_parameter_studies[expr.name]
-
-            new_shape: KnownShapeType = ()
-            new_axes: AxesT = ()
 
             # We know that there are no predecessors and we know the studies to add.
             # We need to get them in the right order.
@@ -278,6 +276,8 @@ class ExpansionMapper(CopyMapper):
             for study_num in arr_num_to_study_nums[iarr]:
                 index = (*index, prim.Variable(f"_{num_single_inst_axes + study_num}"))
 
+            assert len(index) == len(array.axes)
+
             new_array = IndexLambda(expr=prim.Subscript(prim.Variable("_in0"),
                                                         index=index),
                                     bindings=immutabledict({"_in0": array}),
@@ -291,13 +291,12 @@ class ExpansionMapper(CopyMapper):
             correct_shape_preds = (*correct_shape_preds, new_array,)
 
         for arr in correct_shape_preds:
-            assert arr.shape == correct_shape_preds[0].shape 
+            assert arr.shape == correct_shape_preds[0].shape
 
         return correct_shape_preds, new_axes
 
     def map_stack(self, expr: Stack) -> Array:
         new_arrays, new_axes = self._mult_pred_same_shape(expr)
-        breakpoint()
         out = Stack(arrays=new_arrays,
                      axis=expr.axis,
                      axes=(*expr.axes, *new_axes,),
@@ -348,16 +347,6 @@ class ExpansionMapper(CopyMapper):
         # Now we need to update the expressions.
         scalar_expr = ParamAxisExpander()(expr.expr, varname_to_studies_nums,
                                           len(expr.shape))
-        
-
-        # Data dump the index lambda to a file which I can read.
-        with open("expansion_map_indexlambda.txt", "a+") as my_file:
-            my_file.write("\n")
-            my_file.write("\n")
-            my_file.write(str(scalar_expr))
-            my_file.write("\n")
-            my_file.write(str({name: len(bnd.axes) for name, bnd in sorted(new_binds.items())}))
-
 
         return IndexLambda(expr=scalar_expr,
                            bindings=immutabledict(new_binds),
@@ -488,9 +477,3 @@ class ParamAxisExpander(IdentityMapper):
 
         # Since the variable is not in a study we can just return the answer.
         return super().map_variable(expr, varname_to_studies, num_orig_elem_inds)
-
-    def map_substitution(self, expr: prim.Substitution, varname_to_studies,
-                         num_orig_elem_inds):
-
-        breakpoint()
-        raise NotImplementedError("Substitution needs to be expanded.")
