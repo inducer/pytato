@@ -262,16 +262,24 @@ class ExpansionMapper(CopyMapper):
 
         studies_shape, new_axes, arr_num_to_study_nums = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
 
+        if not arr_num_to_study_nums:
+            # We do not need to do anything as the expression we have is unmodified.
+            return new_predecessors, new_axes
+
         # This is going to be expensive.
         correct_shape_preds: ArraysT = ()
 
         for iarr, array in enumerate(new_predecessors):
             # Broadcast out to the right shape.
             num_single_inst_axes = len(expr.arrays[iarr].shape)
-            scale_expr = prim.Subscript(prim.Variable("_in0"),
-                                        index=tuple([prim.Variable(f"_{ind}") for
-                                               ind in range(num_single_inst_axes)]))
-            new_array = IndexLambda(expr=scale_expr,
+            index = tuple(prim.Variable(f"_{ind}") for
+                                        ind in range(num_single_inst_axes))
+            # Add in the axes from the studies we have in the predecessor.
+            for study_num in arr_num_to_study_nums[iarr]:
+                index = (*index, prim.Variable(f"_{num_single_inst_axes + study_num}"))
+
+            new_array = IndexLambda(expr=prim.Subscript(prim.Variable("_in0"),
+                                                        index=index),
                                     bindings=immutabledict({"_in0": array}),
                                     tags=array.tags,
                                     non_equality_tags=array.non_equality_tags,
@@ -289,11 +297,17 @@ class ExpansionMapper(CopyMapper):
 
     def map_stack(self, expr: Stack) -> Array:
         new_arrays, new_axes = self._mult_pred_same_shape(expr)
-        return Stack(arrays=new_arrays,
+        breakpoint()
+        out = Stack(arrays=new_arrays,
                      axis=expr.axis,
                      axes=(*expr.axes, *new_axes,),
                      tags=expr.tags,
                      non_equality_tags=expr.non_equality_tags)
+
+        assert out.ndim == len(out.shape)
+        assert len(out.shape) == len(out.arrays[0].shape) + 1
+
+        return out
 
     def map_concatenate(self, expr: Concatenate) -> Array:
         new_arrays, new_axes = self._mult_pred_same_shape(expr)
