@@ -78,11 +78,11 @@ from pytato.transform import CopyMapper
 @dataclass(frozen=True)
 class ParameterStudyAxisTag(UniqueTag):
     """
-        A tag to indicate that the axis is being used
-        for independent trials like in a parameter study.
-        If you want to vary multiple input variables in the
-        same study then you need to have the same type of
-        class: 'ParameterStudyAxisTag'.
+    A tag to indicate that the axis is being used
+    for independent trials like in a parameter study.
+    If you want to vary multiple input variables in the
+    same study then you need to have the same type of
+    class: 'ParameterStudyAxisTag'.
     """
     axis_size: int
 
@@ -92,7 +92,98 @@ ArraysT = tuple[Array, ...]
 KnownShapeType = tuple[IntegralT, ...]
 
 
-class ExpansionMapper(CopyMapper):
+class ParamAxisExpander(IdentityMapper):
+    """
+    The goal of this mapper is to convert a single instance scalar expression
+    into a single instruction multiple data scalar expression. We assume that any
+    array variables in the original scalar expression will be indexed completely.
+    Also, new axes for the studies are assumed to be on the end of
+    those array variables.
+    """
+
+    def __init__(self, varname_to_studies_num: Mapping[str, tuple[int, ...]],
+                    num_orig_elem_inds: int):
+        """
+        `arg' varname_to_studies_num: is a mapping from the variable name used
+        in the scalar expression to the studies present in the multiple instance
+        expression. Note that the varnames must be for the array variables only.
+
+        `arg' num_orig_elem_inds: is the number of element axes in the result of
+        the single instance expression.
+        """
+
+        super().__init__()
+        self.varname_to_studies_num = varname_to_studies_num
+        self.num_orig_elem_inds = num_orig_elem_inds
+
+    def map_subscript(self, expr: prim.Subscript) -> prim.Subscript:
+        # We only need to modify the indexing which is stored in the index member.
+        assert isinstance(expr.aggregate, prim.Variable)
+
+        name = expr.aggregate.name
+        if name in self.varname_to_studies_num.keys():
+            #  These are the single instance information.
+
+            index = self.rec(expr.index)
+
+            new_vars: tuple[prim.Variable, ...] = ()
+            my_studies: tuple[int, ...] = self.varname_to_studies_num[name]
+
+            for num in my_studies:
+                new_vars = (*new_vars,
+                            prim.Variable(f"_{self.num_orig_elem_inds + num}"),)
+
+            if isinstance(index, tuple):
+                index = index + new_vars
+            else:
+                index = tuple(index) + new_vars
+
+            return type(expr)(aggregate=expr.aggregate, index=index)
+
+        return super().map_subscript(expr)
+
+    def map_variable(self, expr: prim.Variable) -> prim.Expression:
+        # We know that a variable is a leaf node. So we only need to update it
+        # if the variable is part of a study.
+        if expr.name in self.varname_to_studies.keys():
+            # The variable may need to be updated.
+
+            my_studies: tuple[int, ...] = self.varname_to_studies[expr.name]
+
+            if len(my_studies) == 0:
+                # No studies
+                return expr
+
+            assert my_studies
+            assert len(my_studies) > 0
+
+            new_vars = tuple([prim.Variable(f"_{self.num_orig_elem_inds + num}") for
+                              num in my_studies])
+
+            return prim.Subscript(aggregate=expr, index=new_vars)
+
+        # Since the variable is not in a study we can just return the answer.
+        return super().map_variable(expr)
+
+
+class ParameterStudyVectorizer(CopyMapper):
+    """
+    This mapper will expand a single instance DAG into a DAG for parameter studies.
+    It is assumed that the parameter studies cannot interact with each other.
+    Currently, this only supports DAGs which are made for a single processing unit.
+    That is we do not support distributed programming right now.
+
+    Any new axes used for parameter studies will be added to the end of the arrays.
+    Note this will break broadcasting assumptions. Therefore, one needs to be careful
+    if only a portion of the program is expanded. This decision was made under the
+    assumption that the generated code would execute faster if the parameter study
+    axes were the ones with the shortest strides.
+
+    If there are multiple distinct parameter studies then the DAG will be expanded
+    for the Cartesian product of the input parameter studies. A parameter study is
+    specified in an array by tagging the corresponding axis with a tag that is a
+    class: `ParameterStudyAxisTag' or a class which inherits from it.
+    """
 
     def __init__(self, placeholder_name_to_parameter_studies: Mapping[str, StudiesT]):
         super().__init__()
@@ -247,13 +338,13 @@ class ExpansionMapper(CopyMapper):
 
         # {{{ Operations with multiple predecessors.
 
-    def _mult_pred_same_shape(self, expr: Stack | Concatenate) -> tuple[ArraysT,
-                                                                        AxesT]:
+    def _broadcast_predecessors_to_same_shape(self, expr: Stack | Concatenate) \
+                                                -> tuple[ArraysT, AxesT]:
 
         """
-            This method will convert predecessors who were originally the same
-            shape in a single instance program to the same shape in this multiple
-            instance program.
+        This method will convert predecessors who were originally the same
+        shape in a single instance program to the same shape in this multiple
+        instance program.
         """
 
         new_predecessors = tuple(self.rec(arr) for arr in expr.arrays)
@@ -273,6 +364,7 @@ class ExpansionMapper(CopyMapper):
             index = tuple(prim.Variable(f"_{ind}") for
                                         ind in range(num_single_inst_axes))
             # Add in the axes from the studies we have in the predecessor.
+
             for study_num in arr_num_to_study_nums[iarr]:
                 index = (*index, prim.Variable(f"_{num_single_inst_axes + study_num}"))
 
@@ -296,7 +388,7 @@ class ExpansionMapper(CopyMapper):
         return correct_shape_preds, new_axes
 
     def map_stack(self, expr: Stack) -> Array:
-        new_arrays, new_axes = self._mult_pred_same_shape(expr)
+        new_arrays, new_axes = self._broadcast_predecessors_to_same_shape(expr)
         out = Stack(arrays=new_arrays,
                      axis=expr.axis,
                      axes=(*expr.axes, *new_axes,),
@@ -309,7 +401,7 @@ class ExpansionMapper(CopyMapper):
         return out
 
     def map_concatenate(self, expr: Concatenate) -> Array:
-        new_arrays, new_axes = self._mult_pred_same_shape(expr)
+        new_arrays, new_axes = self._broadcast_predecessors_to_same_shape(expr)
 
         return Concatenate(arrays=new_arrays,
                            axis=expr.axis,
@@ -345,10 +437,9 @@ class ExpansionMapper(CopyMapper):
             assert vn_key in varname_to_studies_nums.keys()
 
         # Now we need to update the expressions.
-        scalar_expr = ParamAxisExpander()(expr.expr, varname_to_studies_nums,
-                                          len(expr.shape))
+        scalar_expr_mapper = ParamAxisExpander(varname_to_studies_nums, len(expr.shape))
 
-        return IndexLambda(expr=scalar_expr,
+        return IndexLambda(expr=scalar_expr_mapper(expr.expr),
                            bindings=immutabledict(new_binds),
                            shape=(*expr.shape, *postpend_shape,),
                            var_to_reduction_descr=expr.var_to_reduction_descr,
@@ -410,70 +501,3 @@ class ExpansionMapper(CopyMapper):
                                   " not yet supported.")
 
     # }}}
-
-
-class ParamAxisExpander(IdentityMapper):
-
-    def map_subscript(self, expr: prim.Subscript,
-                      varname_to_studies_num: Mapping[str, tuple[int, ...]],
-                      num_orig_elem_inds: int) -> prim.Subscript:
-        """
-            `arg' num_orig_elem_inds specifies the maximum number of indices
-            in a scalar expression that can be used to index into an array provided
-            that index is not used as part of a reduction.
-        """
-        # We know that we are not changing the variable that we are indexing into.
-        # This is stored in the aggregate member of the class Subscript.
-
-        # We only need to modify the indexing which is stored in the index member.
-        assert isinstance(expr.aggregate, prim.Variable)
-
-        name = expr.aggregate.name
-        if name in varname_to_studies_num.keys():
-            #  These are the single instance information.
-
-            index = self.rec(expr.index, varname_to_studies_num,
-                             num_orig_elem_inds)
-
-            new_vars: tuple[prim.Variable, ...] = ()
-            my_studies: tuple[int, ...] = varname_to_studies_num[name]
-
-            for num in my_studies:
-                new_vars = *new_vars, prim.Variable(f"_{num_orig_elem_inds + num}"),
-
-            if isinstance(index, tuple):
-                index = index + new_vars
-            else:
-                index = tuple(index) + new_vars
-
-            return type(expr)(aggregate=expr.aggregate, index=index)
-
-        return super().map_subscript(expr, varname_to_studies_num, num_orig_elem_inds)
-
-    def map_variable(self, expr: prim.Variable,
-                      varname_to_studies: Mapping[str, tuple[int, ...]],
-                     num_orig_elem_inds: int) -> prim.Expression:
-        # We know that a variable is a leaf node. So we only need to update it
-        # if the variable is part of a study.
-
-        if expr.name in varname_to_studies.keys():
-            # The variable may need to be updated.
-
-            my_studies: tuple[int, ...] = varname_to_studies[expr.name]
-
-            if len(my_studies) == 0:
-                # No studies
-                return expr
-
-            new_vars: tuple[prim.Variable, ...] = ()
-
-            assert my_studies
-            assert len(my_studies) > 0
-
-            for num in my_studies:
-                new_vars = *new_vars, prim.Variable(f"_{num_orig_elem_inds + num}"),
-
-            return prim.Subscript(aggregate=expr, index=new_vars)
-
-        # Since the variable is not in a study we can just return the answer.
-        return super().map_variable(expr, varname_to_studies, num_orig_elem_inds)
