@@ -59,6 +59,7 @@ import enum
 import re
 from functools import cached_property
 from typing import (
+    Any,
     Callable,
     ClassVar,
     Hashable,
@@ -235,6 +236,15 @@ class FunctionDefinition(Taggable):
             return immutabledict({kw: call_site[kw] for kw in self.returns})
         else:
             raise NotImplementedError(self.return_type)
+
+    def __eq__(self, other: Any) -> bool:
+        if self is other:
+            return True
+        if not isinstance(other, FunctionDefinition):
+            return False
+
+        from pytato.equality import EqualityComparer
+        return EqualityComparer().map_function_definition(self, other)
 
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
