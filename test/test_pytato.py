@@ -1219,7 +1219,10 @@ def test_lower_to_index_lambda():
 
 # {{{ Expansion Mapper tests.
 def test_expansion_mapper_placeholder():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1239,7 +1242,10 @@ def test_expansion_mapper_placeholder():
 
 
 def test_expansion_mapper_basic_index():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1255,7 +1261,10 @@ def test_expansion_mapper_basic_index():
 
 
 def test_expansion_mapper_advanced_index_contiguous_axes():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1274,7 +1283,10 @@ def test_expansion_mapper_advanced_index_contiguous_axes():
 
 
 def test_expansion_mapper_advanced_index_non_contiguous_axes():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1296,7 +1308,10 @@ def test_expansion_mapper_advanced_index_non_contiguous_axes():
 
 
 def test_expansion_mapper_index_lambda():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1319,7 +1334,10 @@ def test_expansion_mapper_index_lambda():
 
 
 def test_expansion_mapper_roll():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
@@ -1338,7 +1356,10 @@ def test_expansion_mapper_roll():
 
 
 def test_expansion_mapper_axis_permutation():
-    from pytato.transform.parameter_study import ParameterStudyVectorizer, ParameterStudyAxisTag
+    from pytato.transform.parameter_study import (
+        ParameterStudyAxisTag,
+        ParameterStudyVectorizer,
+    )
 
     name = "my_array"
     my_study = ParameterStudyAxisTag(10)
