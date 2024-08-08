@@ -41,6 +41,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
+    Hashable,
     Iterable,
     List,
     Mapping,
@@ -73,7 +74,7 @@ from pytato.array import (
 )
 from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-from pytato.function import NamedCallResult
+from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.raising import (
     BinaryOp,
     BroadcastOp,
@@ -623,8 +624,9 @@ class AxisTagAttacher(CopyMapper):
     """
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]],
-                 tag_corresponding_redn_descr: bool):
-        super().__init__()
+                 tag_corresponding_redn_descr: bool,
+                 _function_cache: dict[Hashable, FunctionDefinition] | None = None):
+        super().__init__(_function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
