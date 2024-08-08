@@ -145,10 +145,10 @@ class ParamAxisExpander(IdentityMapper):
     def map_variable(self, expr: prim.Variable) -> prim.Expression:
         # We know that a variable is a leaf node. So we only need to update it
         # if the variable is part of a study.
-        if expr.name in self.varname_to_studies.keys():
+        if expr.name in self.varname_to_studies_num.keys():
             # The variable may need to be updated.
 
-            my_studies: tuple[int, ...] = self.varname_to_studies[expr.name]
+            my_studies: tuple[int, ...] = self.varname_to_studies_num[expr.name]
 
             if len(my_studies) == 0:
                 # No studies
