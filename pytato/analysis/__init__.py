@@ -325,24 +325,24 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> tuple[ArrayOrNames]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> tuple[ArrayOrNames, ...]:
         return tuple(unique(dim for dim in shape if isinstance(dim, Array)))
 
-    def map_index_lambda(self, expr: IndexLambda) -> tuple[ArrayOrNames]:
+    def map_index_lambda(self, expr: IndexLambda) -> tuple[ArrayOrNames, ...]:
         return tuple(unique(tuple(expr.bindings.values())
                 + self._get_preds_from_shape(expr.shape)))
 
-    def map_stack(self, expr: Stack) -> tuple[ArrayOrNames]:
+    def map_stack(self, expr: Stack) -> tuple[ArrayOrNames, ...]:
         return tuple(unique(tuple(expr.arrays)
                 + self._get_preds_from_shape(expr.shape)))
 
     map_concatenate = map_stack
 
-    def map_einsum(self, expr: Einsum) -> tuple[ArrayOrNames]:
+    def map_einsum(self, expr: Einsum) -> tuple[ArrayOrNames, ...]:
         return tuple(unique(tuple(expr.args)
                 + self._get_preds_from_shape(expr.shape)))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> tuple[ArrayOrNames]:
+    def map_loopy_call_result(self, expr: NamedArray) -> tuple[ArrayOrNames, ...]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
@@ -351,7 +351,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 + self._get_preds_from_shape(expr.shape)))
 
-    def _map_index_base(self, expr: IndexBase) -> tuple[ArrayOrNames]:
+    def _map_index_base(self, expr: IndexBase) -> tuple[ArrayOrNames, ...]:
         return tuple(unique((expr.array,)  # noqa: RUF005
                 + tuple(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -369,14 +369,14 @@ class DirectPredecessorsGetter(Mapper):
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> tuple[ArrayOrNames]:
+    def _map_input_base(self, expr: InputArgumentBase) -> tuple[ArrayOrNames, ...]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> tuple[ArrayOrNames]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> tuple[ArrayOrNames, ...]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
@@ -384,7 +384,7 @@ class DirectPredecessorsGetter(Mapper):
                                         ) -> tuple[ArrayOrNames]:
         return (expr.passthrough_data,)
 
-    def map_call(self, expr: Call) -> tuple[ArrayOrNames]:
+    def map_call(self, expr: Call) -> tuple[ArrayOrNames, ...]:
         return tuple(unique(expr.bindings.values()))
 
     def map_named_call_result(

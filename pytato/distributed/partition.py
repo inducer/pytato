@@ -315,8 +315,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: tuple[CommunicationOpIdentifier]
-    send_ids: tuple[CommunicationOpIdentifier]
+    recv_ids: tuple[CommunicationOpIdentifier, ...]
+    send_ids: tuple[CommunicationOpIdentifier, ...]
 
 
 # {{{ _make_distributed_partition
@@ -402,12 +402,12 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[tuple[CommunicationOpIdentifier]]):
+        CombineMapper[tuple[CommunicationOpIdentifier, ...]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
                 dict[CommunicationOpIdentifier,
-                     tuple[CommunicationOpIdentifier]] = {}
+                     tuple[CommunicationOpIdentifier, ...]] = {}
 
         self.local_recv_id_to_recv_node: \
                 dict[CommunicationOpIdentifier, DistributedRecv] = {}
@@ -417,14 +417,14 @@ class _LocalSendRecvDepGatherer(
         self.local_rank = local_rank
 
     def combine(
-            self, *args: tuple[CommunicationOpIdentifier]
-            ) -> tuple[CommunicationOpIdentifier]:
+            self, *args: tuple[CommunicationOpIdentifier, ...]
+            ) -> tuple[CommunicationOpIdentifier, ...]:
         from pytools import unique
         return reduce(lambda x, y: tuple(unique(x+y)), args, ())
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> tuple[CommunicationOpIdentifier]:
+                                        ) -> tuple[CommunicationOpIdentifier, ...]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -438,7 +438,7 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> tuple[CommunicationOpIdentifier]:
+    def _map_input_base(self, expr: Array) -> tuple[CommunicationOpIdentifier, ...]:
         return ()
 
     map_placeholder = _map_input_base
@@ -447,7 +447,7 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> tuple[CommunicationOpIdentifier]:
+            ) -> tuple[CommunicationOpIdentifier, ...]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
@@ -461,7 +461,7 @@ class _LocalSendRecvDepGatherer(
         return (recv_id,)
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> tuple[CommunicationOpIdentifier]:
+            self, expr: NamedCallResult) -> tuple[CommunicationOpIdentifier, ...]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
 
@@ -594,8 +594,8 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 # {{{ _set_dict_union_mpi
 
 def _set_dict_union_mpi(
-        dict_a: Mapping[_KeyT, Sequence[_ValueT]],
-        dict_b: Mapping[_KeyT, Sequence[_ValueT]],
+        dict_a: Mapping[_KeyT, tuple[_ValueT, ...]],
+        dict_b: Mapping[_KeyT, tuple[_ValueT, ...]],
         mpi_data_type: mpi4py.MPI.Datatype | None) -> Mapping[_KeyT, Sequence[_ValueT]]:
     assert mpi_data_type is None
     from pytools import unique
@@ -781,7 +781,7 @@ def find_distributed_partition(
 
     part_comm_ids: list[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: tuple[CommunicationOpIdentifier] = ()
+        recv_ids: tuple[CommunicationOpIdentifier, ...] = ()
         for batch in comm_batches:
             send_ids = tuple(
                 comm_id for comm_id in unique(batch)
