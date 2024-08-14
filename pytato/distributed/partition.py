@@ -771,9 +771,7 @@ def find_distributed_partition(
         if isinstance(comm_batches_or_exc, Exception):
             raise comm_batches_or_exc
 
-        comm_batches = cast(
-                Sequence[list[CommunicationOpIdentifier]],
-                comm_batches_or_exc)
+        comm_batches = comm_batches_or_exc
 
     # }}}
 
