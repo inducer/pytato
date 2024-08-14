@@ -1279,7 +1279,7 @@ def test_expand_dims_input_validate():
 def test_with_tagged_reduction():
     from testlib import FooRednTag
 
-    from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
+    from pytato.diagnostic import NotAReductionAxis
     from pytato.raising import index_lambda_to_high_level_op
     x = pt.make_placeholder("x", shape=(10, 10))
     x_sum = pt.sum(x)
@@ -1293,25 +1293,18 @@ def test_with_tagged_reduction():
     assert x_sum.var_to_reduction_descr[hlo.axes[1]].tags_of_type(FooRednTag)
     assert not x_sum.var_to_reduction_descr[hlo.axes[0]].tags_of_type(FooRednTag)
 
-    x_trace = pt.einsum("ii->i", x)
     x_colsum = pt.einsum("ij->j", x)
 
-    with pytest.raises(NotAReductionAxis):
-        # 'j': not being reduced over.
+    with pytest.raises(TypeError):
+        # no longer support indexing by string.
         x_colsum.with_tagged_reduction("j", FooRednTag())
 
-    with pytest.raises(InvalidEinsumIndex):
-        # 'k': unknown axis
-        x_colsum.with_tagged_reduction("k", FooRednTag())
-
-    with pytest.raises(NotAReductionAxis):
-        # 'i': not being reduced over.
-        x_trace.with_tagged_reduction("i", FooRednTag())
-
-    x_colsum = x_colsum.with_tagged_reduction("i", FooRednTag())
+    my_descr = x_colsum.access_descriptors[0][0]
+    x_colsum = x_colsum.with_tagged_reduction(my_descr,
+                                              FooRednTag())
 
     assert (x_colsum
-            .redn_axis_to_redn_descr[x_colsum.index_to_access_descr["i"]]
+            .redn_axis_to_redn_descr[my_descr]
             .tags_of_type(FooRednTag))
 
 

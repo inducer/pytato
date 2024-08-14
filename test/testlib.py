@@ -361,7 +361,7 @@ def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
 
     y = expr1 + expr2
 
-    # Should have duplicates of the 2*x operation
+    # Has duplicates of the 2*x operation
     return pt.make_dict_of_named_arrays({"result": y})
 
 

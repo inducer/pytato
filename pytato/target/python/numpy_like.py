@@ -77,7 +77,7 @@ from pytato.reductions import (
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 from pytato.transform import CachedMapper
-from pytato.utils import are_shape_components_equal
+from pytato.utils import are_shape_components_equal, get_einsum_specification
 
 
 T = TypeVar("T")
@@ -122,30 +122,6 @@ def first_true(iterable: Iterable[T], default: T,
     # first_true([a,b,c], x) --> a or b or c or x
     # first_true([a,b], x, f) --> a if f(a) else b if f(b) else x
     return next(filter(pred, iterable), default)
-
-
-def _get_einsum_subscripts(einsum: Einsum) -> str:
-    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
-
-    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
-    axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
-    input_specs = []
-    for access_descr in einsum.access_descriptors:
-        spec = ""
-        for axis_descr in access_descr:
-            try:
-                spec += axis_descr_to_idx[axis_descr]
-            except KeyError:
-                axis_descr_to_idx[axis_descr] = idx_gen()
-                spec += axis_descr_to_idx[axis_descr]
-
-        input_specs.append(spec)
-
-    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
-                          for i in range(einsum.ndim))
-
-    return f"{', '.join(input_specs)} -> {output_spec}"
 
 
 def _is_slice_trivial(slice_: NormalizedSlice,
@@ -520,7 +496,7 @@ class NumpyCodegenMapper(CachedMapper[str]):
         lhs = self.vng("_pt_tmp")
         args = [ast.Name(self.rec(arg)) for arg in expr.args]
         rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend), "einsum"),
-                        args=[ast.Constant(_get_einsum_subscripts(expr)),
+                        args=[ast.Constant(get_einsum_specification(expr)),
                               *args],
                        keywords=[],
                        )

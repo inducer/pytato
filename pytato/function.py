@@ -17,6 +17,17 @@ __doc__ = """
 
     A type variable corresponding to the return type of the function
     :func:`pytato.trace_call`.
+
+Internal stuff that is only here because the documentation tool wants it
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
+
+.. class:: AxesT
+
+    A :class:`tuple` of :class:`pytato.array.Axis` objects.
 """
 
 __copyright__ = """
@@ -48,9 +59,9 @@ import enum
 import re
 from functools import cached_property
 from typing import (
+    Any,
     Callable,
     ClassVar,
-    Dict,
     Hashable,
     Iterable,
     Iterator,
@@ -63,6 +74,7 @@ from typing import (
 import attrs
 from immutabledict import immutabledict
 
+from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
 from pytato.array import (
@@ -75,7 +87,7 @@ from pytato.array import (
 )
 
 
-ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Dict[str, Array])
+ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Mapping[str, Array])
 
 
 # {{{ Call/NamedCallResult
@@ -92,14 +104,14 @@ class ReturnType(enum.Enum):
 
 
 # eq=False to avoid equality comparison without EqualityMaper
-@attrs.define(frozen=True, eq=False, hash=True)
+@attrs.define(frozen=True, eq=False, hash=True, cache_hash=True)
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
     :class:`~pytato.Array` with the inputs being
     :class:`~pytato.array.Placeholder`\ s. The outputs of the function
     can be a single :class:`pytato.Array`, a tuple of :class:`pytato.Array`\ s or an
-    instance of ``Dict[str, Array]``.
+    instance of ``Mapping[str, Array]``.
 
     .. attribute:: parameters
 
@@ -184,7 +196,7 @@ class FunctionDefinition(Taggable):
         return attrs.evolve(self, tags=tags)
 
     def __call__(self, **kwargs: Array
-                 ) -> Array | tuple[Array, ...] | dict[str, Array]:
+                 ) -> Array | tuple[Array, ...] | Mapping[str, Array]:
         from pytato.array import _get_default_tags
         from pytato.utils import are_shapes_equal
 
@@ -221,11 +233,21 @@ class FunctionDefinition(Taggable):
             return tuple(call_site[f"_{iarg}"]
                          for iarg in range(len(self.returns)))
         elif self.return_type == ReturnType.DICT_OF_ARRAYS:
-            return {kw: call_site[kw] for kw in self.returns}
+            return immutabledict({kw: call_site[kw] for kw in self.returns})
         else:
             raise NotImplementedError(self.return_type)
 
+    def __eq__(self, other: Any) -> bool:
+        if self is other:
+            return True
+        if not isinstance(other, FunctionDefinition):
+            return False
 
+        from pytato.equality import EqualityComparer
+        return EqualityComparer().map_function_definition(self, other)
+
+
+@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
 class NamedCallResult(NamedArray):
     """
     One of the arrays that are returned from a call to :class:`FunctionDefinition`.
@@ -239,18 +261,7 @@ class NamedCallResult(NamedArray):
         The name by which the returned array is referred to in
         :attr:`FunctionDefinition.returns`.
     """
-    call: Call
-    name: str
     _mapper_method: ClassVar[str] = "map_named_call_result"
-
-    def __init__(self,
-                 call: Call,
-                 name: str) -> None:
-        super().__init__(call, name,
-                         axes=call.function.returns[name].axes,
-                         tags=call.function.returns[name].tags,
-                         non_equality_tags=(
-                             call.function.returns[name].non_equality_tags))
 
     def with_tagged_axis(self, iaxis: int,
                          tags: Sequence[Tag] | Tag) -> Array:
@@ -268,6 +279,11 @@ class NamedCallResult(NamedArray):
                      ) -> NamedCallResult:
         raise ValueError("Untagging a NamedCallResult is illegal, use"
                          " Call.without_tags instead")
+
+    @property
+    def call(self) -> Call:
+        assert isinstance(self._container, Call)
+        return self._container
 
     @property
     def shape(self) -> ShapeType:
@@ -317,8 +333,13 @@ class Call(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self.function.returns)
 
+    @memoize_method
     def __getitem__(self, name: str) -> NamedCallResult:
-        return NamedCallResult(self, name)
+        return NamedCallResult(
+            self, name,
+            axes=self.function.returns[name].axes,
+            tags=self.function.returns[name].tags,
+            non_equality_tags=self.function.returns[name].non_equality_tags)
 
     def __len__(self) -> int:
         return len(self.function.returns)

@@ -214,7 +214,7 @@ class ToIndexLambdaMixin:
             dim_to_index_lambda_components,
         )
 
-        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        bindings = {f"_in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
         redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
         args_as_pym_expr: list[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
@@ -253,7 +253,7 @@ class ToIndexLambdaMixin:
 
                     subscript_indices.append(prim.Variable(redn_idx_name))
 
-            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
+            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"_in{iarg}"),
                                                    tuple(subscript_indices)))
 
         # }}}

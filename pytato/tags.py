@@ -205,7 +205,7 @@ class ExpandedDimsReshape(UniqueTag):
 class FunctionIdentifier(UniqueTag):
     """
     A tag that can be attached to a :class:`~pytato.function.FunctionDefinition`
-    node to to describe the function's identifier. One can use this to refer
+    node to describe the function's identifier. One can use this to refer
     all instances of :class:`~pytato.function.FunctionDefinition`, for example in
     transformations.transform.calls.concatenate_calls`.
 

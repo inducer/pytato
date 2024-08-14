@@ -26,8 +26,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Mapping
-
+from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
+                    Type, TYPE_CHECKING)
+from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
+                          DictOfNamedArrays, NamedArray,
+                          IndexBase, IndexRemappingBase, InputArgumentBase,
+                          ShapeType)
+from pytato.function import FunctionDefinition, Call, NamedCallResult
+from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
+from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 
@@ -334,26 +341,26 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[Array]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[ArrayOrNames]:
         return frozenset({dim for dim in shape if isinstance(dim, Array)})
 
-    def map_index_lambda(self, expr: IndexLambda) -> frozenset[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> frozenset[Array]:
+    def map_stack(self, expr: Stack) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> frozenset[Array]:
+    def map_concatenate(self, expr: Concatenate) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> frozenset[Array]:
+    def map_einsum(self, expr: Einsum) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[Array]:
+    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[ArrayOrNames]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
@@ -362,7 +369,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> frozenset[Array]:
+    def _map_index_base(self, expr: IndexBase) -> frozenset[ArrayOrNames]:
         return (frozenset([expr.array])
                 | frozenset(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -373,32 +380,34 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> frozenset[Array]:
+                                  ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[Array]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[Array]:
+                                        ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.passthrough_data])
 
-    def map_named_call_result(self, expr: NamedCallResult) -> frozenset[Array]:
-        raise NotImplementedError(
-            "DirectPredecessorsGetter does not yet support expressions containing "
-            "functions.")
+    def map_call(self, expr: Call) -> frozenset[ArrayOrNames]:
+        return frozenset(expr.bindings.values())
+
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> frozenset[ArrayOrNames]:
+        return frozenset([expr._container])
 
 
 # }}}
@@ -654,17 +663,16 @@ class CallSiteCountMapper(CachedWalkMapper):
         return id(expr)
 
     @memoize_method
-    def map_function_definition(self, /, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
-            new_mapper(subexpr, *args, **kwargs)
+            new_mapper(subexpr)
         self.count += new_mapper.count
 
-        self.post_visit(expr, *args, **kwargs)
+        self.post_visit(expr)
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):

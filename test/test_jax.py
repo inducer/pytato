@@ -90,6 +90,7 @@ def test_einsum(spec, argshapes, jit):
     np.testing.assert_allclose(np_out, pt_out)
 
 
+# Ignore deprecation warnings starting with get_einsum_subscript_str
 @pytest.mark.parametrize("jit", ([False, True]))
 def test_random_dag_against_numpy(jit):
     from testlib import RandomDAGContext, make_random_dag
