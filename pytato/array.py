@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -168,27 +169,46 @@ Internal stuff that is only here because the documentation tool wants it
 
 # }}}
 
+import operator
+import re
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from functools import partialmethod, cached_property
-import operator
-import attrs
+from functools import cached_property, partialmethod
 from typing import (
-        Optional, Callable, ClassVar, Dict, Any, Mapping, Tuple, Union,
-        Protocol, Sequence, cast, TYPE_CHECKING, List, Iterator, TypeVar,
-        FrozenSet, Collection)
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Collection,
+    Iterator,
+    Mapping,
+    Protocol,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
+import attrs
 import numpy as np
+from immutabledict import immutabledict
+from typing_extensions import Self
+
 import pymbolic.primitives as prim
 from pymbolic import var
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
-from pytato.scalar_expr import (Scalar, SCALAR_CLASSES,
-                                ScalarExpression, IntegralT,
-                                INT_CLASSES, get_reduction_induction_variables)
-import re
-from immutabledict import immutabledict
+from pytato.scalar_expr import (
+    INT_CLASSES,
+    SCALAR_CLASSES,
+    IntegralT,
+    Scalar,
+    ScalarExpression,
+    get_reduction_induction_variables,
+)
+
 
 # {{{ get a type variable that represents the type of '...'
 
@@ -224,7 +244,7 @@ ConvertibleToShape = Union[
     Sequence[ShapeComponent]]
 
 
-def _check_identifier(s: Optional[str], optional: bool) -> bool:
+def _check_identifier(s: str | None, optional: bool) -> bool:
     if s is None:
         if optional:
             return True
@@ -265,8 +285,8 @@ def normalize_shape(
 
         return s
 
-    from numbers import Number
     import collections
+    from numbers import Number
 
     if isinstance(shape, (Array, Number)):
         shape = shape,
@@ -310,7 +330,7 @@ _py_type_to_kind_cat = {
 }
 
 
-_float_dtype_to_complex: Dict[np.dtype[Any], np.dtype[Any]] = {
+_float_dtype_to_complex: dict[np.dtype[Any], np.dtype[Any]] = {
     np.dtype(np.float32): np.dtype(np.complex64),
     np.dtype(np.float64): np.dtype(np.complex128),
 }
@@ -359,7 +379,7 @@ def _np_result_dtype(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
         else:
             # bool won't ever be promoted to
             raise AssertionError()
-        return np.result_type(*(np_dtypes + [py_promotion_dtype]))
+        return np.result_type(*([*np_dtypes, py_promotion_dtype]))
 
     else:
         # Just ignore the python types for promotion.
@@ -410,9 +430,9 @@ class Axis(Taggable):
     A type for recording the information about an :class:`~pytato.Array`'s
     axis.
     """
-    tags: FrozenSet[Tag]
+    tags: frozenset[Tag]
 
-    def _with_new_tags(self, tags: FrozenSet[Tag]) -> Axis:
+    def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
         from attrs import evolve as replace
         return replace(self, tags=tags)
 
@@ -423,9 +443,9 @@ class ReductionDescriptor(Taggable):
     Records information about a reduction dimension in an
     :class:`~pytato.Array`'.
     """
-    tags: FrozenSet[Tag]
+    tags: frozenset[Tag]
 
-    def _with_new_tags(self, tags: FrozenSet[Tag]) -> ReductionDescriptor:
+    def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
         from attrs import evolve as replace
         return replace(self, tags=tags)
 
@@ -520,13 +540,25 @@ class Array(Taggable):
     .. attribute:: ndim
 
     """
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
 
-    # These are automatically excluded from equality in EqualityComparer
-    non_equality_tags: FrozenSet[Tag] = attrs.field(kw_only=True,
-                                                    hash=False,
-                                                    default=frozenset())
+    # otherwise subclasses cannot set these
+    if TYPE_CHECKING:
+        @property
+        def axes(self) -> AxesT:
+            raise NotImplementedError
+
+        # These are automatically excluded from equality in EqualityComparer
+        @property
+        def non_equality_tags(self) -> frozenset[Tag]:
+            raise NotImplementedError
+
+        @property
+        def shape(self) -> ShapeType:
+            raise NotImplementedError
+
+        @property
+        def dtype(self) -> np.dtype[Any]:
+            raise NotImplementedError
 
     _mapper_method: ClassVar[str]
 
@@ -555,18 +587,6 @@ class Array(Taggable):
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         return attrs.evolve(self, **kwargs)
 
-    def _with_new_tags(self: ArrayT, tags: FrozenSet[Tag]) -> ArrayT:
-        return attrs.evolve(self, tags=tags)
-
-    if TYPE_CHECKING:
-        @property
-        def shape(self) -> ShapeType:
-            raise NotImplementedError
-
-        @property
-        def dtype(self) -> np.dtype[Any]:
-            raise NotImplementedError
-
     @property
     def size(self) -> ShapeComponent:
         from pytools import product
@@ -579,8 +599,8 @@ class Array(Taggable):
         return self.shape[0]
 
     def __getitem__(self,
-                    slice_spec: Union[ConvertibleToIndexExpr,
-                                      Tuple[ConvertibleToIndexExpr, ...]]
+                    slice_spec: (ConvertibleToIndexExpr
+                        | tuple[ConvertibleToIndexExpr, ...])
                     ) -> Array:
         """
         .. warning::
@@ -613,6 +633,8 @@ class Array(Taggable):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, Array):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
@@ -635,14 +657,14 @@ class Array(Taggable):
                 other: ArrayOrScalar,
                 get_result_type: Callable[
                         [DtypeOrPyScalarType, DtypeOrPyScalarType],
-                        np.dtype[Any]] = _np_result_dtype,  # noqa
+                        np.dtype[Any]] = _np_result_dtype,
                 reverse: bool = False,
                 cast_to_result_dtype: bool = True,
             ) -> Array:
 
         # {{{ sanity checks
 
-        if not isinstance(other, (Array,) + SCALAR_CLASSES):
+        if not isinstance(other, (Array, *SCALAR_CLASSES)):
             return NotImplemented
 
         # }}}
@@ -740,7 +762,7 @@ class Array(Taggable):
         import pytato as pt
         return pt.imag(self)
 
-    def reshape(self, *shape: Union[int, Sequence[int]], order: str = "C") -> Array:
+    def reshape(self, *shape: int | Sequence[int], order: str = "C") -> Array:
         import pytato as pt
         if len(shape) == 0:
             raise TypeError("reshape takes at least one argument (0 given)")
@@ -767,7 +789,7 @@ class Array(Taggable):
         return pt.any(self, axis)
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Union[Sequence[Tag], Tag]) -> Array:
+                         tags: Sequence[Tag] | Tag) -> Array:
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
@@ -784,7 +806,24 @@ class Array(Taggable):
 # }}}
 
 
+# }}}
+
+
 # {{{ mixins
+
+@attrs.frozen(eq=False, slots=False, repr=False)
+class _SuppliedAxesAndTagsMixin(Taggable):
+    axes: AxesT = attrs.field(kw_only=True)
+    tags: frozenset[Tag] = attrs.field(kw_only=True)
+
+    # These are automatically excluded from equality in EqualityComparer
+    non_equality_tags: frozenset[Tag] = attrs.field(kw_only=True,
+                                                    hash=False,
+                                                    default=frozenset())
+
+    def _with_new_tags(self: Self, tags: frozenset[Tag]) -> Self:
+        return attrs.evolve(self, tags=tags)
+
 
 @attrs.frozen(eq=False, slots=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
@@ -800,7 +839,7 @@ class _SuppliedShapeAndDtypeMixin:
 # {{{ dict of named arrays
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class NamedArray(Array):
+class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
     known there.
@@ -814,11 +853,11 @@ class NamedArray(Array):
 
     # type-ignore reason: `copy` signature incompatible with super-class
     def copy(self, *,  # type: ignore[override]
-             container: Optional[AbstractResultWithNamedArrays] = None,
-             name: Optional[str] = None,
-             axes: Optional[AxesT] = None,
-             tags: Optional[FrozenSet[Tag]] = None,
-             non_equality_tags: Optional[FrozenSet[Tag]] = None) -> NamedArray:
+             container: AbstractResultWithNamedArrays | None = None,
+             name: str | None = None,
+             axes: AxesT | None = None,
+             tags: frozenset[Tag] | None = None,
+             non_equality_tags: frozenset[Tag] | None = None) -> NamedArray:
         container = self._container if container is None else container
         name = self.name if name is None else name
         tags = self.tags if tags is None else tags
@@ -866,7 +905,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
 
         This container deliberately does not implement arithmetic.
     """
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    tags: frozenset[Tag] = attrs.field(kw_only=True)
     _mapper_method: ClassVar[str]
 
     def _is_eq_valid(self) -> bool:
@@ -893,6 +932,8 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
+        if not isinstance(other, AbstractResultWithNamedArrays):
+            return False
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
@@ -913,7 +954,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     _mapper_method: ClassVar[str] = "map_dict_of_named_arrays"
 
     def __init__(self, data: Mapping[str, Array], *,
-                 tags: Optional[FrozenSet[Tag]] = None) -> None:
+                 tags: frozenset[Tag] | None = None) -> None:
         if tags is None:
             from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
@@ -955,7 +996,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 # {{{ index lambda
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class IndexLambda(_SuppliedShapeAndDtypeMixin, Array):
+class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
     input indices are represented by
@@ -1070,7 +1111,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
 
 
 @attrs.frozen(frozen=True, eq=False, repr=False, hash=True, cache_hash=True)
-class Einsum(Array):
+class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
     <https://en.wikipedia.org/wiki/Einstein_notation>`__. See
@@ -1103,12 +1144,10 @@ class Einsum(Array):
     .. automethod:: with_tagged_reduction
     """
 
-    access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
-    args: Tuple[Array, ...]
+    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
+    args: tuple[Array, ...]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                      ReductionDescriptor] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor] = \
         attrs.field(validator=attrs.validators.instance_of(immutabledict))
     _mapper_method: ClassVar[str] = "map_einsum"
 
@@ -1116,7 +1155,7 @@ class Einsum(Array):
     def _access_descr_to_axis_len(self
                                   ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
         from pytato.utils import are_shape_components_equal
-        descr_to_axis_len: Dict[EinsumAxisDescriptor, ShapeComponent] = {}
+        descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
 
         for access_descrs, arg in zip(self.access_descriptors,
                                       self.args):
@@ -1140,7 +1179,7 @@ class Einsum(Array):
 
     @cached_property
     def shape(self) -> ShapeType:
-        iaxis_to_len: Dict[int, ShapeComponent] = {}
+        iaxis_to_len: dict[int, ShapeComponent] = {}
 
         for descr, axis_len in self._access_descr_to_axis_len().items():
             if isinstance(descr, EinsumElementwiseAxis):
@@ -1159,30 +1198,20 @@ class Einsum(Array):
         return np.result_type(*[arg.dtype for arg in self.args])
 
     def with_tagged_reduction(self,
-                              redn_axis: Union[EinsumReductionAxis, str],
+                              redn_axis: EinsumReductionAxis,
                               tag: Tag) -> Einsum:
         """
         Returns a copy of *self* with the :class:`ReductionDescriptor`
         associated with *redn_axis* tagged with *tag*.
         """
-        from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
-        # {{{ sanity checks
 
+        # {{{ sanity checks
         if isinstance(redn_axis, str):
-            try:
-                redn_axis_ = self.index_to_access_descr[redn_axis]
-            except KeyError as err:
-                raise InvalidEinsumIndex(
-                             f"'{redn_axis}': not a valid axis index.") from err
-            if isinstance(redn_axis_, EinsumReductionAxis):
-                redn_axis = redn_axis_
-            else:
-                raise NotAReductionAxis(f"'{redn_axis}' is not"
-                                        " a reduction axis.")
-        elif isinstance(redn_axis, EinsumReductionAxis):
-            pass
-        else:
-            raise TypeError("Argument 'redn_axis' expected to be"
+            raise TypeError("Argument `redn_axis' as a string is no longer"
+                            " accepted as a valid index type."
+                            " Use the actual EinsumReductionAxis object instead.")
+        elif not isinstance(redn_axis, EinsumReductionAxis):
+            raise TypeError(f"Argument `redn_axis' expected to be"
                             f" EinsumReductionAxis, got {type(redn_axis)}")
 
         if redn_axis in self.redn_axis_to_redn_descr:
@@ -1205,7 +1234,6 @@ class Einsum(Array):
                           redn_axis_to_redn_descr=immutabledict
                             (new_redn_axis_to_redn_descr),
                           tags=self.tags,
-                          index_to_access_descr=self.index_to_access_descr,
                           non_equality_tags=self.non_equality_tags,
                           )
 
@@ -1233,7 +1261,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> immutabledict[str,
         (EinsumElementwiseAxis(dim=1), EinsumElementwiseAxis(dim=2), EinsumElementwiseAxis(dim=0))
     """  # noqa: E501
 
-    normalized_indices: List[str] = []
+    normalized_indices: list[str] = []
     acc = subscript.strip()
     while acc:
         match = EINSUM_FIRST_INDEX.match(acc)
@@ -1263,7 +1291,7 @@ def _normalize_einsum_in_subscript(subscript: str,
                                                         EinsumAxisDescriptor],
                                    index_to_axis_length: Mapping[str,
                                                                ShapeComponent],
-                                   ) -> Tuple[Tuple[EinsumAxisDescriptor, ...],
+                                   ) -> tuple[tuple[EinsumAxisDescriptor, ...],
                                               immutabledict
                                                 [str, EinsumAxisDescriptor],
                                               immutabledict[str, ShapeComponent]]:
@@ -1288,7 +1316,7 @@ def _normalize_einsum_in_subscript(subscript: str,
     """
     from pytato.utils import are_shape_components_equal
 
-    normalized_indices: List[str] = []
+    normalized_indices: list[str] = []
     acc = subscript.strip()
     while acc:
         match = EINSUM_FIRST_INDEX.match(acc)
@@ -1347,7 +1375,7 @@ def _normalize_einsum_in_subscript(subscript: str,
 
 
 def einsum(subscripts: str, *operands: Array,
-           index_to_redn_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+           index_to_redn_descr: Mapping[str, ReductionDescriptor] | None = None
            ) -> Einsum:
     """
     Einstein summation *subscripts* on *operands*.
@@ -1412,7 +1440,6 @@ def einsum(subscripts: str, *operands: Array,
                                                             EinsumElementwiseAxis)})
                                          ),
                   redn_axis_to_redn_descr=immutabledict(redn_axis_to_redn_descr),
-                  index_to_access_descr=index_to_descr,
                   non_equality_tags=_get_created_at_tag(),
                   )
 
@@ -1422,7 +1449,7 @@ def einsum(subscripts: str, *operands: Array,
 # {{{ stack
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Stack(Array):
+class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
     .. attribute:: arrays
@@ -1434,7 +1461,7 @@ class Stack(Array):
         The output axis
 
     """
-    arrays: Tuple[Array, ...]
+    arrays: tuple[Array, ...]
     axis: int
 
     _mapper_method: ClassVar[str] = "map_stack"
@@ -1455,7 +1482,7 @@ class Stack(Array):
 # {{{ concatenate
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Concatenate(Array):
+class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
     .. attribute:: arrays
@@ -1467,7 +1494,7 @@ class Concatenate(Array):
 
         The axis along which the *arrays* are to be concatenated.
     """
-    arrays: Tuple[Array, ...]
+    arrays: tuple[Array, ...]
     axis: int
 
     _mapper_method: ClassVar[str] = "map_concatenate"
@@ -1515,7 +1542,7 @@ class IndexRemappingBase(Array):
 # {{{ roll
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Roll(IndexRemappingBase):
+class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
     .. attribute:: shift
@@ -1541,7 +1568,7 @@ class Roll(IndexRemappingBase):
 # {{{ axis permutation
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class AxisPermutation(IndexRemappingBase):
+class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
     .. attribute:: array
@@ -1550,7 +1577,7 @@ class AxisPermutation(IndexRemappingBase):
 
         A permutation of the input axes.
     """
-    axis_permutation: Tuple[int, ...]
+    axis_permutation: tuple[int, ...]
 
     _mapper_method: ClassVar[str] = "map_axis_permutation"
 
@@ -1568,7 +1595,7 @@ class AxisPermutation(IndexRemappingBase):
 # {{{ reshape
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Reshape(IndexRemappingBase):
+class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
 
@@ -1605,13 +1632,13 @@ class Reshape(IndexRemappingBase):
 # {{{ indexing
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class IndexBase(IndexRemappingBase):
+class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
 
     .. attribute:: indices
     """
-    indices: Tuple[IndexExpr, ...]
+    indices: tuple[IndexExpr, ...]
 
 
 class BasicIndex(IndexBase):
@@ -1649,8 +1676,11 @@ class AdvancedIndexInContiguousAxes(IndexBase):
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert any(isinstance(idx, Array) for idx in self.indices)
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  _normalized_slice_len, partition)
+        from pytato.utils import (
+            _normalized_slice_len,
+            get_shape_after_broadcasting,
+            partition,
+        )
 
         i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
                                                                 self.indices[idx],
@@ -1665,13 +1695,13 @@ class AdvancedIndexInContiguousAxes(IndexBase):
 
         # type-ignored because mypy cannot figure out basic-indices only refer
         # to slices
-        pre_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        pre_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                     for i_idx in i_basic_indices
                                     if i_idx < i_adv_indices[0])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
         # to slices
-        post_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        post_basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                      for i_idx in i_basic_indices
                                      if i_idx > i_adv_indices[-1])
 
@@ -1692,8 +1722,11 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  _normalized_slice_len, partition)
+        from pytato.utils import (
+            _normalized_slice_len,
+            get_shape_after_broadcasting,
+            partition,
+        )
 
         i_adv_indices, i_basic_indices = partition(lambda idx: isinstance(
                                                                 self.indices[idx],
@@ -1708,7 +1741,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                                                       for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
-        basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]  # noqa: E501
+        basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
                                 for i_idx in i_basic_indices)
 
         return adv_idx_shape + basic_idx_shape
@@ -1759,7 +1792,7 @@ class DataInterface(Protocol):
 
 
 @attrs.frozen(eq=False, repr=False, hash=False)
-class DataWrapper(InputArgumentBase):
+class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     """Takes concrete array data and packages it to be compatible with the
     :class:`Array` interface.
 
@@ -1832,7 +1865,10 @@ class DataWrapper(InputArgumentBase):
 # {{{ placeholder
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
+class Placeholder(
+                  _SuppliedAxesAndTagsMixin,
+                  _SuppliedShapeAndDtypeMixin,
+                  InputArgumentBase):
     r"""A named placeholder for an array whose concrete value is supplied by the
     user during evaluation.
 
@@ -1853,7 +1889,9 @@ class Placeholder(_SuppliedShapeAndDtypeMixin, InputArgumentBase):
 # {{{ size parameter
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
-class SizeParam(InputArgumentBase):
+class SizeParam(
+                _SuppliedAxesAndTagsMixin,
+                InputArgumentBase):
     r"""A named placeholder for a scalar that may be used as a variable in symbolic
     expressions for array sizes.
 
@@ -1893,7 +1931,7 @@ def set_traceback_tag_enabled(enable: bool = True) -> None:
     _ENABLE_TRACEBACK_TAG = enable
 
 
-def _get_created_at_tag(stacklevel: int = 1) -> FrozenSet[Tag]:
+def _get_created_at_tag(stacklevel: int = 1) -> frozenset[Tag]:
     """
     Get a :class:`CreatedAt` tag storing the stack trace of an array's creation.
 
@@ -1901,6 +1939,7 @@ def _get_created_at_tag(stacklevel: int = 1) -> FrozenSet[Tag]:
         array creation location
     """
     import traceback
+
     from pytato.tags import CreatedAt
 
     if not _ENABLE_TRACEBACK_TAG:
@@ -1918,7 +1957,7 @@ def _get_created_at_tag(stacklevel: int = 1) -> FrozenSet[Tag]:
     return frozenset({CreatedAt(_PytatoStackSummary(frames))})
 
 
-def _get_default_tags() -> FrozenSet[Tag]:
+def _get_default_tags() -> frozenset[Tag]:
     return frozenset()
 
 
@@ -1956,7 +1995,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
 
 
-def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
+def roll(a: Array, shift: int, axis: int | None = None) -> Array:
     """Roll array elements along a given axis.
 
     :param a: input array
@@ -1985,7 +2024,7 @@ def roll(a: Array, shift: int, axis: Optional[int] = None) -> Array:
                 axes=_get_default_axes(a.ndim))
 
 
-def transpose(a: Array, axes: Optional[Sequence[int]] = None) -> Array:
+def transpose(a: Array, axes: Sequence[int] | None = None) -> Array:
     """Reverse or permute the axes of an array.
 
     :param a: input array
@@ -2079,7 +2118,7 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
                        axes=_get_default_axes(arrays[0].ndim))
 
 
-def reshape(array: Array, newshape: Union[int, Sequence[int]],
+def reshape(array: Array, newshape: int | Sequence[int],
             order: str = "C") -> Array:
     """
     :param array: array to be reshaped
@@ -2145,8 +2184,8 @@ def reshape(array: Array, newshape: Union[int, Sequence[int]],
 
 # {{{ make_dict_of_named_arrays
 
-def make_dict_of_named_arrays(data: Dict[str, Array], *,
-                              tags: FrozenSet[Tag] = frozenset()
+def make_dict_of_named_arrays(data: dict[str, Array], *,
+                              tags: frozenset[Tag] = frozenset()
                               ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.
 
@@ -2160,8 +2199,8 @@ def make_dict_of_named_arrays(data: Dict[str, Array], *,
 def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any = np.float64,
-                     tags: FrozenSet[Tag] = frozenset(),
-                     axes: Optional[AxesT] = None) -> Placeholder:
+                     tags: frozenset[Tag] = frozenset(),
+                     axes: AxesT | None = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
     :param name:       name of the placeholder array, generated automatically
@@ -2189,7 +2228,7 @@ def make_placeholder(name: str,
 
 
 def make_size_param(name: str,
-                    tags: FrozenSet[Tag] = frozenset()) -> SizeParam:
+                    tags: frozenset[Tag] = frozenset()) -> SizeParam:
     """Make a :class:`SizeParam`.
 
     Size parameters may be used as variables in symbolic expressions for array
@@ -2205,10 +2244,10 @@ def make_size_param(name: str,
 
 def make_data_wrapper(data: DataInterface,
         *,
-        name: Optional[str] = None,
-        shape: Optional[ConvertibleToShape] = None,
-        tags: FrozenSet[Tag] = frozenset(),
-        axes: Optional[AxesT] = None) -> DataWrapper:
+        name: str | None = None,
+        shape: ConvertibleToShape | None = None,
+        tags: frozenset[Tag] = frozenset(),
+        axes: AxesT | None = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
     :param data:       an instance obeying the :class:`DataInterface`
@@ -2296,7 +2335,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 
 # {{{ eye
 
-def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
+def eye(N: int, M: int | None = None, k: int = 0,  # noqa: N803
         dtype: Any = np.float64) -> Array:
     """
     Returns a 2D-array with ones on the *k*-th diagonal
@@ -2329,10 +2368,10 @@ def eye(N: int, M: Optional[int] = None, k: int = 0,  # noqa: N803
 
 @attrs.define
 class _ArangeInfo:
-    start: Optional[int]
-    stop: Optional[int]
-    step: Optional[int]
-    dtype: Optional[np.dtype[Any]]
+    start: int | None
+    stop: int | None
+    step: int | None
+    dtype: np.dtype[Any] | None
 
 
 def arange(*args: Any, **kwargs: Any) -> Array:
@@ -2379,9 +2418,9 @@ def arange(*args: Any, **kwargs: Any) -> Array:
                     explicit_dtype = True
             else:
                 raise TypeError(
-                        "may not specify '%s' by position and keyword" % k)
+                        f"may not specify '{k}' by position and keyword")
         else:
-            raise TypeError("unexpected keyword argument '%s'" % k)
+            raise TypeError(f"unexpected keyword argument '{k}'")
 
     if inf.start is None:
         inf.start = 0
@@ -2425,7 +2464,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 
 # {{{ comparison operator
 
-def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, bool]:
+def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
     # https://github.com/python/mypy/issues/3186
     import pytato.utils as utils
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
@@ -2440,42 +2479,42 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Union[Array, b
                         )  # type: ignore[return-value]
 
 
-def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 == x2) element-wise.
     """
     return _compare(x1, x2, "==")
 
 
-def not_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def not_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 != x2) element-wise.
     """
     return _compare(x1, x2, "!=")
 
 
-def less(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def less(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 < x2) element-wise.
     """
     return _compare(x1, x2, "<")
 
 
-def less_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def less_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 <= x2) element-wise.
     """
     return _compare(x1, x2, "<=")
 
 
-def greater(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def greater(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 > x2) element-wise.
     """
     return _compare(x1, x2, ">")
 
 
-def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns (x1 >= x2) element-wise.
     """
@@ -2486,7 +2525,7 @@ def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
 
 # {{{ logical operations
 
-def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns the element-wise logical OR of *x1* and *x2*.
     """
@@ -2503,7 +2542,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      )  # type: ignore[return-value]
 
 
-def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
+def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     """
     Returns the element-wise logical AND of *x1* and *x2*.
     """
@@ -2520,7 +2559,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Union[Array, bool]:
                                      )  # type: ignore[return-value]
 
 
-def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
+def logical_not(x: ArrayOrScalar) -> Array | bool:
     """
     Returns the element-wise logical NOT of *x*.
     """
@@ -2548,8 +2587,8 @@ def logical_not(x: ArrayOrScalar) -> Union[Array, bool]:
 # {{{ where
 
 def where(condition: ArrayOrScalar,
-          x: Optional[ArrayOrScalar] = None,
-          y: Optional[ArrayOrScalar] = None) -> ArrayOrScalar:
+          x: ArrayOrScalar | None = None,
+          y: ArrayOrScalar | None = None) -> ArrayOrScalar:
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
@@ -2580,7 +2619,7 @@ def where(condition: ArrayOrScalar,
 
     result_shape = utils.get_shape_after_broadcasting([condition, x, y])
 
-    bindings: Dict[str, Array] = {}
+    bindings: dict[str, Array] = {}
 
     expr1 = utils.update_bindings_and_get_broadcasted_expr(condition, "_in0",
                                                            bindings, result_shape)
@@ -2647,11 +2686,11 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
 # {{{ make_index_lambda
 
 def make_index_lambda(
-        expression: Union[str, ScalarExpression],
+        expression: str | ScalarExpression,
         bindings: Mapping[str, Array],
         shape: ShapeType,
         dtype: Any,
-        var_to_reduction_descr: Optional[Mapping[str, ReductionDescriptor]] = None
+        var_to_reduction_descr: Mapping[str, ReductionDescriptor] | None = None
 ) -> IndexLambda:
     if isinstance(expression, str):
         raise NotImplementedError
@@ -2762,8 +2801,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
     """
     Returns *array* broadcasted to *shape*.
     """
-    from pytato.utils import (get_indexing_expression,
-                              are_shape_components_equal)
+    from pytato.utils import are_shape_components_equal, get_indexing_expression
 
     if len(shape) < array.ndim:
         raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
@@ -2790,7 +2828,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
 
 # {{{ squeeze
 
-def squeeze(array: Array, axis: Optional[Collection[int]] = None) -> Array:
+def squeeze(array: Array, axis: Collection[int] | None = None) -> Array:
     """
     Remove single-dimensional entries from the shape of an array.
 
@@ -2818,7 +2856,7 @@ def squeeze(array: Array, axis: Optional[Collection[int]] = None) -> Array:
 
 # {{{ expand_dims
 
-def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
+def expand_dims(array: Array, axis: tuple[int, ...] | int) -> Array:
     """
     Reshapes *array* by adding 1-long axes at *axis* dimensions of the returned
     array.
@@ -2830,7 +2868,7 @@ def expand_dims(array: Array, axis: Union[Tuple[int, ...], int]) -> Array:
 
     output_ndim = array.ndim + len(axis)
 
-    normalized_axis: List[int] = []
+    normalized_axis: list[int] = []
 
     # {{{ sanity checks
 

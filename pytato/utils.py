@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = "Copyright (C) 2021 Kaushik Kulkarni"
 
 __license__ = """
@@ -22,25 +23,50 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import islpy as isl
-import pymbolic.primitives as prim
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Sequence,
+    TypeVar,
+)
 
-from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
-                    Optional, Iterable, TypeVar, FrozenSet)
-from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
-                          DtypeOrPyScalarType, ArrayOrScalar, BasicIndex,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
-                          _dtype_any, Einsum)
-from pytato.scalar_expr import (
-    PYTHON_SCALAR_CLASSES, ScalarExpression, IntegralScalarExpression,
-    SCALAR_CLASSES, INT_CLASSES, BoolT, Scalar, TypeCast)
-from pytools import UniqueNameGenerator
-from pytato.transform import Mapper
-from pytools.tag import Tag
+import islpy as isl
+import numpy as np
 from immutabledict import immutabledict
+
+import pymbolic.primitives as prim
+from pytools import UniqueNameGenerator
+from pytools.tag import Tag
+
+from pytato.array import (
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    ArrayOrScalar,
+    BasicIndex,
+    ConvertibleToIndexExpr,
+    DtypeOrPyScalarType,
+    Einsum,
+    IndexExpr,
+    IndexLambda,
+    NormalizedSlice,
+    ShapeComponent,
+    ShapeType,
+    SizeParam,
+    _dtype_any,
+)
+from pytato.scalar_expr import (
+    INT_CLASSES,
+    PYTHON_SCALAR_CLASSES,
+    SCALAR_CLASSES,
+    BoolT,
+    IntegralScalarExpression,
+    Scalar,
+    ScalarExpression,
+    TypeCast,
+)
+from pytato.transform import Mapper
 
 
 __doc__ = """
@@ -62,15 +88,15 @@ Tpart = TypeVar("Tpart")
 
 
 def partition(pred: Callable[[Tpart], bool],
-              iterable: Iterable[Tpart]) -> Tuple[List[Tpart],
-                                                  List[Tpart]]:
+              iterable: Iterable[Tpart]) -> tuple[list[Tpart],
+                                                  list[Tpart]]:
     """
     Use a predicate to partition entries into false entries and true
     entries
     """
     # Inspired from https://docs.python.org/3/library/itertools.html
     # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
-    from itertools import tee, filterfalse
+    from itertools import filterfalse, tee
     t1, t2 = tee(iterable)
     return list(filterfalse(pred, t1)), list(filter(pred, t2))
 
@@ -78,7 +104,7 @@ def partition(pred: Callable[[Tpart], bool],
 
 
 def get_shape_after_broadcasting(
-        exprs: Iterable[Union[Array, ScalarExpression]]) -> ShapeType:
+        exprs: Iterable[Array | ScalarExpression]) -> ShapeType:
     """
     Returns the shape after broadcasting *exprs* in an operation.
     """
@@ -90,7 +116,7 @@ def get_shape_after_broadcasting(
     # append leading dimensions of all the shapes with 1's to match result_dim.
     augmented_shapes = [((1,)*(result_dim-len(s)) + s) for s in shapes]
 
-    def _get_result_axis_length(axis_lengths: List[IntegralScalarExpression]
+    def _get_result_axis_length(axis_lengths: list[IntegralScalarExpression]
                                 ) -> IntegralScalarExpression:
         result_axis_len = axis_lengths[0]
         for axis_len in axis_lengths[1:]:
@@ -111,7 +137,7 @@ def get_shape_after_broadcasting(
 
 
 def get_indexing_expression(shape: ShapeType,
-                            result_shape: ShapeType) -> Tuple[ScalarExpression, ...]:
+                            result_shape: ShapeType) -> tuple[ScalarExpression, ...]:
     """
     Returns the indices while broadcasting an array of shape *shape* into one of
     shape *result_shape*.
@@ -139,8 +165,8 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
 
 
 def _extract_dtypes(
-        exprs: Sequence[ArrayOrScalar]) -> List[DtypeOrPyScalarType]:
-    dtypes: List[DtypeOrPyScalarType] = []
+        exprs: Sequence[ArrayOrScalar]) -> list[DtypeOrPyScalarType]:
+    dtypes: list[DtypeOrPyScalarType] = []
     for expr in exprs:
         if isinstance(expr, Array):
             dtypes.append(expr.dtype)
@@ -156,7 +182,7 @@ def _extract_dtypes(
 
 def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
-                                             bindings: Dict[str, Array],
+                                             bindings: dict[str, Array],
                                              result_shape: ShapeType
                                              ) -> ScalarExpression:
     """
@@ -184,8 +210,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
                         get_result_type: Callable[[DtypeOrPyScalarType, DtypeOrPyScalarType], np.dtype[Any]],  # noqa:E501
                         *,
-                        tags: FrozenSet[Tag],
-                        non_equality_tags: FrozenSet[Tag],
+                        tags: frozenset[Tag],
+                        non_equality_tags: frozenset[Tag],
                         cast_to_result_dtype: bool,
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
@@ -199,7 +225,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     dtypes = _extract_dtypes([a1, a2])
     result_dtype = get_result_type(*dtypes)
 
-    bindings: Dict[str, Array] = {}
+    bindings: dict[str, Array] = {}
 
     expr1 = update_bindings_and_get_broadcasted_expr(a1, "_in0", bindings,
                                                      result_shape)
@@ -243,9 +269,9 @@ class ShapeExpressionMapper(Mapper):
     """
     def __init__(self, var_name_gen: UniqueNameGenerator):
         super().__init__()
-        self.cache: Dict[Array, ScalarExpression] = {}
+        self.cache: dict[Array, ScalarExpression] = {}
         self.var_name_gen = var_name_gen
-        self.bindings: Dict[str, SizeParam] = {}
+        self.bindings: dict[str, SizeParam] = {}
 
     def rec(self, expr: Array) -> ScalarExpression:  # type: ignore
         if expr in self.cache:
@@ -266,9 +292,9 @@ class ShapeExpressionMapper(Mapper):
 
 
 def dim_to_index_lambda_components(expr: ShapeComponent,
-                                   vng: Optional[UniqueNameGenerator] = None,
-                                   ) -> Tuple[ScalarExpression,
-                                              Dict[str, SizeParam]]:
+                                   vng: UniqueNameGenerator | None = None,
+                                   ) -> tuple[ScalarExpression,
+                                              dict[str, SizeParam]]:
     """
     Returns the scalar expressions and bindings to use the shape
     component within an index lambda.
@@ -330,7 +356,7 @@ def are_shape_components_equal(dim1: ShapeComponent, dim2: ShapeComponent) -> bo
 def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
     """
     Returns *True* iff *shape1* and *shape2* have the same dimensionality and the
-    correpsonding components are equal as defined by
+    corresponding components are equal as defined by
     :func:`~pytato.utils.are_shape_components_equal`.
     """
     return ((len(shape1) == len(shape2))
@@ -346,7 +372,7 @@ class ShapeToISLExpressionMapper(Mapper):
     """
     def __init__(self, space: isl.Space):
         super().__init__()
-        self.cache: Dict[Array, isl.Aff] = {}
+        self.cache: dict[Array, isl.Aff] = {}
         self.space = space
 
     # type-ignore reason: incompatible return type with super class
@@ -499,11 +525,11 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
 
 def _index_into(
         ary: Array,
-        indices: Tuple[ConvertibleToIndexExpr, ...],
-        tags: FrozenSet[Tag],
-        non_equality_tags: FrozenSet[Tag]) -> Array:
-    from pytato.diagnostic import CannotBroadcastError
+        indices: tuple[ConvertibleToIndexExpr, ...],
+        tags: frozenset[Tag],
+        non_equality_tags: frozenset[Tag]) -> Array:
     from pytato.array import _get_default_axes
+    from pytato.diagnostic import CannotBroadcastError
 
     # {{{ handle ellipsis
 
@@ -556,7 +582,7 @@ def _index_into(
                 raise IndexError("only integer arrays are valid array indices")
             if (_is_non_positive(ary.shape[i])
                     and (not are_shape_components_equal(idx.size, 0))):
-                raise IndexError("Indirect indexing into a non-postive"
+                raise IndexError("Indirect indexing into a non-positive"
                                  f" dimension (axis {i}) is illegal.")
         else:
             raise IndexError("only integers, slices, ellipsis and integer arrays"
@@ -566,7 +592,7 @@ def _index_into(
 
     # {{{ normalize slices
 
-    normalized_indices: List[IndexExpr] = [_normalize_slice(idx, axis_len)
+    normalized_indices: list[IndexExpr] = [_normalize_slice(idx, axis_len)
                                            if isinstance(idx, slice)
                                            else idx
                                            for idx, axis_len in zip(indices,
@@ -617,8 +643,8 @@ def _index_into(
 
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
-    array_types: List[_dtype_any] = []
-    scalars: List[Scalar] = []
+    array_types: list[_dtype_any] = []
+    scalars: list[Scalar] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):
@@ -632,8 +658,44 @@ def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
 
 def get_einsum_subscript_str(expr: Einsum) -> str:
     """
-    Returns the index subscript expression that was used in constructing *expr*
-    using the :func:`pytato.einsum` routine.
+    Returns the index subscript expression that can be
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
+    Deprecated: use get_einsum_specification_str instead.
+
+    .. testsetup::
+
+        >>> import pytato as pt
+        >>> import numpy as np
+        >>> from pytato.utils import get_einsum_subscript_str
+
+    .. doctest::
+
+        >>> A = pt.make_placeholder("A", (10, 6), np.float64)
+        >>> B = pt.make_placeholder("B", (6, 5), np.float64)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> get_einsum_subscript_str(ABC)
+        'ij,jk,kl->il'
+    """
+    from warnings import warn
+
+    warn("get_einsum_subscript_str has been deprecated and will be removed in "
+         " Oct 2024. Use get_einsum_specification instead.",
+         DeprecationWarning, stacklevel=2)
+
+    return get_einsum_specification(expr)
+
+
+def get_einsum_specification(expr: Einsum) -> str:
+    """
+    Returns the index subscript expression that can be
+    used in constructing *expr* using the :func:`pytato.einsum` routine.
+
+    Note this function may not return the exact same string as the
+    string you input as part of a call to :func:`pytato.einsum'.
+    Instead you will get a canonical version of the specification
+    starting the indices with the letter 'i'.
 
 
     .. testsetup::
@@ -646,28 +708,30 @@ def get_einsum_subscript_str(expr: Einsum) -> str:
 
         >>> A = pt.make_placeholder("A", (10, 6), np.float64)
         >>> B = pt.make_placeholder("B", (6, 5), np.float64)
-        >>> C = pt.make_placeholder("B", (5, 4), np.float64)
-        >>> ABC = pt.einsum("ij,jk,kl->il", A, B, C)
+        >>> C = pt.make_placeholder("C", (5, 4), np.float64)
+        >>> ABC = pt.einsum("ab,bc,cd->ad", A, B, C)
         >>> get_einsum_subscript_str(ABC)
         'ij,jk,kl->il'
     """
-    from pytato.array import EinsumElementwiseAxis
 
-    acc_descr_to_index = {
-        acc_descr: idx
-        for idx, acc_descr in expr.index_to_access_descr.items()
-    }
+    from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
-    output_subscripts = "".join(
-        [acc_descr_to_index[EinsumElementwiseAxis(idim)]
-         for idim in range(expr.ndim)]
-    )
-    arg_subscripts: List[str] = []
+    index_letters = (chr(i) for i in range(ord("i"), ord("z")))
+    axis_descr_to_idx: dict[EinsumAxisDescriptor, str] = {}
+    input_specs = []
+    for access_descr in expr.access_descriptors:
+        spec = ""
+        for axis_descr in access_descr:
+            try:
+                spec += axis_descr_to_idx[axis_descr]
+            except KeyError:
+                axis_descr_to_idx[axis_descr] = next(index_letters)
+                spec += axis_descr_to_idx[axis_descr]
 
-    for acc_descrs in expr.access_descriptors:
-        arg_subscripts.append("".join(acc_descr_to_index[acc_descr]
-                                      for acc_descr in acc_descrs))
+        input_specs.append(spec)
 
-    return f"{','.join(arg_subscripts)}->{output_subscripts}"
+    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
+                          for i in range(expr.ndim))
 
+    return f"{','.join(input_specs)}->{output_spec}"
 # vim: fdm=marker

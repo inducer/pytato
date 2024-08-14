@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 Copyright (C) 2022 University of Illinois Board of Trustees
@@ -37,6 +38,24 @@ from pytato.loopy import LoopyCall
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 
+from pytato.array import (
+    Array,
+    Concatenate,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    IndexRemappingBase,
+    InputArgumentBase,
+    NamedArray,
+    ShapeType,
+    Stack,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.loopy import LoopyCall
+from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
+
+
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 
@@ -50,6 +69,8 @@ __doc__ = """
 .. autofunction:: get_num_nodes
 
 .. autofunction:: get_node_type_counts
+
+.. autofunction:: get_node_multiplicities
 
 .. autofunction:: get_num_call_sites
 
@@ -74,8 +95,8 @@ class NUserCollector(Mapper):
     def __init__(self) -> None:
         from collections import defaultdict
         super().__init__()
-        self._visited_ids: Set[int] = set()
-        self.nusers: Dict[Array, int] = defaultdict(lambda: 0)
+        self._visited_ids: set[int] = set()
+        self.nusers: dict[Array, int] = defaultdict(lambda: 0)
 
     # type-ignore reason: NUserCollector.rec's type does not match
     # Mapper.rec's type
@@ -188,7 +209,7 @@ class NUserCollector(Mapper):
 # }}}
 
 
-def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
+def get_nusers(outputs: Array | DictOfNamedArrays) -> Mapping[Array, int]:
     """
     For the DAG *outputs*, returns the mapping from each node to the number of
     nodes using its value within the DAG given by *outputs*.
@@ -204,7 +225,7 @@ def get_nusers(outputs: Union[Array, DictOfNamedArrays]) -> Mapping[Array, int]:
 
 def _get_indices_from_input_subscript(subscript: str,
                                       is_output: bool,
-                                      ) -> Tuple[str, ...]:
+                                      ) -> tuple[str, ...]:
     from pytato.array import EINSUM_FIRST_INDEX
 
     acc = subscript.strip()
@@ -247,8 +268,11 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     would compute the same result as *expr*.
     """
 
-    from pytato.array import (EinsumElementwiseAxis, EinsumReductionAxis,
-                              EinsumAxisDescriptor)
+    from pytato.array import (
+        EinsumAxisDescriptor,
+        EinsumElementwiseAxis,
+        EinsumReductionAxis,
+    )
 
     if not isinstance(expr, Einsum):
         raise TypeError(f"{expr} expected to be Einsum, got {type(expr)}.")
@@ -260,7 +284,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     in_spec, out_spec = subscripts.split("->")
 
     # build up a mapping from index names to axis descriptors
-    index_to_descrs: Dict[str, EinsumAxisDescriptor] = {}
+    index_to_descrs: dict[str, EinsumAxisDescriptor] = {}
 
     for idim, idx in enumerate(_get_indices_from_input_subscript(out_spec,
                                                                  is_output=True)):
@@ -308,27 +332,27 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> FrozenSet[Array]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[ArrayOrNames]:
         return frozenset({dim for dim in shape if isinstance(dim, Array)})
 
-    def map_index_lambda(self, expr: IndexLambda) -> FrozenSet[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> FrozenSet[Array]:
+    def map_stack(self, expr: Stack) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> FrozenSet[Array]:
+    def map_concatenate(self, expr: Concatenate) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> FrozenSet[Array]:
+    def map_einsum(self, expr: Einsum) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> FrozenSet[Array]:
-        from pytato.loopy import LoopyCallResult, LoopyCall
+    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[ArrayOrNames]:
+        from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
         return (frozenset(ary
@@ -336,7 +360,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> FrozenSet[Array]:
+    def _map_index_base(self, expr: IndexBase) -> frozenset[ArrayOrNames]:
         return (frozenset([expr.array])
                 | frozenset(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -347,32 +371,34 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> FrozenSet[Array]:
+                                  ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> FrozenSet[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> FrozenSet[Array]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[Array]:
+                                        ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.passthrough_data])
 
-    def map_named_call_result(self, expr: NamedCallResult) -> FrozenSet[Array]:
-        raise NotImplementedError(
-            "DirectPredecessorsGetter does not yet support expressions containing "
-            "functions.")
+    def map_call(self, expr: Call) -> frozenset[ArrayOrNames]:
+        return frozenset(expr.bindings.values())
+
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> frozenset[ArrayOrNames]:
+        return frozenset([expr._container])
 
 
 # }}}
@@ -385,27 +411,31 @@ class NodeCountMapper(CachedWalkMapper):
     """
     Counts the number of nodes of a given type in a DAG.
 
-    .. attribute:: counts
+    .. autoattribute:: expr_type_counts
+    .. autoattribute:: count_duplicates
 
        Dictionary mapping node types to number of nodes of that type.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, count_duplicates: bool = False) -> None:
         from collections import defaultdict
         super().__init__()
-        self.counts = defaultdict(int)   # type: Dict[Type[Any], int]
+        self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
+        self.count_duplicates = count_duplicates
 
-    def get_cache_key(self, expr: ArrayOrNames) -> ArrayOrNames:
-        # does NOT account for duplicate nodes
-        return expr
+    def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
+        # Returns unique nodes only if count_duplicates is False
+        return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
         if not isinstance(expr, DictOfNamedArrays):
-            self.counts[type(expr)] += 1
+            self.expr_type_counts[type(expr)] += 1
 
 
-def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]
-                         ) -> Dict[Type[Any], int]:
+def get_node_type_counts(
+        outputs: Array | DictOfNamedArrays,
+        count_duplicates: bool = False
+        ) -> dict[type[Any], int]:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
@@ -416,26 +446,78 @@ def get_node_type_counts(outputs: Union[Array, DictOfNamedArrays]
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    ncm = NodeCountMapper()
+    ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
 
-    return ncm.counts
+    return ncm.expr_type_counts
 
 
-def get_num_nodes(outputs: Union[Array, DictOfNamedArrays]) -> int:
+def get_num_nodes(
+        outputs: Array | DictOfNamedArrays,
+        count_duplicates: bool | None = None
+        ) -> int:
     """
     Returns the number of nodes in DAG *outputs*.
-
     Instances of `DictOfNamedArrays` are excluded from counting.
     """
+    if count_duplicates is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_duplicates' will change "
+            "from True to False in 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_duplicates = True
 
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    ncm = NodeCountMapper()
+    ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
 
-    return sum(ncm.counts.values())
+    return sum(ncm.expr_type_counts.values())
+
+# }}}
+
+
+# {{{ NodeMultiplicityMapper
+
+
+class NodeMultiplicityMapper(CachedWalkMapper):
+    """
+    Computes the multiplicity of each unique node in a DAG.
+
+    The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
+    that equal `x`.
+
+    .. autoattribute:: expr_multiplicity_counts
+    """
+    def __init__(self) -> None:
+        from collections import defaultdict
+        super().__init__()
+        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
+
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
+        # Returns each node, including nodes that are duplicates
+        return id(expr)
+
+    def post_visit(self, expr: Any) -> None:
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_multiplicity_counts[expr] += 1
+
+
+def get_node_multiplicities(
+        outputs: Array | DictOfNamedArrays) -> dict[Array, int]:
+    """
+    Returns the multiplicity per `expr`.
+    """
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    nmm = NodeMultiplicityMapper()
+    nmm(outputs)
+
+    return nmm.expr_multiplicity_counts
 
 # }}}
 
@@ -460,24 +542,23 @@ class CallSiteCountMapper(CachedWalkMapper):
         return id(expr)
 
     @memoize_method
-    def map_function_definition(self, /, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
-            new_mapper(subexpr, *args, **kwargs)
+            new_mapper(subexpr)
         self.count += new_mapper.count
 
-        self.post_visit(expr, *args, **kwargs)
+        self.post_visit(expr)
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):
             self.count += 1
 
 
-def get_num_call_sites(outputs: Union[Array, DictOfNamedArrays]) -> int:
+def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
     from pytato.codegen import normalize_outputs
