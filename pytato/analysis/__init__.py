@@ -33,7 +33,10 @@ from pytools import memoize_method
 
 from pytato.array import (
     Array,
+    AxisPermutation,
+    BasicIndex,
     Concatenate,
+    DataWrapper as DataWrapper,
     DictOfNamedArrays,
     Einsum,
     IndexBase,
@@ -41,12 +44,18 @@ from pytato.array import (
     IndexRemappingBase,
     InputArgumentBase,
     NamedArray,
+    Reshape,
     ShapeType,
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall
-from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    DependencyMapper as DependencyMapper,
+    Mapper,
+)
 
 
 if TYPE_CHECKING:
@@ -509,6 +518,118 @@ def get_node_multiplicities(
     nmm(outputs)
 
     return nmm.expr_multiplicity_counts
+
+# }}}
+
+
+# {{{ EdgeCountMapper
+
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class EdgeCountMapper(CachedWalkMapper):
+    """
+    Counts the number of edges in a DAG.
+
+    .. autoattribute:: edge_count
+    """
+
+    def __init__(self, count_duplicates: bool = False) -> None:
+        super().__init__()
+        self.edge_count: int = 0
+        self.count_duplicates = count_duplicates
+
+    def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
+        # Each node is uniquely identified by its id
+        return id(expr) if self.count_duplicates else expr
+
+    def post_visit(self, expr: Any) -> None:
+        # Each dependency is connected by an edge
+        self.edge_count += len(self.get_dependencies(expr))
+
+    def get_dependencies(self, expr: Any) -> frozenset[Any]:
+        # Retrieve dependencies based on the type of the expression
+        if hasattr(expr, "bindings") or isinstance(expr, IndexLambda):
+            return frozenset(expr.bindings.values())
+        elif isinstance(expr, (BasicIndex, Reshape, AxisPermutation)):
+            return frozenset([expr.array])
+        elif isinstance(expr, Einsum):
+            return frozenset(expr.args)
+        return frozenset()
+
+
+def get_num_edges(outputs: Array | DictOfNamedArrays,
+                   count_duplicates: bool | None = None) -> int:
+    """
+    Returns the number of edges in DAG *outputs*.
+
+    Instances of `DictOfNamedArrays` are excluded from counting.
+    """
+    if count_duplicates is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_duplicates' will change "
+            "from True to False in 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_duplicates = True
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    ecm = EdgeCountMapper(count_duplicates)
+    ecm(outputs)
+
+    return ecm.edge_count
+
+# }}}
+
+
+# {{{ EdgeMultiplicityMapper
+
+
+class EdgeMultiplicityMapper(CachedWalkMapper):
+    """
+    Computes the multiplicity of each unique edge in a DAG.
+
+    The multiplicity of an edge is the number of times it appears in the DAG.
+
+    .. autoattribute:: edge_multiplicity_counts
+    """
+    def __init__(self) -> None:
+        from collections import defaultdict
+        super().__init__()
+        self.edge_multiplicity_counts: dict[tuple[Any, Any], int] = defaultdict(int)
+
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
+        # Each node is uniquely identified by its id
+        return id(expr)
+
+    def post_visit(self, expr: Any) -> None:
+        dependencies = self.get_dependencies(expr)
+        for dep in dependencies:
+            self.edge_multiplicity_counts[(dep, expr)] += 1
+
+    def get_dependencies(self, expr: Any) -> frozenset[Any]:
+        # Retrieve dependencies based on the type of the expression
+        if hasattr(expr, "bindings") or isinstance(expr, IndexLambda):
+            return frozenset(expr.bindings.values())
+        elif isinstance(expr, (BasicIndex, Reshape, AxisPermutation)):
+            return frozenset([expr.array])
+        elif isinstance(expr, Einsum):
+            return frozenset(expr.args)
+        return frozenset()
+
+
+def get_edge_multiplicities(
+        outputs: Array | DictOfNamedArrays) -> dict[tuple[Any, Any], int]:
+    """
+    Returns the multiplicity per edge.
+    """
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    emm = EdgeMultiplicityMapper()
+    emm(outputs)
+
+    return emm.edge_multiplicity_counts
 
 # }}}
 

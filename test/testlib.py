@@ -16,12 +16,13 @@ from pytato.array import (
     AxisPermutation,
     Concatenate,
     DataWrapper,
+    DictOfNamedArrays,
     Placeholder,
     Reshape,
     Roll,
     Stack,
 )
-from pytato.transform import Mapper
+from pytato.transform import ArrayOrNames, Mapper
 
 
 # {{{ tools for comparison to numpy
@@ -394,7 +395,22 @@ def make_large_dag_with_duplicates(iterations: int,
     result = pt.sum(combined_expr, axis=0)
     return pt.make_dict_of_named_arrays({"result": result})
 
-# }}}
+
+def count_edges_using_dependency_mapper(dag: ArrayOrNames | DictOfNamedArrays) -> int:
+    # Use DependencyMapper to find all nodes in the graph
+    dep_mapper = pt.transform.DependencyMapper()
+    all_nodes = dep_mapper(dag)
+
+    # Initialize edge count
+    edge_count = 0
+
+    # For each node, find its direct predecessors and count them as edges
+    pred_getter = pt.analysis.DirectPredecessorsGetter()
+    for node in all_nodes:
+        direct_predecessors = pred_getter(node)
+        edge_count += len(direct_predecessors)
+
+    return edge_count
 
 
 # {{{ tags used only by the regression tests
