@@ -829,7 +829,7 @@ def find_distributed_partition(
     materialized_arrays_collector = _MaterializedArrayCollector()
     materialized_arrays_collector(outputs)
 
-    # The sets of arrays below must have a deterministic order in order to ensure
+    # The collections of arrays below must have a deterministic order in order to ensure
     # that the resulting partition is also deterministic
 
     sent_arrays = tuple(unique(
