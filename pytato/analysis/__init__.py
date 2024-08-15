@@ -607,7 +607,7 @@ class EdgeMultiplicityMapper(CachedWalkMapper):
     def post_visit(self, expr: Any) -> None:
         dependencies = self.get_dependencies(expr)
         for dep in dependencies:
-            self.edge_multiplicity_counts[(dep, expr)] += 1
+            self.edge_multiplicity_counts[dep, expr] += 1
 
     def get_dependencies(self, expr: Any) -> frozenset[Any]:
         # Retrieve dependencies based on the type of the expression

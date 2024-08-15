@@ -808,7 +808,7 @@ def test_small_dag_edge_count():
 
     counts = get_edge_multiplicities(dag)
     assert len(counts) == 1
-    assert counts[(a, b)] == 1  # One edge between a and b
+    assert counts[a, b] == 1  # One edge between a and b
 
 
 def test_large_dag_edge_count():
