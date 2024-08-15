@@ -157,10 +157,10 @@ class ParamAxisExpander(IdentityMapper):
             assert my_studies
             assert len(my_studies) > 0
 
-            new_vars = tuple([prim.Variable(f"_{self.num_orig_elem_inds + num}") for
-                              num in my_studies])
+            new_vars = (prim.Variable(f"_{self.num_orig_elem_inds + num}") # noqa
+                            for num in my_studies)
 
-            return prim.Subscript(aggregate=expr, index=new_vars)
+            return prim.Subscript(aggregate=expr, index=tuple(new_vars))
 
         # Since the variable is not in a study we can just return the answer.
         return super().map_variable(expr)
@@ -300,11 +300,12 @@ class ParameterStudyVectorizer(CopyMapper):
         postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
                                                                              (new_predecessor,))
         # Include the axes we are adding to the system.
-        axis_permute = expr.axis_permutation + tuple([i + len(expr.axis_permutation)
-                                             for i in range(len(postpend_shape))])
+        n_single_inst_axes: int = len(expr.axis_permutation)
+        axis_permute_gen = (i + n_single_inst_axes for i in range(len(postpend_shape)))
 
         return AxisPermutation(array=new_predecessor,
-                               axis_permutation=axis_permute,
+                               axis_permutation=(*expr.axis_permutation,
+                                                 *axis_permute_gen,),
                                axes=(*expr.axes, *new_axes,),
                                tags=expr.tags,
                                non_equality_tags=expr.non_equality_tags)
@@ -360,13 +361,13 @@ class ParameterStudyVectorizer(CopyMapper):
 
         for iarr, array in enumerate(new_predecessors):
             # Broadcast out to the right shape.
-            num_single_inst_axes = len(expr.arrays[iarr].shape)
+            n_single_inst_axes = len(expr.arrays[iarr].shape)
             index = tuple(prim.Variable(f"_{ind}") for
-                                        ind in range(num_single_inst_axes))
+                                        ind in range(n_single_inst_axes))
             # Add in the axes from the studies we have in the predecessor.
 
             for study_num in arr_num_to_study_nums[iarr]:
-                index = (*index, prim.Variable(f"_{num_single_inst_axes + study_num}"))
+                index = (*index, prim.Variable(f"_{n_single_inst_axes + study_num}"))
 
             assert len(index) == len(array.axes)
 
