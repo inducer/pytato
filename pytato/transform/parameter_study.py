@@ -189,16 +189,16 @@ class ParameterStudyVectorizer(CopyMapper):
         \mathbf{Z} = \mathbf{X} + \mathbf{Y},
 
     where :math:`\mathbf{X}` is a part of parameter study :math:`\mathbf{S1}` and
-    :math:`\mathbf{Y}` is a part of parameter study :math:`\mathbf{S2}`. Then,
-    :math:`\mathbf{Z}` will be a part of both parameter studies :math:`\mathbf{S1}` and
-    :math:`\mathbf{S2}`.
+    :math:`\mathbf{Y}` is a part of parameter study :math:`\mathbf{S2}` both with single
+    instance shapes of :math:`\mathbf{orig\_shape}`. Then, :math:`\mathbf{Z}` will be a
+    part of both parameter studies :math:`\mathbf{S1}` and :math:`\mathbf{S2}`.
 
     .. math::
-    
+
         \mathbf{Z}_{i,j} = \mathbf{X}_{i} + \mathbf{Y}_{j},
 
-
-    and so the shape of :math:`\mathbf{Z}` will be (orig_shape, :math:`\mathbf{S1}.size`, :math:`\mathbf{S2}.size`).
+    and so the shape of :math:`\mathbf{Z}` will be
+    (:math:`\mathbf{orig\_shape}`, :math:`\mathbf{S1}.size`, :math:`\mathbf{S2}.size`).
 
     A parameter study is specified in an array by tagging the corresponding axis
     with a tag that is a :class:`ParameterStudyAxisTag` or a class which
