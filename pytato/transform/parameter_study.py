@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 
-"""
-.. currentmodule:: pytato.transform
+__doc__ = """
+.. currentmodule:: pytato.transform.parameter_study
 
-TODO:
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: ParameterStudyAxisTag
+.. autoclass:: ParameterStudyVectorizer
+.. autoclass:: IndexLambdaScalarExpressionVectorizer
+"""
 
-"""
-__copyright__ = """
-Copyright (C) 2020-1 University of Illinois Board of Trustees
-"""
+__copyright__ = "Copyright (C) 2024 Nicholas Koskelo"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -81,9 +80,9 @@ class ParameterStudyAxisTag(UniqueTag):
     for independent trials like in a parameter study.
     If you want to vary multiple input variables in the
     same study then you need to have the same type of
-    class: 'ParameterStudyAxisTag'.
+    :class:`ParameterStudyAxisTag`.
     """
-    axis_size: int
+    size: int
 
 
 StudiesT = tuple[ParameterStudyAxisTag, ...]
@@ -91,7 +90,7 @@ ArraysT = tuple[Array, ...]
 KnownShapeType = tuple[IntegralT, ...]
 
 
-class ParamAxisExpander(IdentityMapper):
+class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
     """
     The goal of this mapper is to convert a single instance scalar expression
     into a single instruction multiple data scalar expression. We assume that any
@@ -103,11 +102,11 @@ class ParamAxisExpander(IdentityMapper):
     def __init__(self, varname_to_studies_num: Mapping[str, tuple[int, ...]],
                     num_orig_elem_inds: int):
         """
-        `arg' varname_to_studies_num: is a mapping from the variable name used
+        `arg` varname_to_studies_num: is a mapping from the variable name used
         in the scalar expression to the studies present in the multiple instance
         expression. Note that the varnames must be for the array variables only.
 
-        `arg' num_orig_elem_inds: is the number of element axes in the result of
+        `arg` num_orig_elem_inds: is the number of element axes in the result of
         the single instance expression.
         """
 
@@ -168,20 +167,39 @@ class ParamAxisExpander(IdentityMapper):
 class ParameterStudyVectorizer(CopyMapper):
     """
     This mapper will expand a single instance DAG into a DAG for parameter studies.
-    It is assumed that the parameter studies cannot interact with each other.
+    The DAG for parameter studies will be equivalent to running the single instance
+    DAG for each input in the parameter study space, $P$. You must specify which
+    input :class:`~pytato.array.Placeholder' are part of what parameter study.
+
+    To maintain the equivalence with repeated calling the single instance DAG, the
+    DAG for parameter studies will not create any expressions which depend on the
+    specific instance of a parameter study.
+
+    We do allow an input parameter which is specified by a
+    :class:`~pytato.array.Placeholder` to be a part of multiple distinct parameter
+    studies. Each distinct parameter study will be a new axis at the end of the array.
+
+    We do NOT require that each input be part of each parameter study. We will broadcast
+    the input as necessary.
+
+    Consider an binary operation, $z = x + y$. Let $x$ be a part of parameter study
+    $S1$. Let $y$ be a part of parameter study $S2$. Then, $z$ will be a part of the
+    parameter studies $S1$ and $S2$. $z_{i,j} = x_{i} + y_{j}$. So, the shape of $z$
+    would be (single instance shape, $S1.size$, $S2.size$).
+
+    A parameter study is specified in an array by tagging the corresponding axis
+    with a tag that is a :class:`ParameterStudyAxisTag` or a class which
+    inherits from it.
+
     Currently, this only supports DAGs which are made for a single processing unit.
-    That is we do not support distributed programming right now.
+    That is we do not support distributed programming right now. We also do not support
+    function definitions within the single instance DAG.
 
-    Any new axes used for parameter studies will be added to the end of the arrays.
-    Note this will break broadcasting assumptions. Therefore, one needs to be careful
-    if only a portion of the program is expanded. This decision was made under the
-    assumption that the generated code would execute faster if the parameter study
-    axes were the ones with the shortest strides.
-
-    If there are multiple distinct parameter studies then the DAG will be expanded
-    for the Cartesian product of the input parameter studies. A parameter study is
-    specified in an array by tagging the corresponding axis with a tag that is a
-    class: `ParameterStudyAxisTag' or a class which inherits from it.
+    NOTE any new axes used for parameter studies will be added to the end of the arrays.
+    If only a portion of the program is expanded, broadcasting may break as the single
+    instance axes will be left aligned instead of right aligned. This decision was
+    made under the assumption that the generated code would execute faster
+    if the parameter study axes were the ones with the shortest strides.
     """
 
     def __init__(self, placeholder_name_to_parameter_studies: Mapping[str, StudiesT]):
@@ -247,7 +265,7 @@ class ParameterStudyVectorizer(CopyMapper):
         num_studies: int = 0
         for ind, study in enumerate(sorted(studies,
                                            key=lambda x: str(x.__class__))):
-            new_shape = (*new_shape, study.axis_size)
+            new_shape = (*new_shape, study.size)
             studies_axes = (*studies_axes, Axis(tags=frozenset((study,))))
             for arr_num, arr in enumerate(mapped_preds):
                 if arr in study_to_arrays[frozenset((study,))]:
@@ -437,7 +455,7 @@ class ParameterStudyVectorizer(CopyMapper):
             assert vn_key in varname_to_studies_nums.keys()
 
         # Now we need to update the expressions.
-        scalar_expr_mapper = ParamAxisExpander(varname_to_studies_nums, len(expr.shape))
+        scalar_expr_mapper = IndexLambdaScalarExpressionVectorizer(varname_to_studies_nums, len(expr.shape)) # noqa
 
         return IndexLambda(expr=scalar_expr_mapper(expr.expr),
                            bindings=immutabledict(new_binds),
