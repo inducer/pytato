@@ -165,11 +165,11 @@ class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
 
 
 class ParameterStudyVectorizer(CopyMapper):
-    """
+    r"""
     This mapper will expand a single instance DAG into a DAG for parameter studies.
     The DAG for parameter studies will be equivalent to running the single instance
-    DAG for each input in the parameter study space, $P$. You must specify which
-    input :class:`~pytato.array.Placeholder' are part of what parameter study.
+    DAG for each input in the parameter study space. You must specify which
+    input :class:`~pytato.array.Placeholder` are part of what parameter study.
 
     To maintain the equivalence with repeated calling the single instance DAG, the
     DAG for parameter studies will not create any expressions which depend on the
@@ -182,10 +182,23 @@ class ParameterStudyVectorizer(CopyMapper):
     We do NOT require that each input be part of each parameter study. We will broadcast
     the input as necessary.
 
-    Consider an binary operation, $z = x + y$. Let $x$ be a part of parameter study
-    $S1$. Let $y$ be a part of parameter study $S2$. Then, $z$ will be a part of the
-    parameter studies $S1$ and $S2$. $z_{i,j} = x_{i} + y_{j}$. So, the shape of $z$
-    would be (single instance shape, $S1.size$, $S2.size$).
+    Ex:
+
+    .. math::
+
+        \mathbf{Z} = \mathbf{X} + \mathbf{Y},
+
+    where :math:`\mathbf{X}` is a part of parameter study :math:`\mathbf{S1}` and
+    :math:`\mathbf{Y}` is a part of parameter study :math:`\mathbf{S2}`. Then,
+    :math:`\mathbf{Z}` will be a part of both parameter studies :math:`\mathbf{S1}` and
+    :math:`\mathbf{S2}`.
+
+    .. math::
+    
+        \mathbf{Z}_{i,j} = \mathbf{X}_{i} + \mathbf{Y}_{j},
+
+
+    and so the shape of :math:`\mathbf{Z}` will be (orig_shape, :math:`\mathbf{S1}.size`, :math:`\mathbf{S2}.size`).
 
     A parameter study is specified in an array by tagging the corresponding axis
     with a tag that is a :class:`ParameterStudyAxisTag` or a class which
