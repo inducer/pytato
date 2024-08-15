@@ -7,7 +7,6 @@ from __future__ import annotations
 TODO:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. automodule:: pytato.transform.parameter_study
 """
 __copyright__ = """
 Copyright (C) 2020-1 University of Illinois Board of Trustees
