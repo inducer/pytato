@@ -181,7 +181,7 @@ def _normalize_reduction_axes(
     new_shape = tuple(axis_len
         for i, axis_len in enumerate(shape)
         if i not in reduction_axes)
-    return tuple(new_shape), reduction_axes
+    return new_shape, reduction_axes
 
 
 def _get_reduction_indices_bounds(shape: ShapeType,
