@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020-2021 Andreas Kloeckner
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -26,25 +28,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Union
-import sys
-
 import itertools
 import operator
-import loopy as lp
+import sys
+
 import numpy as np
+import pytest
+from testlib import assert_allclose_to_numpy, get_random_pt_dag
+
+import loopy as lp
+import pymbolic.primitives as p
 import pyopencl as cl
-import pyopencl.array as cl_array  # noqa
+import pyopencl.array as cl_array
 import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
 
 import pytato as pt
-from testlib import assert_allclose_to_numpy, get_random_pt_dag
-import pymbolic.primitives as p
 
 
 def test_basic_codegen(ctx_factory):
@@ -186,7 +189,7 @@ def test_data_wrapper(ctx_factory):
     assert (x_out == x_in).all()
 
 
-def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
+def test_codegen_with_DictOfNamedArrays(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -578,7 +581,7 @@ def test_dict_to_loopy_kernel(ctx_factory):
 def test_only_deps_as_knl_args():
     # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
     x = pt.make_placeholder(name="x", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(name="y", shape=(10, 4), dtype=float)  # noqa:F841
+    pt.make_placeholder(name="y", shape=(10, 4), dtype=float)
 
     z = 2*x
     knl = pt.generate_loopy(z).kernel
@@ -683,6 +686,7 @@ def test_passing_bound_arguments_raises(ctx_factory):
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
     from numpy.random import default_rng
+
     from pymbolic.mapper.evaluator import evaluate
 
     queue = cl.CommandQueue(ctx_factory())
@@ -822,8 +826,10 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
 
 
 def test_call_loopy_with_scalar_array_inputs(ctx_factory):
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
     from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
@@ -935,9 +941,9 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
     def _get_x_shape(_m, _n):
         return (3*_n+7, )
 
-    A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
+    A_in = np.random.rand(*_get_a_shape(m_in, n_in))
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
-    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))  # noqa: N806
+    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))
     x = pt.make_data_wrapper(x_in, shape=_get_x_shape(m, n))
 
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
@@ -965,16 +971,18 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
 
 
 def test_call_loopy_shape_inference1(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     rng = default_rng()
 
-    A_in = rng.random((20, 37))  # noqa
+    A_in = rng.random((20, 37))
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -984,7 +992,7 @@ def test_call_loopy_shape_inference1(ctx_factory):
             out[ii, jj] = tmp*(ii + jj)
             """, lang_version=(2018, 2))
 
-    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)
     y_pt = call_loopy(knl, {"A": A})["out"]
 
     _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in)
@@ -995,16 +1003,18 @@ def test_call_loopy_shape_inference1(ctx_factory):
 
 
 def test_call_loopy_shape_inference2(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     rng = default_rng()
 
-    A_in = rng.random((38, 71))  # noqa
+    A_in = rng.random((38, 71))
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -1016,7 +1026,7 @@ def test_call_loopy_shape_inference2(ctx_factory):
 
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
-    A = pt.make_placeholder(name="x",  # noqa: N806
+    A = pt.make_placeholder(name="x",
                             shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
                             dtype=np.float64)
 
@@ -1274,7 +1284,7 @@ def test_advanced_indexing_fuzz(ctx_factory):
     cq = cl.CommandQueue(ctx)
     rng = default_rng(seed=0)
 
-    NSAMPLES = 50  # noqa: N806
+    NSAMPLES = 50
 
     for i in range(NSAMPLES):
         input_ndim = rng.integers(1, 8)
@@ -1387,8 +1397,7 @@ def test_named_temporaries(ctx_factory):
                                         })
     dag = pt.transform.materialize_with_mpms(dag)
 
-    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
-                                                  pt.AbstractResultWithNamedArrays]
+    def mark_materialized_nodes_as_cse(ary: pt.Array | pt.AbstractResultWithNamedArrays
                                        ) -> pt.Array:
         if isinstance(ary, pt.AbstractResultWithNamedArrays):
             return ary
@@ -1453,6 +1462,7 @@ def test_random_dag_against_numpy(ctx_factory):
 
 def test_assume_non_negative_indirect_address(ctx_factory):
     from numpy.random import default_rng
+
     from pytato.scalar_expr import WalkMapper
 
     ctx = ctx_factory()
@@ -1481,7 +1491,7 @@ def test_assume_non_negative_indirect_address(ctx_factory):
 
 
 def test_axis_tag_to_loopy_iname_tag_propagate():
-    from testlib import FooInameTag, BarInameTag, BazInameTag
+    from testlib import BarInameTag, BazInameTag, FooInameTag
 
     x = pt.make_placeholder("x", (10, 4), np.float32)
     y = 2 * x
@@ -1537,7 +1547,7 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
 
 
 def test_array_tags_propagated_to_loopy():
-    from testlib import FooTag, BarTag, BazTag
+    from testlib import BarTag, BazTag, FooTag
 
     x1 = pt.make_placeholder("x1", (10, 4), dtype=np.float64)
     x2 = pt.make_placeholder("x2", (10, 4), dtype=np.float64)
@@ -1601,7 +1611,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
     _, (pt_result,) = knl(cq)
 
     from pytato.analysis import get_num_nodes
-    print(get_num_nodes(pt_dag))
+    print(get_num_nodes(pt_dag, count_duplicates=False))
 
     np.testing.assert_allclose(pt_result, np_result)
 
@@ -1627,8 +1637,9 @@ def test_zero_size_cl_array_dedup(ctx_factory):
 
     dedup_dw_out = pt.transform.deduplicate_data_wrappers(out)
 
-    num_nodes_old = pt.analysis.get_num_nodes(out)
-    num_nodes_new = pt.analysis.get_num_nodes(dedup_dw_out)
+    num_nodes_old = pt.analysis.get_num_nodes(out, count_duplicates=True)
+    num_nodes_new = pt.analysis.get_num_nodes(
+        dedup_dw_out, count_duplicates=True)
     # 'x2' would be merged with 'x1' as both of them point to the same data
     # 'x3' would be merged with 'x4' as both of them point to the same data
     assert num_nodes_new == (num_nodes_old - 2)
@@ -1981,7 +1992,9 @@ def test_nested_function_calls(ctx_factory):
     _, out = prg(cq, x=x_np)
     np.testing.assert_allclose(out["out1"], 3*x_np)
     np.testing.assert_allclose(out["out2"], x_np)
-    ref_tracer = lambda f, *args, identifier: f(*args)  # noqa: E731
+
+    def ref_tracer(f, *args, identifier):
+        return f(*args)
 
     def foo(tracer, x, y):
         return 2*x + 3*y
@@ -2014,10 +2027,10 @@ def test_nested_function_calls(ctx_factory):
 
 
 def test_duplicate_node_count_dot_graph():
-    from pytato.visualization.dot import get_dot_graph
-    from pytato.analysis import get_num_nodes
-    from testlib import get_random_pt_dag
     from testlib import count_dot_graph_nodes
+
+    from pytato.analysis import get_num_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     for i in range(80):
         # print("curr i:", i)
@@ -2038,10 +2051,10 @@ def test_duplicate_node_count_dot_graph():
 
 
 def test_duplicate_nodes_with_comm_count_dot_graph():
-    from pytato.visualization.dot import get_dot_graph
+    from testlib import count_dot_graph_nodes, get_random_pt_dag_with_send_recv_nodes
+
     from pytato.analysis import get_num_nodes
-    from testlib import get_random_pt_dag_with_send_recv_nodes
-    from testlib import count_dot_graph_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     rank = 0
     size = 2
@@ -2063,10 +2076,10 @@ def test_duplicate_nodes_with_comm_count_dot_graph():
 
 
 def test_large_dot_graph_with_duplicates_count():
-    from pytato.visualization.dot import get_dot_graph
+    from testlib import count_dot_graph_nodes, make_large_dag
+
     from pytato.analysis import get_num_nodes
-    from testlib import make_large_dag
-    from testlib import count_dot_graph_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     iterations = 100
     dag = make_large_dag(iterations, seed=42)
@@ -2084,7 +2097,6 @@ def test_large_dot_graph_with_duplicates_count():
 
     # Verify node counts without duplicates
     assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
-
 
 
 if __name__ == "__main__":

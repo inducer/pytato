@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """
 Copyright (C) 2023 Kaushik Kulkarni
@@ -25,16 +27,21 @@ THE SOFTWARE.
 """
 
 import sys
+
 import numpy as np
-import pytato as pt
+
 from pyopencl.tools import (  # noqa: F401
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+
+import pytato as pt
 
 
 def test_apply_einsum_distributive_law_0():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 
@@ -53,14 +60,15 @@ def test_apply_einsum_distributive_law_0():
     y = (7*A1 + 8*A2) @ (2*x1-3*x2)
     y_transformed = apply_distributive_property_to_einsums(y, how_to_distribute)
 
-    assert y_transformed == ((2 * ((7*A1 + 8*A2) @ x1) - 3 * ((7*A1 + 8*A2) @
-                                                              x2)))
+    assert y_transformed == (2 * ((7*A1 + 8*A2) @ x1) - 3 * ((7*A1 + 8*A2) @
+                                                              x2))
 
 
 def test_apply_einsum_distributive_law_1():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 
@@ -84,8 +92,9 @@ def test_apply_einsum_distributive_law_1():
 
 def test_apply_einsum_distributive_law_2():
     from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
         EinsumDistributiveLawDescriptor,
-        DoDistribute, DoNotDistribute,
         apply_distributive_property_to_einsums,
     )
 
