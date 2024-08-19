@@ -178,9 +178,9 @@ def _normalize_reduction_axes(
             raise ValueError(f"{axis} is out of bounds for array of dimension"
                     f" {len(shape)}.")
 
-    new_shape = tuple([axis_len
+    new_shape = tuple(axis_len
         for i, axis_len in enumerate(shape)
-        if i not in reduction_axes])
+        if i not in reduction_axes)
     return new_shape, reduction_axes
 
 
