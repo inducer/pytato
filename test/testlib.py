@@ -53,7 +53,7 @@ class NumpyBasedEvaluator(Mapper):
         return self.np.transpose(self.rec(expr.array), expr.axis_permutation)
 
     def map_reshape(self, expr: Reshape) -> Any:
-        return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)
+        return self.np.reshape(self.rec(expr.array), expr.newshape, order=expr.order)
 
     def map_concatenate(self, expr: Concatenate) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
