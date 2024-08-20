@@ -23,6 +23,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
+import islpy as isl
+
 from typing import (
     Any,
     Callable,
@@ -31,8 +34,19 @@ from typing import (
     TypeVar,
 )
 
-import islpy as isl
-import numpy as np
+from typing import (Tuple, List, Union, Callable, Any, Sequence, Dict,
+                    Optional, Iterable, TypeVar, FrozenSet)
+from pytato.array import (Array, ShapeType, IndexLambda, SizeParam, ShapeComponent,
+                          DtypeOrScalar, ArrayOrScalar, BasicIndex,
+                          AdvancedIndexInContiguousAxes,
+                          AdvancedIndexInNoncontiguousAxes,
+                          ConvertibleToIndexExpr, IndexExpr, NormalizedSlice,
+                          _dtype_any, Einsum)
+from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
+                                SCALAR_CLASSES, INT_CLASSES, BoolT)
+from pytools import UniqueNameGenerator
+from pytato.transform import Mapper
+from pytools.tag import Tag
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
@@ -46,7 +60,6 @@ from pytato.array import (
     ArrayOrScalar,
     BasicIndex,
     ConvertibleToIndexExpr,
-    DtypeOrPyScalarType,
     Einsum,
     IndexExpr,
     IndexLambda,
@@ -58,7 +71,6 @@ from pytato.array import (
 )
 from pytato.scalar_expr import (
     INT_CLASSES,
-    PYTHON_SCALAR_CLASSES,
     SCALAR_CLASSES,
     BoolT,
     IntegralScalarExpression,
@@ -164,18 +176,15 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
         return val[get_indexing_expression(shape, result_shape)]
 
 
-def _extract_dtypes(
-        exprs: Sequence[ArrayOrScalar]) -> list[DtypeOrPyScalarType]:
-    dtypes: list[DtypeOrPyScalarType] = []
+def extract_dtypes_or_scalars(
+        exprs: Sequence[ArrayOrScalar]) -> List[DtypeOrScalar]:
+    dtypes: List[DtypeOrScalar] = []
     for expr in exprs:
         if isinstance(expr, Array):
             dtypes.append(expr.dtype)
-        elif isinstance(expr, np.generic):
-            dtypes.append(expr.dtype)
-        elif isinstance(expr, PYTHON_SCALAR_CLASSES):
-            dtypes.append(type(expr))
         else:
-            raise TypeError(f"unexpected expression type: '{type(expr)}'")
+            assert isinstance(expr, SCALAR_CLASSES)
+            dtypes.append(expr)
 
     return dtypes
 
@@ -208,21 +217,24 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
 
 def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
-                        get_result_type: Callable[[DtypeOrPyScalarType, DtypeOrPyScalarType], np.dtype[Any]],  # noqa:E501
-                        *,
-                        tags: frozenset[Tag],
-                        non_equality_tags: frozenset[Tag],
-                        cast_to_result_dtype: bool,
+                        get_result_type: Callable[[DtypeOrScalar, DtypeOrScalar], np.dtype[Any]],  # noqa:E501
+                        tags: FrozenSet[Tag],
+                        non_equality_tags: FrozenSet[Tag],
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
+
+    if isinstance(a1, SCALAR_CLASSES):
+        a1 = np.dtype(type(a1)).type(a1)
+
+    if isinstance(a2, SCALAR_CLASSES):
+        a2 = np.dtype(type(a2)).type(a2)
 
     if np.isscalar(a1) and np.isscalar(a2):
         from pytato.scalar_expr import evaluate
         return evaluate(op(a1, a2))  # type: ignore
 
     result_shape = get_shape_after_broadcasting([a1, a2])
-
-    dtypes = _extract_dtypes([a1, a2])
+    dtypes = extract_dtypes_or_scalars([a1, a2])
     result_dtype = get_result_type(*dtypes)
 
     bindings: dict[str, Array] = {}
@@ -231,25 +243,6 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                                                      result_shape)
     expr2 = update_bindings_and_get_broadcasted_expr(a2, "_in1", bindings,
                                                      result_shape)
-
-    def cast_to_result_type(
-                array: ArrayOrScalar,
-                expr: ScalarExpression
-            ) -> ScalarExpression:
-        if ((isinstance(array, Array) or isinstance(array, np.generic))
-                and array.dtype != result_dtype):
-            # Loopy's type casts don't like casting to bool
-            assert result_dtype != np.bool_
-
-            expr = TypeCast(result_dtype, expr)
-        elif isinstance(expr, SCALAR_CLASSES):
-            expr = result_dtype.type(expr)
-
-        return expr
-
-    if cast_to_result_dtype:
-        expr1 = cast_to_result_type(a1, expr1)
-        expr2 = cast_to_result_type(a2, expr2)
 
     return IndexLambda(expr=op(expr1, expr2),
                        shape=result_shape,
