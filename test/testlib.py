@@ -345,8 +345,8 @@ def count_dot_graph_nodes(dot_graph: str) -> Dict[Any, int]:
     the count of each unique node identifier.
     """
 
-    node_pattern = re.compile(
-        r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
+    node_pattern = re.compile(r'(\barray_\d+\b|\barray\b)')
+
     nodes = node_pattern.findall(dot_graph)
 
     node_counts: Dict[Any, int] = {}

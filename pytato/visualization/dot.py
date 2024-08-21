@@ -30,6 +30,7 @@ from functools import partial
 import html
 import attrs
 import gc
+import re
 
 from typing import (Callable, Dict, Tuple, Union, List,
         Mapping, Any, FrozenSet, Set, Optional)
@@ -72,6 +73,70 @@ class _SubgraphTree:
     subgraphs: Dict[str, _SubgraphTree]
 
 
+def extract_operation_symbol(expr):
+
+    operation_replacements = {
+        r'NaN_if': 'if',
+        r'else': 'else',
+        r'isnan': 'is NaN',
+        r'<': '&lt;',
+        r'>': '&gt;',
+        r'\s*==\s*': '==',
+        r'\s*!=\s*': '!=',
+        r'\s*<=\s*': '<=',
+        r'\s*>=\s*': '>=',
+        r'\s*\+\s*': '+',
+        r'\s*\-\s*': '-',
+        r'\s*\*\*\s*': '**',
+        r'\s*\*\s*': '*',
+        r'\s*/\s*': '/',
+        r'\s*//\s*': '//',
+        r'\s*%\s*': '%',
+        r'\s*or\s*': 'or',
+        r'\s*and\s*': 'and',
+        r'\s*not\s*': 'not',
+        r'\s*<<\s*': '<<',
+        r'\s*>>\s*': '>>',
+        r'\s*\|\s*': '|',
+        r'\s*\^\s*': '^',
+        r'~\s*': '~',
+        r'\s*@\s*': '@',
+        r'\s*SumReductionOperation\s*': 'Σ',
+        r'&lt;': '&lt;',
+        r'&gt;': '&gt;',
+        r'&': '&amp;',
+    }
+
+    for pattern, replacement in operation_replacements.items():
+        if re.search(pattern, expr.strip()):
+            return replacement
+
+    return expr
+
+
+def simplify_indexlambda_node_to_symbol_only(s):
+    if "IndexLambda" in s:
+        expr_match = re.search(r'expr:</td><td border="0"><FONT FACE=\'monospace\'>(.*?)</FONT></td>', s)
+        if expr_match:
+            original_expr = expr_match.group(1)
+            operation_symbol = extract_operation_symbol(original_expr)
+
+            print(operation_symbol)
+
+            tooltip_content = []
+            tooltip_matches = re.findall(r'<tr><td border="0">(.*?)</td><td border="0"><FONT FACE=\'monospace\'>(.*?)</FONT></td></tr>', s)
+            for key, value in tooltip_matches:
+                tooltip_content.append(f"{key}: {value}")
+
+            tooltip_text = ",\n".join(tooltip_content)
+
+            new_label = f'<tr><td colspan="2" border="0" align="center"><FONT POINT-SIZE="20">{operation_symbol}</FONT></td></tr>'
+
+            s = f'{new_label}</table>> style=filled fillcolor="white" tooltip="{tooltip_text}"];'
+
+    return s
+
+
 class DotEmitter:
     def __init__(self) -> None:
         self.subgraph_to_lines: Dict[Tuple[str, ...], List[str]] = {}
@@ -86,7 +151,9 @@ class DotEmitter:
                 s = remove_common_indentation(s)
 
             for line in s.split("\n"):
-                line_list.append(line)
+                simplified_line = simplify_indexlambda_node_to_symbol_only(
+                    line)
+                line_list.append(simplified_line)
 
     def _get_subgraph_tree(self) -> _SubgraphTree:
         subgraph_tree = _SubgraphTree(contents=None, subgraphs={})
