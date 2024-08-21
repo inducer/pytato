@@ -26,15 +26,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (Mapping, Dict, Union, Set, Tuple, Any, FrozenSet,
-                    Type, TYPE_CHECKING)
-from pytato.array import (Array, IndexLambda, Stack, Concatenate, Einsum,
-                          DictOfNamedArrays, NamedArray,
-                          IndexBase, IndexRemappingBase, InputArgumentBase,
-                          ShapeType)
-from pytato.function import FunctionDefinition, Call, NamedCallResult
-from pytato.transform import Mapper, ArrayOrNames, CachedWalkMapper
-from pytato.loopy import LoopyCall
+from typing import TYPE_CHECKING, Any, Mapping
+
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 

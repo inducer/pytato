@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import operator
 import random
+import re
 import types
 from typing import Any, Callable, Sequence
 
 import numpy as np
 
-import re
 import pyopencl as cl
 from pytools.tag import Tag
 
@@ -397,7 +397,7 @@ def make_large_dag_with_duplicates(iterations: int,
     return pt.make_dict_of_named_arrays({"result": result})
 
 
-def count_dot_graph_nodes(dot_graph: str) -> Dict[Any, int]:
+def count_dot_graph_nodes(dot_graph: str) -> dict[Any, int]:
     """
     Parses a dot graph and returns a dictionary with
     the count of each unique node identifier.
@@ -407,7 +407,7 @@ def count_dot_graph_nodes(dot_graph: str) -> Dict[Any, int]:
 
     nodes = node_pattern.findall(dot_graph)
 
-    node_counts: Dict[Any, int] = {}
+    node_counts: dict[Any, int] = {}
     for node in nodes:
         node_counts[node] = node_counts.get(node, 0) + 1
 

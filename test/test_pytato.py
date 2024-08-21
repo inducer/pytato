@@ -32,18 +32,6 @@ import sys
 import attrs
 import numpy as np
 import pytest
-import attrs
-
-import os
-
-# Get the directory containing the script
-script_dir = os.path.dirname(__file__)
-
-# Add the parent directory to the Python path
-parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
-sys.path.append(parent_dir)
-
-import pytato as pt
 
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -695,7 +683,7 @@ def test_random_dag_with_comm_count():
     for i in range(10):
         dag = get_random_pt_dag_with_send_recv_nodes(
             seed=i, rank=rank, size=size)
-        
+
         assert get_num_nodes(dag, count_duplicates=False) == len(
             pt.transform.DependencyMapper()(dag))
 
@@ -778,7 +766,8 @@ def test_large_dag_with_duplicates_count():
 
 def test_duplicate_node_count():
     from testlib import get_random_pt_dag
-    from pytato.analysis import get_num_nodes, get_node_multiplicities
+
+    from pytato.analysis import get_node_multiplicities, get_num_nodes
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
@@ -798,7 +787,8 @@ def test_duplicate_node_count():
 
 def test_duplicate_nodes_with_comm_count():
     from testlib import get_random_pt_dag_with_send_recv_nodes
-    from pytato.analysis import get_num_nodes, get_node_multiplicities
+
+    from pytato.analysis import get_node_multiplicities, get_num_nodes
 
     rank = 0
     size = 2
@@ -819,37 +809,6 @@ def test_duplicate_nodes_with_comm_count():
         # Check that duplicates are correctly calculated
         assert node_count - num_duplicates == len(
             pt.transform.DependencyMapper()(dag))
-
-
-def test_large_dag_with_duplicates_count():
-    from pytato.analysis import (
-        get_num_nodes, get_node_type_counts, get_node_multiplicities
-    )
-    from testlib import make_large_dag
-    import pytato as pt
-
-    iterations = 100
-    dag = make_large_dag(iterations, seed=42)
-
-    # Verify that the number of nodes is equal to iterations + 1 (placeholder)
-    node_count = get_num_nodes(dag, count_duplicates=True)
-    assert node_count == iterations + 1
-
-    # Get the number of expressions and the amount they're called
-    node_multiplicity = get_node_multiplicities(dag)
-
-    num_duplicates = sum(
-        count - 1 for count in node_multiplicity.values() if count > 1)
-
-    counts = get_node_type_counts(dag, count_duplicates=True)
-    assert len(counts) >= 1
-    assert counts[pt.array.Placeholder] == 1
-    assert counts[pt.array.IndexLambda] == 100  # 100 operations
-    assert sum(counts.values()) == iterations + 1
-
-    # Check that duplicates are correctly calculated
-    assert node_count - num_duplicates == len(
-        pt.transform.DependencyMapper()(dag))
 
 
 def test_rec_get_user_nodes():
@@ -1423,6 +1382,7 @@ def test_rewrite_einsums_with_no_broadcasts():
 
 
 def test_dot_visualizers():
+    from testlib import RandomDAGContext, make_random_dag
     a = pt.make_placeholder("A", shape=(10, 4))
     x1 = pt.make_placeholder("x1", shape=4)
     x2 = pt.make_placeholder("x2", shape=4)
@@ -1452,10 +1412,10 @@ def test_dot_visualizers():
 
 
 def test_duplicate_node_count_dot_graph():
-    from pytato.visualization.dot import get_dot_graph
+    from testlib import count_dot_graph_nodes, get_random_pt_dag
+
     from pytato.analysis import get_num_nodes
-    from testlib import get_random_pt_dag
-    from testlib import count_dot_graph_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
@@ -1475,10 +1435,10 @@ def test_duplicate_node_count_dot_graph():
 
 
 def test_duplicate_nodes_with_comm_count_dot_graph():
-    from pytato.visualization.dot import get_dot_graph
+    from testlib import count_dot_graph_nodes, get_random_pt_dag_with_send_recv_nodes
+
     from pytato.analysis import get_num_nodes
-    from testlib import get_random_pt_dag_with_send_recv_nodes
-    from testlib import count_dot_graph_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     rank = 0
     size = 2
@@ -1501,10 +1461,10 @@ def test_duplicate_nodes_with_comm_count_dot_graph():
 
 
 def test_large_dot_graph_with_duplicates_count():
-    from pytato.visualization.dot import get_dot_graph
+    from testlib import count_dot_graph_nodes, make_large_dag
+
     from pytato.analysis import get_num_nodes
-    from testlib import make_large_dag
-    from testlib import count_dot_graph_nodes
+    from pytato.visualization.dot import get_dot_graph
 
     iterations = 100
     dag = make_large_dag(iterations, seed=42)
