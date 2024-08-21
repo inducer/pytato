@@ -76,35 +76,35 @@ class _SubgraphTree:
 def extract_operation_symbol(expr):
 
     operation_replacements = {
-        r'NaN_if': 'if',
-        r'else': 'else',
-        r'isnan': 'is NaN',
-        r'<': '&lt;',
-        r'>': '&gt;',
-        r'\s*==\s*': '==',
-        r'\s*!=\s*': '!=',
-        r'\s*<=\s*': '<=',
-        r'\s*>=\s*': '>=',
-        r'\s*\+\s*': '+',
-        r'\s*\-\s*': '-',
-        r'\s*\*\*\s*': '**',
-        r'\s*\*\s*': '*',
-        r'\s*/\s*': '/',
-        r'\s*//\s*': '//',
-        r'\s*%\s*': '%',
-        r'\s*or\s*': 'or',
-        r'\s*and\s*': 'and',
-        r'\s*not\s*': 'not',
-        r'\s*<<\s*': '<<',
-        r'\s*>>\s*': '>>',
-        r'\s*\|\s*': '|',
-        r'\s*\^\s*': '^',
-        r'~\s*': '~',
-        r'\s*@\s*': '@',
-        r'\s*SumReductionOperation\s*': 'Σ',
-        r'&lt;': '&lt;',
-        r'&gt;': '&gt;',
-        r'&': '&amp;',
+        r"NaN_if": "if",
+        r"else": "else",
+        r"isnan": "is NaN",
+        r"<": "&lt;",
+        r">": "&gt;",
+        r"\s*==\s*": "==",
+        r"\s*!=\s*": "!=",
+        r"\s*<=\s*": "<=",
+        r"\s*>=\s*": ">=",
+        r"\s*\+\s*": "+",
+        r"\s*\-\s*": "-",
+        r"\s*\*\*\s*": "**",
+        r"\s*\*\s*": "*",
+        r"\s*/\s*": "/",
+        r"\s*//\s*": "//",
+        r"\s*%\s*": "%",
+        r"\s*or\s*": "or",
+        r"\s*and\s*": "and",
+        r"\s*not\s*": "not",
+        r"\s*<<\s*": "<<",
+        r"\s*>>\s*": ">>",
+        r"\s*\|\s*": "|",
+        r"\s*\^\s*": "^",
+        r"~\s*": "~",
+        r"\s*@\s*": "@",
+        r"\s*SumReductionOperation\s*": "Σ",
+        r"&lt;": "&lt;",
+        r"&gt;": "&gt;",
+        r"&": "&amp;",
     }
 
     for pattern, replacement in operation_replacements.items():
@@ -116,23 +116,37 @@ def extract_operation_symbol(expr):
 
 def simplify_indexlambda_node_to_symbol_only(s):
     if "IndexLambda" in s:
-        expr_match = re.search(r'expr:</td><td border="0"><FONT FACE=\'monospace\'>(.*?)</FONT></td>', s)
+        expr_match = re.search(
+            r'expr:</td><td border="0"><FONT FACE=\'monospace\'>(.*?)</FONT></td>', s
+        )
+
         if expr_match:
             original_expr = expr_match.group(1)
             operation_symbol = extract_operation_symbol(original_expr)
 
-            print(operation_symbol)
-
             tooltip_content = []
-            tooltip_matches = re.findall(r'<tr><td border="0">(.*?)</td><td border="0"><FONT FACE=\'monospace\'>(.*?)</FONT></td></tr>', s)
+            tooltip_matches = re.findall(
+                r'<tr><td border="0">(.*?)</td><td border="0">'
+                r'<FONT FACE=\'monospace\'>(.*?)</FONT></td></tr>',
+                s
+            )
+
             for key, value in tooltip_matches:
                 tooltip_content.append(f"{key}: {value}")
 
             tooltip_text = ",\n".join(tooltip_content)
 
-            new_label = f'<tr><td colspan="2" border="0" align="center"><FONT POINT-SIZE="20">{operation_symbol}</FONT></td></tr>'
+            new_label = (
+                f'<tr><td colspan="2" border="0" align="center">'
+                f'<FONT POINT-SIZE="20">{operation_symbol}</FONT>'
+                f'</td></tr>'
+            )
 
-            s = f'{new_label}</table>> style=filled fillcolor="white" tooltip="{tooltip_text}"];'
+            s = (
+                f'{new_label}</table>> '
+                f'style=filled fillcolor="white" '
+                f'tooltip="{tooltip_text}"];'
+            )
 
     return s
 

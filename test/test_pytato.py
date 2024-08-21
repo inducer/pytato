@@ -30,6 +30,15 @@ import numpy as np
 import pytest
 import attrs
 
+import os
+
+# Get the directory containing the script
+script_dir = os.path.dirname(__file__)
+
+# Add the parent directory to the Python path
+parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+sys.path.append(parent_dir)
+
 import pytato as pt
 
 from pyopencl.tools import (  # noqa
@@ -1342,8 +1351,9 @@ def test_dot_visualizers():
 
     # }}}
 
+
 def test_duplicate_node_count_dot_graph():
-    from pytato.visualization.dot import get_dot_graph, show_dot_graph
+    from pytato.visualization.dot import get_dot_graph
     from pytato.analysis import get_num_nodes
     from testlib import get_random_pt_dag
     from testlib import count_dot_graph_nodes

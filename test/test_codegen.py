@@ -2013,7 +2013,6 @@ def test_nested_function_calls(ctx_factory):
         np.testing.assert_allclose(result_out[k], expect_out[k])
 
 
-
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
