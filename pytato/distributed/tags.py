@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 .. currentmodule:: pytato
 
@@ -31,7 +32,7 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, Tuple, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from pytato.distributed.partition import DistributedGraphPartition
 
@@ -48,7 +49,7 @@ T = TypeVar("T")
 def number_distributed_tags(
         mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition,
-        base_tag: int) -> Tuple[DistributedGraphPartition, int]:
+        base_tag: int) -> tuple[DistributedGraphPartition, int]:
     """Return a new :class:`~pytato.distributed.DistributedGraphPartition`
     in which symbolic tags are replaced by unique integer tags, created by
     counting upward from *base_tag*.
