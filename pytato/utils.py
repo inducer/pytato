@@ -164,22 +164,6 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
         return val[get_indexing_expression(shape, result_shape)]
 
 
-def _extract_dtypes(
-        exprs: Sequence[ArrayOrScalar]) -> list[DtypeOrPyScalarType]:
-    dtypes: list[DtypeOrPyScalarType] = []
-    for expr in exprs:
-        if isinstance(expr, Array):
-            dtypes.append(expr.dtype)
-        elif isinstance(expr, np.generic):
-            dtypes.append(expr.dtype)
-        elif isinstance(expr, PYTHON_SCALAR_CLASSES):
-            dtypes.append(type(expr))
-        else:
-            raise TypeError(f"unexpected expression type: '{type(expr)}'")
-
-    return dtypes
-
-
 def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
                                              bindings: dict[str, Array],
@@ -221,9 +205,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
         return evaluate(op(a1, a2))  # type: ignore
 
     result_shape = get_shape_after_broadcasting([a1, a2])
-
-    dtypes = _extract_dtypes([a1, a2])
-    result_dtype = get_result_type(*dtypes)
+    result_dtype = get_result_type(a1, a2)
 
     bindings: dict[str, Array] = {}
 
