@@ -54,7 +54,6 @@ multiline-quotes = "double"
 [[tool.mypy.overrides]]
 module = [
   "islpy",
-  "loopy.*",
   "pymbolic.*",
   "pyopencl.*",
   "jax.*",
