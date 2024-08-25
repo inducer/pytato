@@ -103,7 +103,7 @@ def _mpi_send(mpi_communicator: Any, send_node: DistributedSend,
 
 def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
-        dict[Hashable, BoundProgram],
+        Mapping[Hashable, BoundProgram],
         queue: Any, mpi_communicator: Any,
         *,
         allocator: Any | None = None,
