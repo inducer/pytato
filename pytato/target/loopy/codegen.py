@@ -39,6 +39,7 @@ import islpy as isl
 import loopy as lp
 import pymbolic.primitives as prim
 import pytools
+from loopy.typing import ExpressionT
 from pymbolic import var
 from pytools.tag import Tag
 
@@ -520,7 +521,7 @@ class CodeGenMapper(Mapper):
                                prim.Subscript(var(name), inames_as_vars))
 
         assignees = []
-        params = []
+        params: list[ExpressionT] = []
         depends_on: set[str] = set()
         new_tvs = {}
         new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
@@ -600,12 +601,12 @@ class CodeGenMapper(Mapper):
 
         # update kernel
         kernel = state.kernel
-        tvs = state.kernel.temporary_variables.copy()
+        tvs = dict(state.kernel.temporary_variables)
         tvs.update(new_tvs)
 
         kernel = kernel.copy(instructions=[*kernel.instructions, new_insn],
                              temporary_variables=tvs,
-                             domains=kernel.domains+domains)
+                             domains=[*kernel.domains, *domains])
 
         state.update_kernel(kernel)
 
@@ -909,11 +910,11 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
     if output_to_temporary:
         tvar = get_loopy_temporary(name, expr, cgen_mapper, state)
-        temporary_variables = kernel.temporary_variables.copy()
+        temporary_variables = dict(kernel.temporary_variables)
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
-                domains=kernel.domains + additional_domains,
-                instructions=kernel.instructions + additional_insns)
+                domains=[*kernel.domains, *additional_domains],
+                instructions=[*kernel.instructions, *additional_insns])
     else:
         arg = lp.GlobalArg(name,
                 shape=shape,
@@ -925,8 +926,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                                               cgen_mapper
                                               .array_tag_t_to_not_propagate))
         kernel = kernel.copy(args=[*kernel.args, arg],
-                domains=kernel.domains + additional_domains,
-                instructions=kernel.instructions + additional_insns)
+                domains=[*kernel.domains, *additional_domains],
+                instructions=[*kernel.instructions, *additional_insns])
 
     # {{{ axes tags -> iname tags
 
