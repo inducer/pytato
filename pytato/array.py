@@ -467,8 +467,11 @@ class Axis(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        if tags != self.tags:
+            from dataclasses import replace
+            return replace(self, tags=tags)
+        else:
+            return self
 
 
 @dataclasses.dataclass(frozen=True)
@@ -480,8 +483,11 @@ class ReductionDescriptor(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        if tags != self.tags:
+            from dataclasses import replace
+            return replace(self, tags=tags)
+        else:
+            return self
 
 
 @array_dataclass()
@@ -865,7 +871,10 @@ class _SuppliedAxesAndTagsMixin(Taggable):
                                                     default=frozenset())
 
     def _with_new_tags(self: Self, tags: frozenset[Tag]) -> Self:
-        return dataclasses.replace(self, tags=tags)
+        if tags != self.tags:
+            return dataclasses.replace(self, tags=tags)
+        else:
+            return self
 
 
 @dataclasses.dataclass(frozen=True, eq=False, repr=False)
