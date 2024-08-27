@@ -555,12 +555,13 @@ def _test_dag_with_multiple_send_nodes_per_sent_array_inner(ctx_factory):
         x_np = rng.random((10, 4))
         x = pt.make_data_wrapper(cla.to_device(queue, x_np))
         y = 2 * x
+        ones = pt.ones(10)
         send1 = pt.staple_distributed_send(
             y, dest_rank=1, comm_tag=42,
-            stapled_to=pt.ones(10))
+            stapled_to=ones)
         send2 = pt.staple_distributed_send(
             y, dest_rank=2, comm_tag=42,
-            stapled_to=pt.ones(10))
+            stapled_to=ones)
         z = 4 * y
         dag = pt.make_dict_of_named_arrays({"z": z, "send1": send1, "send2": send2})
     else:
