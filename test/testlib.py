@@ -101,6 +101,7 @@ class RandomDAGContext:
                  rng: np.random.Generator,
                  axis_len: int,
                  use_numpy: bool,
+                 allow_duplicate_nodes: bool = False,
                  additional_generators: (
                      Sequence[tuple[int, Callable[[RandomDAGContext], Array]]]
                          | None) = None
@@ -115,6 +116,7 @@ class RandomDAGContext:
         self.axis_len = axis_len
         self.past_results: list[Array] = []
         self.use_numpy = use_numpy
+        self.allow_duplicate_nodes = allow_duplicate_nodes
 
         if additional_generators is None:
             additional_generators = []
@@ -156,6 +158,14 @@ _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
 
 
 def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
+    if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
+        def dedup(expr: Array) -> Array:
+            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+
+    else:
+        def dedup(expr: Array) -> Array:
+            return expr
+
     rng = rdagc.rng
 
     max_prob_hardcoded = 1500
@@ -166,7 +176,7 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
         v = rng.integers(0, max_prob_hardcoded + additional_prob)
 
         if v < 600:
-            return make_random_constant(rdagc, naxes=int(rng.integers(1, 3)))
+            return dedup(make_random_constant(rdagc, naxes=int(rng.integers(1, 3))))
 
         elif v < 1000:
             op1 = make_random_dag(rdagc)
@@ -189,9 +199,9 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
             # just inserted a few new 1-long axes. Those need to go before we
             # return.
             if which_op in ["maximum", "minimum"]:
-                return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))
+                return dedup(rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2)))
             else:
-                return rdagc.np.squeeze(which_op(op1, op2))
+                return dedup(rdagc.np.squeeze(which_op(op1, op2)))
 
         elif v < 1075:
             op1 = make_random_dag(rdagc)
@@ -199,24 +209,26 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
             if op1.ndim <= 1 and op2.ndim <= 1:
                 continue
 
-            return op1 @ op2
+            return dedup(op1 @ op2)
 
         elif v < 1275:
             if not rdagc.past_results:
                 continue
-            return rdagc.past_results[rng.integers(0, len(rdagc.past_results))]
+            return dedup(
+                rdagc.past_results[rng.integers(0, len(rdagc.past_results))])
 
         elif v < max_prob_hardcoded:
             result = make_random_dag(rdagc)
-            return rdagc.np.transpose(
+            return dedup(
+                rdagc.np.transpose(
                     result,
-                    tuple(rng.permuted(list(range(result.ndim)))))
+                    tuple(rng.permuted(list(range(result.ndim))))))
 
         else:
             base_prob = max_prob_hardcoded
             for fake_prob, gen_func in rdagc.additional_generators:
                 if base_prob <= v < base_prob + fake_prob:
-                    return gen_func(rdagc)
+                    return dedup(gen_func(rdagc))
 
                 base_prob += fake_prob
 
@@ -237,6 +249,14 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
     of the array are of length :attr:`RandomDAGContext.axis_len` (there is
     at least one axis, but arbitrarily more may be present).
     """
+    if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
+        def dedup(expr: Array) -> Array:
+            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+
+    else:
+        def dedup(expr: Array) -> Array:
+            return expr
+
     rng = rdagc.rng
     result = make_random_dag_inner(rdagc)
 
@@ -248,14 +268,15 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
             subscript[rng.integers(0, result.ndim)] = int(
                     rng.integers(0, rdagc.axis_len))
 
-            return result[tuple(subscript)]
+            return dedup(result[tuple(subscript)])
 
         elif v == 1:
             # reduce away an axis
 
             # FIXME do reductions other than sum?
-            return rdagc.np.sum(
-                    result, axis=int(rng.integers(0, result.ndim)))
+            return dedup(
+                rdagc.np.sum(
+                    result, axis=int(rng.integers(0, result.ndim))))
 
         else:
             raise AssertionError()
@@ -275,7 +296,8 @@ def get_random_pt_dag(seed: int,
                           Sequence[tuple[int, Callable[[RandomDAGContext], Array]]]
                               | None) = None,
                       axis_len: int = 4,
-                      convert_dws_to_placeholders: bool = False
+                      convert_dws_to_placeholders: bool = False,
+                      allow_duplicate_nodes: bool = False
                       ) -> pt.DictOfNamedArrays:
     if additional_generators is None:
         additional_generators = []
@@ -286,6 +308,7 @@ def get_random_pt_dag(seed: int,
 
     rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
             axis_len=axis_len, use_numpy=False,
+            allow_duplicate_nodes=allow_duplicate_nodes,
             additional_generators=additional_generators)
     dag = pt.make_dict_of_named_arrays({"result": make_random_dag(rdagc_comm)})
 
