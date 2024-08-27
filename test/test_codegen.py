@@ -926,7 +926,7 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     x = pt.make_data_wrapper(x_in, shape=_get_x_shape(m, n))
 
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
-    pt_expr = pt.einsum("ij, j ->  i", A, x)
+    pt_expr = pt.transform.Deduplicator()(pt.einsum("ij, j ->  i", A, x))
 
     _, (pt_out,) = pt.generate_loopy(pt_expr)(cq, m=m_in, n=n_in)
 
@@ -1582,8 +1582,9 @@ def test_regression_reduction_in_conditional(ctx_factory):
 
     np_inputs = get_np_input_args()
     np_result = kernel(np, **np_inputs)
-    pt_dag = kernel(pt, **{kw: pt.make_data_wrapper(arg)
-                           for kw, arg in np_inputs.items()})
+    pt_dag = pt.transform.Deduplicator()(
+        kernel(pt, **{kw: pt.make_data_wrapper(arg)
+                      for kw, arg in np_inputs.items()}))
 
     knl = pt.generate_loopy(pt_dag, options=lp.Options(write_code=True))
 
@@ -1939,10 +1940,12 @@ def test_function_call(ctx_factory, visualize=False):
                 "baz": 65 * twice_x,
                 "quux": 7 * twice_x_2}
 
-    result_with_functions = pt.tag_all_calls_to_be_inlined(
-        pt.make_dict_of_named_arrays(build_expression(pt.trace_call)))
-    result_without_functions = pt.make_dict_of_named_arrays(
-        build_expression(lambda fn, *args: fn(*args)))
+    expr = pt.transform.Deduplicator()(
+            pt.make_dict_of_named_arrays(build_expression(pt.trace_call)))
+
+    result_with_functions = pt.tag_all_calls_to_be_inlined(expr)
+    result_without_functions = pt.transform.Deduplicator()(
+        pt.make_dict_of_named_arrays(build_expression(lambda fn, *args: fn(*args))))
 
     # test that visualizing graphs with functions works
     dot = pt.get_dot_graph(result_with_functions)
