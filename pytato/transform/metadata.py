@@ -649,7 +649,7 @@ class AxisTagAttacher(CopyMapper):
     def rec(self, expr: ArrayOrNames) -> Any:
         key = self._cache.get_key(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache_retrieve(expr, key=key)
         except KeyError:
             result = Mapper.rec(self, expr)
             if not isinstance(
@@ -657,7 +657,7 @@ class AxisTagAttacher(CopyMapper):
                 assert isinstance(expr, Array)
                 # type-ignore reason: passed "ArrayOrNames"; expected "Array"
                 result = self._attach_tags(expr, result)  # type: ignore[arg-type]
-            return self._cache.add(expr, result, key=key)
+            return self._cache_add(expr, result, key=key)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(

@@ -94,7 +94,10 @@ class FFTRealizationMapper(CopyMapper):
             arrays = fft_vec_gatherer.level_to_arrays[lev]
             rec_arrays = [self.rec(ary) for ary in arrays]
             # reset cache so that the partial subs are not stored
-            self._cache = type(self._cache)(lambda expr: expr)
+            self._cache = type(self._cache)(
+                lambda expr: expr,
+                err_on_collision=self._cache.err_on_collision,
+                err_on_no_op_duplication=self._cache.err_on_no_op_duplication)
             lev_array = pt.concatenate(rec_arrays, axis=0)
             assert lev_array.shape == (fft_vec_gatherer.n,)
 
