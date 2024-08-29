@@ -645,7 +645,7 @@ class TagCountMapper(CombineMapper[int, Never]):
     def rec(self, expr: ArrayOrNames) -> int:
         inputs = self._cache.make_inputs(expr)
         try:
-            return self._cache.retrieve(inputs)
+            return self._cache_retrieve(inputs)
         except KeyError:
             s = super().rec(expr)
             if (
@@ -657,7 +657,7 @@ class TagCountMapper(CombineMapper[int, Never]):
             else:
                 result = 0 + s
 
-            self._cache.add(inputs, 0)
+            self._cache_add(inputs, 0)
             return result
 
 
