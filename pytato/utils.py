@@ -203,6 +203,10 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
         return evaluate(op(a1, a2))  # type: ignore
 
     result_shape = get_shape_after_broadcasting([a1, a2])
+
+    # Note: get_result_type calls np.result_type by default, which means
+    # that we are passing a pytato array to numpy. Luckily, np.result_type
+    # only looks at the dtype of input arrays as of numpy v2.1.
     result_dtype = get_result_type(a1, a2)
 
     bindings: dict[str, Array] = {}
