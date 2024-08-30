@@ -46,7 +46,6 @@ from pytato.array import (
     ArrayOrScalar,
     BasicIndex,
     ConvertibleToIndexExpr,
-    DtypeOrPyScalarType,
     Einsum,
     IndexExpr,
     IndexLambda,
@@ -58,7 +57,6 @@ from pytato.array import (
 )
 from pytato.scalar_expr import (
     INT_CLASSES,
-    PYTHON_SCALAR_CLASSES,
     SCALAR_CLASSES,
     BoolT,
     IntegralScalarExpression,
@@ -192,7 +190,7 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
 
 def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
-                        get_result_type: Callable[[DtypeOrPyScalarType, DtypeOrPyScalarType], np.dtype[Any]],  # noqa:E501
+                        get_result_type: Callable[[ArrayOrScalar, ArrayOrScalar], np.dtype[Any]],  # noqa:E501
                         *,
                         tags: frozenset[Tag],
                         non_equality_tags: frozenset[Tag],

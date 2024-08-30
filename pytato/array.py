@@ -172,7 +172,6 @@ Internal stuff that is only here because the documentation tool wants it
 import operator
 import re
 from abc import ABC, abstractmethod
-from enum import IntEnum
 from functools import cached_property, partialmethod
 from typing import (
     TYPE_CHECKING,
@@ -307,7 +306,7 @@ ArrayOrScalar = Union["Array", Scalar]
 
 
 def _np_result_dtype(
-        *arrays_and_dtypes: Union[np.typing.ArrayLike, np.typing.DTypeLike],
+        *arrays_and_dtypes: np.typing.ArrayLike | np.typing.DTypeLike,
         ) -> np.dtype[Any]:
     return np.result_type(*arrays_and_dtypes)
 
@@ -579,7 +578,7 @@ class Array(Taggable):
                 op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
                 other: ArrayOrScalar,
                 get_result_type: Callable[
-                        [DtypeOrPyScalarType, DtypeOrPyScalarType],
+                        [ArrayOrScalar, ArrayOrScalar],
                         np.dtype[Any]] = _np_result_dtype,
                 reverse: bool = False,
                 cast_to_result_dtype: bool = True,
