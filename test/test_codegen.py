@@ -317,7 +317,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
@@ -377,7 +376,6 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
