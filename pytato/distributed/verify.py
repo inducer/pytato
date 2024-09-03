@@ -10,6 +10,7 @@ Verification
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -35,22 +36,29 @@ THE SOFTWARE.
 """
 
 
-from typing import Any, List, FrozenSet, Dict, Set, Optional, Sequence, TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Any, Sequence
 
 import attrs
 import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
 
-from pytato.array import DictOfNamedArrays, make_dict_of_named_arrays, Placeholder
-from pytato.transform import ArrayOrNames, CachedWalkMapper
+from pytato.array import (
+    DictOfNamedArrays,
+    Placeholder,
+    ShapeType,
+    make_dict_of_named_arrays,
+)
 from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.distributed.partition import (
-        PartId, DistributedGraphPartition, CommunicationOpIdentifier)
-from pytato.array import ShapeType
+    CommunicationOpIdentifier,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.transform import ArrayOrNames, CachedWalkMapper
 
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -85,12 +93,12 @@ class _DistributedName:
 @attrs.define(frozen=True)
 class _SummarizedDistributedGraphPart:
     pid: _DistributedPartId
-    needed_pids: FrozenSet[_DistributedPartId]
-    user_input_names: FrozenSet[_DistributedName]
-    partition_input_names: FrozenSet[_DistributedName]
-    output_names: FrozenSet[_DistributedName]
-    name_to_recv_node: Dict[_DistributedName, DistributedRecv]
-    name_to_send_nodes: Dict[_DistributedName, List[_SummarizedDistributedSend]]
+    needed_pids: frozenset[_DistributedPartId]
+    user_input_names: frozenset[_DistributedName]
+    partition_input_names: frozenset[_DistributedName]
+    output_names: frozenset[_DistributedName]
+    name_to_recv_node: dict[_DistributedName, DistributedRecv]
+    name_to_send_nodes: dict[_DistributedName, list[_SummarizedDistributedSend]]
 
     @property
     def rank(self) -> int:
@@ -136,7 +144,7 @@ class MissingRecvError(DistributedPartitionVerificationError):
 class _SeenNodesWalkMapper(CachedWalkMapper):
     def __init__(self) -> None:
         super().__init__()
-        self.seen_nodes: Set[ArrayOrNames] = set()
+        self.seen_nodes: set[ArrayOrNames] = set()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
@@ -148,7 +156,7 @@ class _SeenNodesWalkMapper(CachedWalkMapper):
 
 
 def _check_partition_disjointness(partition: DistributedGraphPartition) -> None:
-    part_id_to_nodes: Dict[PartId, Set[ArrayOrNames]] = {}
+    part_id_to_nodes: dict[PartId, set[ArrayOrNames]] = {}
 
     for part in partition.parts.values():
         mapper = _SeenNodesWalkMapper()
@@ -186,12 +194,14 @@ def _run_partition_diagnostics(
 
     from pytato.analysis import get_num_nodes
     num_nodes_per_part = [get_num_nodes(make_dict_of_named_arrays(
-            {x: gp.name_to_output[x] for x in part.output_names}))
+            {x: gp.name_to_output[x] for x in part.output_names}),
+            count_duplicates=False)
             for part in gp.parts.values()]
 
-    logger.info(f"find_distributed_partition: Split {get_num_nodes(outputs)} nodes "
-        f"into {len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
-        "partition.")
+    logger.info("find_distributed_partition: "
+                f"Split {get_num_nodes(outputs, count_duplicates=False)} nodes "
+                f"into {len(gp.parts)} parts, with {num_nodes_per_part} nodes in each "
+                "partition.")
 
 # }}}
 
@@ -220,7 +230,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
     # Convert local partition to _SummarizedDistributedGraphPart
     summarized_parts: \
-            Dict[_DistributedPartId, _SummarizedDistributedGraphPart] = {}
+            dict[_DistributedPartId, _SummarizedDistributedGraphPart] = {}
 
     for pid, part in partition.parts.items():
         assert pid == part.pid
@@ -250,8 +260,9 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 for name, sends in part.name_to_send_nodes.items()})
 
     # Gather the _SummarizedDistributedGraphPart's to rank 0
-    all_summarized_parts_gathered: Optional[
-            Sequence[Dict[_DistributedPartId, _SummarizedDistributedGraphPart]]] = \
+    all_summarized_parts_gathered: \
+            Sequence[dict[_DistributedPartId, _SummarizedDistributedGraphPart]] \
+            | None = \
             mpi_communicator.gather(summarized_parts, root=root_rank)
 
     if mpi_communicator.rank == root_rank:
@@ -263,17 +274,17 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 for dpid, sumpart in rank_parts.items()}
 
         # Every node in the graph is a _SummarizedDistributedGraphPart
-        pid_to_needed_pids: Dict[_DistributedPartId, Set[_DistributedPartId]] = {}
+        pid_to_needed_pids: dict[_DistributedPartId, set[_DistributedPartId]] = {}
 
         def add_needed_pid(pid: _DistributedPartId,
                            needed_pid: _DistributedPartId) -> None:
             pid_to_needed_pids.setdefault(pid, set()).add(needed_pid)
 
-        all_recvs: Set[CommunicationOpIdentifier] = set()
+        all_recvs: set[CommunicationOpIdentifier] = set()
 
         # {{{ gather information on who produces output
 
-        name_to_computing_pid: Dict[_DistributedName, _DistributedPartId] = {}
+        name_to_computing_pid: dict[_DistributedName, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for out_name in sumpart.output_names:
                 assert out_name not in name_to_computing_pid
@@ -283,7 +294,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # {{{ gather information on who receives which names
 
-        name_to_receiving_pid: Dict[_DistributedName, _DistributedPartId] = {}
+        name_to_receiving_pid: dict[_DistributedName, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for recv_name in sumpart.name_to_recv_node:
                 assert recv_name not in name_to_computing_pid
@@ -295,7 +306,7 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
         # {{{ gather information on senders
 
         comm_id_to_sending_pid: \
-                Dict[CommunicationOpIdentifier, _DistributedPartId] = {}
+                dict[CommunicationOpIdentifier, _DistributedPartId] = {}
         for sumpart in all_summarized_parts.values():
             for sumsends in sumpart.name_to_send_nodes.values():
                 for sumsend in sumsends:
@@ -332,9 +343,9 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
                 # Add edges between sends and receives (cross-rank)
                 try:
                     sending_pid = comm_id_to_sending_pid[comm_id]
-                except KeyError:
+                except KeyError as err:
                     raise MissingSendError(
-                        f"no matching send for recv on '{comm_id}'")
+                        f"no matching send for recv on '{comm_id}'") from err
 
                 add_needed_pid(sumpart.pid, sending_pid)
 
@@ -367,12 +378,13 @@ def verify_distributed_partition(mpi_communicator: mpi4py.MPI.Comm,
 
         # Do a topological sort to check for any cycles
 
-        from pytools.graph import compute_topological_order, CycleError
+        from pytools.graph import CycleError, compute_topological_order
+
         from pytato.distributed.verify import PartitionInducedCycleError
         try:
             compute_topological_order(pid_to_needed_pids)
-        except CycleError:
-            raise PartitionInducedCycleError
+        except CycleError as err:
+            raise PartitionInducedCycleError from err
 
         logger.info("verify_distributed_partition completed successfully.")
 

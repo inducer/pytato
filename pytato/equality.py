@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,19 +25,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
-from pytato.array import (AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, AxisPermutation,
-                          BasicIndex, Concatenate, DataWrapper, Einsum,
-                          IndexBase, IndexLambda, NamedArray,
-                          Reshape, Roll, Stack, AbstractResultWithNamedArrays,
-                          Array, DictOfNamedArrays, Placeholder, SizeParam)
-from pytato.function import Call, NamedCallResult, FunctionDefinition
+from typing import TYPE_CHECKING, Any, Callable, Union
+
 from pytools import memoize_method
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    NamedArray,
+    Placeholder,
+    Reshape,
+    Roll,
+    SizeParam,
+    Stack,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+
+
 if TYPE_CHECKING:
-    from pytato.loopy import LoopyCall, LoopyCallResult
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """
 .. autoclass:: EqualityComparer
@@ -65,7 +83,7 @@ class EqualityComparer:
           more on this.
     """
     def __init__(self) -> None:
-        self._cache: Dict[Tuple[int, int], bool] = {}
+        self._cache: dict[tuple[int, int], bool] = {}
 
     def rec(self, expr1: ArrayOrNames, expr2: Any) -> bool:
         cache_key = id(expr1), id(expr2)
@@ -73,7 +91,7 @@ class EqualityComparer:
             return self._cache[cache_key]
         except KeyError:
 
-            method: Callable[[Union[Array, AbstractResultWithNamedArrays], Any],
+            method: Callable[[Array | AbstractResultWithNamedArrays, Any],
                              bool]
 
             try:
@@ -280,6 +298,7 @@ class EqualityComparer:
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.parameters == expr2.parameters
+                and expr1.return_type == expr2.return_type
                 and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
                 and all(self.rec(expr1.returns[k], expr2.returns[k])
                         for k in expr1.returns)
@@ -293,6 +312,7 @@ class EqualityComparer:
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
                         for name, bnd in expr1.bindings.items())
+                and expr1.tags == expr2.tags
                 )
 
     def map_named_call_result(self, expr1: NamedCallResult, expr2: Any) -> bool:

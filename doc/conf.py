@@ -1,5 +1,6 @@
 from urllib.request import urlopen
 
+
 _conf_url = \
         "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
 with urlopen(_conf_url) as _inf:
@@ -29,6 +30,7 @@ intersphinx_mapping = {
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "attrs": ("https://www.attrs.org/en/stable/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
+    "immutabledict": ("https://immutabledict.corenting.fr/", None),
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in
@@ -41,14 +43,12 @@ intersphinx_mapping = {
 # this needs a setting of the same name across all packages involved, that's
 # why this name is as global-sounding as it is.
 import sys
+
+
 sys._BUILDING_SPHINX_DOCS = True
 
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
+    ["py:class", r"numpy.bool_"],
     ["py:class", r"typing_extensions(.+)"],
-    # As of 2023-10-05, it doesn't look like there's sphinx documentation
-    # available.
-    ["py:class", r"immutabledict(.*)"],
-    # https://github.com/python-attrs/attrs/issues/1073
-    ["py:mod", "attrs"],
 ]
