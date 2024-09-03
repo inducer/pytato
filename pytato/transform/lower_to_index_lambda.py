@@ -68,7 +68,8 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
     if expr.order.upper() not in ["C", "F"]:
         raise NotImplementedError("Order expected to be 'C' or 'F'",
-                                  f" (case insensitive) found {expr.order}")
+                                  " (case insensitive). Found order = ",
+                                  f"{expr.order}")
 
     order = expr.order
     oldshape = expr.array.shape
@@ -83,7 +84,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     # (5, 4, 4, 4) -> (5, 16, 4), we leave the untouched axes alone and only
     # bother computing new indices for the collapsed/expanded axes.
     ambiguous_reshape = False
-    oldax_to_newax: Dict[ShapeType, ShapeType] = {}
+    oldax_to_newax: dict[ShapeType, ShapeType] = {}
 
     # case 1 & 2: collapsed/expanded old axes
     if len(newshape) != len(oldshape):
@@ -120,14 +121,14 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
                         ilongax += 1
 
                 if len(newshape) > len(oldshape):
-                    oldax_to_newax[(ishortax,)] = tuple(ilongaxs)
+                    oldax_to_newax[ishortax,] = tuple(ilongaxs)
                 else:
                     oldax_to_newax[tuple(ilongaxs)] = (ishortax,)
             else:
                 if len(newshape) > len(oldshape):
-                    oldax_to_newax[(ishortax,)] = (ilongax,)
+                    oldax_to_newax[ishortax,] = (ilongax,)
                 else:
-                    oldax_to_newax[(ilongax,)] = (ishortax,)
+                    oldax_to_newax[ilongax,] = (ishortax,)
 
             if ambiguous_reshape:
                 break
@@ -162,7 +163,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     def compute_new_indices(ioldaxs: ShapeType,
                             inewaxs: ShapeType,
                             order: str,
-                            fallback: bool = False) -> Tuple[ScalarExpression]:
+                            fallback: bool = False) -> tuple[ScalarExpression]:
 
         if not fallback:
             sub_oldshape = tuple(
