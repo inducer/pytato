@@ -659,6 +659,10 @@ class AxisTagAttacher(CopyMapper):
 # }}}
 
 
+class IgnoredForPropagationTag(Tag):
+    pass
+
+
 def unify_axes_tags(
         expr: ArrayOrNames,
         *,
@@ -694,16 +698,14 @@ def unify_axes_tags(
 
     from pytools.graph import (
         get_propagation_graph_from_constraints,
-        get_reachable_nodes
+        get_reachable_nodes,
     )
-    from pytools.tag import IgnoredForPropagationTag
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
     axis_to_solved_tags: dict[tuple[Array, int], set[Tag]] = {}
 
     propagation_graph = get_propagation_graph_from_constraints(
-        equations_collector.equations,
-        equations_collector.known_tag_to_var
+        equations_collector.equations
     )
 
     for tag, var in equations_collector.known_tag_to_var.items():
