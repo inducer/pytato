@@ -168,21 +168,19 @@ def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
 
         oldstrides = [1]
         oldstride_axes = (
-            reversed(sub_oldshape[1:]) if order == "C" else sub_oldshape[:-1])
-
+            sub_oldshape[::-1][:-1] if order == "C" else sub_oldshape[:-1])
         for ax_len in oldstride_axes:
             oldstrides.append(ax_len*oldstrides[-1])
 
-        oldsizetill_axes = (
-            reversed(sub_oldshape[:-1]) if order == "C" else sub_oldshape[:-1])
         oldsizetills = [sub_oldshape[-1] if order == "C" else sub_oldshape[0]]
-
+        oldsizetill_axes = (
+            sub_oldshape[:-1][::-1] if order == "C" else sub_oldshape[:-1])
         for ax_len in oldsizetill_axes:
             oldsizetills.append(ax_len*oldsizetills[-1])
 
-        newstride_axes = (
-            reversed(sub_newshape[1:] if order == "C" else sub_newshape[:-1]))
         newstrides = [1]
+        newstride_axes = (
+            sub_newshape[::-1][:-1] if order == "C" else sub_newshape[:-1])
         for ax_len in newstride_axes:
             newstrides.append(ax_len*newstrides[-1])
 
