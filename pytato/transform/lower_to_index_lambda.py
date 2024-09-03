@@ -52,7 +52,7 @@ from pytato.array import (
     Stack,
 )
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
-from pytato.scalar_expr import INT_CLASSES, IntegralT, ScalarExpression
+from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
 
