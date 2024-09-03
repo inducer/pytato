@@ -4,9 +4,9 @@ Pytato: Get Descriptions of Array Computations via Lazy Evaluation
 .. image:: https://gitlab.tiker.net/inducer/pytato/badges/main/pipeline.svg
     :alt: Gitlab Build Status
     :target: https://gitlab.tiker.net/inducer/pytato/commits/main
-.. image:: https://github.com/inducer/pytato/workflows/CI/badge.svg?branch=main&event=push
+.. image:: https://github.com/inducer/pytato/workflows/CI/badge.svg?branch=main
     :alt: Github Build Status
-    :target: https://github.com/inducer/pytato/actions?query=branch%3Amain+workflow%3ACI+event%3Apush
+    :target: https://github.com/inducer/pytato/actions?query=branch%3Amain+workflow%3ACI
 .. image:: https://badge.fury.io/py/pytato.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/pytato/
@@ -32,4 +32,9 @@ Numpy compatibility
 Pytato is written to pose no particular restrictions on the version of numpy
 used for execution. To use mypy-based type checking on Pytato itself or
 packages using Pytato, numpy 1.20 or newer is required, due to the
-typing-based changes to numpy in that release.
+typing-based changes to numpy in that release. Furthermore, pytato
+now uses type promotion rules aiming to match those in
+`numpy 2 <https://numpy.org/devdocs/numpy_2_0_migration_guide.html#changes-to-numpy-data-type-promotion>`__.
+This will not break compatibility with older numpy versions, but may
+result in differing data types between computations carried out in
+numpy and pytato.

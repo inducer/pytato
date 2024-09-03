@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -26,30 +27,45 @@ THE SOFTWARE.
 """
 
 
-from functools import partial
 import html
+from functools import partial
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Mapping,
+)
+
 import attrs
 
-from typing import (TYPE_CHECKING, Callable, Dict, Tuple, Union, List,
-        Mapping, Any, FrozenSet, Set, Optional)
-
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
-from pytato.loopy import LoopyCall
-from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.tags import FunctionIdentifier
 from pytools.codegen import remove_common_indentation
+from pytools.tag import Tag
 
 from pytato.array import (
-        Array, DataWrapper, DictOfNamedArrays, IndexLambda, InputArgumentBase,
-        Stack, ShapeType, Einsum, Placeholder, AbstractResultWithNamedArrays,
-        IndexBase)
-
+    AbstractResultWithNamedArrays,
+    Array,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    InputArgumentBase,
+    Placeholder,
+    ShapeType,
+    Stack,
+)
 from pytato.codegen import normalize_outputs
-from pytato.transform import CachedMapper, ArrayOrNames, InputGatherer
-
 from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart, PartId)
+    DistributedGraphPart,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.loopy import LoopyCall
+from pytato.tags import FunctionIdentifier
+from pytato.transform import ArrayOrNames, CachedMapper, InputGatherer
+
 
 if TYPE_CHECKING:
     from pytato.distributed.nodes import DistributedSendRefHolder
@@ -68,15 +84,15 @@ __doc__ = """
 
 @attrs.define
 class _SubgraphTree:
-    contents: Optional[List[str]]
-    subgraphs: Dict[str, _SubgraphTree]
+    contents: list[str] | None
+    subgraphs: dict[str, _SubgraphTree]
 
 
 class DotEmitter:
     def __init__(self) -> None:
-        self.subgraph_to_lines: Dict[Tuple[str, ...], List[str]] = {}
+        self.subgraph_to_lines: dict[tuple[str, ...], list[str]] = {}
 
-    def __call__(self, subgraph_path: Tuple[str, ...], s: str) -> None:
+    def __call__(self, subgraph_path: tuple[str, ...], s: str) -> None:
         line_list = self.subgraph_to_lines.setdefault(subgraph_path, [])
 
         if not s.strip():
@@ -92,7 +108,7 @@ class DotEmitter:
         subgraph_tree = _SubgraphTree(contents=None, subgraphs={})
 
         def insert_into_subgraph_tree(
-                root: _SubgraphTree, path: Tuple[str, ...], contents: List[str]
+                root: _SubgraphTree, path: tuple[str, ...], contents: list[str]
                 ) -> None:
             if not path:
                 assert root.contents is None
@@ -144,11 +160,11 @@ class DotEmitter:
 @attrs.define
 class _DotNodeInfo:
     title: str
-    fields: Dict[str, Any]
-    edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]]
+    fields: dict[str, Any]
+    edges: dict[str, ArrayOrNames | FunctionDefinition]
 
 
-def stringify_tags(tags: FrozenSet[Optional[Tag]]) -> str:
+def stringify_tags(tags: frozenset[Tag | None]) -> str:
     components = sorted(str(elem) for elem in tags)
     return "{" + ", ".join(components) + "}"
 
@@ -165,8 +181,8 @@ def stringify_shape(shape: ShapeType) -> str:
 class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
     def __init__(self) -> None:
         super().__init__()
-        self.node_to_dot: Dict[ArrayOrNames, _DotNodeInfo] = {}
-        self.functions: Set[FunctionDefinition] = set()
+        self.node_to_dot: dict[ArrayOrNames, _DotNodeInfo] = {}
+        self.functions: set[FunctionDefinition] = set()
 
     def get_common_dot_info(self, expr: Array) -> _DotNodeInfo:
         title = type(expr).__name__
@@ -177,7 +193,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
                   "non_equality_tags": expr.non_equality_tags,
                   }
 
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
         return _DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
@@ -186,6 +202,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
+        # pylint: disable=not-an-iterable
         for field in attrs.fields(type(expr)):
             if field.name in info.fields:
                 continue
@@ -284,7 +301,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         self.node_to_dot[expr] = info
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
         for name, val in expr._data.items():
             edges[name] = val
             self.rec(val)
@@ -295,7 +312,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
                 edges=edges)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
-        edges: Dict[str, Union[ArrayOrNames, FunctionDefinition]] = {}
+        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
         for name, arg in expr.bindings.items():
             if isinstance(arg, Array):
                 edges[name] = arg
@@ -364,7 +381,7 @@ def dot_escape_leave_space(s: str) -> str:
 
 # {{{ emit helpers
 
-def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
+def _stringify_created_at(non_equality_tags: frozenset[Tag]) -> str:
     from pytato.tags import CreatedAt
     for tag in non_equality_tags:
         if isinstance(tag, CreatedAt):
@@ -373,14 +390,14 @@ def _stringify_created_at(non_equality_tags: FrozenSet[Tag]) -> str:
     return "<unknown>"
 
 
-def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
+def _emit_array(emit: Callable[[str], None], title: str, fields: dict[str, Any],
         dot_node_id: str, color: str = "white") -> None:
     td_attrib = 'border="0"'
     table_attrib = 'border="0" cellborder="1" cellspacing="0"'
 
     rows = [f"<tr><td colspan='2' {td_attrib}>{dot_escape(title)}</td></tr>"]
 
-    non_equality_tags: FrozenSet[Any] = fields.pop("non_equality_tags", frozenset())
+    non_equality_tags: frozenset[Any] = fields.pop("non_equality_tags", frozenset())
 
     tooltip = dot_escape_leave_space(_stringify_created_at(non_equality_tags))
 
@@ -397,37 +414,37 @@ def _emit_array(emit: Callable[[str], None], title: str, fields: Dict[str, Any],
 
 
 def _emit_name_cluster(
-        emit: DotEmitter, subgraph_path: Tuple[str, ...],
+        emit: DotEmitter, subgraph_path: tuple[str, ...],
         names: Mapping[str, ArrayOrNames],
         array_to_id: Mapping[ArrayOrNames, str], id_gen: Callable[[str], str],
         label: str) -> None:
     edges = []
 
-    cluster_subgraph_path = subgraph_path + (f"cluster_{dot_escape(label)}",)
+    cluster_subgraph_path = (*subgraph_path, f"cluster_{dot_escape(label)}")
     emit_cluster = partial(emit, cluster_subgraph_path)
     emit_cluster("node [shape=ellipse]")
     emit_cluster(f'label="{label}"')
 
     for name, array in names.items():
         name_id = id_gen(dot_escape(name))
-        emit_cluster('%s [label="%s"]' % (name_id, dot_escape(name)))
+        emit_cluster(f'{name_id} [label="{dot_escape(name)}"]')
         array_id = array_to_id[array]
         # Edges must be outside the cluster.
         edges.append((name_id, array_id))
 
     for name_id, array_id in edges:
-        emit(subgraph_path, "%s -> %s" % (array_id, name_id))
+        emit(subgraph_path, f"{array_id} -> {name_id}")
 
 
 def _emit_function(
-        emitter: DotEmitter, subgraph_path: Tuple[str, ...],
+        emitter: DotEmitter, subgraph_path: tuple[str, ...],
         id_gen: UniqueNameGenerator,
         node_to_dot: Mapping[ArrayOrNames, _DotNodeInfo],
         func_to_id: Mapping[FunctionDefinition, str],
         outputs: Mapping[str, Array]) -> None:
-    input_arrays: List[Array] = []
-    internal_arrays: List[ArrayOrNames] = []
-    array_to_id: Dict[ArrayOrNames, str] = {}
+    input_arrays: list[Array] = []
+    internal_arrays: list[ArrayOrNames] = []
+    array_to_id: dict[ArrayOrNames, str] = {}
 
     emit = partial(emitter, subgraph_path)
     for array in node_to_dot:
@@ -438,7 +455,7 @@ def _emit_function(
             internal_arrays.append(array)
 
     # Emit inputs.
-    input_subgraph_path = subgraph_path + ("cluster_inputs",)
+    input_subgraph_path = (*subgraph_path, "cluster_inputs")
     emit_input = partial(emitter, input_subgraph_path)
     emit_input('label="Arguments"')
 
@@ -468,7 +485,7 @@ def _emit_function(
                 raise ValueError(
                         f"unexpected type of tail on edge: {type(tail_item)}")
 
-            emit('%s -> %s [label="%s"]' % (tail, head, dot_escape(label)))
+            emit(f'{tail} -> {head} [label="{dot_escape(label)}"]')
 
     # Emit output/namespace name mappings.
     _emit_name_cluster(
@@ -479,7 +496,7 @@ def _emit_function(
 
 # {{{ information gathering
 
-def _get_function_name(f: FunctionDefinition) -> Optional[str]:
+def _get_function_name(f: FunctionDefinition) -> str | None:
     func_id_tags = f.tags_of_type(FunctionIdentifier)
     if func_id_tags:
         func_id_tag, = func_id_tags
@@ -491,14 +508,14 @@ def _get_function_name(f: FunctionDefinition) -> Optional[str]:
 def _gather_partition_node_information(
         id_gen: UniqueNameGenerator,
         partition: DistributedGraphPartition
-        ) -> Tuple[
+        ) -> tuple[
                 Mapping[PartId, Mapping[FunctionDefinition, str]],
-                Mapping[Tuple[PartId, Optional[FunctionDefinition]],
+                Mapping[tuple[PartId, FunctionDefinition | None],
                         Mapping[ArrayOrNames, _DotNodeInfo]]
                 ]:
-    part_id_to_func_to_id: Dict[PartId, Dict[FunctionDefinition, str]] = {}
-    part_id_func_to_node_info: Dict[Tuple[PartId, Optional[FunctionDefinition]],
-                     Dict[ArrayOrNames, _DotNodeInfo]] = {}
+    part_id_to_func_to_id: dict[PartId, dict[FunctionDefinition, str]] = {}
+    part_id_func_to_node_info: dict[tuple[PartId, FunctionDefinition | None],
+                     dict[ArrayOrNames, _DotNodeInfo]] = {}
 
     for part in partition.parts.values():
         mapper = ArrayToDotNodeInfoMapper()
@@ -511,7 +528,7 @@ def _gather_partition_node_information(
         # It is important that seen functions are emitted callee-first.
         # (Otherwise function 'entry' nodes will get declared in the wrong
         # cluster.) So use a data type that preserves order.
-        seen_functions: List[FunctionDefinition] = []
+        seen_functions: list[FunctionDefinition] = []
 
         def gather_function_info(f: FunctionDefinition) -> None:
             key = (part.pid, f)  # noqa: B023
@@ -549,7 +566,7 @@ def _gather_partition_node_information(
 # }}}
 
 
-def get_dot_graph(result: Union[Array, DictOfNamedArrays]) -> str:
+def get_dot_graph(result: Array | DictOfNamedArrays) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
@@ -605,8 +622,8 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
     emit_root("node [shape=rectangle]")
 
-    placeholder_to_id: Dict[ArrayOrNames, str] = {}
-    part_id_to_array_to_id: Dict[PartId, Dict[ArrayOrNames, str]] = {}
+    placeholder_to_id: dict[ArrayOrNames, str] = {}
+    part_id_to_array_to_id: dict[PartId, dict[ArrayOrNames, str]] = {}
 
     part_id_to_id = {pid: dot_escape(str(pid)) for pid in partition.parts}
     assert len(set(part_id_to_id.values())) == len(partition.parts)
@@ -637,7 +654,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
         is_trivial_partition = part.pid is None and len(partition.parts) == 1
         if is_trivial_partition:
-            part_subgraph_path: Tuple[str, ...] = ()
+            part_subgraph_path: tuple[str, ...] = ()
         else:
             part_subgraph_path = (f"cluster_{part_id_to_id[part.pid]}",)
 
@@ -653,7 +670,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
         # Here we're relying on the part_id_to_func_to_id dict to preserve order.
 
         for func, fid in part_id_to_func_to_id[part.pid].items():
-            func_subgraph_path = part_subgraph_path + (f"cluster_{fid}",)
+            func_subgraph_path = (*part_subgraph_path, f"cluster_{fid}")
             label = _get_function_name(func) or fid
 
             emitter(func_subgraph_path, f'label="{label}"')
@@ -684,8 +701,8 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
         # }}}
 
         part_node_to_info = part_id_func_to_node_info[part.pid, None]
-        input_arrays: List[Array] = []
-        internal_arrays: List[ArrayOrNames] = []
+        input_arrays: list[Array] = []
+        internal_arrays: list[ArrayOrNames] = []
 
         for array in part_node_to_info.keys():
             if isinstance(array, InputArgumentBase):
@@ -778,8 +795,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
                     raise ValueError(
                             f"unexpected type of tail on edge: {type(tail_item)}")
 
-                emit_root('%s -> %s [label="%s"]' %
-                    (tail, head, dot_escape(label)))
+                emit_root(f'{tail} -> {head} [label="{dot_escape(label)}"]')
 
         _emit_name_cluster(
                 emitter, part_subgraph_path,
@@ -794,7 +810,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
     # {{{ draw overall outputs
 
-    combined_array_to_id: Dict[ArrayOrNames, str] = {}
+    combined_array_to_id: dict[ArrayOrNames, str] = {}
     for part_id in partition.parts.keys():
         combined_array_to_id.update(part_id_to_array_to_id[part_id])
 
@@ -809,8 +825,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     return emitter.generate()
 
 
-def show_dot_graph(result: Union[str, Array, DictOfNamedArrays,
-                                 DistributedGraphPartition],
+def show_dot_graph(result: str | Array | DictOfNamedArrays | DistributedGraphPartition,
         **kwargs: Any) -> None:
     """Show a graph representing the computation of *result* in a browser.
 

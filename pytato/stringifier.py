@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,18 +25,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Any, cast
+
+import attrs
 import numpy as np
+from immutabledict import immutabledict
 
 from pytools import memoize_method
 
-from typing import Any, Dict, Tuple, cast
-from pytato.transform import Mapper
-from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
-                          IndexLambda, ReductionDescriptor)
-from pytato.function import FunctionDefinition, Call
+from pytato.array import (
+    Array,
+    Axis,
+    DataWrapper,
+    DictOfNamedArrays,
+    IndexLambda,
+    ReductionDescriptor,
+)
+from pytato.function import Call, FunctionDefinition
 from pytato.loopy import LoopyCall
-from immutabledict import immutabledict
-import attrs
+from pytato.transform import Mapper
 
 
 __doc__ = """
@@ -60,7 +68,7 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
-        self._cache: Dict[Tuple[int, int], str] = {}
+        self._cache: dict[tuple[int, int], str] = {}
 
     def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
@@ -95,6 +103,7 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
+        # pylint: disable=not-an-iterable
         fields = tuple(field.name for field in attrs.fields(type(expr)))
 
         fields = tuple(field for field in fields if field != "non_equality_tags")
@@ -153,6 +162,7 @@ class Reprifier(Mapper):
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
+        # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
                         for field in attrs.fields(type(expr)))
@@ -169,6 +179,7 @@ class Reprifier(Mapper):
             else:
                 return repr(getattr(expr, field))
 
+        # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
                         for field in attrs.fields(type(expr)))

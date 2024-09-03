@@ -1,4 +1,6 @@
 """Pytato specific exceptions."""
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2021 Kaushik Kulkarni"
 
@@ -47,7 +49,7 @@ class CannotBroadcastError(ValueError):
     pass
 
 
-class UnknownIndexLambdaExpr(ValueError):
+class UnknownIndexLambdaExpr(ValueError):  # noqa: N818
     """
     Raised when the structure :class:`pytato.array.IndexLambda` could not be
     inferred.
@@ -55,20 +57,20 @@ class UnknownIndexLambdaExpr(ValueError):
     pass
 
 
-class InvalidEinsumIndex(ValueError):
+class InvalidEinsumIndex(ValueError):  # noqa: N818
     """
     Raised when an einsum index was referred by an invalid value.
     """
 
 
-class NotAReductionAxis(ValueError):
+class NotAReductionAxis(ValueError):  # noqa: N818
     """
     Raised when a :class:`pytato.ReductionDescriptor` was referred by an invalid
     value.
     """
 
 
-class CannotBeLoweredToIndexLambda(ValueError):
+class CannotBeLoweredToIndexLambda(ValueError):  # noqa: N818
     """
     Raised when a :class:`pytato.Array` was expected to be lowered to an
     :class:`~pytato.array.IndexLambda`, but it cannot be. For ex. a
