@@ -28,9 +28,6 @@ THE SOFTWARE.
 """
 
 import sys
-from typing import (
-    Mapping,
-)
 
 import attrs
 import numpy as np
