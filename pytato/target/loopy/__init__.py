@@ -116,7 +116,7 @@ class LoopyPyOpenCLTarget(LoopyTarget):
             warn("Passing 'device' is deprecated and will stop working in 2023.",
                     DeprecationWarning, stacklevel=2)
 
-    def get_loopy_target(self) -> loopy.LoopyPyOpenCLTarget:
+    def get_loopy_target(self) -> loopy.PyOpenCLTarget:
         import loopy as lp
         return lp.PyOpenCLTarget()
 
