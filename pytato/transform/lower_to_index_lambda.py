@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from immutabledict import immutabledict
@@ -60,6 +61,12 @@ from pytato.transform import Mapper
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
+@dataclass(frozen=True)
+class _ReshapeIndexGroup:
+    old_ax_indices: tuple[int, ...]
+    new_ax_indices: tuple[int, ...]
+
+
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     if expr.array.shape == ():
         # RHS must be a scalar i.e. RHS' indices are empty
@@ -72,9 +79,27 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
                                   f"{expr.order}")
 
     order = expr.order
-    oldshape = expr.array.shape
-    newshape = expr.shape
+    old_shape = expr.array.shape
+    new_shape = expr.shape
 
+    axis_mapping: list[_ReshapeIndexGroup] = []
+
+    old_index = 0
+    new_index = 0
+
+    while old_index < len(old_shape) and new_index < len(new_shape):
+        old_ax_len_product = old_shape[old_index]
+        new_ax_len_product = new_shape[new_index]
+
+        old_product_end = old_index + 1
+        new_product_end = new_index + 1
+
+        while old_ax_len_product != new_ax_len_product:
+            if not isinstance(old_ax_len_product, INT_CLASSES) or 
+                
+
+
+    
     # {{{ construct old -> new axis mapping
 
     # NOTE: there are cases where the mapping of old -> new axes is obfuscated
@@ -87,15 +112,15 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     oldax_to_newax: dict[ShapeType, ShapeType] = {}
 
     # case 1 & 2: collapsed/expanded old axes
-    if len(newshape) != len(oldshape):
-        expanded_old_dims = (True if len(newshape) > len(oldshape) else False)
+    if len(new_shape) != len(old_shape):
+        expanded_old_dims = (True if len(new_shape) > len(old_shape) else False)
 
         if expanded_old_dims:
-            longshape = newshape
-            shortshape = oldshape
+            longshape = new_shape
+            shortshape = old_shape
         else:
-            longshape = oldshape
-            shortshape = newshape
+            longshape = old_shape
+            shortshape = new_shape
 
         ilongax = 0
         for ishortax, shortax in enumerate(shortshape):
@@ -120,12 +145,12 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
                         ilongaxs.append(ilongax)
                         ilongax += 1
 
-                if len(newshape) > len(oldshape):
+                if len(new_shape) > len(old_shape):
                     oldax_to_newax[ishortax,] = tuple(ilongaxs)
                 else:
                     oldax_to_newax[tuple(ilongaxs)] = (ishortax,)
             else:
-                if len(newshape) > len(oldshape):
+                if len(new_shape) > len(old_shape):
                     oldax_to_newax[ishortax,] = (ilongax,)
                 else:
                     oldax_to_newax[ilongax,] = (ishortax,)
@@ -141,9 +166,9 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     # case 3: permute axes of oldshape => linearize all indices
     else:
         # shapes are the same, don't do anything
-        if oldshape == newshape:
+        if old_shape == new_shape:
             return tuple(
-                prim.Variable(f"_{i}") for i in range(len(newshape))
+                prim.Variable(f"_{i}") for i in range(len(new_shape))
             )
         ambiguous_reshape = True
 
@@ -152,8 +177,8 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     # {{{ check that we've caught everything
 
     # need a mapping of all old axes -> all new axes
-    if (len(sum(oldax_to_newax.keys(), ())) != len(oldshape) or
-            len(sum(oldax_to_newax.values(), ())) != len(newshape)):
+    if (len(sum(oldax_to_newax.keys(), ())) != len(old_shape) or
+            len(sum(oldax_to_newax.values(), ())) != len(new_shape)):
         ambiguous_reshape = True
 
     # }}}
@@ -167,9 +192,9 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
         if not fallback:
             sub_oldshape = tuple(
-                oldshape[ioldax] for ioldax in ioldaxs)  # type: ignore
+                old_shape[ioldax] for ioldax in ioldaxs)  # type: ignore
             sub_newshape = tuple(
-                newshape[inewax] for inewax in inewaxs)  # type: ignore
+                new_shape[inewax] for inewax in inewaxs)  # type: ignore
 
             index_vars = [prim.Variable(f"_{i}") for i in inewaxs]
 
@@ -177,10 +202,10 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
                 return tuple(prim.Variable(f"_{i}") for i in inewaxs)
 
         else:
-            sub_oldshape = oldshape
-            sub_newshape = newshape
+            sub_oldshape = old_shape
+            sub_newshape = new_shape
 
-            index_vars = [prim.Variable(f"_{i}") for i in range(len(newshape))]
+            index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
 
         oldstrides = [1]
         oldstride_axes = (
@@ -216,7 +241,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     if ambiguous_reshape:
         print("Ambiguous reshape found when trying to compute reshaped indices."
               " Defaulting to linearizing all axes.")
-        return compute_new_indices(oldshape, newshape, order, fallback=True)
+        return compute_new_indices(old_shape, new_shape, order, fallback=True)
 
     ret = [
         compute_new_indices(ioldaxs, inewaxs, order)
