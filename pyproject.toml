@@ -82,3 +82,9 @@ arange = "arange"
 [tool.typos.files]
 extend-exclude = [
 ]
+
+[project]
+name = "pytato"
+dependencies = [
+  "pytools>=2024.1.14"
+]
