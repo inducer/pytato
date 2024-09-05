@@ -176,11 +176,6 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
         old_index = old_product_end
         new_index = new_product_end
 
-    # new_shape == ()
-    if len(axis_mapping) == 0:
-        return _generate_index_expressions(old_shape, new_shape, order,
-                                           index_vars)
-
     # handle trailing 1s
     final_reshaped_indices = axis_mapping.pop(-1)
     old_ax_indices = final_reshaped_indices.old_ax_indices
