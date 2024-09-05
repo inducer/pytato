@@ -49,6 +49,7 @@ from pytato.array import (
     NormalizedSlice,
     Reshape,
     Roll,
+    ShapeComponent,
     ShapeType,
     Stack,
 )
@@ -63,15 +64,50 @@ ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 @dataclass(frozen=True)
 class _ReshapeIndexGroup:
-    old_ax_indices: tuple[int, ...]
-    new_ax_indices: tuple[int, ...]
+    old_ax_indices: tuple[ShapeComponent, ...]
+    new_ax_indices: tuple[ShapeComponent, ...]
+
+
+def _generate_index_expressions(
+        old_shape: ShapeType,
+        new_shape: ShapeType,
+        order: str,
+        index_vars: list[prim.Variable]) -> tuple[ScalarExpression, ...]:
+
+    old_strides = [1]
+    new_strides = [1]
+    old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
+
+    old_stride_axs = (old_shape[::-1][:-1] if order == "C" else
+                      old_shape[:-1])
+    for old_ax in old_stride_axs:
+        old_strides.append(old_strides[-1]*old_ax)
+
+    new_stride_axs = (new_shape[::-1][:-1] if order == "C" else
+                      new_shape[:-1])
+    for new_ax in new_stride_axs:
+        new_strides.append(new_strides[-1]*new_ax)
+
+    old_size_till_axs = (old_shape[:-1][::-1] if order == "C" else
+                         old_shape[1:])
+    for old_ax in old_size_till_axs:
+        old_size_tills.append(old_size_tills[-1]*old_ax)
+
+    if order == "C":
+        old_strides = old_strides[::-1]
+        new_strides = new_strides[::-1]
+        old_size_tills = old_size_tills[::-1]
+
+    flattened_index_expn = sum(
+        index_var*new_stride
+        for index_var, new_stride in zip(index_vars, new_strides))
+
+    return tuple(
+        (flattened_index_expn % old_size_till) // old_stride
+        for old_size_till, old_stride in zip(old_size_tills, old_strides))
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
-    if expr.array.shape == ():
-        # RHS must be a scalar i.e. RHS' indices are empty
-        assert expr.size == 1
-        return ()
 
     if expr.order.upper() not in ["C", "F"]:
         raise NotImplementedError("Order expected to be 'C' or 'F'",
@@ -81,6 +117,27 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     order = expr.order
     old_shape = expr.array.shape
     new_shape = expr.shape
+
+    # index variables need to be unique and depend on the new shape length
+    index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
+
+    # {{{ check for scalars
+
+    if old_shape == ():
+        assert expr.size == 1
+        return ()
+
+    if new_shape == ():
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
+
+    if 0 in old_shape and 0 in new_shape:
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
+
+    # }}}
+
+    # {{{ generate subsets of old axes mapped to subsets of new axes
 
     axis_mapping: list[_ReshapeIndexGroup] = []
 
@@ -95,163 +152,71 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
         new_product_end = new_index + 1
 
         while old_ax_len_product != new_ax_len_product:
-            if not isinstance(old_ax_len_product, INT_CLASSES) or 
-                
+            if not isinstance(old_ax_len_product, INT_CLASSES) or \
+                not isinstance(new_ax_len_product, INT_CLASSES):
+                raise TypeError("Cannot determine which axes were expanded or "
+                                "collapsed symbolically")
 
-
-    
-    # {{{ construct old -> new axis mapping
-
-    # NOTE: there are cases where the mapping of old -> new axes is obfuscated
-    # by the reshape, i.e. (5, 12, 3) -> (3, 2, 3, 10). In cases like this, we
-    # default to linearizing all indices.
-    # In cases where the reshape is simple, i.e. (5, 16) -> (5, 4, 4) or
-    # (5, 4, 4, 4) -> (5, 16, 4), we leave the untouched axes alone and only
-    # bother computing new indices for the collapsed/expanded axes.
-    ambiguous_reshape = False
-    oldax_to_newax: dict[ShapeType, ShapeType] = {}
-
-    # case 1 & 2: collapsed/expanded old axes
-    if len(new_shape) != len(old_shape):
-        expanded_old_dims = (True if len(new_shape) > len(old_shape) else False)
-
-        if expanded_old_dims:
-            longshape = new_shape
-            shortshape = old_shape
-        else:
-            longshape = old_shape
-            shortshape = new_shape
-
-        ilongax = 0
-        for ishortax, shortax in enumerate(shortshape):
-            assert isinstance(shortax, INT_CLASSES)
-            if shortax != longshape[ilongax]:
-
-                # collect expanded axes
-                acc = 1
-                ilongaxs = []
-                while acc < shortax:
-                    if ilongax >= len(longshape):
-                        ambiguous_reshape = True
-                        break
-
-                    ilongaxs.append(ilongax)
-                    acc *= longshape[ilongax]
-                    ilongax += 1
-
-                # check for axes of length 1
-                if ilongax < len(longshape) and longshape[ilongax] == 1:
-                    while ilongax < len(longshape) and longshape[ilongax] == 1:
-                        ilongaxs.append(ilongax)
-                        ilongax += 1
-
-                if len(new_shape) > len(old_shape):
-                    oldax_to_newax[ishortax,] = tuple(ilongaxs)
-                else:
-                    oldax_to_newax[tuple(ilongaxs)] = (ishortax,)
+            if new_ax_len_product < old_ax_len_product:
+                new_ax_len_product *= new_shape[new_product_end]
+                new_product_end += 1
             else:
-                if len(new_shape) > len(old_shape):
-                    oldax_to_newax[ishortax,] = (ilongax,)
-                else:
-                    oldax_to_newax[ilongax,] = (ishortax,)
+                old_ax_len_product *= old_shape[old_product_end]
+                old_product_end += 1
 
-            if ambiguous_reshape:
-                break
+        old_ax_indices = old_shape[old_index:old_product_end]
+        new_ax_indices = new_shape[new_index:new_product_end]
 
-            ilongax += 1
+        reshaped_indices = _ReshapeIndexGroup(
+            old_ax_indices=old_ax_indices,
+            new_ax_indices=new_ax_indices)
 
-            if ilongax >= len(longshape):
-                break
+        axis_mapping.append(reshaped_indices)
 
-    # case 3: permute axes of oldshape => linearize all indices
-    else:
-        # shapes are the same, don't do anything
-        if old_shape == new_shape:
-            return tuple(
-                prim.Variable(f"_{i}") for i in range(len(new_shape))
-            )
-        ambiguous_reshape = True
+        old_index = old_product_end
+        new_index = new_product_end
 
-    # }}}
+    # new_shape == ()
+    if len(axis_mapping) == 0:
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
 
-    # {{{ check that we've caught everything
+    # handle trailing 1s
+    final_reshaped_indices = axis_mapping.pop(-1)
+    old_ax_indices = final_reshaped_indices.old_ax_indices
+    new_ax_indices = final_reshaped_indices.new_ax_indices
 
-    # need a mapping of all old axes -> all new axes
-    if (len(sum(oldax_to_newax.keys(), ())) != len(old_shape) or
-            len(sum(oldax_to_newax.values(), ())) != len(new_shape)):
-        ambiguous_reshape = True
+    while old_index < len(old_shape):
+        old_ax_indices += tuple([old_shape[old_index]])  # noqa: C409
+        old_index += 1
 
-    # }}}
+    while new_index < len(new_shape):
+        new_ax_indices += tuple([new_shape[new_index]])  # noqa: C409
+        new_index += 1
 
-    # {{{ process old -> new axis mapping
-
-    def compute_new_indices(ioldaxs: ShapeType,
-                            inewaxs: ShapeType,
-                            order: str,
-                            fallback: bool = False) -> tuple[ScalarExpression]:
-
-        if not fallback:
-            sub_oldshape = tuple(
-                old_shape[ioldax] for ioldax in ioldaxs)  # type: ignore
-            sub_newshape = tuple(
-                new_shape[inewax] for inewax in inewaxs)  # type: ignore
-
-            index_vars = [prim.Variable(f"_{i}") for i in inewaxs]
-
-            if len(sub_oldshape) == len(sub_newshape):
-                return tuple(prim.Variable(f"_{i}") for i in inewaxs)
-
-        else:
-            sub_oldshape = old_shape
-            sub_newshape = new_shape
-
-            index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
-
-        oldstrides = [1]
-        oldstride_axes = (
-            sub_oldshape[::-1][:-1] if order == "C" else sub_oldshape[:-1])
-        for ax_len in oldstride_axes:
-            oldstrides.append(ax_len*oldstrides[-1])
-
-        oldsizetills = [sub_oldshape[-1] if order == "C" else sub_oldshape[0]]
-        oldsizetill_axes = (
-            sub_oldshape[:-1][::-1] if order == "C" else sub_oldshape[:-1])
-        for ax_len in oldsizetill_axes:
-            oldsizetills.append(ax_len*oldsizetills[-1])
-
-        newstrides = [1]
-        newstride_axes = (
-            sub_newshape[::-1][:-1] if order == "C" else sub_newshape[:-1])
-        for ax_len in newstride_axes:
-            newstrides.append(ax_len*newstrides[-1])
-
-        if order == "C":
-            newstrides = newstrides[::-1]
-            oldstrides = oldstrides[::-1]
-            oldsizetills = oldsizetills[::-1]
-
-        flattened_idx = sum(
-            index_var*stride
-            for index_var, stride in zip(index_vars, newstrides)
-        )
-
-        return tuple(((flattened_idx % sizetill) // stride)
-                       for stride, sizetill in zip(oldstrides, oldsizetills))
-
-    if ambiguous_reshape:
-        print("Ambiguous reshape found when trying to compute reshaped indices."
-              " Defaulting to linearizing all axes.")
-        return compute_new_indices(old_shape, new_shape, order, fallback=True)
-
-    ret = [
-        compute_new_indices(ioldaxs, inewaxs, order)
-        for ioldaxs, inewaxs in oldax_to_newax.items()
-    ]
+    axis_mapping.append(_ReshapeIndexGroup(old_ax_indices=old_ax_indices,
+                                           new_ax_indices=new_ax_indices))
 
     # }}}
 
-    # create a flat tuple instead of a (possibly) tuple of tuples
-    return sum(ret, ())
+    # {{{ compute index expressions for sub shapes
+
+    index_vars_begin = 0
+    index_expressions = []
+    for reshaped_indices in axis_mapping:
+        sub_old_shape = reshaped_indices.old_ax_indices
+        sub_new_shape = reshaped_indices.new_ax_indices
+
+        index_vars_end = index_vars_begin + len(sub_new_shape)
+        sub_index_vars = index_vars[index_vars_begin:index_vars_end]
+        index_vars_begin = index_vars_end
+
+        index_expressions.append(_generate_index_expressions(
+            sub_old_shape, sub_new_shape, order, sub_index_vars))
+
+    # }}}
+
+    return sum(index_expressions, ())
 
 
 class ToIndexLambdaMixin:
