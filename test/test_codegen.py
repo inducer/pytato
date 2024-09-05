@@ -533,7 +533,8 @@ def test_concatenate(ctx_factory):
                                       (9, -1),
                                       (36, -1),
                                       36])
-def test_reshape(ctx_factory, oldshape, newshape):
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_reshape(ctx_factory, oldshape, newshape, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -543,10 +544,11 @@ def test_reshape(ctx_factory, oldshape, newshape):
 
     x = pt.make_data_wrapper(x_in)
 
-    assert_allclose_to_numpy(pt.reshape(x, newshape=newshape), queue)
-    assert_allclose_to_numpy(x.reshape(newshape), queue)
+    assert_allclose_to_numpy(pt.reshape(x, newshape=newshape, order=order),
+                             queue)
+    assert_allclose_to_numpy(x.reshape(newshape, order=order), queue)
     if isinstance(newshape, tuple):
-        assert_allclose_to_numpy(x.reshape(*newshape), queue)
+        assert_allclose_to_numpy(x.reshape(*newshape, order=order), queue)
 
 
 def test_dict_of_named_array_codegen_avoids_recomputation():
