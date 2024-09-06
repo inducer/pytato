@@ -33,8 +33,8 @@ THE SOFTWARE.
 
 from dataclasses import dataclass
 from typing import (
-    Iterable,
     Mapping,
+    Sequence,
 )
 
 from immutabledict import immutabledict
@@ -73,6 +73,9 @@ from pytato.scalar_expr import IdentityMapper, IntegralT
 from pytato.transform import CopyMapper
 
 
+KnownShapeType = tuple[IntegralT, ...]
+
+
 @dataclass(frozen=True)
 class ParameterStudyAxisTag(UniqueTag):
     """
@@ -83,11 +86,6 @@ class ParameterStudyAxisTag(UniqueTag):
     :class:`ParameterStudyAxisTag`.
     """
     size: int
-
-
-StudiesT = tuple[ParameterStudyAxisTag, ...]
-ArraysT = tuple[Array, ...]
-KnownShapeType = tuple[IntegralT, ...]
 
 
 class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
@@ -124,19 +122,11 @@ class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
 
             index = self.rec(expr.index)
 
-            new_vars: tuple[prim.Variable, ...] = ()
-            my_studies: tuple[int, ...] = self.varname_to_studies_num[name]
+            additional_inds = (prim.Variable(f"_{self.num_orig_elem_inds + num}") for
+                               num in self.varname_to_studies_num[name])
 
-            for num in my_studies:
-                new_vars = (*new_vars,
-                            prim.Variable(f"_{self.num_orig_elem_inds + num}"),)
-
-            if isinstance(index, tuple):
-                index = index + new_vars
-            else:
-                index = tuple(index) + new_vars
-
-            return type(expr)(aggregate=expr.aggregate, index=index)
+            return type(expr)(aggregate=expr.aggregate,
+                              index=(*index, *additional_inds,))
 
         return super().map_subscript(expr)
 
@@ -155,7 +145,7 @@ class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
             assert my_studies
             assert len(my_studies) > 0
 
-            new_vars = (prim.Variable(f"_{self.num_orig_elem_inds + num}") # noqa
+            new_vars = (prim.Variable(f"_{self.num_orig_elem_inds + num}") # noqa E501
                             for num in my_studies)
 
             return prim.Subscript(aggregate=expr, index=tuple(new_vars))
@@ -164,150 +154,84 @@ class IndexLambdaScalarExpressionVectorizer(IdentityMapper):
         return super().map_variable(expr)
 
 
+def _param_study_to_index(tag: ParameterStudyAxisTag) -> str:
+    """
+    Get the canonical index string associated with the input tag.
+    """
+    return str(tag.__class__)  # Update to use the qualname or name.
+
+
 class ParameterStudyVectorizer(CopyMapper):
     r"""
-    This mapper will expand a single instance DAG into a DAG for parameter studies.
-    The DAG for parameter studies will be equivalent to running the single instance
-    DAG for each input in the parameter study space. You must specify which
-    input :class:`~pytato.array.Placeholder` are part of what parameter study.
+    This mapper will expand a DAG into a DAG for parameter studies. An array is part
+    of a parameter study if one of its axes is tagged with a with a tag from
+    :class:`ParameterStudyAxisTag` and all of the axes after that axis are also tagged
+    with a distinct :class:`ParameterStudyAxisTag` tag. An array may be a member of
+    multiple parameter studies. The new DAG for parameter studies which will be
+    equivalent to running your original DAG once for each input in the parameter study
+    space. The parameter study space is defined as the Cartesian product of all
+    the input parameter studies. When calling this mapper you must specify which input
+    :class:`~pytato.array.Placeholder` arrays are part of what parameter study.
 
     To maintain the equivalence with repeated calling the single instance DAG, the
     DAG for parameter studies will not create any expressions which depend on the
     specific instance of a parameter study.
 
-    We do allow an input parameter which is specified by a
-    :class:`~pytato.array.Placeholder` to be a part of multiple distinct parameter
-    studies. Each distinct parameter study will be a new axis at the end of the array.
+    It is not required that each input be part of a parameter study as we will
+    broadcast the input to the appropriate size.
 
-    We do NOT require that each input be part of each parameter study. We will broadcast
-    the input as necessary.
+    The mapper does not support distributed programming or function definitions.
 
-    Ex:
+    .. note::
 
-    .. math::
-
-        \mathbf{Z} = \mathbf{X} + \mathbf{Y},
-
-    where :math:`\mathbf{X}` is a part of parameter study :math:`\mathbf{S1}` and
-    :math:`\mathbf{Y}` is a part of parameter study :math:`\mathbf{S2}` both with single
-    instance shapes of :math:`\mathbf{orig\_shape}`. Then, :math:`\mathbf{Z}` will be a
-    part of both parameter studies :math:`\mathbf{S1}` and :math:`\mathbf{S2}`.
-
-    .. math::
-
-        \mathbf{Z}_{i,j} = \mathbf{X}_{i} + \mathbf{Y}_{j},
-
-    and so the shape of :math:`\mathbf{Z}` will be
-    (:math:`\mathbf{orig\_shape}`, :math:`\mathbf{S1}.size`, :math:`\mathbf{S2}.size`).
-
-    A parameter study is specified in an array by tagging the corresponding axis
-    with a tag that is a :class:`ParameterStudyAxisTag` or a class which
-    inherits from it.
-
-    Currently, this only supports DAGs which are made for a single processing unit.
-    That is we do not support distributed programming right now. We also do not support
-    function definitions within the single instance DAG.
-
-    NOTE any new axes used for parameter studies will be added to the end of the arrays.
-    If only a portion of the program is expanded, broadcasting may break as the single
-    instance axes will be left aligned instead of right aligned. This decision was
-    made under the assumption that the generated code would execute faster
-    if the parameter study axes were the ones with the shortest strides.
+    Any new axes used for parameter studies will be added to the end of the arrays.
     """
 
-    def __init__(self, placeholder_name_to_parameter_studies: Mapping[str, StudiesT]):
+    def __init__(self,
+                 place_name_to_parameter_studies: Mapping[str,
+                                                    tuple[ParameterStudyAxisTag, ...]],
+                 study_to_size: Mapping[ParameterStudyAxisTag, int]):
         super().__init__()
-        self.placeholder_name_to_parameter_studies = placeholder_name_to_parameter_studies  # noqa
+        self.place_name_to_parameter_studies = place_name_to_parameter_studies  # E501
+        self.study_to_size = study_to_size
 
-    def _shapes_and_axes_from_predecessors(self, curr_expr: Array,
-                                         mapped_preds: ArraysT) -> \
-                                                 tuple[KnownShapeType,
-                                                       AxesT,
-                                                       dict[int, tuple[int, ...]]]:
-
-        assert not any(axis.tags_of_type(ParameterStudyAxisTag) for
-                       axis in curr_expr.axes)
-
-        # We are post pending the axes we are using for parameter studies.
-
-        study_to_arrays: dict[frozenset[ParameterStudyAxisTag], ArraysT] = {}
-
+    def _get_canonical_ordered_studies(
+            self, mapped_preds: tuple[Array, ...]) -> Sequence[ParameterStudyAxisTag]:
         active_studies: set[ParameterStudyAxisTag] = set()
-
         for arr in mapped_preds:
             for axis in arr.axes:
                 tags = axis.tags_of_type(ParameterStudyAxisTag)
                 if tags:
                     assert len(tags) == 1  # only one study per axis.
                     active_studies = active_studies.union(tags)
-                    if tags in study_to_arrays.keys():
-                        study_to_arrays[tags] = (*study_to_arrays[tags], arr)
-                    else:
-                        study_to_arrays[tags] = (arr,)
 
-        ps, na, arr_num_to_study_nums = self._studies_to_shape_and_axes_and_arrays_in_canonical_order(active_studies, # noqa
-                                                study_to_arrays, mapped_preds)
+        return sorted(active_studies, key=_param_study_to_index)
 
-        # Add in the arrays that are not a part of a parameter study.
-        # This is done to avoid any KeyErrors later.
+    def _canonical_ordered_studies_to_shapes_and_axes(
+            self, studies: Sequence[ParameterStudyAxisTag]) -> tuple[list[int],
+                                                                     list[Axis]]:
+        """
+        Get the shapes and axes in the canonical ordering.
+        """
 
-        for arr_num in range(len(mapped_preds)):
-            if arr_num not in arr_num_to_study_nums.keys():
-                arr_num_to_study_nums[arr_num] = ()
-            else:
-                assert len(arr_num_to_study_nums[arr_num]) > 0
-
-        assert len(arr_num_to_study_nums) == len(mapped_preds)
-
-        for axis in na:
-            assert axis.tags_of_type(ParameterStudyAxisTag)
-
-        return ps, na, arr_num_to_study_nums
-
-    def _studies_to_shape_and_axes_and_arrays_in_canonical_order(self,
-                    studies: Iterable[ParameterStudyAxisTag],
-                    study_to_arrays: dict[frozenset[ParameterStudyAxisTag], ArraysT],
-                    mapped_preds: ArraysT) -> tuple[KnownShapeType, AxesT,
-                                                    dict[int, tuple[int, ...]]]:
-
-        # This is where we specify the canonical ordering of the studies.
-        array_num_to_study_nums: dict[int, tuple[int, ...]] = {}
-        new_shape: KnownShapeType = ()
-        studies_axes: AxesT = ()
-
-        num_studies: int = 0
-        for ind, study in enumerate(sorted(studies,
-                                           key=lambda x: str(x.__class__))):
-            new_shape = (*new_shape, study.size)
-            studies_axes = (*studies_axes, Axis(tags=frozenset((study,))))
-            for arr_num, arr in enumerate(mapped_preds):
-                if arr in study_to_arrays[frozenset((study,))]:
-                    if arr_num in array_num_to_study_nums.keys():
-                        array_num_to_study_nums[arr_num] = (*array_num_to_study_nums[arr_num], ind) # noqa
-                    else:
-                        array_num_to_study_nums[arr_num] = (ind,)
-            num_studies += 1
-
-        assert len(new_shape) == num_studies
-        assert len(new_shape) == len(studies_axes)
-
-        return new_shape, studies_axes, array_num_to_study_nums
+        return [self.study_to_size[study] for study in studies], \
+                [Axis(tags=frozenset((study,))) for study in studies]
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        # This is where we could introduce extra axes.
-        if expr.name in self.placeholder_name_to_parameter_studies.keys():
-            studies = self.placeholder_name_to_parameter_studies[expr.name]
+
+        if expr.name in self.place_name_to_parameter_studies.keys():
+            canonical_studies = sorted(self.place_name_to_parameter_studies[expr.name],
+                                       key=_param_study_to_index) # noqa E501
 
             # We know that there are no predecessors and we know the studies to add.
             # We need to get them in the right order.
-            new_shape, new_axes, _ = self._studies_to_shape_and_axes_and_arrays_in_canonical_order( # noqa
-                                                                    studies, {}, ())
+            end_shape, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
 
             return Placeholder(name=expr.name,
                                shape=self.rec_idx_or_size_tuple((*expr.shape,
-                                                                 *new_shape,)),
+                                                                 *end_shape,)),
                                dtype=expr.dtype,
-                               axes=(*expr.axes, *new_axes,),
+                               axes=(*expr.axes, *end_axes,),
                                tags=expr.tags,
                                non_equality_tags=expr.non_equality_tags)
 
@@ -315,62 +239,68 @@ class ParameterStudyVectorizer(CopyMapper):
 
     def map_roll(self, expr: Roll) -> Array:
         new_predecessor = self.rec(expr.array)
-        _, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
-                                                                (new_predecessor,))
+
+        canonical_studies = self._get_canonical_ordered_studies((new_predecessor,))
+        _, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
 
         return Roll(array=new_predecessor,
                     shift=expr.shift,
                     axis=expr.axis,
-                    axes=(*expr.axes, *new_axes,),
+                    axes=(*expr.axes, *end_axes,),
                     tags=expr.tags,
                     non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
-                                                                             (new_predecessor,))
+
+        canonical_studies = self._get_canonical_ordered_studies((new_predecessor,))
+        end_shapes, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
+
         # Include the axes we are adding to the system.
         n_single_inst_axes: int = len(expr.axis_permutation)
-        axis_permute_gen = (i + n_single_inst_axes for i in range(len(postpend_shape)))
+        axis_permute_gen = (i + n_single_inst_axes for i in range(len(end_shapes)))
 
         return AxisPermutation(array=new_predecessor,
                                axis_permutation=(*expr.axis_permutation,
                                                  *axis_permute_gen,),
-                               axes=(*expr.axes, *new_axes,),
+                               axes=(*expr.axes, *end_axes,),
                                tags=expr.tags,
                                non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
-                                                                             (new_predecessor,))
+
+        canonical_studies = self._get_canonical_ordered_studies((new_predecessor,))
+        end_shape, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
+
         # Update the indices.
-        new_indices = expr.indices
-        for shape in postpend_shape:
-            new_indices = (*new_indices, NormalizedSlice(0, shape, 1))
+        end_indices = (NormalizedSlice(0, shape, 1) for shape in end_shape)
 
         return type(expr)(new_predecessor,
-                          indices=self.rec_idx_or_size_tuple(new_indices),
-                          axes=(*expr.axes, *new_axes,),
+                          indices=self.rec_idx_or_size_tuple((*expr.indices,
+                                                              *end_indices)),
+                          axes=(*expr.axes, *end_axes,),
                           tags=expr.tags,
                           non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
         new_predecessor = self.rec(expr.array)
-        postpend_shape, new_axes, _ = self._shapes_and_axes_from_predecessors(expr,
-                                                                             (new_predecessor,))
+
+        canonical_studies = self._get_canonical_ordered_studies((new_predecessor,))
+        end_shape, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
+
         return Reshape(new_predecessor,
-                       newshape=self.rec_idx_or_size_tuple(expr.newshape +
-                                                           postpend_shape),
+                       newshape=self.rec_idx_or_size_tuple((*expr.shape,
+                                                            *end_shape,)),
                        order=expr.order,
-                       axes=(*expr.axes, *new_axes,),
+                       axes=(*expr.axes, *end_axes,),
                        tags=expr.tags,
                        non_equality_tags=expr.non_equality_tags)
 
         # {{{ Operations with multiple predecessors.
 
     def _broadcast_predecessors_to_same_shape(self, expr: Stack | Concatenate) \
-                                                -> tuple[ArraysT, AxesT]:
+                                                -> tuple[tuple[Array, ...], AxesT]:
 
         """
         This method will convert predecessors who were originally the same
@@ -380,24 +310,25 @@ class ParameterStudyVectorizer(CopyMapper):
 
         new_predecessors = tuple(self.rec(arr) for arr in expr.arrays)
 
-        studies_shape, new_axes, arr_num_to_study_nums = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
+        canonical_studies = self._get_canonical_ordered_studies(new_predecessors)
+        studies_shape, new_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
 
-        if not arr_num_to_study_nums:
+        if not studies_shape:
             # We do not need to do anything as the expression we have is unmodified.
-            return new_predecessors, new_axes
+            return new_predecessors, tuple(new_axes)
 
-        # This is going to be expensive.
-        correct_shape_preds: ArraysT = ()
-
+        correct_shape_preds: tuple[Array, ...] = ()
         for iarr, array in enumerate(new_predecessors):
             # Broadcast out to the right shape.
             n_single_inst_axes = len(expr.arrays[iarr].shape)
-            index = tuple(prim.Variable(f"_{ind}") for
-                                        ind in range(n_single_inst_axes))
-            # Add in the axes from the studies we have in the predecessor.
 
-            for study_num in arr_num_to_study_nums[iarr]:
-                index = (*index, prim.Variable(f"_{n_single_inst_axes + study_num}"))
+            # We assume there is at most one axis
+            # tag of type ParameterStudyAxisTag per axis.
+
+            index = tuple(prim.Variable(f"_{ind}") if not \
+                        array.axes[ind].tags_of_type(ParameterStudyAxisTag) \
+                    else prim.Variable(f"_{n_single_inst_axes + canonical_studies.index(tuple(array.axes[ind].tags_of_type(ParameterStudyAxisTag))[0])}") # noqa E501
+                    for ind in range(len(array.shape)))
 
             assert len(index) == len(array.axes)
 
@@ -416,7 +347,7 @@ class ParameterStudyVectorizer(CopyMapper):
         for arr in correct_shape_preds:
             assert arr.shape == correct_shape_preds[0].shape
 
-        return correct_shape_preds, new_axes
+        return correct_shape_preds, tuple(new_axes)
 
     def map_stack(self, expr: Stack) -> Array:
         new_arrays, new_axes = self._broadcast_predecessors_to_same_shape(expr)
@@ -452,46 +383,66 @@ class ParameterStudyVectorizer(CopyMapper):
         # However, the index will be unique.
 
         array_num_to_bnd_name: dict[int, str] = {ind: name for ind, (name, _)
-                                                 in enumerate(sorted(new_binds.items()))} # noqa
+                                                 in enumerate(sorted(new_binds.items()))} # noqa E501
 
         # Determine the new parameter studies that are being conducted.
-        postpend_shape, new_axes, arr_num_to_study_nums = self._shapes_and_axes_from_predecessors(expr, # noqa
-                                                                             new_arrays)
+        canonical_studies = self._get_canonical_ordered_studies(new_arrays)
+        postpend_shapes, post_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
 
-        varname_to_studies_nums = {array_num_to_bnd_name[iarr]: studies for iarr,
-                              studies in arr_num_to_study_nums.items()}
+        varname_to_studies_nums: dict[str, tuple[int, ...]] = {bnd_name: () for 
+                                                              _, bnd_name
+                                                 in array_num_to_bnd_name.items()}
 
-        for vn_key in varname_to_studies_nums.keys():
-            assert vn_key in new_binds.keys()
+        for iarr, array in enumerate(new_arrays):
+            for axis in array.axes:
+                tags = axis.tags_of_type(ParameterStudyAxisTag)
+                if tags:
+                    assert len(tags) == 1
+                    study: ParameterStudyAxisTag = next(iter(tags))
+                    name: str = array_num_to_bnd_name[iarr]
+                    varname_to_studies_nums[name] = (*varname_to_studies_nums[name],
+                                                     canonical_studies.index(study),)
 
-        for vn_key in new_binds.keys():
-            assert vn_key in varname_to_studies_nums.keys()
+        #varname_to_studies_nums = {array_num_to_bnd_name[iarr]: studies for iarr,
+        #                      studies in arr_num_to_study_nums.items()}
+
+        assert all(vn_key in new_binds.keys() for
+                   vn_key in varname_to_studies_nums.keys())
+
+        assert all(vn_key in varname_to_studies_nums.keys() for
+                   vn_key in new_binds.keys())
 
         # Now we need to update the expressions.
-        scalar_expr_mapper = IndexLambdaScalarExpressionVectorizer(varname_to_studies_nums, len(expr.shape)) # noqa
+        scalar_expr_mapper = IndexLambdaScalarExpressionVectorizer(varname_to_studies_nums, len(expr.shape)) # noqa E501
 
         return IndexLambda(expr=scalar_expr_mapper(expr.expr),
                            bindings=immutabledict(new_binds),
-                           shape=(*expr.shape, *postpend_shape,),
+                           shape=(*expr.shape, *postpend_shapes,),
                            var_to_reduction_descr=expr.var_to_reduction_descr,
                            dtype=expr.dtype,
-                           axes=(*expr.axes, *new_axes,),
+                           axes=(*expr.axes, *post_axes,),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_einsum(self, expr: Einsum) -> Array:
 
         new_predecessors = tuple(self.rec(arg) for arg in expr.args)
-        _, new_axes, arr_num_to_study_nums = self._shapes_and_axes_from_predecessors(expr, new_predecessors) # noqa
+        canonical_studies = self._get_canonical_ordered_studies(new_predecessors)
+        studies_shape, end_axes = self._canonical_ordered_studies_to_shapes_and_axes(canonical_studies) # noqa E501
 
         access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...] = ()
         for ival, array in enumerate(new_predecessors):
             one_descr = expr.access_descriptors[ival]
-            if arr_num_to_study_nums:
-                for ind in arr_num_to_study_nums[ival]:
+            for axis in array.axes:
+                tags = axis.tags_of_type(ParameterStudyAxisTag)
+                if tags:
+                    # Need to append a descriptor
+                    assert len(tags) == 1
+                    study: ParameterStudyAxisTag = next(iter(tags))
                     one_descr = (*one_descr,
-                                 # Adding in new element axes to the end of the arrays.
-                                 EinsumElementwiseAxis(dim=len(expr.shape) + ind))
+                                 EinsumElementwiseAxis(dim=len(expr.shape)
+                                         + canonical_studies.index(study)))
+
             access_descriptors = (*access_descriptors, one_descr)
 
             # One descriptor per axis.
@@ -499,7 +450,7 @@ class ParameterStudyVectorizer(CopyMapper):
 
         return Einsum(access_descriptors,
                      new_predecessors,
-                     axes=(*expr.axes, *new_axes,),
+                     axes=(*expr.axes, *end_axes,),
                      redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                      tags=expr.tags,
                      non_equality_tags=expr.non_equality_tags)

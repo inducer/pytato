@@ -46,23 +46,23 @@ class Study2(ParameterStudyAxisTag):
     pass
 
 
-global_array_name1 = "foo"
-global_array_name2 = "bar"
-global_shape1: int = 1234
-global_shape2: int = 5678
-global_study1 = Study1(global_shape1)
-global_study2 = Study2(global_shape2)
-global_name_to_studies = {global_array_name1: frozenset((global_study1,)),
-                          global_array_name2: frozenset((global_study2,)), }
-
+GLOBAL_ARRAY_NAME1 = "foo"
+GLOBAL_ARRAY_NAME2 = "bar"
+GLOBAL_SHAPE1: int = 1234
+GLOBAL_SHAPE2: int = 5678
+GLOBAL_STUDY1 = Study1(GLOBAL_SHAPE1)
+GLOBAL_STUDY2 = Study2(GLOBAL_SHAPE2)
+GLOBAL_NAME_TO_STUDIES = {GLOBAL_ARRAY_NAME1: frozenset((GLOBAL_STUDY1,)),
+                          GLOBAL_ARRAY_NAME2: frozenset((GLOBAL_STUDY2,)), }
+GLOBAL_STUDY_TO_SHAPES = {GLOBAL_STUDY1: GLOBAL_SHAPE1, GLOBAL_STUDY2: GLOBAL_SHAPE2}
 
 # {{{ Expansion Mapper tests.
 def test_vectorize_mapper_placeholder():
-    expr = pt.make_placeholder(global_array_name1, (15, 5), dtype=int)
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int)
     assert expr.shape == (15, 5)
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (15, 5, global_shape1)
+    assert new_expr.shape == (15, 5, GLOBAL_SHAPE1)
 
     for i, axis in enumerate(new_expr.axes):
         tags = axis.tags_of_type(ParameterStudyAxisTag)
@@ -73,25 +73,25 @@ def test_vectorize_mapper_placeholder():
 
 
 def test_vectorize_mapper_basic_index():
-    expr = pt.make_placeholder(global_array_name1, (15, 5), dtype=int)[14, 0]
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int)[14, 0]
 
     assert expr.shape == ()
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (global_shape1,)
+    assert new_expr.shape == (GLOBAL_SHAPE1,)
     assert new_expr.axes[0].tags_of_type(ParameterStudyAxisTag)
 
 
 def test_vectorize_mapper_advanced_index_contiguous_axes():
-    expr = pt.make_placeholder(global_array_name1, (15, 5), dtype=int)
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int)
     expr = expr[pt.arange(10, dtype=int)]
 
     assert expr.shape == (10, 5)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (10, 5, global_shape1)
+    assert new_expr.shape == (10, 5, GLOBAL_SHAPE1)
     assert new_expr.axes[2].tags_of_type(ParameterStudyAxisTag)
 
     assert isinstance(new_expr, pt.AdvancedIndexInContiguousAxes)
@@ -102,15 +102,15 @@ def test_vectorize_mapper_advanced_index_non_contiguous_axes():
     ind0 = pt.arange(10, dtype=int).reshape(10, 1)
     ind1 = pt.arange(2, dtype=int).reshape(1, 2)
 
-    expr = pt.make_placeholder(global_array_name1, (15, 1000, 5), dtype=int)
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 1000, 5), dtype=int)
     expr = expr[ind0, :, ind1]
 
     assert isinstance(expr, pt.AdvancedIndexInNoncontiguousAxes)
     assert expr.shape == (10, 2, 1000)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (10, 2, 1000, global_shape1)
+    assert new_expr.shape == (10, 2, 1000, GLOBAL_SHAPE1)
     assert new_expr.axes[3].tags_of_type(ParameterStudyAxisTag)
 
     assert isinstance(new_expr, pt.AdvancedIndexInNoncontiguousAxes)
@@ -118,14 +118,14 @@ def test_vectorize_mapper_advanced_index_non_contiguous_axes():
 
 
 def test_vectorize_mapper_index_lambda():
-    expr = pt.make_placeholder(global_array_name1, (15, 5), dtype=int)[14, 0] \
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int)[14, 0] \
             + pt.ones(100)
 
     assert expr.shape == (100,)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (100, global_shape1)
+    assert new_expr.shape == (100, GLOBAL_SHAPE1)
     assert isinstance(new_expr, pt.IndexLambda)
 
     scalar_expr = new_expr.expr
@@ -137,7 +137,7 @@ def test_vectorize_mapper_index_lambda():
 
 
 def test_vectorize_mapper_roll():
-    expr = pt.make_placeholder(global_array_name1, (15, 5), dtype=int)[14, 0] \
+    expr = pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int)[14, 0] \
             + pt.ones(100)
 
     expr = pt.roll(expr, axis=0, shift=22)
@@ -145,20 +145,20 @@ def test_vectorize_mapper_roll():
     assert expr.shape == (100,)
     assert not any(axis.tags_of_type(ParameterStudyAxisTag) for axis in expr.axes)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (100, global_shape1,)
+    assert new_expr.shape == (100, GLOBAL_SHAPE1,)
     assert isinstance(new_expr, pt.Roll)
     assert new_expr.axes[1].tags_of_type(ParameterStudyAxisTag)
 
 
 def test_vectorize_mapper_axis_permutation():
-    expr = pt.transpose(pt.make_placeholder(global_array_name1, (15, 5), dtype=int))
+    expr = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME1, (15, 5), dtype=int))
     assert expr.shape == (5, 15)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(expr)
-    assert new_expr.shape == (5, 15, global_shape1)
+    assert new_expr.shape == (5, 15, GLOBAL_SHAPE1)
     assert isinstance(new_expr, pt.AxisPermutation)
 
     for i, axis in enumerate(new_expr.axes):
@@ -170,17 +170,17 @@ def test_vectorize_mapper_axis_permutation():
 
 
 def test_vectorize_mapper_reshape():
-    expr = pt.transpose(pt.make_placeholder(global_array_name1,
+    expr = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME1,
                                             (15, 5), dtype=int))
-    expr2 = pt.transpose(pt.make_placeholder(global_array_name2,
+    expr2 = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME2,
                                              (15, 5), dtype=int))
 
     out_expr = pt.stack([expr, expr2], axis=0).reshape(10, 15)
     assert out_expr.shape == (10, 15)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(out_expr)
-    assert new_expr.shape == (10, 15, global_shape1, global_shape2)
+    assert new_expr.shape == (10, 15, GLOBAL_SHAPE1, GLOBAL_SHAPE2)
     assert isinstance(new_expr, pt.Reshape)
 
     for i, axis in enumerate(new_expr.axes):
@@ -195,17 +195,17 @@ def test_vectorize_mapper_reshape():
 
 
 def test_vectorize_mapper_stack():
-    expr = pt.transpose(pt.make_placeholder(global_array_name1,
+    expr = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME1,
                                             (15, 5), dtype=int))
-    expr2 = pt.transpose(pt.make_placeholder(global_array_name2,
+    expr2 = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME2,
                                              (15, 5), dtype=int))
 
     out_expr = pt.stack([expr, expr2], axis=0)
     assert out_expr.shape == (2, 5, 15)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(out_expr)
-    assert new_expr.shape == (2, 5, 15, global_shape1, global_shape2)
+    assert new_expr.shape == (2, 5, 15, GLOBAL_SHAPE1, GLOBAL_SHAPE2)
     assert isinstance(new_expr, pt.Stack)
 
     for i, axis in enumerate(new_expr.axes):
@@ -220,17 +220,17 @@ def test_vectorize_mapper_stack():
 
 
 def test_vectorize_mapper_concatenate():
-    expr = pt.transpose(pt.make_placeholder(global_array_name1,
+    expr = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME1,
                                             (15, 5), dtype=int))
-    expr2 = pt.transpose(pt.make_placeholder(global_array_name2,
+    expr2 = pt.transpose(pt.make_placeholder(GLOBAL_ARRAY_NAME2,
                                              (15, 5), dtype=int))
 
     out_expr = pt.concatenate([expr, expr2], axis=0)
     assert out_expr.shape == (10, 15)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     new_expr = my_mapper(out_expr)
-    assert new_expr.shape == (10, 15, global_shape1, global_shape2)
+    assert new_expr.shape == (10, 15, GLOBAL_SHAPE1, GLOBAL_SHAPE2)
     assert isinstance(new_expr, pt.Concatenate)
 
     for i, axis in enumerate(new_expr.axes):
@@ -246,19 +246,19 @@ def test_vectorize_mapper_concatenate():
 
 def test_vectorize_mapper_einsum_matmul():
     # Matmul gets expanded correctly.
-    a = pt.make_placeholder(global_array_name1,
+    a = pt.make_placeholder(GLOBAL_ARRAY_NAME1,
                             (47, 42), dtype=int)
-    b = pt.make_placeholder(global_array_name2,
+    b = pt.make_placeholder(GLOBAL_ARRAY_NAME2,
                             (42, 5), dtype=int)
 
     c = pt.matmul(a, b)
     assert isinstance(c, pt.Einsum)
     assert c.shape == (47, 5)
 
-    my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+    my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
     updated_c = my_mapper(c)
 
-    assert updated_c.shape == (47, 5, global_shape1, global_shape2)
+    assert updated_c.shape == (47, 5, GLOBAL_SHAPE1, GLOBAL_SHAPE2)
 
 
 def test_vectorize_mapper_does_nothing_if_tags_not_there():
@@ -288,7 +288,7 @@ def test_vectorize_mapper_does_nothing_if_tags_not_there():
 
         dag = pt.transform.map_and_copy(dag, make_dws_placeholder)
 
-        my_mapper = ParameterStudyVectorizer(global_name_to_studies)
+        my_mapper = ParameterStudyVectorizer(GLOBAL_NAME_TO_STUDIES, GLOBAL_STUDY_TO_SHAPES)
         new_dag = my_mapper(dag)
 
         assert new_dag == dag
