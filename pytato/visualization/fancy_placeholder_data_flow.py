@@ -150,9 +150,9 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
         return ret_node
 
     def map_einsum(self, expr: Einsum) -> _FancyDotWriterNode:
-        from pytato.utils import get_einsum_subscript_str
+        from pytato.utils import get_einsum_specification
 
-        ensm_spec = get_einsum_subscript_str(expr)
+        ensm_spec = get_einsum_specification(expr)
         node_id = self.vng("_pt_ensm")
         spec = ensm_spec.replace("->", "→")
         node_decl = (f'{node_id} [label="{spec}",'

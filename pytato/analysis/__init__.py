@@ -62,6 +62,10 @@ __doc__ = """
 
 .. autofunction:: get_num_nodes
 
+.. autofunction:: get_node_type_counts
+
+.. autofunction:: get_node_multiplicities
+
 .. autofunction:: get_num_call_sites
 
 .. autoclass:: DirectPredecessorsGetter
@@ -322,26 +326,26 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[Array]:
+    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[ArrayOrNames]:
         return frozenset({dim for dim in shape if isinstance(dim, Array)})
 
-    def map_index_lambda(self, expr: IndexLambda) -> frozenset[Array]:
+    def map_index_lambda(self, expr: IndexLambda) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> frozenset[Array]:
+    def map_stack(self, expr: Stack) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> frozenset[Array]:
+    def map_concatenate(self, expr: Concatenate) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> frozenset[Array]:
+    def map_einsum(self, expr: Einsum) -> frozenset[ArrayOrNames]:
         return (frozenset(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[Array]:
+    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[ArrayOrNames]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
@@ -350,7 +354,7 @@ class DirectPredecessorsGetter(Mapper):
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> frozenset[Array]:
+    def _map_index_base(self, expr: IndexBase) -> frozenset[ArrayOrNames]:
         return (frozenset([expr.array])
                 | frozenset(idx for idx in expr.indices
                             if isinstance(idx, Array))
@@ -361,32 +365,34 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> frozenset[Array]:
+                                  ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[Array]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[Array]:
+                                        ) -> frozenset[ArrayOrNames]:
         return frozenset([expr.passthrough_data])
 
-    def map_named_call_result(self, expr: NamedCallResult) -> frozenset[Array]:
-        raise NotImplementedError(
-            "DirectPredecessorsGetter does not yet support expressions containing "
-            "functions.")
+    def map_call(self, expr: Call) -> frozenset[ArrayOrNames]:
+        return frozenset(expr.bindings.values())
+
+    def map_named_call_result(
+            self, expr: NamedCallResult) -> frozenset[ArrayOrNames]:
+        return frozenset([expr._container])
 
 
 # }}}
@@ -397,34 +403,115 @@ class DirectPredecessorsGetter(Mapper):
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NodeCountMapper(CachedWalkMapper):
     """
-    Counts the number of nodes in a DAG.
+    Counts the number of nodes of a given type in a DAG.
 
-    .. attribute:: count
+    .. autoattribute:: expr_type_counts
+    .. autoattribute:: count_duplicates
 
-       The number of nodes.
+       Dictionary mapping node types to number of nodes of that type.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, count_duplicates: bool = False) -> None:
+        from collections import defaultdict
         super().__init__()
-        self.count = 0
+        self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
+        self.count_duplicates = count_duplicates
 
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
+    def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
+        # Returns unique nodes only if count_duplicates is False
+        return id(expr) if self.count_duplicates else expr
 
     def post_visit(self, expr: Any) -> None:
-        self.count += 1
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_type_counts[type(expr)] += 1
 
 
-def get_num_nodes(outputs: Array | DictOfNamedArrays) -> int:
-    """Returns the number of nodes in DAG *outputs*."""
+def get_node_type_counts(
+        outputs: Array | DictOfNamedArrays,
+        count_duplicates: bool = False
+        ) -> dict[type[Any], int]:
+    """
+    Returns a dictionary mapping node types to node count for that type
+    in DAG *outputs*.
+
+    Instances of `DictOfNamedArrays` are excluded from counting.
+    """
 
     from pytato.codegen import normalize_outputs
     outputs = normalize_outputs(outputs)
 
-    ncm = NodeCountMapper()
+    ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
 
-    return ncm.count
+    return ncm.expr_type_counts
+
+
+def get_num_nodes(
+        outputs: Array | DictOfNamedArrays,
+        count_duplicates: bool | None = None
+        ) -> int:
+    """
+    Returns the number of nodes in DAG *outputs*.
+    Instances of `DictOfNamedArrays` are excluded from counting.
+    """
+    if count_duplicates is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_duplicates' will change "
+            "from True to False in 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_duplicates = True
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    ncm = NodeCountMapper(count_duplicates)
+    ncm(outputs)
+
+    return sum(ncm.expr_type_counts.values())
+
+# }}}
+
+
+# {{{ NodeMultiplicityMapper
+
+
+class NodeMultiplicityMapper(CachedWalkMapper):
+    """
+    Computes the multiplicity of each unique node in a DAG.
+
+    The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
+    that equal `x`.
+
+    .. autoattribute:: expr_multiplicity_counts
+    """
+    def __init__(self) -> None:
+        from collections import defaultdict
+        super().__init__()
+        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
+
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
+        # Returns each node, including nodes that are duplicates
+        return id(expr)
+
+    def post_visit(self, expr: Any) -> None:
+        if not isinstance(expr, DictOfNamedArrays):
+            self.expr_multiplicity_counts[expr] += 1
+
+
+def get_node_multiplicities(
+        outputs: Array | DictOfNamedArrays) -> dict[Array, int]:
+    """
+    Returns the multiplicity per `expr`.
+    """
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    nmm = NodeMultiplicityMapper()
+    nmm(outputs)
+
+    return nmm.expr_multiplicity_counts
 
 # }}}
 
@@ -449,17 +536,16 @@ class CallSiteCountMapper(CachedWalkMapper):
         return id(expr)
 
     @memoize_method
-    def map_function_definition(self, /, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
 
         new_mapper = self.clone_for_callee(expr)
         for subexpr in expr.returns.values():
-            new_mapper(subexpr, *args, **kwargs)
+            new_mapper(subexpr)
         self.count += new_mapper.count
 
-        self.post_visit(expr, *args, **kwargs)
+        self.post_visit(expr)
 
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):

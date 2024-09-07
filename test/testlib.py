@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+import random
 import types
 from typing import Any, Callable, Sequence
 
@@ -52,7 +53,7 @@ class NumpyBasedEvaluator(Mapper):
         return self.np.transpose(self.rec(expr.array), expr.axis_permutation)
 
     def map_reshape(self, expr: Reshape) -> Any:
-        return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)
+        return self.np.reshape(self.rec(expr.array), expr.newshape, order=expr.order)
 
     def map_concatenate(self, expr: Concatenate) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
@@ -326,6 +327,73 @@ def get_random_pt_dag_with_send_recv_nodes(
         axis_len=axis_len,
         convert_dws_to_placeholders=convert_dws_to_placeholders,
         additional_generators=[(comm_fake_probability, gen_comm)])
+
+
+def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
+    """
+    Builds a DAG with emphasis on number of operations.
+    """
+
+    rng = np.random.default_rng(seed)
+    random.seed(seed)
+
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+    # DAG should have `iterations` number of operations
+    return pt.make_dict_of_named_arrays({"result": current})
+
+
+def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+
+    expr1 = 2 * x
+    expr2 = 2 * x
+
+    y = expr1 + expr2
+
+    # Has duplicates of the 2*x operation
+    return pt.make_dict_of_named_arrays({"result": y})
+
+
+def make_large_dag_with_duplicates(iterations: int,
+                                   seed: int = 0) -> pt.DictOfNamedArrays:
+
+    random.seed(seed)
+    rng = np.random.default_rng(seed)
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+    duplicates = []
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+        # Introduce duplicates intentionally
+        if rng.uniform() > 0.2:
+            dup1 = operation(a, value)
+            dup2 = operation(a, value)
+            duplicates.append(dup1)
+            duplicates.append(dup2)
+            current = operation(current, dup1)
+
+    all_exprs = [current, *duplicates]
+    combined_expr = pt.stack(all_exprs, axis=0)
+
+    result = pt.sum(combined_expr, axis=0)
+    return pt.make_dict_of_named_arrays({"result": result})
 
 # }}}
 

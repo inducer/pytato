@@ -159,7 +159,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         # {{{ eliminate callable name collision
 
         for name, clbl in translation_unit.callables_table.items():
-            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+            if isinstance(clbl, lp.CallableKernel):
                 if name in self.kernels_seen and (
                         translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
@@ -186,7 +186,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                                             translation_unit, name, new_name)
                     name = new_name
 
-                self.kernels_seen[name] = translation_unit[name]
+                self.kernels_seen[name] = clbl.subkernel
 
         # }}}
 

@@ -181,6 +181,7 @@ class LoopyCallResult(NamedArray):
         # reason: (pylint doesn't respect the asserts)
         assert isinstance(self._container, LoopyCall)
         loopy_arg = self._container._entry_kernel.arg_dict[self.name]
+        assert loopy_arg.dtype is not None
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 
@@ -266,15 +267,15 @@ def call_loopy(translation_unit: lp.TranslationUnit,
     # {{{ infer types of the translation_unit
 
     for name, ary in bindings_new.items():
-        if translation_unit[entrypoint].arg_dict[name].dtype not in [lp.auto,
-                                                                     None]:
+        if translation_unit[entrypoint].arg_dict[name].dtype is not None:
             continue
 
         if isinstance(ary, Array):
             translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})
         else:
             assert isinstance(ary, Number)
-            translation_unit = lp.add_dtypes(translation_unit, {name: type(ary)})
+            translation_unit = lp.add_dtypes(translation_unit,
+                                             {name: np.dtype(type(ary))})
 
     translation_unit = lp.infer_unknown_types(translation_unit)
 
@@ -516,9 +517,9 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         # TODO: remove this once
         # https://github.com/inducer/loopy/issues/442 is resolved.
-        if (isinstance(val, Number)
-                and knl.arg_dict[var].dtype not in [lp.auto, None]):
-            val = knl.arg_dict[var].dtype.numpy_dtype.type(val)
+        dtype = knl.arg_dict[var].dtype
+        if (isinstance(val, Number) and dtype is not None):
+            val = dtype.numpy_dtype.type(val)
 
         # }}}
 

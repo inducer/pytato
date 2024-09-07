@@ -298,6 +298,7 @@ class EqualityComparer:
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.parameters == expr2.parameters
+                and expr1.return_type == expr2.return_type
                 and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
                 and all(self.rec(expr1.returns[k], expr2.returns[k])
                         for k in expr1.returns)
@@ -311,6 +312,7 @@ class EqualityComparer:
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
                         for name, bnd in expr1.bindings.items())
+                and expr1.tags == expr2.tags
                 )
 
     def map_named_call_result(self, expr1: NamedCallResult, expr2: Any) -> bool:
