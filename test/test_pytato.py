@@ -1387,9 +1387,9 @@ def run_test_with_new_python_invocation(f, *args, extra_env_vars=None) -> None:
 
 
 def run_test_with_new_python_invocation_inner() -> None:
+    import os
     from base64 import b64decode
     from pickle import loads
-    import os
 
     f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
 
@@ -1397,10 +1397,12 @@ def run_test_with_new_python_invocation_inner() -> None:
 
 
 def test_persistent_hashing_and_persistent_dict() -> None:
-    from pytools.persistent_dict import WriteOncePersistentDict, ReadOnlyEntryError
-    from pytato.analysis import PytatoKeyBuilder
     import shutil
     import tempfile
+
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
+
+    from pytato.analysis import PytatoKeyBuilder
 
     try:
         tmpdir = tempfile.mkdtemp()
@@ -1432,7 +1434,7 @@ def test_persistent_hashing_and_persistent_dict() -> None:
 
 
 def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
-    from pytools.persistent_dict import WriteOncePersistentDict, ReadOnlyEntryError
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
 
     from pytato.analysis import PytatoKeyBuilder
     pkb = PytatoKeyBuilder()
