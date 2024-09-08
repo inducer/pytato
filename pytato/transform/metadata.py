@@ -7,6 +7,8 @@
 
 .. autoclass:: AxisTagAttacher
 
+.. autoclass:: AxisIgnoredForPropagationTag
+
 .. autoclass:: AxesTagsEquationCollector
 """
 from __future__ import annotations
@@ -659,7 +661,14 @@ class AxisTagAttacher(CopyMapper):
 # }}}
 
 
-class IgnoredForPropagationTag(Tag):
+class AxisIgnoredForPropagationTag(Tag):
+    """
+    Disallows propagating tags across axes tagged with this. Effectively removes
+    an edge from the (undirected) propagation graph. The default tag propagation
+    behavior in the case of an einsum is to propagate all tags across
+    non-reduction axes. Since this is not always desirable, this tag can be used
+    to disable that behavior at axis-granularity.
+    """
     pass
 
 
@@ -709,7 +718,7 @@ def unify_axes_tags(
     )
 
     for tag, var in equations_collector.known_tag_to_var.items():
-        if isinstance(tag, IgnoredForPropagationTag):
+        if isinstance(tag, AxisIgnoredForPropagationTag):
             continue
 
         reachable_nodes = get_reachable_nodes(propagation_graph, var)
