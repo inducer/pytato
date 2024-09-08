@@ -663,11 +663,12 @@ class AxisTagAttacher(CopyMapper):
 
 class AxisIgnoredForPropagationTag(Tag):
     """
-    Disallows propagating tags across axes tagged with this. Effectively removes
-    an edge from the (undirected) propagation graph. The default tag propagation
-    behavior in the case of an einsum is to propagate all tags across
-    non-reduction axes. Since this is not always desirable, this tag can be used
-    to disable that behavior at axis-granularity.
+    Disallows tags from propagating across axes equipped with this tag.
+    Effectively removes an edge from the undirected graph whose edges represent
+    propagation pathways. The default tag propagation behavior in the case
+    of an einsum is to propagate all tags across non-reduction axes. Since this
+    is not always desirable, this tag can be used to disable the default
+    behavior at axis-granularity.
     """
     pass
 
