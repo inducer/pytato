@@ -2121,7 +2121,16 @@ def reshape(array: Array, newshape: int | Sequence[int],
     """
     :param array: array to be reshaped
     :param newshape: shape of the resulting array
-    :param order: ``"C"`` or ``"F"``. Indexing strategy for the resulting array.
+    :param order: ``"C"`` or ``"F"``. For each group of
+        non-matching shape axes, indices in the input
+        *and* the output array are linearized according to this order
+        and 'matched up'.
+
+        Groups are found by multiplying axis lengths on the input and output side,
+        a matching input/output group is found once adding an input or axis to the
+        group makes the two products match.
+
+        The semantics are identical to :func:`numpy.reshape`.
 
     .. note::
 
@@ -2140,6 +2149,9 @@ def reshape(array: Array, newshape: int | Sequence[int],
 
     if not all(isinstance(axis_len, INT_CLASSES) for axis_len in array.shape):
         raise ValueError("reshape of arrays with symbolic lengths not allowed")
+
+    if order.upper() not in ["F", "C"]:
+        raise ValueError("order must be one of F or C")
 
     newshape_explicit = []
 
