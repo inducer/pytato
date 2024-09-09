@@ -36,7 +36,7 @@ setup(
     python_requires="~=3.8",
     install_requires=[
         "loopy>=2020.2",
-        "pytools>=2024.1.9",
+        "pytools>=2024.1.14",
         "immutabledict",
         "attrs",
         "bidict",

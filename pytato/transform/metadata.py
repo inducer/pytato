@@ -7,6 +7,8 @@
 
 .. autoclass:: AxisTagAttacher
 
+.. autoclass:: AxisIgnoredForPropagationTag
+
 .. autoclass:: AxesTagsEquationCollector
 """
 from __future__ import annotations
@@ -584,38 +586,7 @@ class AxesTagsEquationCollector(Mapper):
 # }}}
 
 
-def _get_propagation_graph_from_constraints(
-        equations: list[tuple[str, str]]) -> Mapping[str, frozenset[str]]:
-    from immutabledict import immutabledict
-    propagation_graph: dict[str, set[str]] = {}
-    for lhs, rhs in equations:
-        assert lhs != rhs
-        propagation_graph.setdefault(lhs, set()).add(rhs)
-        propagation_graph.setdefault(rhs, set()).add(lhs)
-
-    return immutabledict({k: frozenset(v)
-                           for k, v in propagation_graph.items()})
-
-
-def get_reachable_nodes(undirected_graph: Mapping[GraphNodeT, Iterable[GraphNodeT]],
-                        source_node: GraphNodeT) -> frozenset[GraphNodeT]:
-    """
-    Returns a :class:`frozenset` of all nodes in *undirected_graph* that are
-    reachable from *source_node*.
-    """
-    nodes_visited: set[GraphNodeT] = set()
-    nodes_to_visit = {source_node}
-    while nodes_to_visit:
-        current_node = nodes_to_visit.pop()
-        nodes_visited.add(current_node)
-
-        neighbors = undirected_graph[current_node]
-        nodes_to_visit.update({node
-                               for node in neighbors
-                               if node not in nodes_visited})
-
-    return frozenset(nodes_visited)
-
+# {{{ AxisTagAttacher
 
 class AxisTagAttacher(CopyMapper):
     """
@@ -687,6 +658,20 @@ class AxisTagAttacher(CopyMapper):
         assert isinstance(result, (Array, AbstractResultWithNamedArrays))
         return result
 
+# }}}
+
+
+class AxisIgnoredForPropagationTag(Tag):
+    """
+    Disallows tags from propagating across axes equipped with this tag.
+    Effectively removes an edge from the undirected graph whose edges represent
+    propagation pathways. The default tag propagation behavior in the case
+    of an einsum is to propagate all tags across non-reduction axes. Since this
+    is not always desirable, this tag can be used to disable the default
+    behavior at axis-granularity.
+    """
+    pass
+
 
 def unify_axes_tags(
         expr: ArrayOrNames,
@@ -721,15 +706,24 @@ def unify_axes_tags(
     # Defn. A Propagation graph is a graph where nodes denote variables and an
     # edge between 2 nodes denotes an equality criterion.
 
-    propagation_graph = _get_propagation_graph_from_constraints(
-        equations_collector.equations)
+    from pytools.graph import (
+        get_reachable_nodes,
+        undirected_graph_from_edges,
+    )
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
     axis_to_solved_tags: dict[tuple[Array, int], set[Tag]] = {}
 
+    propagation_graph = undirected_graph_from_edges(
+        equations_collector.equations
+    )
+
     for tag, var in equations_collector.known_tag_to_var.items():
-        for reachable_var in (get_reachable_nodes(propagation_graph, var)
-                              - known_tag_vars):
+        if isinstance(tag, AxisIgnoredForPropagationTag):
+            continue
+
+        reachable_nodes = get_reachable_nodes(propagation_graph, var)
+        for reachable_var in (reachable_nodes - known_tag_vars):
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],
                 set()
