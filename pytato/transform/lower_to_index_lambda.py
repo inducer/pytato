@@ -167,11 +167,9 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
         old_ax_indices = old_shape[old_index:old_product_end]
         new_ax_indices = new_shape[new_index:new_product_end]
 
-        reshaped_indices = _ReshapeIndexGroup(
+        axis_mapping.append(_ReshapeIndexGroup(
             old_ax_indices=old_ax_indices,
-            new_ax_indices=new_ax_indices)
-
-        axis_mapping.append(reshaped_indices)
+            new_ax_indices=new_ax_indices))
 
         old_index = old_product_end
         new_index = new_product_end
