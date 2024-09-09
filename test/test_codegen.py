@@ -523,16 +523,12 @@ def test_concatenate(ctx_factory):
     assert_allclose_to_numpy(pt.concatenate((x0, x1, x2), axis=1), queue)
 
 
-@pytest.mark.parametrize("oldshape", [(36,),
-                                      (3, 3, 4),
-                                      (12, 3),
-                                      (2, 2, 3, 3, 1)])
-@pytest.mark.parametrize("newshape", [(-1,),
-                                      (-1, 6),
-                                      (4, 9),
-                                      (9, -1),
-                                      (36, -1),
-                                      36])
+_SHAPES = [(36,), (3, 3, 4), (12, 3), (2, 2, 3, 3, 1), (4, 9), (9, 4)]
+
+
+@pytest.mark.parametrize("oldshape", _SHAPES)
+@pytest.mark.parametrize("newshape", [
+            *_SHAPES, (-1,), (-1, 6), (4, 9), (9, -1), (36, -1), 36])
 @pytest.mark.parametrize("order", ["C", "F"])
 def test_reshape(ctx_factory, oldshape, newshape, order):
     cl_ctx = ctx_factory()
