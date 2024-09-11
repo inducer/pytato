@@ -326,9 +326,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                                    "logical_and"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
-    if which == "sub":
-        pytest.skip("https://github.com/inducer/loopy/issues/131")
-
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
