@@ -227,7 +227,9 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
             expr = TypeCast(result_dtype, expr)
         elif isinstance(expr, SCALAR_CLASSES):
-            expr = result_dtype.type(expr)
+            # Disabled due to https://github.com/inducer/pytato/issues/542
+            # expr = result_dtype.type(expr)
+            return expr
 
         return expr
 
