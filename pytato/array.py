@@ -172,7 +172,6 @@ Internal stuff that is only here because the documentation tool wants it
 import operator
 import re
 from abc import ABC, abstractmethod
-from enum import IntEnum
 from functools import cached_property, partialmethod
 from typing import (
     TYPE_CHECKING,
@@ -306,87 +305,10 @@ DtypeOrPyScalarType = Union[_dtype_any, PyScalarType]
 ArrayOrScalar = Union["Array", Scalar]
 
 
-# https://numpy.org/neps/nep-0050-scalar-promotion.html
-class DtypeKindCategory(IntEnum):
-    BOOLEAN = 0
-    INTEGRAL = 1
-    INEXACT = 2
-
-
-_dtype_kind_char_to_kind_cat = {
-    "b": DtypeKindCategory.BOOLEAN,
-    "i": DtypeKindCategory.INTEGRAL,
-    "u": DtypeKindCategory.INTEGRAL,
-    "f": DtypeKindCategory.INEXACT,
-    "c": DtypeKindCategory.INEXACT,
-}
-
-
-_py_type_to_kind_cat = {
-    bool: DtypeKindCategory.BOOLEAN,
-    int: DtypeKindCategory.INTEGRAL,
-    float: DtypeKindCategory.INEXACT,
-    complex: DtypeKindCategory.INEXACT,
-}
-
-
-_float_dtype_to_complex: dict[np.dtype[Any], np.dtype[Any]] = {
-    np.dtype(np.float32): np.dtype(np.complex64),
-    np.dtype(np.float64): np.dtype(np.complex128),
-}
-
-
-def _complexify_dtype(dtype: np.dtype[Any]) -> np.dtype[Any]:
-    if dtype.kind == "c":
-        return dtype
-    elif dtype.kind == "f":
-        return _float_dtype_to_complex[dtype]
-    else:
-        raise ValueError("can only complexify types that are already inexact")
-
-
-def _np_result_dtype(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
-    # For numpy 2.0, np.result_type does not implement numpy's type
-    # promotion behavior. Weird. Hence all this nonsense is needed.
-
-    py_types = [dtype for dtype in dtypes if isinstance(dtype, type)]
-
-    if not py_types:
-        return np.result_type(*dtypes)
-
-    np_dtypes = [dtype for dtype in dtypes if isinstance(dtype, np.dtype)]
-    np_kind_cats = {
-        _dtype_kind_char_to_kind_cat[dtype.kind] for dtype in np_dtypes}
-    py_kind_cats = {_py_type_to_kind_cat[tp] for tp in py_types}
-    kind_cats = np_kind_cats | py_kind_cats
-
-    res_kind_cat = max(kind_cats)
-    max_py_kind_cats = max(py_kind_cats)
-    max_np_kind_cats = max(np_kind_cats)
-
-    is_complex = (complex in py_types
-        or any(dtype.kind == "c" for dtype in np_dtypes))
-
-    if max_py_kind_cats > max_np_kind_cats:
-        if res_kind_cat == DtypeKindCategory.INTEGRAL:
-            # FIXME: Perhaps this should be int32 "on some systems, e.g. Windows"
-            py_promotion_dtype: np.dtype[Any] = np.dtype(np.int64)
-        elif res_kind_cat == DtypeKindCategory.INEXACT:
-            if is_complex:
-                py_promotion_dtype = np.dtype(np.complex128)
-            else:
-                py_promotion_dtype = np.dtype(np.float64)
-        else:
-            # bool won't ever be promoted to
-            raise AssertionError()
-        return np.result_type(*([*np_dtypes, py_promotion_dtype]))
-
-    else:
-        # Just ignore the python types for promotion.
-        result = np.result_type(*np_dtypes)
-        if is_complex:
-            result = _complexify_dtype(result)
-        return result
+def _np_result_dtype(
+        *arrays_and_dtypes: np.typing.ArrayLike | np.typing.DTypeLike,
+        ) -> np.dtype[Any]:
+    return np.result_type(*arrays_and_dtypes)
 
 
 def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
@@ -656,7 +578,7 @@ class Array(Taggable):
                 op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],
                 other: ArrayOrScalar,
                 get_result_type: Callable[
-                        [DtypeOrPyScalarType, DtypeOrPyScalarType],
+                        [ArrayOrScalar, ArrayOrScalar],
                         np.dtype[Any]] = _np_result_dtype,
                 reverse: bool = False,
                 cast_to_result_dtype: bool = True,

@@ -46,7 +46,6 @@ from pytato.array import (
     ArrayOrScalar,
     BasicIndex,
     ConvertibleToIndexExpr,
-    DtypeOrPyScalarType,
     Einsum,
     IndexExpr,
     IndexLambda,
@@ -58,7 +57,6 @@ from pytato.array import (
 )
 from pytato.scalar_expr import (
     INT_CLASSES,
-    PYTHON_SCALAR_CLASSES,
     SCALAR_CLASSES,
     BoolT,
     IntegralScalarExpression,
@@ -164,22 +162,6 @@ def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
         return val[get_indexing_expression(shape, result_shape)]
 
 
-def _extract_dtypes(
-        exprs: Sequence[ArrayOrScalar]) -> list[DtypeOrPyScalarType]:
-    dtypes: list[DtypeOrPyScalarType] = []
-    for expr in exprs:
-        if isinstance(expr, Array):
-            dtypes.append(expr.dtype)
-        elif isinstance(expr, np.generic):
-            dtypes.append(expr.dtype)
-        elif isinstance(expr, PYTHON_SCALAR_CLASSES):
-            dtypes.append(type(expr))
-        else:
-            raise TypeError(f"unexpected expression type: '{type(expr)}'")
-
-    return dtypes
-
-
 def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
                                              bindings: dict[str, Array],
@@ -208,7 +190,7 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
 
 def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
-                        get_result_type: Callable[[DtypeOrPyScalarType, DtypeOrPyScalarType], np.dtype[Any]],  # noqa:E501
+                        get_result_type: Callable[[ArrayOrScalar, ArrayOrScalar], np.dtype[Any]],  # noqa:E501
                         *,
                         tags: frozenset[Tag],
                         non_equality_tags: frozenset[Tag],
@@ -222,8 +204,10 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
     result_shape = get_shape_after_broadcasting([a1, a2])
 
-    dtypes = _extract_dtypes([a1, a2])
-    result_dtype = get_result_type(*dtypes)
+    # Note: get_result_type calls np.result_type by default, which means
+    # that we are passing a pytato array to numpy. Luckily, np.result_type
+    # only looks at the dtype of input arrays as of numpy v2.1.
+    result_dtype = get_result_type(a1, a2)
 
     bindings: dict[str, Array] = {}
 

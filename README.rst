@@ -32,9 +32,8 @@ Numpy compatibility
 Pytato is written to pose no particular restrictions on the version of numpy
 used for execution. To use mypy-based type checking on Pytato itself or
 packages using Pytato, numpy 1.20 or newer is required, due to the
-typing-based changes to numpy in that release. Furthermore, pytato
-now uses type promotion rules aiming to match those in
-`numpy 2 <https://numpy.org/devdocs/numpy_2_0_migration_guide.html#changes-to-numpy-data-type-promotion>`__.
-This will not break compatibility with older numpy versions, but may
-result in differing data types between computations carried out in
-numpy and pytato.
+typing-based changes to numpy in that release.
+
+Furthermore, pytato now uses type promotion rules based on those in
+`numpy <https://numpy.org/devdocs/numpy_2_0_migration_guide.html#changes-to-numpy-data-type-promotion>`__ that should result in the same
+data types as the currently installed version of numpy.
