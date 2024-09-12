@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from immutabledict import immutabledict
@@ -48,11 +49,12 @@ from pytato.array import (
     NormalizedSlice,
     Reshape,
     Roll,
+    ShapeComponent,
     ShapeType,
     Stack,
 )
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
-from pytato.scalar_expr import INT_CLASSES, IntegralT, ScalarExpression
+from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
 
@@ -60,36 +62,154 @@ from pytato.transform import Mapper
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
+@dataclass(frozen=True)
+class _ReshapeIndexGroup:
+    old_ax_indices: tuple[ShapeComponent, ...]
+    new_ax_indices: tuple[ShapeComponent, ...]
+
+
+def _generate_index_expressions(
+        old_shape: ShapeType,
+        new_shape: ShapeType,
+        order: str,
+        index_vars: list[prim.Variable]) -> tuple[ScalarExpression, ...]:
+
+    old_strides = [1]
+    new_strides = [1]
+    old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
+
+    old_stride_axs = (old_shape[::-1][:-1] if order == "C" else
+                      old_shape[:-1])
+    for old_ax in old_stride_axs:
+        old_strides.append(old_strides[-1]*old_ax)
+
+    new_stride_axs = (new_shape[::-1][:-1] if order == "C" else
+                      new_shape[:-1])
+    for new_ax in new_stride_axs:
+        new_strides.append(new_strides[-1]*new_ax)
+
+    old_size_till_axs = (old_shape[:-1][::-1] if order == "C" else
+                         old_shape[1:])
+    for old_ax in old_size_till_axs:
+        old_size_tills.append(old_size_tills[-1]*old_ax)
+
+    if order == "C":
+        old_strides = old_strides[::-1]
+        new_strides = new_strides[::-1]
+        old_size_tills = old_size_tills[::-1]
+
+    flattened_index_expn = sum(
+        index_var*new_stride
+        for index_var, new_stride in zip(index_vars, new_strides))
+
+    return tuple(
+        (flattened_index_expn % old_size_till) // old_stride
+        for old_size_till, old_stride in zip(old_size_tills, old_strides))
+
+
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
-    if expr.array.shape == ():
-        # RHS must be a scalar i.e. RHS' indices are empty
+
+    if expr.order.upper() not in ["C", "F"]:
+        raise NotImplementedError("Order expected to be 'C' or 'F'",
+                                  " (case insensitive). Found order = ",
+                                  f"{expr.order}")
+
+    order = expr.order
+    old_shape = expr.array.shape
+    new_shape = expr.shape
+
+    # index variables need to be unique and depend on the new shape length
+    index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
+
+    # {{{ check for scalars
+
+    if old_shape == ():
         assert expr.size == 1
         return ()
 
-    if expr.order != "C":
-        raise NotImplementedError(expr.order)
+    if new_shape == ():
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
 
-    newstrides: list[IntegralT] = [1]  # reshaped array strides
-    for new_axis_len in reversed(expr.shape[1:]):
-        assert isinstance(new_axis_len, INT_CLASSES)
-        newstrides.insert(0, newstrides[0]*new_axis_len)
+    if 0 in old_shape and 0 in new_shape:
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
 
-    flattened_idx = sum(prim.Variable(f"_{i}")*stride
-                        for i, stride in enumerate(newstrides))
+    # }}}
 
-    oldstrides: list[IntegralT] = [1]  # input array strides
-    for axis_len in reversed(expr.array.shape[1:]):
-        assert isinstance(axis_len, INT_CLASSES)
-        oldstrides.insert(0, oldstrides[0]*axis_len)
+    # {{{ generate subsets of old axes mapped to subsets of new axes
 
-    assert isinstance(expr.array.shape[-1], INT_CLASSES)
-    oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
-    for old_axis_len in reversed(expr.array.shape[:-1]):
-        assert isinstance(old_axis_len, INT_CLASSES)
-        oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
+    axis_mapping: list[_ReshapeIndexGroup] = []
 
-    return tuple(((flattened_idx % sizetill) // stride)
-                 for stride, sizetill in zip(oldstrides, oldsizetills))
+    old_index = 0
+    new_index = 0
+
+    while old_index < len(old_shape) and new_index < len(new_shape):
+        old_ax_len_product = old_shape[old_index]
+        new_ax_len_product = new_shape[new_index]
+
+        old_product_end = old_index + 1
+        new_product_end = new_index + 1
+
+        while old_ax_len_product != new_ax_len_product:
+            if not isinstance(old_ax_len_product, INT_CLASSES) or \
+                not isinstance(new_ax_len_product, INT_CLASSES):
+                raise TypeError("Cannot determine which axes were expanded or "
+                                "collapsed symbolically")
+
+            if new_ax_len_product < old_ax_len_product:
+                new_ax_len_product *= new_shape[new_product_end]
+                new_product_end += 1
+            else:
+                old_ax_len_product *= old_shape[old_product_end]
+                old_product_end += 1
+
+        old_ax_indices = old_shape[old_index:old_product_end]
+        new_ax_indices = new_shape[new_index:new_product_end]
+
+        axis_mapping.append(_ReshapeIndexGroup(
+            old_ax_indices=old_ax_indices,
+            new_ax_indices=new_ax_indices))
+
+        old_index = old_product_end
+        new_index = new_product_end
+
+    # handle trailing 1s
+    final_reshaped_indices = axis_mapping.pop(-1)
+    old_ax_indices = final_reshaped_indices.old_ax_indices
+    new_ax_indices = final_reshaped_indices.new_ax_indices
+
+    while old_index < len(old_shape):
+        old_ax_indices += tuple([old_shape[old_index]])  # noqa: C409
+        old_index += 1
+
+    while new_index < len(new_shape):
+        new_ax_indices += tuple([new_shape[new_index]])  # noqa: C409
+        new_index += 1
+
+    axis_mapping.append(_ReshapeIndexGroup(old_ax_indices=old_ax_indices,
+                                           new_ax_indices=new_ax_indices))
+
+    # }}}
+
+    # {{{ compute index expressions for sub shapes
+
+    index_vars_begin = 0
+    index_expressions = []
+    for reshaped_indices in axis_mapping:
+        sub_old_shape = reshaped_indices.old_ax_indices
+        sub_new_shape = reshaped_indices.new_ax_indices
+
+        index_vars_end = index_vars_begin + len(sub_new_shape)
+        sub_index_vars = index_vars[index_vars_begin:index_vars_end]
+        index_vars_begin = index_vars_end
+
+        index_expressions.append(_generate_index_expressions(
+            sub_old_shape, sub_new_shape, order, sub_index_vars))
+
+    # }}}
+
+    return sum(index_expressions, ())
 
 
 class ToIndexLambdaMixin:
