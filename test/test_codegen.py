@@ -2005,6 +2005,27 @@ def test_nested_function_calls(ctx_factory):
         np.testing.assert_allclose(result_out[k], expect_out[k])
 
 
+def test_pow_arg_casting(ctx_factory):
+    # Check that pow() arguments are not typecast from int
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x_np = np.random.rand(10, 4)
+    x = pt.make_data_wrapper(x_np)
+
+    out = x ** -2
+    _, (pt_out,) = pt.generate_loopy(out)(cq)
+    assert isinstance(out.expr.exponent, int)
+    assert pt_out.dtype == np.float64
+    np.testing.assert_allclose(np.power(x_np, -2), pt_out)
+
+    out = x ** 2.0
+    _, (pt_out,) = pt.generate_loopy(out)(cq)
+    assert isinstance(out.expr.exponent, np.float64)
+    assert pt_out.dtype == np.float64
+    np.testing.assert_allclose(np.power(x_np, 2.0), pt_out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])

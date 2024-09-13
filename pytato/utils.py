@@ -226,11 +226,12 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
             assert result_dtype != np.bool_
 
             expr = TypeCast(result_dtype, expr)
-        elif isinstance(expr, (complex,)) and not isinstance(expr, np.generic):
-            # See https://github.com/inducer/pytato/pull/247 and
-            # https://github.com/inducer/pytato/issues/542
-            expr = np.dtype(type(expr)).type(expr)
-            return expr
+        elif isinstance(expr, SCALAR_CLASSES):
+            # See https://github.com/inducer/pytato/issues/542
+            # on why pow() + integers is not typecast to float or complex.
+            if not (op == prim.Power and np.issubdtype(type(expr), np.integer)
+                    and not np.issubdtype(result_dtype, np.integer)):
+                expr = result_dtype.type(expr)
 
         return expr
 
