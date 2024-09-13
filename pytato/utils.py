@@ -227,9 +227,11 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
             expr = TypeCast(result_dtype, expr)
         elif isinstance(expr, SCALAR_CLASSES):
+            import operator
             # See https://github.com/inducer/pytato/issues/542
             # on why pow() + integers is not typecast to float or complex.
-            if not (op == prim.Power and np.issubdtype(type(expr), np.integer)
+            if not ((op == prim.Power or op == operator.pow)
+                    and np.issubdtype(type(expr), np.integer)
                     and not np.issubdtype(result_dtype, np.integer)):
                 expr = result_dtype.type(expr)
 
