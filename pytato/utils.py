@@ -221,19 +221,24 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                 array: ArrayOrScalar,
                 expr: ScalarExpression
             ) -> ScalarExpression:
-        if isinstance(expr, SCALAR_CLASSES):
+        if ((isinstance(array, Array) or isinstance(array, np.generic))
+                and array.dtype != result_dtype):
+            # Loopy's type casts don't like casting to bool
+            assert result_dtype != np.bool_
+
+            # See https://github.com/inducer/pytato/issues/542
+            # on why pow() + integers is not typecast to float or complex.
+            if not (is_pow
+                    and np.issubdtype(array.dtype, np.integer)
+                    and not np.issubdtype(result_dtype, np.integer)):
+                expr = TypeCast(result_dtype, expr)
+        elif isinstance(expr, SCALAR_CLASSES):
             # See https://github.com/inducer/pytato/issues/542
             # on why pow() + integers is not typecast to float or complex.
             if not (is_pow
                     and np.issubdtype(type(expr), np.integer)
                     and not np.issubdtype(result_dtype, np.integer)):
                 expr = result_dtype.type(expr)
-        elif ((isinstance(array, Array) or isinstance(array, np.generic))
-                and array.dtype != result_dtype):
-            # Loopy's type casts don't like casting to bool
-            assert result_dtype != np.bool_
-
-            expr = TypeCast(result_dtype, expr)
 
         return expr
 

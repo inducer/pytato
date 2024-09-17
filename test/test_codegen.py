@@ -2010,20 +2010,58 @@ def test_pow_arg_casting(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    x_np = np.random.rand(10, 4)
-    x = pt.make_data_wrapper(x_np)
+    types = (int, np.int32, np.int64, float, np.float32, np.float64)
 
-    out = x ** -2
-    _, (pt_out,) = pt.generate_loopy(out)(cq)
-    assert isinstance(out.expr.exponent, int)
-    assert pt_out.dtype == np.float64
-    np.testing.assert_allclose(np.power(x_np, -2), pt_out)
+    for base_scalar in (True, False):
+        for exponent_scalar in (True, False):
+            if base_scalar and exponent_scalar:
+                # Not supported in pytato
+                continue
 
-    out = x ** 2.0
-    _, (pt_out,) = pt.generate_loopy(out)(cq)
-    assert isinstance(out.expr.exponent, np.float64)
-    assert pt_out.dtype == np.float64
-    np.testing.assert_allclose(np.power(x_np, 2.0), pt_out)
+            for base_tp in types:
+                if base_scalar:
+                    base_np = base_tp(2)
+                    first = base_np
+                else:
+                    base_np = np.array([1, 2, 3], base_tp)
+                    first = pt.make_data_wrapper(base_np)
+
+                for exponent_tp in types:
+                    if exponent_scalar:
+                        exponent_np = exponent_tp(2)
+                        second = exponent_np
+                    else:
+                        exponent_np = np.array([1, 2, 3], exponent_tp)
+                        second = pt.make_data_wrapper(exponent_np)
+
+                    out = first ** second
+
+                    _, (pt_out,) = pt.generate_loopy(out)(cq)
+
+                    np_out = np.power(base_np, exponent_np)
+
+                    assert pt_out.dtype == np_out.dtype
+                    np.testing.assert_allclose(np_out, pt_out)
+
+                    if np.issubdtype(exponent_tp, np.integer):
+                        assert exponent_tp in (int, np.int32, np.int64)
+
+                        if exponent_scalar:
+                            # We do cast between different int types
+                            assert (type(out.expr.exponent) in
+                                    (int, np.int32, np.int64)
+                                    or out.expr.exponent.dtype == np_out.dtype)
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (int, np.int32, np.int64)
+                    else:
+                        assert exponent_tp in (float, np.float32, np.float64)
+                        if exponent_scalar:
+                            assert type(out.expr.exponent) == np_out.dtype \
+                                or out.expr.exponent.dtype == np_out.dtype
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (float, np.float32, np.float64)
 
 
 if __name__ == "__main__":
