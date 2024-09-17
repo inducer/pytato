@@ -2406,7 +2406,8 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
                             lambda x, y: np.dtype(np.bool_),
                             tags=_get_default_tags(),
                             non_equality_tags=_get_created_at_tag(stacklevel=2),
-                            cast_to_result_dtype=False
+                            cast_to_result_dtype=False,
+                            is_pow=False,
                         )  # type: ignore[return-value]
 
 
@@ -2470,6 +2471,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
                                      cast_to_result_dtype=False,
+                                     is_pow=False,
                                      )  # type: ignore[return-value]
 
 
@@ -2487,6 +2489,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
                                      cast_to_result_dtype=False,
+                                     is_pow=False,
                                      )  # type: ignore[return-value]
 
 
