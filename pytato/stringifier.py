@@ -158,7 +158,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "data":
-                return object.__repr__(expr.data)
+                return repr(expr.data)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
@@ -207,7 +207,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "translation_unit":
-                return object.__repr__(expr.translation_unit)
+                return repr(expr.translation_unit)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
