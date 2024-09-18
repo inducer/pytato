@@ -539,6 +539,32 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
 
 # {{{ TransformMapper
 
+def _is_mapper_created_duplicate(expr: CacheExprT, result: CacheExprT) -> bool:
+    """Returns *True* if *result* is not identical to *expr* when it ought to be."""
+    # For this check to work, must preserve duplicates when retrieving
+    # predecessors. DirectPredecessorsGetter deduplicates by virtue of
+    # storing the predecessors it finds in sets
+    from pytato.analysis import ListOfDirectPredecessorsGetter
+    pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
+    return (
+        hash(result) == hash(expr)
+        and result == expr
+        and result is not expr
+        # Only consider "direct" duplication, not duplication resulting from
+        # equality-preserving changes to predecessors. Assume that such changes are
+        # OK, otherwise they would have been detected at the point at which they
+        # originated. (For example, consider a DAG containing pre-existing
+        # duplicates. If a subexpression of *expr* is a duplicate and is replaced
+        # with a previously encountered version from the cache, a new instance of
+        # *expr* must be created. This should not trigger an error.)
+        and all(
+            result_pred is pred
+            for pred, result_pred in zip(
+                pred_getter(expr),
+                pred_getter(result),
+                strict=True)))
+
+
 class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
     """
     Cache for :class:`TransformMapper` and :class:`TransformMapperWithExtraArgs`.
@@ -585,32 +611,10 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
             # to prior cached results are replaced with the original instance
             result = self._result_to_cached_result[result]
         except KeyError:
-            if self.err_on_created_duplicate:
-                # For this check to work, must preserve duplicates when retrieving
-                # predecessors. DirectPredecessorsGetter deduplicates by virtue of
-                # storing the predecessors it finds in sets
-                from pytato.analysis import ListOfDirectPredecessorsGetter
-                pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
-                if (
-                        hash(result) == hash(inputs.expr)
-                        and result == inputs.expr
-                        and result is not inputs.expr
-                        # Only consider "direct" duplication, not duplication
-                        # resulting from equality-preserving changes to predecessors.
-                        # Assume that such changes are OK, otherwise they would have
-                        # been detected at the point at which they originated. (For
-                        # example, consider a DAG containing pre-existing duplicates.
-                        # If a subexpression of *expr* is a duplicate and is replaced
-                        # with a previously encountered version from the cache, a
-                        # new instance of *expr* must be created. This should not
-                        # trigger an error.)
-                        and all(
-                            result_pred is pred
-                            for pred, result_pred in zip(
-                                pred_getter(inputs.expr),
-                                pred_getter(result),
-                                strict=True))):
-                    raise MapperCreatedDuplicateError from None
+            if (
+                    self.err_on_created_duplicate
+                    and _is_mapper_created_duplicate(inputs.expr, result)):
+                raise MapperCreatedDuplicateError from None
 
             self._result_to_cached_result[result] = result
 
@@ -2054,6 +2058,69 @@ class MPMSMaterializerAccumulator:
     expr: Array
 
 
+class MPMSMaterializerCache(
+        CachedMapperCache[ArrayOrNames, MPMSMaterializerAccumulator, []]):
+    """
+    Cache for :class:`MPMSMaterializer`.
+
+    .. automethod:: __init__
+    .. automethod:: add
+    """
+    def __init__(
+            self,
+            err_on_collision: bool,
+            err_on_created_duplicate: bool) -> None:
+        """
+        Initialize the cache.
+
+        :arg err_on_collision: Raise an exception if two distinct input expression
+            instances have the same key.
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        super().__init__(err_on_collision=err_on_collision)
+
+        self.err_on_created_duplicate = err_on_created_duplicate
+
+        self._result_key_to_result: dict[
+            ArrayOrNames, MPMSMaterializerAccumulator] = {}
+
+    def add(
+            self,
+            inputs: CacheInputsWithKey[ArrayOrNames, []],
+            result: MPMSMaterializerAccumulator) -> MPMSMaterializerAccumulator:
+        """
+        Cache a mapping result.
+
+        Returns the cached result (which may not be identical to *result* if a
+        result was already cached with the same result key).
+        """
+        key = inputs.key
+
+        assert key not in self._input_key_to_result, \
+            f"Cache entry is already present for key '{key}'."
+
+        try:
+            # The first encountered instance of each distinct result (in terms of
+            # "==" of result.expr) gets cached, and subsequent mappings with results
+            # that are equal to prior cached results are replaced with the original
+            # instance
+            result = self._result_key_to_result[result.expr]
+        except KeyError:
+            if (
+                    self.err_on_created_duplicate
+                    and _is_mapper_created_duplicate(inputs.expr, result.expr)):
+                raise MapperCreatedDuplicateError from None
+
+            self._result_key_to_result[result.expr] = result
+
+        self._input_key_to_result[key] = result
+        if self.err_on_collision:
+            self._input_key_to_expr[key] = inputs.expr
+
+        return result
+
+
 def _materialize_if_mpms(expr: Array,
                          nsuccessors: int,
                          predecessors: Iterable[MPMSMaterializerAccumulator]
@@ -2077,7 +2144,7 @@ def _materialize_if_mpms(expr: Array,
         return MPMSMaterializerAccumulator(materialized_predecessors, expr)
 
 
-class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
+class MPMSMaterializer(CachedMapper[MPMSMaterializerAccumulator, Never, []]):
     """
     See :func:`materialize_with_mpms` for an explanation.
 
@@ -2086,17 +2153,41 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
         A mapping from a node in the expression graph (i.e. an
         :class:`~pytato.Array`) to its number of successors.
     """
-    def __init__(self, nsuccessors: Mapping[Array, int]):
-        super().__init__()
-        self.nsuccessors = nsuccessors
-        self.cache: dict[ArrayOrNames, MPMSMaterializerAccumulator] = {}
+    def __init__(
+            self,
+            nsuccessors: Mapping[Array, int],
+            _cache: MPMSMaterializerCache | None = None):
+        err_on_collision = False
+        err_on_created_duplicate = False
 
-    def rec(self, expr: ArrayOrNames) -> MPMSMaterializerAccumulator:
-        if expr in self.cache:
-            return self.cache[expr]
-        result: MPMSMaterializerAccumulator = super().rec(expr)
-        self.cache[expr] = result
-        return result
+        if _cache is None:
+            _cache = MPMSMaterializerCache(
+                err_on_collision=err_on_collision,
+                err_on_created_duplicate=err_on_created_duplicate)
+
+        # Does not support functions, so function_cache is ignored
+        super().__init__(err_on_collision=err_on_collision, _cache=_cache)
+
+        self.nsuccessors = nsuccessors
+
+    def _cache_add(
+            self,
+            inputs: CacheInputsWithKey[ArrayOrNames, []],
+            result: MPMSMaterializerAccumulator) -> MPMSMaterializerAccumulator:
+        try:
+            return self._cache.add(inputs, result)
+        except MapperCreatedDuplicateError as e:
+            raise ValueError(
+                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def clone_for_callee(
+            self, function: FunctionDefinition) -> Self:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        raise AssertionError("Control shouldn't reach this point.")
 
     def _map_input_base(self, expr: InputArgumentBase
                         ) -> MPMSMaterializerAccumulator:
@@ -2113,24 +2204,40 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
                         for bnd_name, bnd in sorted(expr.bindings.items())}
+        new_children: Mapping[str, Array] = immutabledict({
+            bnd_name: bnd.expr
+            for bnd_name, bnd in children_rec.items()})
 
-        new_expr = IndexLambda(expr=expr.expr,
-                               shape=expr.shape,
-                               dtype=expr.dtype,
-                               bindings=immutabledict({bnd_name: bnd.expr
-                                for bnd_name, bnd in sorted(children_rec.items())}),
-                               axes=expr.axes,
-                               var_to_reduction_descr=expr.var_to_reduction_descr,
-                               tags=expr.tags,
-                               non_equality_tags=expr.non_equality_tags)
+        if (
+                frozenset(new_children.keys()) == frozenset(expr.bindings.keys())
+                and all(
+                    new_children[name] is expr.bindings[name]
+                    for name in expr.bindings)):
+            new_expr = expr
+        else:
+            new_expr = IndexLambda(
+                expr=expr.expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=new_children,
+                axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
+
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     children_rec.values())
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
-        new_expr = Stack(tuple(ary.expr for ary in rec_arrays),
-                         expr.axis, axes=expr.axes, tags=expr.tags,
-                         non_equality_tags=expr.non_equality_tags)
+        new_arrays = tuple(ary.expr for ary in rec_arrays)
+        if all(
+                new_ary is ary
+                for ary, new_ary in zip(expr.arrays, new_arrays, strict=True)):
+            new_expr = expr
+        else:
+            new_expr = Stack(new_arrays, expr.axis, axes=expr.axes, tags=expr.tags,
+                             non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -2138,29 +2245,44 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
 
     def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
-        new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),
-                               expr.axis,
-                               axes=expr.axes,
-                               tags=expr.tags,
-                               non_equality_tags=expr.non_equality_tags)
+        new_arrays = tuple(ary.expr for ary in rec_arrays)
+        if all(
+                new_ary is ary
+                for ary, new_ary in zip(expr.arrays, new_arrays, strict=True)):
+            new_expr = expr
+        else:
+            new_expr = Concatenate(new_arrays,
+                                   expr.axis,
+                                   axes=expr.axes,
+                                   tags=expr.tags,
+                                   non_equality_tags=expr.non_equality_tags)
+
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     rec_arrays)
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,
-                        tags=expr.tags,
-                        non_equality_tags=expr.non_equality_tags)
+        if rec_array.expr is expr.array:
+            new_expr = expr
+        else:
+            new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,
+                            tags=expr.tags,
+                            non_equality_tags=expr.non_equality_tags)
+
         return _materialize_if_mpms(new_expr, self.nsuccessors[expr],
                                     (rec_array,))
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,
-                                   axes=expr.axes, tags=expr.tags,
-                                   non_equality_tags=expr.non_equality_tags)
+        if rec_array.expr is expr.array:
+            new_expr = expr
+        else:
+            new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,
+                                       axes=expr.axes, tags=expr.tags,
+                                       non_equality_tags=expr.non_equality_tags)
+
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     (rec_array,))
@@ -2170,16 +2292,23 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
         rec_indices = {i: self.rec(idx)
                        for i, idx in enumerate(expr.indices)
                        if isinstance(idx, Array)}
-
-        new_expr = type(expr)(rec_array.expr,
-                              tuple(rec_indices[i].expr
-                                    if i in rec_indices
-                                    else expr.indices[i]
-                                    for i in range(
-                                        len(expr.indices))),
-                              axes=expr.axes,
-                              tags=expr.tags,
-                              non_equality_tags=expr.non_equality_tags)
+        new_indices = tuple(rec_indices[i].expr
+                            if i in rec_indices
+                            else expr.indices[i]
+                            for i in range(
+                                len(expr.indices)))
+        if (
+                rec_array.expr is expr.array
+                and all(
+                    new_idx is idx
+                    for idx, new_idx in zip(expr.indices, new_indices, strict=True))):
+            new_expr = expr
+        else:
+            new_expr = type(expr)(rec_array.expr,
+                                  new_indices,
+                                  axes=expr.axes,
+                                  tags=expr.tags,
+                                  non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
@@ -2192,26 +2321,35 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
 
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        new_expr = Reshape(rec_array.expr, expr.newshape,
-                           expr.order, axes=expr.axes, tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
+        if rec_array.expr is expr.array:
+            new_expr = expr
+        else:
+            new_expr = Reshape(rec_array.expr, expr.newshape,
+                               expr.order, axes=expr.axes, tags=expr.tags,
+                               non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
                                     (rec_array,))
 
     def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
-        rec_arrays = [self.rec(ary) for ary in expr.args]
-        new_expr = Einsum(expr.access_descriptors,
-                          tuple(ary.expr for ary in rec_arrays),
-                          expr.redn_axis_to_redn_descr,
-                          axes=expr.axes,
-                          tags=expr.tags,
-                          non_equality_tags=expr.non_equality_tags)
+        rec_args = [self.rec(ary) for ary in expr.args]
+        new_args = tuple(ary.expr for ary in rec_args)
+        if all(
+                new_arg is arg
+                for arg, new_arg in zip(expr.args, new_args, strict=True)):
+            new_expr = expr
+        else:
+            new_expr = Einsum(expr.access_descriptors,
+                              new_args,
+                              expr.redn_axis_to_redn_descr,
+                              axes=expr.axes,
+                              tags=expr.tags,
+                              non_equality_tags=expr.non_equality_tags)
 
         return _materialize_if_mpms(new_expr,
                                     self.nsuccessors[expr],
-                                    rec_arrays)
+                                    rec_args)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
                                  ) -> MPMSMaterializerAccumulator:
@@ -2224,15 +2362,21 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
                                         ) -> MPMSMaterializerAccumulator:
-        rec_passthrough = self.rec(expr.passthrough_data)
         rec_send_data = self.rec(expr.send.data)
-        new_expr = DistributedSendRefHolder(
-            send=DistributedSend(rec_send_data.expr,
-                                 dest_rank=expr.send.dest_rank,
-                                 comm_tag=expr.send.comm_tag,
-                                 tags=expr.send.tags),
-            passthrough_data=rec_passthrough.expr,
-            )
+        if rec_send_data.expr is expr.send.data:
+            new_send = expr.send
+        else:
+            new_send = DistributedSend(
+                rec_send_data.expr,
+                dest_rank=expr.send.dest_rank,
+                comm_tag=expr.send.comm_tag,
+                tags=expr.send.tags)
+        rec_passthrough = self.rec(expr.passthrough_data)
+        if new_send is expr.send and rec_passthrough.expr is expr.passthrough_data:
+            new_expr = expr
+        else:
+            new_expr = DistributedSendRefHolder(new_send, rec_passthrough.expr)
+
         return MPMSMaterializerAccumulator(
             rec_passthrough.materialized_predecessors, new_expr)
 
