@@ -765,6 +765,53 @@ def test_large_dag_with_duplicates_count():
         dag, count_duplicates=False)
 
 
+def test_duplicate_node_count():
+    from testlib import get_random_pt_dag
+
+    from pytato.analysis import get_node_multiplicities, get_num_nodes
+    for i in range(80):
+        dag = get_random_pt_dag(seed=i, axis_len=5)
+
+        # Get the number of types of expressions
+        node_count = get_num_nodes(dag, count_duplicates=True)
+
+        # Get the number of expressions and the amount they're called
+        node_multiplicity = get_node_multiplicities(dag)
+
+        # Get difference in duplicates
+        num_duplicates = sum(
+            count - 1 for count in node_multiplicity.values() if count > 1)
+        # Check that duplicates are correctly calculated
+        assert node_count - num_duplicates == len(
+            pt.transform.DependencyMapper()(dag))
+
+
+def test_duplicate_nodes_with_comm_count():
+    from testlib import get_random_pt_dag_with_send_recv_nodes
+
+    from pytato.analysis import get_node_multiplicities, get_num_nodes
+
+    rank = 0
+    size = 2
+    for i in range(20):
+        dag = get_random_pt_dag_with_send_recv_nodes(
+            seed=i, rank=rank, size=size)
+
+        # Get the number of types of expressions
+        node_count = get_num_nodes(dag, count_duplicates=True)
+
+        # Get the number of expressions and the amount they're called
+        node_multiplicity = get_node_multiplicities(dag)
+
+        # Get difference in duplicates
+        num_duplicates = sum(
+            count - 1 for count in node_multiplicity.values() if count > 1)
+
+        # Check that duplicates are correctly calculated
+        assert node_count - num_duplicates == len(
+            pt.transform.DependencyMapper()(dag))
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))

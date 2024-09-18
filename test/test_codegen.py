@@ -565,7 +565,7 @@ def test_dict_to_loopy_kernel(ctx_factory):
 def test_only_deps_as_knl_args():
     # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
     x = pt.make_placeholder(name="x", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(name="y", shape=(10, 4), dtype=float)  # noqa:F841
+    pt.make_placeholder(name="y", shape=(10, 4), dtype=float)
 
     z = 2*x
     knl = pt.generate_loopy(z).kernel
@@ -925,9 +925,9 @@ def test_einsum_with_parametrized_shapes(ctx_factory):
     def _get_x_shape(_m, _n):
         return (3*_n+7, )
 
-    A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
+    A_in = np.random.rand(*_get_a_shape(m_in, n_in))
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
-    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))  # noqa: N806
+    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))
     x = pt.make_data_wrapper(x_in, shape=_get_x_shape(m, n))
 
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
@@ -966,7 +966,7 @@ def test_call_loopy_shape_inference1(ctx_factory):
 
     rng = default_rng()
 
-    A_in = rng.random((20, 37))  # noqa
+    A_in = rng.random((20, 37))
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -976,7 +976,7 @@ def test_call_loopy_shape_inference1(ctx_factory):
             out[ii, jj] = tmp*(ii + jj)
             """, lang_version=(2018, 2))
 
-    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)
     y_pt = call_loopy(knl, {"A": A})["out"]
 
     _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in)
@@ -998,7 +998,7 @@ def test_call_loopy_shape_inference2(ctx_factory):
 
     rng = default_rng()
 
-    A_in = rng.random((38, 71))  # noqa
+    A_in = rng.random((38, 71))
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -1010,7 +1010,7 @@ def test_call_loopy_shape_inference2(ctx_factory):
 
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
-    A = pt.make_placeholder(name="x",  # noqa: N806
+    A = pt.make_placeholder(name="x",
                             shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
                             dtype=np.float64)
 
@@ -1268,7 +1268,7 @@ def test_advanced_indexing_fuzz(ctx_factory):
     cq = cl.CommandQueue(ctx)
     rng = default_rng(seed=0)
 
-    NSAMPLES = 50  # noqa: N806
+    NSAMPLES = 50
 
     for i in range(NSAMPLES):
         input_ndim = rng.integers(1, 8)
@@ -1976,7 +1976,9 @@ def test_nested_function_calls(ctx_factory):
     _, out = prg(cq, x=x_np)
     np.testing.assert_allclose(out["out1"], 3*x_np)
     np.testing.assert_allclose(out["out2"], x_np)
-    ref_tracer = lambda f, *args, identifier: f(*args)  # noqa: E731
+
+    def ref_tracer(f, *args, identifier):
+        return f(*args)
 
     def foo(tracer, x, y):
         return 2*x + 3*y
@@ -2006,6 +2008,79 @@ def test_nested_function_calls(ctx_factory):
     assert result_out.keys() == expect_out.keys()
     for k in expect_out:
         np.testing.assert_allclose(result_out[k], expect_out[k])
+
+
+def test_duplicate_node_count_dot_graph():
+    from testlib import count_dot_graph_nodes
+
+    from pytato.analysis import get_num_nodes
+    from pytato.visualization.dot import get_dot_graph
+
+    for i in range(80):
+        # print("curr i:", i)
+        dag = get_random_pt_dag(seed=i, axis_len=5)
+
+        # Generate dot graph with duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=True)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+        # Generate dot graph without duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=False)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        # Verify node counts without duplicates
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
+
+
+def test_duplicate_nodes_with_comm_count_dot_graph():
+    from testlib import count_dot_graph_nodes, get_random_pt_dag_with_send_recv_nodes
+
+    from pytato.analysis import get_num_nodes
+    from pytato.visualization.dot import get_dot_graph
+
+    rank = 0
+    size = 2
+    for i in range(20):
+        dag = get_random_pt_dag_with_send_recv_nodes(seed=i, rank=rank, size=size)
+
+        # Generate dot graph with duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=True)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+        # Generate dot graph without duplicates
+        dot_graph = get_dot_graph(dag, count_duplicates=False)
+        node_counts = count_dot_graph_nodes(dot_graph)
+
+        # Verify node counts without duplicates
+        assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
+
+
+def test_large_dot_graph_with_duplicates_count():
+    from testlib import count_dot_graph_nodes, make_large_dag
+
+    from pytato.analysis import get_num_nodes
+    from pytato.visualization.dot import get_dot_graph
+
+    iterations = 100
+    dag = make_large_dag(iterations, seed=42)
+
+    # Generate dot graph with duplicates
+    dot_graph = get_dot_graph(dag, count_duplicates=True)
+    node_counts = count_dot_graph_nodes(dot_graph)
+
+    # Verify node counts with duplicates
+    assert len(node_counts) == get_num_nodes(dag, count_duplicates=True)
+
+    # Generate dot graph without duplicates
+    dot_graph = get_dot_graph(dag, count_duplicates=False)
+    node_counts = count_dot_graph_nodes(dot_graph)
+
+    # Verify node counts without duplicates
+    assert len(node_counts) == get_num_nodes(dag, count_duplicates=False)
 
 
 if __name__ == "__main__":

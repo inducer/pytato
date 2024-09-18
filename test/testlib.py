@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import operator
 import random
+import re
 import types
 from typing import Any, Callable, Sequence
 
@@ -394,6 +395,23 @@ def make_large_dag_with_duplicates(iterations: int,
 
     result = pt.sum(combined_expr, axis=0)
     return pt.make_dict_of_named_arrays({"result": result})
+
+
+def count_dot_graph_nodes(dot_graph: str) -> dict[Any, int]:
+    """
+    Parses a dot graph and returns a dictionary with
+    the count of each unique node identifier.
+    """
+
+    node_pattern = re.compile(
+        r'addr:</td><td border="0"><FONT FACE=\'monospace\'>(0x[0-9a-f]+)</FONT></td>')
+    nodes = node_pattern.findall(dot_graph)
+
+    node_counts: dict[Any, int] = {}
+    for node in nodes:
+        node_counts[node] = node_counts.get(node, 0) + 1
+
+    return node_counts
 
 # }}}
 
