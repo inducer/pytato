@@ -582,6 +582,7 @@ class Array(Taggable):
                         np.dtype[Any]] = _np_result_dtype,
                 reverse: bool = False,
                 cast_to_result_dtype: bool = True,
+                is_pow: bool = False,
             ) -> Array:
 
         # {{{ sanity checks
@@ -601,14 +602,16 @@ class Array(Taggable):
                          get_result_type,
                          tags=tags,
                          non_equality_tags=non_equality_tags,
-                         cast_to_result_dtype=cast_to_result_dtype)
+                         cast_to_result_dtype=cast_to_result_dtype,
+                         is_pow=is_pow)
         else:
             result = utils.broadcast_binary_op(
                          self, other, op,
                          get_result_type,
                          tags=tags,
                          non_equality_tags=non_equality_tags,
-                         cast_to_result_dtype=cast_to_result_dtype)
+                         cast_to_result_dtype=cast_to_result_dtype,
+                         is_pow=is_pow)
 
         assert isinstance(result, Array)
         return result
@@ -648,8 +651,8 @@ class Array(Taggable):
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
             get_result_type=_truediv_result_type, reverse=True)
 
-    __pow__ = partialmethod(_binary_op, operator.pow)
-    __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True)
+    __pow__ = partialmethod(_binary_op, operator.pow, is_pow=True)
+    __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True, is_pow=True)
 
     __neg__ = partialmethod(_unary_op, operator.neg)
 
@@ -2403,7 +2406,8 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
                             lambda x, y: np.dtype(np.bool_),
                             tags=_get_default_tags(),
                             non_equality_tags=_get_created_at_tag(stacklevel=2),
-                            cast_to_result_dtype=False
+                            cast_to_result_dtype=False,
+                            is_pow=False,
                         )  # type: ignore[return-value]
 
 
@@ -2467,6 +2471,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
                                      cast_to_result_dtype=False,
+                                     is_pow=False,
                                      )  # type: ignore[return-value]
 
 
@@ -2484,6 +2489,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
                                      tags=_get_default_tags(),
                                      non_equality_tags=_get_created_at_tag(),
                                      cast_to_result_dtype=False,
+                                     is_pow=False,
                                      )  # type: ignore[return-value]
 
 

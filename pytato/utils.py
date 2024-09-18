@@ -195,6 +195,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                         tags: frozenset[Tag],
                         non_equality_tags: frozenset[Tag],
                         cast_to_result_dtype: bool,
+                        is_pow: bool,
                         ) -> ArrayOrScalar:
     from pytato.array import _get_default_axes
 
@@ -225,9 +226,19 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
             # Loopy's type casts don't like casting to bool
             assert result_dtype != np.bool_
 
-            expr = TypeCast(result_dtype, expr)
+            # See https://github.com/inducer/pytato/issues/542
+            # on why pow() + integers is not typecast to float or complex.
+            if not (is_pow
+                    and np.issubdtype(array.dtype, np.integer)
+                    and not np.issubdtype(result_dtype, np.integer)):
+                expr = TypeCast(result_dtype, expr)
         elif isinstance(expr, SCALAR_CLASSES):
-            expr = result_dtype.type(expr)
+            # See https://github.com/inducer/pytato/issues/542
+            # on why pow() + integers is not typecast to float or complex.
+            if not (is_pow
+                    and np.issubdtype(type(expr), np.integer)
+                    and not np.issubdtype(result_dtype, np.integer)):
+                expr = result_dtype.type(expr)
 
         return expr
 

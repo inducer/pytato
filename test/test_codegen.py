@@ -326,9 +326,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                                    "logical_and"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
-    if which == "sub":
-        pytest.skip("https://github.com/inducer/loopy/issues/131")
-
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -2006,6 +2003,65 @@ def test_nested_function_calls(ctx_factory):
     assert result_out.keys() == expect_out.keys()
     for k in expect_out:
         np.testing.assert_allclose(result_out[k], expect_out[k])
+
+
+def test_pow_arg_casting(ctx_factory):
+    # Check that pow() arguments are not typecast from int
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    types = (int, np.int32, np.int64, float, np.float32, np.float64)
+
+    for base_scalar in (True, False):
+        for exponent_scalar in (True, False):
+            if base_scalar and exponent_scalar:
+                # Not supported in pytato
+                continue
+
+            for base_tp in types:
+                if base_scalar:
+                    base_np = base_tp(2)
+                    base = base_np
+                else:
+                    base_np = np.array([1, 2, 3], base_tp)
+                    base = pt.make_data_wrapper(base_np)
+
+                for exponent_tp in types:
+                    if exponent_scalar:
+                        exponent_np = exponent_tp(2)
+                        exponent = exponent_np
+                    else:
+                        exponent_np = np.array([1, 2, 3], exponent_tp)
+                        exponent = pt.make_data_wrapper(exponent_np)
+
+                    out = base ** exponent
+
+                    _, (pt_out,) = pt.generate_loopy(out)(cq)
+
+                    np_out = np.power(base_np, exponent_np)
+
+                    assert pt_out.dtype == np_out.dtype
+                    np.testing.assert_allclose(np_out, pt_out)
+
+                    if np.issubdtype(exponent_tp, np.integer):
+                        assert exponent_tp in (int, np.int32, np.int64)
+
+                        if exponent_scalar:
+                            # We do cast between different int types
+                            assert (type(out.expr.exponent) in
+                                    (int, np.int32, np.int64)
+                                    or out.expr.exponent.dtype == np_out.dtype)
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (int, np.int32, np.int64)
+                    else:
+                        assert exponent_tp in (float, np.float32, np.float64)
+                        if exponent_scalar:
+                            assert type(out.expr.exponent) == np_out.dtype \
+                                or out.expr.exponent.dtype == np_out.dtype
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (float, np.float32, np.float64)
 
 
 if __name__ == "__main__":
