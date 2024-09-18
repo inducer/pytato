@@ -2021,20 +2021,20 @@ def test_pow_arg_casting(ctx_factory):
             for base_tp in types:
                 if base_scalar:
                     base_np = base_tp(2)
-                    first = base_np
+                    base = base_np
                 else:
                     base_np = np.array([1, 2, 3], base_tp)
-                    first = pt.make_data_wrapper(base_np)
+                    base = pt.make_data_wrapper(base_np)
 
                 for exponent_tp in types:
                     if exponent_scalar:
                         exponent_np = exponent_tp(2)
-                        second = exponent_np
+                        exponent = exponent_np
                     else:
                         exponent_np = np.array([1, 2, 3], exponent_tp)
-                        second = pt.make_data_wrapper(exponent_np)
+                        exponent = pt.make_data_wrapper(exponent_np)
 
-                    out = first ** second
+                    out = base ** exponent
 
                     _, (pt_out,) = pt.generate_loopy(out)(cq)
 
