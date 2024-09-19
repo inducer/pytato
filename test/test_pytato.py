@@ -1455,6 +1455,21 @@ def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
 # }}}
 
 
+def test_numpy_type_promotion_with_pytato_arrays():
+    class NotReallyAnArray:
+        @property
+        def dtype(self):
+            return np.dtype("float64")
+
+    # Make sure that np.result_type accesses only the dtype attribute of the
+    # class, not (e.g.) its data.
+    assert np.result_type(42, NotReallyAnArray()) == np.float64
+
+    from pytato.array import _np_result_dtype
+    assert _np_result_dtype(42, NotReallyAnArray()) == np.float64
+    assert _np_result_dtype(42.0, NotReallyAnArray()) == np.float64
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:
