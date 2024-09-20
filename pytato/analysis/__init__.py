@@ -337,6 +337,10 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], Never, []]):
     def _get_preds_from_shape(self, shape: ShapeType) -> FrozenOrderedSet[ArrayOrNames]:
         return FrozenOrderedSet(dim for dim in shape if isinstance(dim, Array))
 
+    def map_dict_of_named_arrays(
+            self, expr: DictOfNamedArrays) -> FrozenOrderedSet[ArrayOrNames]:
+        return FrozenOrderedSet(expr._data.values())
+
     def map_index_lambda(self, expr: IndexLambda) -> FrozenOrderedSet[ArrayOrNames]:
         return (FrozenOrderedSet(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
