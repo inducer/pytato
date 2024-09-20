@@ -102,6 +102,7 @@ __doc__ = """
 .. autoclass:: TransformMapperWithExtraArgs
 .. autoclass:: CopyMapper
 .. autoclass:: CopyMapperWithExtraArgs
+.. autoclass:: Deduplicator
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
@@ -1353,6 +1354,28 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(new_call, Call)
         return new_call[expr.name]
+
+# }}}
+
+
+# {{{ Deduplicator
+
+class Deduplicator(CopyMapper):
+    """Removes duplicate nodes from an expression."""
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            ) -> None:
+        super().__init__(
+            err_on_collision=False, err_on_no_op_duplication=False,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
 # }}}
 
