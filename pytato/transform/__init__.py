@@ -416,13 +416,16 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
+            err_on_collision: bool | None = None,
             _cache:
                 CachedMapperCache[ArrayOrNames, ResultT] | None = None,
             _function_cache:
                 CachedMapperCache[FunctionDefinition, FunctionResultT] | None = None
             ) -> None:
         super().__init__()
+
+        if err_on_collision is None:
+            err_on_collision = __debug__
 
         self._cache: CachedMapperCache[ArrayOrNames, ResultT] = (
             _cache if _cache is not None
@@ -602,8 +605,8 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_no_op_duplication: bool = False,
+            err_on_collision: bool | None = None,
+            err_on_no_op_duplication: bool | None = None,
             _cache: TransformMapperCache[ArrayOrNames] | None = None,
             _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
@@ -613,6 +616,11 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
         :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
+        if err_on_collision is None:
+            err_on_collision = __debug__
+        if err_on_no_op_duplication is None:
+            err_on_no_op_duplication = __debug__
+
         if _cache is None:
             _cache = TransformMapperCache(
                 self.get_cache_key,
@@ -690,8 +698,8 @@ class TransformMapperWithExtraArgs(
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_no_op_duplication: bool = False,
+            err_on_collision: bool | None = None,
+            err_on_no_op_duplication: bool | None = None,
             _cache: TransformMapperCache[ArrayOrNames] | None = None,
             _function_cache:
                 TransformMapperCache[FunctionDefinition] | None = None
@@ -702,6 +710,11 @@ class TransformMapperWithExtraArgs(
         :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
+        if err_on_collision is None:
+            err_on_collision = __debug__
+        if err_on_no_op_duplication is None:
+            err_on_no_op_duplication = __debug__
+
         if _cache is None:
             _cache = TransformMapperCache(
                 self.get_cache_key,
