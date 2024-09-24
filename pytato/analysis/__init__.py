@@ -647,7 +647,7 @@ class TagCountMapper(CombineMapper[int, Never]):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            s = super().rec(expr)
+            s = Mapper.rec(self, expr)
             if (
                     isinstance(expr, Array)
                     and (

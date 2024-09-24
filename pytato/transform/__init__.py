@@ -2002,7 +2002,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            return self._cache_add(inputs, super().rec(self.map_fn(expr)))
+            return self._cache_add(inputs, Mapper.rec(self, self.map_fn(expr)))
 
 # }}}
 
