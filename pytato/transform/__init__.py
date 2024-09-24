@@ -533,6 +533,8 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
 
         self.err_on_no_op_duplication = err_on_no_op_duplication
 
+        self._result_key_to_result: dict[CacheKeyT, CacheExprT] = {}
+
     def add(
             self,
             inputs: CacheInputs[CacheExprT],
@@ -549,24 +551,29 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
         if result_key is None:
             result_key = self._key_func(result)
 
-        from pytato.analysis import DirectPredecessorsGetter
-        pred_getter = DirectPredecessorsGetter(include_functions=True)
-        if (
-                self.err_on_no_op_duplication
-                and hash(result_key) == hash(key)
-                and result_key == key
-                and result is not inputs.expr
-                # Need this check in order to handle input DAGs that have existing
-                # duplicates. Deduplication will potentially replace predecessors
-                # of `expr` with cached versions, producing a new `result` that has
-                # the same cache key as `expr`.
-                and all(
-                    result_pred is pred
-                    for pred, result_pred in zip(
-                        pred_getter(inputs.expr),
-                        pred_getter(result),
-                        strict=True))):
-            raise CacheNoOpDuplicationError from None
+        try:
+            result = self._result_key_to_result[result_key]
+        except KeyError:
+            from pytato.analysis import DirectPredecessorsGetter
+            pred_getter = DirectPredecessorsGetter(include_functions=True)
+            if (
+                    self.err_on_no_op_duplication
+                    and hash(result_key) == hash(key)
+                    and result_key == key
+                    and result is not inputs.expr
+                    # Need this check in order to handle input DAGs that have existing
+                    # duplicates. Deduplication will potentially replace predecessors
+                    # of `expr` with cached versions, producing a new `result` that has
+                    # the same cache key as `expr`.
+                    and all(
+                        result_pred is pred
+                        for pred, result_pred in zip(
+                            pred_getter(inputs.expr),
+                            pred_getter(result),
+                            strict=True))):
+                raise CacheNoOpDuplicationError from None
+
+            self._result_key_to_result[result_key] = result
 
         self._expr_key_to_result[key] = result
         if self.err_on_collision:
