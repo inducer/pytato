@@ -178,9 +178,10 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
+# FIXME: Make this inherit from CachedWalkMapper instead?
 class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(err_on_collision=False)
         self.node_to_dot: dict[ArrayOrNames, _DotNodeInfo] = {}
         self.functions: set[FunctionDefinition] = set()
 
