@@ -561,6 +561,8 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
 
         self.err_on_created_duplicate = err_on_created_duplicate
 
+        self._result_to_cached_result: dict[CacheExprT, CacheExprT] = {}
+
     def add(
             self,
             inputs: CacheInputsWithKey[CacheExprT, P],
@@ -568,38 +570,48 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
         """
         Cache a mapping result.
 
-        Returns *result*.
+        Returns the cached result (which may not be identical to *result* if a
+        result was already cached with the same result key).
         """
         key = inputs.key
 
         assert key not in self._input_key_to_result, \
             f"Cache entry is already present for key '{key}'."
 
-        if self.err_on_created_duplicate:
-            # For this check to work, must preserve duplicates when retrieving
-            # predecessors. DirectPredecessorsGetter deduplicates by virtue of storing
-            # the predecessors it finds in sets
-            from pytato.analysis import ListOfDirectPredecessorsGetter
-            pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
-            if (
-                    hash(result) == hash(inputs.expr)
-                    and result == inputs.expr
-                    and result is not inputs.expr
-                    # Only consider "direct" duplication, not duplication resulting
-                    # from equality-preserving changes to predecessors. Assume that
-                    # such changes are OK, otherwise they would have been detected
-                    # at the point at which they originated. (For example, consider
-                    # a DAG containing pre-existing duplicates. If a subexpression
-                    # of *expr* is a duplicate and is replaced with a previously
-                    # encountered version from the cache, a new instance of *expr*
-                    # must be created. This should not trigger an error.)
-                    and all(
-                        result_pred is pred
-                        for pred, result_pred in zip(
-                            pred_getter(inputs.expr),
-                            pred_getter(result),
-                            strict=True))):
-                raise MapperCreatedDuplicateError from None
+        try:
+            # The first encountered instance of each distinct result (in terms of
+            # "==") gets cached, and subsequent mappings with results that are equal
+            # to prior cached results are replaced with the original instance
+            result = self._result_to_cached_result[result]
+        except KeyError:
+            if self.err_on_created_duplicate:
+                # For this check to work, must preserve duplicates when retrieving
+                # predecessors. DirectPredecessorsGetter deduplicates by virtue of
+                # storing the predecessors it finds in sets
+                from pytato.analysis import ListOfDirectPredecessorsGetter
+                pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
+                if (
+                        hash(result) == hash(inputs.expr)
+                        and result == inputs.expr
+                        and result is not inputs.expr
+                        # Only consider "direct" duplication, not duplication
+                        # resulting from equality-preserving changes to predecessors.
+                        # Assume that such changes are OK, otherwise they would have
+                        # been detected at the point at which they originated. (For
+                        # example, consider a DAG containing pre-existing duplicates.
+                        # If a subexpression of *expr* is a duplicate and is replaced
+                        # with a previously encountered version from the cache, a
+                        # new instance of *expr* must be created. This should not
+                        # trigger an error.)
+                        and all(
+                            result_pred is pred
+                            for pred, result_pred in zip(
+                                pred_getter(inputs.expr),
+                                pred_getter(result),
+                                strict=True))):
+                    raise MapperCreatedDuplicateError from None
+
+            self._result_to_cached_result[result] = result
 
         self._input_key_to_result[key] = result
         if self.err_on_collision:
