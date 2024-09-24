@@ -1621,7 +1621,8 @@ def test_zero_size_cl_array_dedup(ctx_factory):
         dedup_dw_out, count_duplicates=True)
     # 'x2' would be merged with 'x1' as both of them point to the same data
     # 'x3' would be merged with 'x4' as both of them point to the same data
-    assert num_nodes_new == (num_nodes_old - 2)
+    # '2*x2' would be merged with '2*x1' as they are identical expressions
+    assert num_nodes_new == (num_nodes_old - 3)
 
 
 # {{{ test_deterministic_codegen
