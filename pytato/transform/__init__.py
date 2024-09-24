@@ -380,6 +380,9 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
         """Cache a mapping result."""
         key = inputs.key
 
+        assert key not in self._expr_key_to_result, \
+            f"Cache entry is already present for key '{key}'."
+
         self._expr_key_to_result[key] = result
         if self.err_on_collision:
             self._expr_key_to_expr[key] = inputs.expr
@@ -548,6 +551,9 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
         result was already cached with the same result key).
         """
         key = inputs.key
+
+        assert key not in self._expr_key_to_result, \
+            f"Cache entry is already present for key '{key}'."
 
         if result_key is None:
             result_key = self._key_func(result)
