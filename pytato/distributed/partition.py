@@ -928,7 +928,7 @@ def find_distributed_partition(
     def get_materialized_predecessors(ary: Array) -> tuple[Array, ...]:
         materialized_preds: dict[Array, None] = {}
         for pred in direct_preds_getter(ary):
-            if pred in materialized_arrays:
+            if pred in materialized_arrays_set:
                 materialized_preds[pred] = None
             else:
                 for p in get_materialized_predecessors(pred):
