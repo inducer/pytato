@@ -402,12 +402,12 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[tuple[CommunicationOpIdentifier, ...]]):
+        CombineMapper[dict[CommunicationOpIdentifier, None]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
                 dict[CommunicationOpIdentifier,
-                     tuple[CommunicationOpIdentifier, ...]] = {}
+                     dict[CommunicationOpIdentifier, None]] = {}
 
         self.local_recv_id_to_recv_node: \
                 dict[CommunicationOpIdentifier, DistributedRecv] = {}
@@ -417,14 +417,13 @@ class _LocalSendRecvDepGatherer(
         self.local_rank = local_rank
 
     def combine(
-            self, *args: tuple[CommunicationOpIdentifier, ...]
-            ) -> tuple[CommunicationOpIdentifier, ...]:
-        from pytools import unique
-        return reduce(lambda x, y: tuple(unique(x+y)), args, ())
+            self, *args: dict[CommunicationOpIdentifier, None]
+            ) -> dict[CommunicationOpIdentifier, None]:
+        return reduce(lambda x, y: x | y, args, {})
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> tuple[CommunicationOpIdentifier, ...]:
+                                        ) -> dict[CommunicationOpIdentifier, None]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -438,8 +437,8 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> tuple[CommunicationOpIdentifier, ...]:
-        return ()
+    def _map_input_base(self, expr: Array) -> dict[CommunicationOpIdentifier, None]:
+        return {}
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
@@ -447,21 +446,21 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> tuple[CommunicationOpIdentifier, ...]:
+            ) -> dict[CommunicationOpIdentifier, None]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
             from pytato.distributed.verify import DuplicateRecvError
             raise DuplicateRecvError(f"Multiple receives found for '{recv_id}'")
 
-        self.local_comm_ids_to_needed_comm_ids[recv_id] = ()
+        self.local_comm_ids_to_needed_comm_ids[recv_id] = {}
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
-        return (recv_id,)
+        return {recv_id: None}
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> tuple[CommunicationOpIdentifier, ...]:
+            self, expr: NamedCallResult) -> dict[CommunicationOpIdentifier, None]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
 
@@ -475,7 +474,7 @@ TaskType = TypeVar("TaskType")
 
 def _schedule_task_batches(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Sequence[list[TaskType]]:
+        -> Sequence[dict[TaskType, None]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -490,7 +489,7 @@ def _schedule_task_batches(
 
 def _schedule_task_batches_counted(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> tuple[Sequence[list[TaskType]], int]:
+        -> tuple[Sequence[dict[TaskType, None]], int]:
     """
     Static type checkers need the functions to return the same type regardless
     of the input. The testing code needs to know about the number of tasks visited
@@ -499,11 +498,11 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches: Sequence[list[TaskType]] = [[] for _ in range(nlevels)]
+    task_batches: Sequence[dict[TaskType, None]] = [{} for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
         if task_id not in task_batches[dep_level]:
-            task_batches[dep_level].append(task_id)
+            task_batches[dep_level][task_id] = None
 
     return task_batches, visits_in_depend + len(task_to_dep_level.keys())
 
@@ -594,14 +593,14 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 # {{{ _set_dict_union_mpi
 
 def _set_dict_union_mpi(
-        dict_a: Mapping[_KeyT, tuple[_ValueT, ...]],
-        dict_b: Mapping[_KeyT, tuple[_ValueT, ...]],
-        mpi_data_type: mpi4py.MPI.Datatype | None) -> Mapping[_KeyT, Sequence[_ValueT]]:
+        dict_a: Mapping[_KeyT, dict[_ValueT, None]],
+        dict_b: Mapping[_KeyT, dict[_ValueT, None]],
+        mpi_data_type: mpi4py.MPI.Datatype | None) \
+            -> Mapping[_KeyT, dict[_ValueT, None]]:
     assert mpi_data_type is None
-    from pytools import unique
     result = dict(dict_a)
     for key, values in dict_b.items():
-        result[key] = tuple(unique(result.get(key, ()) + values))
+        result[key] = result.get(key, {}) | values
     return result
 
 # }}}
