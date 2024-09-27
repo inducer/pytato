@@ -315,8 +315,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: tuple[CommunicationOpIdentifier, ...]
-    send_ids: tuple[CommunicationOpIdentifier, ...]
+    recv_ids: immutabledict[CommunicationOpIdentifier, None]
+    send_ids: immutabledict[CommunicationOpIdentifier, None]
 
 
 # {{{ _make_distributed_partition
@@ -727,8 +727,7 @@ def find_distributed_partition(
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
     import mpi4py.MPI as MPI
-
-    from pytools import unique
+    from immutabledict import immutabledict
 
     from pytato.transform import SubsetDependencyMapper
 
@@ -779,30 +778,31 @@ def find_distributed_partition(
 
     part_comm_ids: list[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: tuple[CommunicationOpIdentifier, ...] = ()
+        recv_ids: immutabledict[CommunicationOpIdentifier, None] = immutabledict()
         for batch in comm_batches:
-            send_ids = tuple(
-                comm_id for comm_id in unique(batch)
-                if comm_id.src_rank == local_rank)
+            send_ids: immutabledict[CommunicationOpIdentifier, None] \
+                = immutabledict.fromkeys(
+                    comm_id for comm_id in batch
+                    if comm_id.src_rank == local_rank)
             if recv_ids or send_ids:
                 part_comm_ids.append(
                     _PartCommIDs(
                         recv_ids=recv_ids,
                         send_ids=send_ids))
             # These go into the next part
-            recv_ids = tuple(
-                comm_id for comm_id in unique(batch)
+            recv_ids = immutabledict.fromkeys(
+                comm_id for comm_id in batch
                 if comm_id.dest_rank == local_rank)
         if recv_ids:
             part_comm_ids.append(
                 _PartCommIDs(
                     recv_ids=recv_ids,
-                    send_ids=()))
+                    send_ids=immutabledict()))
     else:
         part_comm_ids.append(
             _PartCommIDs(
-                recv_ids=(),
-                send_ids=()))
+                recv_ids=immutabledict(),
+                send_ids=immutabledict()))
 
     nparts = len(part_comm_ids)
 
@@ -820,7 +820,7 @@ def find_distributed_partition(
     comm_id_to_part_id = {
         comm_id: ipart
         for ipart, comm_ids in enumerate(part_comm_ids)
-        for comm_id in unique(comm_ids.send_ids + comm_ids.recv_ids)}
+        for comm_id in comm_ids.send_ids | comm_ids.recv_ids}
 
     # }}}
 
@@ -832,10 +832,10 @@ def find_distributed_partition(
     # The collections of arrays below must have a deterministic order in order to ensure
     # that the resulting partition is also deterministic
 
-    sent_arrays = tuple(unique(
-        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values()))
+    sent_arrays = dict.fromkeys(
+        send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
 
-    received_arrays = tuple(unique(lsrdg.local_recv_id_to_recv_node.values()))
+    received_arrays = dict.fromkeys(lsrdg.local_recv_id_to_recv_node.values())
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
@@ -843,18 +843,13 @@ def find_distributed_partition(
     # We could allow sent *arrays* to be included here because they are distinct
     # from send *nodes*, but we choose to exclude them in order to simplify the
     # processing below.
-    materialized_arrays_set = set(materialized_arrays_collector.materialized_arrays) \
-        - set(received_arrays) \
-        - set(sent_arrays)
-
-    from pytools import unique
-    materialized_arrays = tuple(unique(
-        a for a in materialized_arrays_collector.materialized_arrays
-        if a in materialized_arrays_set))
+    materialized_arrays = {a: None
+                           for a in materialized_arrays_collector.materialized_arrays
+                           if a not in received_arrays | sent_arrays}
 
     # "mso" for "materialized/sent/output"
-    output_arrays = tuple(unique(outputs._data.values()))
-    mso_arrays = tuple(unique(materialized_arrays + sent_arrays + output_arrays))
+    output_arrays = dict.fromkeys(outputs._data.values())
+    mso_arrays = materialized_arrays | sent_arrays | output_arrays
 
     # FIXME: This gathers up materialized_arrays recursively, leading to
     # result sizes potentially quadratic in the number of materialized arrays.
@@ -918,30 +913,30 @@ def find_distributed_partition(
     assert all(0 <= part_id < nparts
                for part_id in stored_ary_to_part_id.values())
 
-    stored_arrays = tuple(unique(stored_ary_to_part_id))
+    stored_arrays = dict.fromkeys(stored_ary_to_part_id)
 
     # {{{ find which stored arrays should become part outputs
     # (because they are used in not just their local part, but also others)
 
     direct_preds_getter = DirectPredecessorsGetter()
 
-    def get_materialized_predecessors(ary: Array) -> tuple[Array, ...]:
+    def get_materialized_predecessors(ary: Array) -> dict[Array, None]:
         materialized_preds: dict[Array, None] = {}
         for pred in direct_preds_getter(ary):
-            if pred in materialized_arrays_set:
+            if pred in materialized_arrays:
                 materialized_preds[pred] = None
             else:
                 for p in get_materialized_predecessors(pred):
                     materialized_preds[p] = None
-        return tuple(materialized_preds.keys())
+        return materialized_preds
 
-    stored_arrays_promoted_to_part_outputs = tuple(unique(
-                stored_pred
+    stored_arrays_promoted_to_part_outputs = {
+                stored_pred: None
                 for stored_ary in stored_arrays
                 for stored_pred in get_materialized_predecessors(stored_ary)
                 if (stored_ary_to_part_id[stored_ary]
                     != stored_ary_to_part_id[stored_pred])
-    ))
+    }
 
     # }}}
 
