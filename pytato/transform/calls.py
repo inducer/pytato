@@ -4,6 +4,9 @@
 .. autofunction:: inline_calls
 .. autofunction:: tag_all_calls_to_be_inlined
 """
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
 __license__ = """
@@ -26,13 +29,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from immutables import Map
-from pytato.transform import (ArrayOrNames, CopyMapper)
-from pytato.array import (AbstractResultWithNamedArrays, Array,
-                          DictOfNamedArrays, Placeholder)
+from typing import Mapping
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    DictOfNamedArrays,
+    Placeholder,
+)
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
+from pytato.transform import ArrayOrNames, CopyMapper
 
 
 # {{{ inlining
@@ -44,7 +51,8 @@ class PlaceholderSubstitutor(CopyMapper):
         A mapping from the placeholder name to the array that it is to be
         substituted with.
     """
-    def __init__(self, substitutions: Map[str, Array]) -> None:
+
+    def __init__(self, substitutions: Mapping[str, Array]) -> None:
         super().__init__()
         self.substitutions = substitutions
 
@@ -62,20 +70,23 @@ class Inliner(CopyMapper):
         assert isinstance(new_expr, Call)
 
         if expr.tags_of_type(InlineCallTag):
-            substitutor = PlaceholderSubstitutor(expr.bindings)
+            substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
                 {name: substitutor(ret)
                  for name, ret in new_expr.function.returns.items()},
-                tags=expr.tags
+                tags=new_expr.tags
             )
         else:
             return new_expr
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
-        new_call = self.rec(expr._container)
-        assert isinstance(new_call, AbstractResultWithNamedArrays)
-        return new_call[expr.name]
+        new_call_or_inlined_expr = self.rec(expr._container)
+        assert isinstance(new_call_or_inlined_expr, AbstractResultWithNamedArrays)
+        if isinstance(new_call_or_inlined_expr, Call):
+            return new_call_or_inlined_expr[expr.name]
+        else:
+            return new_call_or_inlined_expr[expr.name].expr
 
 
 class InlineMarker(CopyMapper):

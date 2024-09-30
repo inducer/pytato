@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2021 Kaushik Kulkarni
@@ -27,35 +29,37 @@ THE SOFTWARE.
 
 import sys
 
+import attrs
 import numpy as np
 import pytest
-import attrs
-
-import pytato as pt
+from testlib import RandomDAGContext, make_random_dag
 
 from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from testlib import RandomDAGContext, make_random_dag
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+
+import pytato as pt
+from pytato.array import _SuppliedAxesAndTagsMixin
 
 
 def test_matmul_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
-    b = pt.make_placeholder(name="b", shape=(20, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
+    b = pt.make_placeholder(name="b", shape=(20, 10))
 
     with pytest.raises(ValueError):
         a @ b
 
-    c = pt.make_placeholder(name="c", shape=(), dtype=np.float64)
+    c = pt.make_placeholder(name="c", shape=())
     with pytest.raises(ValueError):
         c @ c
 
     n = pt.make_size_param("n")
-    d = pt.make_placeholder(name="d", shape=(n, n), dtype=np.float64)
+    d = pt.make_placeholder(name="d", shape=(n, n))
     d @ d
 
 
 def test_roll_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
     pt.roll(a, 1, axis=0)
 
     with pytest.raises(ValueError):
@@ -66,7 +70,7 @@ def test_roll_input_validation():
 
 
 def test_transpose_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10))
     pt.transpose(a)
 
     with pytest.raises(ValueError):
@@ -80,7 +84,7 @@ def test_transpose_input_validation():
 
 
 def test_slice_input_validation():
-    a = pt.make_placeholder(name="a", shape=(10, 10, 10), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10, 10, 10))
 
     a[0]
     a[0, 0]
@@ -94,7 +98,7 @@ def test_slice_input_validation():
 
 
 def test_index_type_validation():
-    a = pt.make_placeholder(name="a", shape=(10,), dtype=np.float64)
+    a = pt.make_placeholder(name="a", shape=(10,))
 
     idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.int8)
     a[idx]
@@ -102,14 +106,14 @@ def test_index_type_validation():
     idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.uint8)
     a[idx]
 
-    idx = pt.make_placeholder(name="idx", shape=(5,), dtype=np.float64)
+    idx = pt.make_placeholder(name="idx", shape=(5,))
     with pytest.raises(IndexError):
         a[idx]
 
 
 def test_stack_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
+    x = pt.make_placeholder(name="x", shape=(10, 10))
+    y = pt.make_placeholder(name="y", shape=(1, 10))
 
     assert pt.stack((x, x, x), axis=0).shape == (3, 10, 10)
 
@@ -126,9 +130,8 @@ def test_stack_input_validation():
         pt.stack((x, x), axis=3)
 
 
-@pytest.mark.xfail  # Unnamed placeholders should be used via pt.bind
 def test_make_placeholder_noname():
-    x = pt.make_placeholder("x", shape=(10, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(10, 4))
     y = 2*x
 
     knl = pt.generate_loopy(y).kernel
@@ -138,7 +141,7 @@ def test_make_placeholder_noname():
 
 
 def test_zero_length_arrays():
-    x = pt.make_placeholder("x", shape=(0, 4), dtype=float)
+    x = pt.make_placeholder("x", shape=(0, 4))
     y = 2*x
 
     assert y.shape == (0, 4)
@@ -148,8 +151,8 @@ def test_zero_length_arrays():
 
 
 def test_concatenate_input_validation():
-    x = pt.make_placeholder(name="x", shape=(10, 10), dtype=np.float64)
-    y = pt.make_placeholder(name="y", shape=(1, 10), dtype=np.float64)
+    x = pt.make_placeholder(name="x", shape=(10, 10))
+    y = pt.make_placeholder(name="y", shape=(1, 10))
 
     assert pt.concatenate((x, x, x), axis=0).shape == (30, 10)
     assert pt.concatenate((x, y), axis=0).shape == (11, 10)
@@ -168,7 +171,7 @@ def test_concatenate_input_validation():
 
 
 def test_reshape_input_validation():
-    x = pt.make_placeholder("x", shape=(3, 3, 4), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(3, 3, 4))
 
     assert pt.reshape(x, (-1,)).shape == (36,)
     assert pt.reshape(x, (-1, 6)).shape == (6, 6)
@@ -185,7 +188,7 @@ def test_reshape_input_validation():
 
     # Reporter by alexfikl
     # See https://github.com/inducer/pytato/issues/157
-    x = pt.make_placeholder("x", shape=(0,), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(0,))
     assert pt.reshape(x, (128, 0, 17)).shape == (128, 0, 17)
 
 
@@ -203,22 +206,22 @@ def test_binary_op_dispatch():
 
             return NotImplemented
 
-    x = pt.make_placeholder(name="x", shape=(10,), dtype=float)
+    x = pt.make_placeholder(name="x", shape=(10,))
     assert Foo() + x == "bar"
     assert x + Foo() == "baz"
 
 
 def test_same_placeholder_name_raises():
     from pytato.diagnostic import NameClashError
-    x = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(name="arr", shape=(10, 4), dtype=float)
+    x = pt.make_placeholder(name="arr", shape=(10, 4))
+    y = pt.make_placeholder(name="arr", shape=(10, 4))
 
     with pytest.raises(NameClashError):
         pt.generate_loopy(x+y)
 
     n1 = pt.make_size_param("n")
     n2 = pt.make_size_param("n")
-    x = pt.make_placeholder(name="arr", shape=(n1, n2), dtype=float)
+    x = pt.make_placeholder(name="arr", shape=(n1, n2))
     with pytest.raises(NameClashError):
         pt.generate_loopy(2*x)
 
@@ -226,7 +229,7 @@ def test_same_placeholder_name_raises():
 def test_einsum_error_handling():
     with pytest.raises(ValueError):
         # operands not enough
-        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2), float))
+        pt.einsum("ij,j->j", pt.make_placeholder("x", (2, 2)))
 
     with pytest.raises(ValueError):
         # double index use in the out spec.
@@ -234,7 +237,7 @@ def test_einsum_error_handling():
 
 
 def test_accessing_dict_of_named_arrays_validation():
-    x = pt.make_placeholder(name="x", shape=10, dtype=float)
+    x = pt.make_placeholder(name="x", shape=10)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
 
     assert isinstance(y1y2["y1"], pt.array.NamedArray)
@@ -243,9 +246,10 @@ def test_accessing_dict_of_named_arrays_validation():
 
 
 def test_call_loopy_shape_inference():
+    import loopy as lp
+
     from pytato.loopy import call_loopy
     from pytato.utils import are_shapes_equal
-    import loopy as lp
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -257,7 +261,7 @@ def test_call_loopy_shape_inference():
 
     # {{{ variant 1
 
-    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37))  # noqa: N806
     y = call_loopy(knl, {"A": A})["out"]
     assert are_shapes_equal(y.shape, (4, 3))
 
@@ -268,8 +272,7 @@ def test_call_loopy_shape_inference():
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
     A = pt.make_placeholder(name="x",  # noqa: N806
-                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
-                            dtype=np.float64)
+                            shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3))
 
     y = call_loopy(knl, {"A": A})["out"]
     assert are_shapes_equal(y.shape, (2*n2, 2*n1))
@@ -285,14 +288,14 @@ def test_tagging_array():
         Best array known to humankind.
         """
 
-    x = pt.make_placeholder(shape=(42, 1729), dtype=float, name="x")
+    x = pt.make_placeholder(shape=(42, 1729), name="x")
     y = x.tagged(BestArrayTag())
     assert any(isinstance(tag, BestArrayTag) for tag in y.tags)
 
 
 def test_dict_of_named_arrays_comparison():
     # See https://github.com/inducer/pytato/pull/137
-    x = pt.make_placeholder("x", (10, 4), float)
+    x = pt.make_placeholder("x", (10, 4))
     dict1 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict2 = pt.make_dict_of_named_arrays({"out": 2 * x})
     dict3 = pt.make_dict_of_named_arrays({"not_out": 2 * x})
@@ -304,15 +307,21 @@ def test_dict_of_named_arrays_comparison():
 
 def test_toposortmapper():
     n = pt.make_size_param("n")
-    array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
+    array = pt.make_placeholder(name="array", shape=n)
     stack = pt.stack([array, 2*array, array + 6])
     y = stack @ stack.T
 
     tm = pt.transform.TopoSortMapper()
     tm(y)
 
-    from pytato.array import (AxisPermutation, IndexLambda,
-                              Placeholder, Einsum, SizeParam, Stack)
+    from pytato.array import (
+        AxisPermutation,
+        Einsum,
+        IndexLambda,
+        Placeholder,
+        SizeParam,
+        Stack,
+    )
 
     assert isinstance(tm.topological_order[0], SizeParam)
     assert isinstance(tm.topological_order[1], Placeholder)
@@ -325,10 +334,11 @@ def test_toposortmapper():
 
 def test_userscollector():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.transform import UsersCollector
-    from pytato.analysis import get_nusers
 
     from pytools.graph import reverse_graph
+
+    from pytato.analysis import get_nusers
+    from pytato.transform import UsersCollector
 
     # Check that nodes without users are correctly reversed
     array = pt.make_placeholder(name="array", shape=1, dtype=np.int64)
@@ -373,13 +383,14 @@ def test_userscollector():
 
 def test_linear_complexity_inequality():
     # See https://github.com/inducer/pytato/issues/163
+    from numpy.random import default_rng
+
     import pytato as pt
     from pytato.equality import EqualityComparer
-    from numpy.random import default_rng
 
     def construct_intestine_graph(depth=100, seed=0):
         rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        x = pt.make_placeholder("x", shape=(10,))
 
         for _ in range(depth):
             coeff1, coeff2 = rng.integers(0, 10, 2)
@@ -503,8 +514,8 @@ IndexLambda(
     dtype='int64',
     expr=Product((Subscript(Variable('_in0'),
                             (Variable('_0'), Variable('_1'))),
-                  Subscript(Variable('_in1'),
-                            (Variable('_0'), Variable('_1'))))),
+                  TypeCast(dtype('int64'), Subscript(Variable('_in1'),
+                            (Variable('_0'), Variable('_1')))))),
     bindings={'_in0': Placeholder(shape=(10, 4), dtype='int64', name='y'),
               '_in1': IndexLambda(
                   shape=(10, 4),
@@ -587,24 +598,176 @@ def test_repr_array_is_deterministic():
         assert repr(dag) == repr(dag)
 
 
-def test_nodecountmapper():
-    from testlib import RandomDAGContext, make_random_dag
+def test_empty_dag_count():
+    from pytato.analysis import get_node_type_counts, get_num_nodes
+
+    empty_dag = pt.make_dict_of_named_arrays({})
+
+    # Verify that get_num_nodes returns 0 for an empty DAG
+    assert get_num_nodes(empty_dag, count_duplicates=False) == 0
+
+    counts = get_node_type_counts(empty_dag)
+    assert len(counts) == 0
+
+
+def test_single_node_dag_count():
+    from pytato.analysis import get_node_type_counts, get_num_nodes
+
+    data = np.random.rand(4, 4)
+    single_node_dag = pt.make_dict_of_named_arrays(
+        {"result": pt.make_data_wrapper(data)})
+
+    # Get counts per node type
+    node_counts = get_node_type_counts(single_node_dag)
+
+    # Assert that there is only one node of type DataWrapper
+    assert node_counts == {pt.DataWrapper: 1}
+
+    # Get total number of nodes
+    total_nodes = get_num_nodes(single_node_dag, count_duplicates=False)
+
+    assert total_nodes == 1
+
+
+def test_small_dag_count():
+    from pytato.analysis import get_node_type_counts, get_num_nodes
+
+    # Make a DAG using two nodes and one operation
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    b = a + 1
+    dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
+
+    # Verify that get_num_nodes returns 2 for a DAG with two nodes
+    assert get_num_nodes(dag, count_duplicates=False) == 2
+
+    counts = get_node_type_counts(dag)
+    assert len(counts) == 2
+    assert counts[pt.array.Placeholder] == 1   # "a"
+    assert counts[pt.array.IndexLambda] == 1   # single operation
+
+
+def test_large_dag_count():
+    from testlib import make_large_dag
+
+    from pytato.analysis import get_node_type_counts, get_num_nodes
+
+    iterations = 100
+    dag = make_large_dag(iterations, seed=42)
+
+    # Verify that the number of nodes is equal to iterations + 1 (placeholder)
+    assert get_num_nodes(dag, count_duplicates=False) == iterations + 1
+
+    counts = get_node_type_counts(dag)
+    assert len(counts) >= 1
+    assert counts[pt.array.Placeholder] == 1
+    assert counts[pt.array.IndexLambda] == 100   # 100 operations
+    assert sum(counts.values()) == iterations + 1
+
+
+def test_random_dag_count():
+    from testlib import get_random_pt_dag
+
     from pytato.analysis import get_num_nodes
+    for i in range(80):
+        dag = get_random_pt_dag(seed=i, axis_len=5)
 
-    axis_len = 5
+        assert get_num_nodes(dag, count_duplicates=False) == len(
+            pt.transform.DependencyMapper()(dag))
 
+
+def test_random_dag_with_comm_count():
+    from testlib import get_random_pt_dag_with_send_recv_nodes
+
+    from pytato.analysis import get_num_nodes
+    rank = 0
+    size = 2
     for i in range(10):
-        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
-                                 axis_len=axis_len, use_numpy=False)
-        dag = make_random_dag(rdagc)
+        dag = get_random_pt_dag_with_send_recv_nodes(
+            seed=i, rank=rank, size=size)
 
-        # Subtract 1 since NodeCountMapper counts an extra one for DictOfNamedArrays.
-        assert get_num_nodes(dag)-1 == len(pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag, count_duplicates=False) == len(
+            pt.transform.DependencyMapper()(dag))
+
+
+def test_small_dag_with_duplicates_count():
+    from testlib import make_small_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_node_multiplicities,
+        get_node_type_counts,
+        get_num_nodes,
+    )
+
+    dag = make_small_dag_with_duplicates()
+
+    # Get the number of expressions, including duplicates
+    node_count = get_num_nodes(dag, count_duplicates=True)
+    expected_node_count = 4
+    assert node_count == expected_node_count
+
+    # Get the number of occurrences of each unique expression
+    node_multiplicity = get_node_multiplicities(dag)
+    assert any(count > 1 for count in node_multiplicity.values())
+
+    # Get difference in duplicates
+    num_duplicates = sum(count - 1 for count in node_multiplicity.values())
+
+    counts = get_node_type_counts(dag, count_duplicates=True)
+    expected_counts = {
+        pt.array.Placeholder: 1,
+        pt.array.IndexLambda: 3
+    }
+
+    for node_type, expected_count in expected_counts.items():
+        assert counts[node_type] == expected_count
+
+    # Check that duplicates are correctly calculated
+    assert node_count - num_duplicates == len(
+        pt.transform.DependencyMapper()(dag))
+    assert node_count - num_duplicates == get_num_nodes(
+        dag, count_duplicates=False)
+
+
+def test_large_dag_with_duplicates_count():
+    from testlib import make_large_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_node_multiplicities,
+        get_node_type_counts,
+        get_num_nodes,
+    )
+
+    iterations = 100
+    dag = make_large_dag_with_duplicates(iterations, seed=42)
+
+    # Get the number of expressions, including duplicates
+    node_count = get_num_nodes(dag, count_duplicates=True)
+
+    # Get the number of occurrences of each unique expression
+    node_multiplicity = get_node_multiplicities(dag)
+    assert any(count > 1 for count in node_multiplicity.values())
+
+    expected_node_count = sum(count for count in node_multiplicity.values())
+    assert node_count == expected_node_count
+
+    # Get difference in duplicates
+    num_duplicates = sum(count - 1 for count in node_multiplicity.values())
+
+    counts = get_node_type_counts(dag, count_duplicates=True)
+
+    assert counts[pt.array.Placeholder] == 1
+    assert sum(counts.values()) == expected_node_count
+
+    # Check that duplicates are correctly calculated
+    assert node_count - num_duplicates == len(
+        pt.transform.DependencyMapper()(dag))
+    assert node_count - num_duplicates == get_num_nodes(
+        dag, count_duplicates=False)
 
 
 def test_rec_get_user_nodes():
-    x1 = pt.make_placeholder("x1", shape=(10, 4), dtype=np.float64)
-    x2 = pt.make_placeholder("x2", shape=(10, 4), dtype=np.float64)
+    x1 = pt.make_placeholder("x1", shape=(10, 4))
+    x2 = pt.make_placeholder("x2", shape=(10, 4))
 
     expr = pt.make_dict_of_named_arrays({"out1": 2 * x1,
                                          "out2": 7 * x1 + 3 * x2})
@@ -620,7 +783,7 @@ def test_rec_get_user_nodes_linear_complexity():
     def construct_intestine_graph(depth=100, seed=0):
         from numpy.random import default_rng
         rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
+        x = pt.make_placeholder("x", shape=(10,))
         y = x
 
         for _ in range(depth):
@@ -648,58 +811,29 @@ def test_rec_get_user_nodes_linear_complexity():
     assert (expected_result == result)
 
 
-def test_tag_user_nodes_linear_complexity():
-    from numpy.random import default_rng
-
-    def construct_intestine_graph(depth=100, seed=0):
-        rng = default_rng(seed)
-        x = pt.make_placeholder("x", shape=(10,), dtype=float)
-        y = x
-
-        for _ in range(depth):
-            coeff1, coeff2 = rng.integers(0, 10, 2)
-            y = coeff1 * y + coeff2 * y
-
-        return y, x
-
-    expr, inp = construct_intestine_graph()
-    user_collector = pt.transform.UsersCollector()
-    user_collector(expr)
-
-    expected_result = {}
-
-    class ExpectedResultComputer(pt.transform.CachedWalkMapper):
-        def get_cache_key(self, expr) -> int:
-            return id(expr)
-
-        def post_visit(self, expr):
-            expected_result[expr] = {"foo"}
-
-    expr, inp = construct_intestine_graph()
-    result = pt.transform.tag_user_nodes(user_collector.node_to_users, "foo", inp)
-    ExpectedResultComputer()(expr)
-
-    assert expected_result == result
-
-
 def test_basic_index_equality_traverses_underlying_arrays():
     # to test bug in pytato which didn't account underlying arrays
-    a = pt.make_placeholder("a", (10,), float)
-    b = pt.make_placeholder("b", (10,), float)
+    a = pt.make_placeholder("a", (10,))
+    b = pt.make_placeholder("b", (10,))
     assert a[0] != b[0]
 
 
 def test_idx_lambda_to_hlo():
-    from pytato.raising import index_lambda_to_high_level_op
-    from immutables import Map
-    from pytato.raising import (BinaryOp, BinaryOpType, FullOp, ReduceOp,
-                                C99CallOp, BroadcastOp)
+    from immutabledict import immutabledict
 
-    from pytato.reductions import (SumReductionOperation,
-                                   ProductReductionOperation)
+    from pytato.raising import (
+        BinaryOp,
+        BinaryOpType,
+        BroadcastOp,
+        C99CallOp,
+        FullOp,
+        ReduceOp,
+        index_lambda_to_high_level_op,
+    )
+    from pytato.reductions import ProductReductionOperation, SumReductionOperation
 
-    a = pt.make_placeholder("a", (10, 4), dtype=np.float64)
-    b = pt.make_placeholder("b", (10, 4), dtype=np.float64)
+    a = pt.make_placeholder("a", (10, 4))
+    b = pt.make_placeholder("b", (10, 4))
 
     assert index_lambda_to_high_level_op(a + b) == BinaryOp(BinaryOpType.ADD,
                                                             a, b)
@@ -734,11 +868,11 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
             == ReduceOp(SumReductionOperation(),
                         b,
-                        Map({1: "_r0"})))
+                        immutabledict({1: "_r0"})))
     assert (index_lambda_to_high_level_op(pt.prod(a))
             == ReduceOp(ProductReductionOperation(),
                         a,
-                        Map({0: "_r0",
+                        immutabledict({0: "_r0",
                              1: "_r1"})))
     assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
     assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
@@ -792,15 +926,134 @@ def test_deduplicate_data_wrappers():
 def test_einsum_dot_axes_has_correct_dim():
     # before 'pytato@895bae5', this test would fail because of incorrect
     # default 'Einsum.axes' instantiation.
-    a = pt.make_placeholder("a", (10, 10), "float64")
-    b = pt.make_placeholder("b", (10, 10), "float64")
+    a = pt.make_placeholder("a", (10, 10))
+    b = pt.make_placeholder("b", (10, 10))
     einsum = pt.einsum("ij,jk   ->    ik", a, b)
     assert len(einsum.axes) == einsum.ndim
 
 
+def test_created_at():
+    pt.set_traceback_tag_enabled()
+
+    a = pt.make_placeholder("a", (10, 10), "float64")
+    b = pt.make_placeholder("b", (10, 10), "float64")
+
+    # res1 and res2 are defined on different lines and should have different
+    # CreatedAt tags.
+    res1 = a+b
+    res2 = a+b
+
+    # res3 and res4 are defined on the same line and should have the same
+    # CreatedAt tags.
+    res3 = a+b; res4 = a+b  # noqa: E702
+
+    # {{{ Check that CreatedAt tags are handled correctly for equality/hashing
+
+    assert res1 == res2 == res3 == res4
+    assert hash(res1) == hash(res2) == hash(res3) == hash(res4)
+
+    assert res1.non_equality_tags != res2.non_equality_tags
+    assert res3.non_equality_tags == res4.non_equality_tags
+    assert hash(res1.non_equality_tags) != hash(res2.non_equality_tags)
+    assert hash(res3.non_equality_tags) == hash(res4.non_equality_tags)
+
+    assert res1.tags == res2.tags == res3.tags == res4.tags
+    assert hash(res1.tags) == hash(res2.tags) == hash(res3.tags) == hash(res4.tags)
+
+    # }}}
+
+    from pytato.tags import CreatedAt
+
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    # {{{ Make sure the function name appears in the traceback
+
+    tag, = created_tag
+
+    found = False
+
+    stacksummary = tag.traceback.to_stacksummary()
+    assert len(stacksummary) > 10
+
+    for frame in tag.traceback.frames:
+        if frame.name == "test_created_at" and "a+b" in frame.line:
+            found = True
+            break
+
+    assert found
+
+    # }}}
+
+    # {{{ Make sure that CreatedAt tags are in the visualization
+
+    from pytato.visualization import get_dot_graph
+    s = get_dot_graph(res1)
+    assert "test_created_at" in s
+    assert "a+b" in s
+
+    # }}}
+
+    # {{{ Make sure only a single CreatedAt tag is created
+
+    old_tag = tag
+
+    res1 = res1 + res2
+
+    created_tag = frozenset({tag
+                         for tag in res1.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    # Tag should be recreated
+    assert tag != old_tag
+
+    # }}}
+
+    # {{{ Make sure that copying preserves the tag
+
+    old_tag = tag
+
+    res1_new = pt.transform.map_and_copy(res1, lambda x: x)
+
+    created_tag = frozenset({tag
+                         for tag in res1_new.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 1
+
+    tag, = created_tag
+
+    assert old_tag == tag
+
+    # }}}
+
+    # {{{ Test disabling traceback creation
+
+    pt.set_traceback_tag_enabled(False)
+
+    a = pt.make_placeholder("a", (10, 10), "float64")
+
+    created_tag = frozenset({tag
+                         for tag in a.non_equality_tags
+                         if isinstance(tag, CreatedAt)})
+
+    assert len(created_tag) == 0
+
+    # }}}
+
+
 def test_pickling_and_unpickling_is_equal():
-    from testlib import RandomDAGContext, make_random_dag
     import pickle
+
+    from testlib import RandomDAGContext, make_random_dag
+
     from pytools import UniqueNameGenerator
     axis_len = 5
 
@@ -851,17 +1104,17 @@ def test_adv_indexing_into_zero_long_axes():
     n = pt.make_size_param("n")
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(0, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(0, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(n-n, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n-2, 10), dtype="float64")
+        a = pt.make_placeholder("a", shape=(n-n-2, 10))
         idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
@@ -887,7 +1140,7 @@ def test_adv_indexing_into_zero_long_axes():
 
 
 def test_expand_dims_input_validate():
-    a = pt.make_placeholder("x", (10, 4), dtype="float64")
+    a = pt.make_placeholder("x", (10, 4))
 
     assert pt.expand_dims(a, (0, 2, 4)).shape == (1, 10, 1, 4, 1)
     assert pt.expand_dims(a, (-5, -3, -1)).shape == (1, 10, 1, 4, 1)
@@ -905,9 +1158,10 @@ def test_expand_dims_input_validate():
 
 def test_with_tagged_reduction():
     from testlib import FooRednTag
+
+    from pytato.diagnostic import NotAReductionAxis
     from pytato.raising import index_lambda_to_high_level_op
-    from pytato.diagnostic import InvalidEinsumIndex, NotAReductionAxis
-    x = pt.make_placeholder("x", shape=(10, 10), dtype=np.float64)
+    x = pt.make_placeholder("x", shape=(10, 10))
     x_sum = pt.sum(x)
 
     with pytest.raises(NotAReductionAxis):
@@ -919,38 +1173,31 @@ def test_with_tagged_reduction():
     assert x_sum.var_to_reduction_descr[hlo.axes[1]].tags_of_type(FooRednTag)
     assert not x_sum.var_to_reduction_descr[hlo.axes[0]].tags_of_type(FooRednTag)
 
-    x_trace = pt.einsum("ii->i", x)
     x_colsum = pt.einsum("ij->j", x)
 
-    with pytest.raises(NotAReductionAxis):
-        # 'j': not being reduced over.
+    with pytest.raises(TypeError):
+        # no longer support indexing by string.
         x_colsum.with_tagged_reduction("j", FooRednTag())
 
-    with pytest.raises(InvalidEinsumIndex):
-        # 'k': unknown axis
-        x_colsum.with_tagged_reduction("k", FooRednTag())
-
-    with pytest.raises(NotAReductionAxis):
-        # 'i': not being reduced over.
-        x_trace.with_tagged_reduction("i", FooRednTag())
-
-    x_colsum = x_colsum.with_tagged_reduction("i", FooRednTag())
+    my_descr = x_colsum.access_descriptors[0][0]
+    x_colsum = x_colsum.with_tagged_reduction(my_descr,
+                                              FooRednTag())
 
     assert (x_colsum
-            .redn_axis_to_redn_descr[x_colsum.index_to_access_descr["i"]]
+            .redn_axis_to_redn_descr[my_descr]
             .tags_of_type(FooRednTag))
 
 
 def test_derived_class_uses_correct_array_eq():
     @attrs.define(frozen=True)
-    class MyNewArrayT(pt.Array):
+    class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
     @attrs.define(frozen=True, eq=False)
-    class MyNewAndCorrectArrayT(pt.Array):
+    class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     MyNewAndCorrectArrayT(tags=frozenset(), axes=())
@@ -998,12 +1245,13 @@ def test_cached_walk_mapper_with_extra_args():
 
 
 def test_unify_axes_tags():
+    from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
+
     from pytato.array import EinsumReductionAxis
-    from testlib import FooTag, BarTag, BazTag, QuuxTag, TestlibTag
 
     # {{{ 1. broadcasting + expand_dims
 
-    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = pt.make_placeholder("x", (10, 4))
     x = x.with_tagged_axis(0, FooTag())
     x = x.with_tagged_axis(1, BarTag())
 
@@ -1023,10 +1271,10 @@ def test_unify_axes_tags():
 
     # {{{ 2. back-propagation + einsum
 
-    x = pt.make_placeholder("x", (10, 4), "float64")
+    x = pt.make_placeholder("x", (10, 4))
     x = x.with_tagged_axis(0, FooTag())
 
-    y = pt.make_placeholder("y", (10, 4), "float64")
+    y = pt.make_placeholder("y", (10, 4))
     y = y.with_tagged_axis(1, BarTag())
 
     z = pt.einsum("ij, ij -> i", x, y)
@@ -1077,8 +1325,8 @@ def test_unify_axes_tags():
 
 
 def test_rewrite_einsums_with_no_broadcasts():
-    a = pt.make_placeholder("a", (10, 4, 1), np.float64)
-    b = pt.make_placeholder("b", (10, 1, 4), np.float64)
+    a = pt.make_placeholder("a", (10, 4, 1))
+    b = pt.make_placeholder("b", (10, 1, 4))
     c = pt.einsum("ijk,ijk->ijk", a, b)
     expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
 
@@ -1088,9 +1336,9 @@ def test_rewrite_einsums_with_no_broadcasts():
 
 
 def test_dot_visualizers():
-    a = pt.make_placeholder("A", shape=(10, 4), dtype=np.float64)
-    x1 = pt.make_placeholder("x1", shape=4, dtype=np.float64)
-    x2 = pt.make_placeholder("x2", shape=4, dtype=np.float64)
+    a = pt.make_placeholder("A", shape=(10, 4))
+    x1 = pt.make_placeholder("x1", shape=4)
+    x2 = pt.make_placeholder("x2", shape=4)
 
     y = a @ (2*x1 + 3*x2)
 
@@ -1114,6 +1362,21 @@ def test_dot_visualizers():
     pt.show_fancy_placeholder_data_flow(y, output_to="svg")
 
     # }}}
+
+
+def test_numpy_type_promotion_with_pytato_arrays():
+    class NotReallyAnArray:
+        @property
+        def dtype(self):
+            return np.dtype("float64")
+
+    # Make sure that np.result_type accesses only the dtype attribute of the
+    # class, not (e.g.) its data.
+    assert np.result_type(42, NotReallyAnArray()) == np.float64
+
+    from pytato.array import _np_result_dtype
+    assert _np_result_dtype(42, NotReallyAnArray()) == np.float64
+    assert _np_result_dtype(42.0, NotReallyAnArray()) == np.float64
 
 
 if __name__ == "__main__":

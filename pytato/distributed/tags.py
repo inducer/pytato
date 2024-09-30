@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 .. currentmodule:: pytato
 
@@ -31,7 +32,7 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, Tuple, FrozenSet, Any
+from typing import TYPE_CHECKING, TypeVar
 
 from pytato.distributed.partition import DistributedGraphPartition
 
@@ -40,12 +41,15 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 
+T = TypeVar("T")
+
+
 # {{{ construct tag numbering
 
 def number_distributed_tags(
         mpi_communicator: mpi4py.MPI.Comm,
         partition: DistributedGraphPartition,
-        base_tag: int) -> Tuple[DistributedGraphPartition, int]:
+        base_tag: int) -> tuple[DistributedGraphPartition, int]:
     """Return a new :class:`~pytato.distributed.DistributedGraphPartition`
     in which symbolic tags are replaced by unique integer tags, created by
     counting upward from *base_tag*.
@@ -60,48 +64,39 @@ def number_distributed_tags(
         This is a potentially heavyweight MPI-collective operation on
         *mpi_communicator*.
     """
-    tags = frozenset({
+    from pytools import flatten
+
+    # A potential optimization here could be to use a 'set' to collect the tags,
+    # but this would introduce non-determinism in the tag numbering. Another
+    # option would be use something like pytools.unique() to reduce the amount
+    # of data communicated, but since all sends and receives should each
+    # have unique tags, this would at most buy us a factor of 2.
+    tags = tuple([
             recv.comm_tag
             for part in partition.parts.values()
             for recv in part.name_to_recv_node.values()
-            } | {
+            ] + [
             send.comm_tag
             for part in partition.parts.values()
             for sends in part.name_to_send_nodes.values()
-            for send in sends})
-
-    from mpi4py import MPI
-
-    def set_union(
-            set_a: FrozenSet[Any], set_b: FrozenSet[Any],
-            mpi_data_type: MPI.Datatype) -> FrozenSet[str]:
-        assert mpi_data_type is None
-        assert isinstance(set_a, frozenset)
-        assert isinstance(set_b, frozenset)
-
-        return set_a | set_b
+            for send in sends])
 
     root_rank = 0
 
-    set_union_mpi_op = MPI.Op.Create(
-            # type ignore reason: mpi4py misdeclares op functions as returning
-            # None.
-            set_union,  # type: ignore[arg-type]
-            commute=True)
-    try:
-        all_tags = mpi_communicator.reduce(
-                tags, set_union_mpi_op, root=root_rank)
-    finally:
-        set_union_mpi_op.Free()
+    # We can't let MPI do a set union here, since the result would be
+    # non-deterministic.
+    all_tags = mpi_communicator.gather(tags, root=root_rank)
 
     if mpi_communicator.rank == root_rank:
         sym_tag_to_int_tag = {}
         next_tag = base_tag
-        assert isinstance(all_tags, frozenset)
+        assert isinstance(all_tags, list)
+        assert len(all_tags) == mpi_communicator.size
 
-        for sym_tag in all_tags:
-            sym_tag_to_int_tag[sym_tag] = next_tag
-            next_tag += 1
+        for sym_tag in flatten(all_tags):  # type: ignore[no-untyped-call]
+            if sym_tag not in sym_tag_to_int_tag:
+                sym_tag_to_int_tag[sym_tag] = next_tag
+                next_tag += 1
 
         mpi_communicator.bcast((sym_tag_to_int_tag, next_tag), root=root_rank)
     else:

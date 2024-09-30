@@ -1,23 +1,27 @@
 """
 .. autofunction:: pad
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
-from pytato.array import Array, IndexLambda
-from pytato.scalar_expr import IntegralT, INT_CLASSES, ScalarType
-from typing import Union, Sequence, Any, Tuple, List, Dict
+import collections.abc as abc
+from typing import Any, Sequence
+
+import numpy as np
+
+import pymbolic.primitives as prim
 from pytools import UniqueNameGenerator
 
-import collections.abc as abc
-import pymbolic.primitives as prim
-import numpy as np
+from pytato.array import Array, IndexLambda
+from pytato.scalar_expr import INT_CLASSES, IntegralT, Scalar
 
 
 def _get_constant_padded_idx_lambda(
     array: Array,
-    pad_widths: Sequence[Tuple[IntegralT, IntegralT]],
-    constant_vals: Sequence[Tuple[ScalarType, ScalarType]]
+    pad_widths: Sequence[tuple[IntegralT, IntegralT]],
+    constant_vals: Sequence[tuple[Scalar, Scalar]]
 ) -> IndexLambda:
     """
     Internal routine used by :func:`pad` for constant-mode padding.
@@ -26,7 +30,7 @@ def _get_constant_padded_idx_lambda(
     assert array.ndim == len(pad_widths) == len(constant_vals)
 
     array_name_in_expr = "in_0"
-    bindings: Dict[str, Array] = {array_name_in_expr: array}
+    bindings: dict[str, Array] = {array_name_in_expr: array}
     vng = UniqueNameGenerator()
     vng.add_name(array_name_in_expr)
 
@@ -63,33 +67,25 @@ def _get_constant_padded_idx_lambda(
 
 
 def _normalize_pad_width(
-    array: Array,
-    pad_width: Union[IntegralT, Sequence[IntegralT]],
-) -> Sequence[Tuple[IntegralT, IntegralT]]:
-    processed_pad_widths: List[Tuple[IntegralT, IntegralT]]
+        array: Array,
+        pad_width: IntegralT | Sequence[IntegralT],
+        ) -> Sequence[tuple[IntegralT, IntegralT]]:
+    processed_pad_widths: list[tuple[IntegralT, IntegralT]]
 
     if isinstance(pad_width, INT_CLASSES):
         processed_pad_widths = [(pad_width, pad_width)
                                 for _ in range(array.ndim)]
     elif (isinstance(pad_width, abc.Sequence)
-            and len(pad_width) == 1
-            and isinstance(pad_width, INT_CLASSES)):
+          and len(pad_width) == 1
+          and isinstance(pad_width, INT_CLASSES)):
         processed_pad_widths = [(pad_width[0], pad_width[0])
                                 for _ in range(array.ndim)]
     elif (isinstance(pad_width, abc.Sequence)
-            and len(pad_width) == 1
-            and isinstance(pad_width, tuple)):
-        processed_pad_widths = [pad_width[0]
-                                for _ in range(array.ndim)]
-    elif (isinstance(pad_width, tuple)
-            and len(pad_width) == 2
-            and isinstance(pad_width[0], INT_CLASSES)
-            and isinstance(pad_width[1], INT_CLASSES)
+          and len(pad_width) == 2
+          and isinstance(pad_width[0], INT_CLASSES)
+          and isinstance(pad_width[1], INT_CLASSES)
           ):
-        # type-ignore-reason: mypy does not take the guarding predicate into
-        # account
-        processed_pad_widths = [pad_width  # type: ignore[misc]
-                                for _ in range(array.ndim)]
+        processed_pad_widths = [(pad_width[0], pad_width[1])] * array.ndim
     elif isinstance(pad_width, abc.Sequence):
         if len(pad_width) != array.ndim:
             raise ValueError(f"Number of pad widths != {array.ndim}"
@@ -118,7 +114,7 @@ def _normalize_pad_width(
 
 
 def pad(array: Array,
-        pad_width: Union[IntegralT, Sequence[IntegralT]],
+        pad_width: IntegralT | Sequence[IntegralT],
         mode: str = "constant",
         **kwargs: Any) -> Array:
     r"""
@@ -173,7 +169,7 @@ def pad(array: Array,
 
         # {{{ normalize constant_values
 
-        processed_constant_vals: Sequence[Tuple[ScalarType, ScalarType]]
+        processed_constant_vals: Sequence[tuple[Scalar, Scalar]]
 
         try:
             constant_vals = kwargs.pop("constant_values")
@@ -191,10 +187,7 @@ def pad(array: Array,
                     and np.isscalar(constant_vals[0])
                     and np.isscalar(constant_vals[1])
                   ):
-                # type-ignore-reason: mypy does not understand the guarding
-                # predicate
-                processed_constant_vals = [constant_vals  # type: ignore[misc]
-                                           for _ in range(array.ndim)]
+                processed_constant_vals = [constant_vals for _ in range(array.ndim)]
             elif isinstance(constant_vals, abc.Sequence):
                 if len(constant_vals) != array.ndim:
                     raise ValueError("")
@@ -205,10 +198,7 @@ def pad(array: Array,
                             and len(constant_val) == 2
                             and np.isscalar(constant_val[0])
                             and np.isscalar(constant_val[1])):
-                        # type-ignore-reason: mypy does not understand the guarding
-                        # predicate
-                        processed_constant_vals.append(
-                            constant_val)  # type: ignore[arg-type]
+                        processed_constant_vals.append(constant_val)
                     else:
                         raise ValueError(
                             "Elements of `constant_vals` must be of type"

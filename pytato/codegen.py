@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -23,22 +24,36 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Union, Dict, Tuple, List, Any, Optional
+from typing import Any, Mapping, Tuple
 
-from pytato.array import (Array, DictOfNamedArrays, DataWrapper, Placeholder,
-                          DataInterface, SizeParam, InputArgumentBase,
-                          make_dict_of_named_arrays)
+from immutabledict import immutabledict
 
-from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
-
-from pytato.scalar_expr import IntegralScalarExpression
-from pytato.transform import (CopyMapper, CachedWalkMapper,
-                              SubsetDependencyMapper, ArrayOrNames)
-from pytato.target import Target
-from pytato.loopy import LoopyCall
-from pytools import UniqueNameGenerator
 import loopy as lp
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import UniqueNameGenerator
+
+from pytato.array import (
+    Array,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    InputArgumentBase,
+    Placeholder,
+    SizeParam,
+    make_dict_of_named_arrays,
+)
+from pytato.function import NamedCallResult
+from pytato.loopy import LoopyCall
+from pytato.scalar_expr import IntegralScalarExpression
+from pytato.target import Target
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CopyMapper,
+    SubsetDependencyMapper,
+)
+from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
+
 
 SymbolicIndex = Tuple[IntegralScalarExpression, ...]
 
@@ -59,7 +74,7 @@ __doc__ = """
 def _generate_name_for_temp(
         expr: Array, var_name_gen: UniqueNameGenerator,
         default_prefix: str = "_pt_temp") -> str:
-    from pytato.tags import _BaseNameTag, Named, PrefixNamed
+    from pytato.tags import Named, PrefixNamed, _BaseNameTag
     if expr.tags_of_type(_BaseNameTag):
         if expr.tags_of_type(Named):
             name_tag, = expr.tags_of_type(Named)
@@ -74,7 +89,7 @@ def _generate_name_for_temp(
             prefix_tag, = expr.tags_of_type(PrefixNamed)
             return var_name_gen(prefix_tag.prefix)
         else:
-            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
+            raise NotImplementedError(type(next(iter(expr.tags_of_type(_BaseNameTag)))))
     else:
         return var_name_gen(default_prefix)
 
@@ -99,25 +114,26 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Stack`            :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
     def __init__(self, target: Target,
-                 kernels_seen: Optional[Dict[str, lp.LoopKernel]] = None
+                 kernels_seen: dict[str, lp.LoopKernel] | None = None
                  ) -> None:
         super().__init__()
-        self.bound_arguments: Dict[str, DataInterface] = {}
+        self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
-        self.kernels_seen: Dict[str, lp.LoopKernel] = kernels_seen or {}
-
-    def clone_for_callee(self) -> CodeGenPreprocessor:
-        return CodeGenPreprocessor(self.target, self.kernels_seen)
+        self.kernels_seen: dict[str, lp.LoopKernel] = kernels_seen or {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(name, tags=expr.tags)
+        return SizeParam(
+            name=name,
+            tags=expr.tags,
+            non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         name = expr.name
@@ -128,7 +144,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
@@ -142,7 +159,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         # {{{ eliminate callable name collision
 
         for name, clbl in translation_unit.callables_table.items():
-            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+            if isinstance(clbl, lp.CallableKernel):
                 if name in self.kernels_seen and (
                         translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
@@ -169,13 +186,14 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                                             translation_unit, name, new_name)
                     name = new_name
 
-                self.kernels_seen[name] = translation_unit[name]
+                self.kernels_seen[name] = clbl.subkernel
 
         # }}}
 
-        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+        bindings: Mapping[str, Any] = immutabledict(
+                    {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())}
+                    for name, subexpr in sorted(expr.bindings.items())})
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
@@ -192,13 +210,18 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
+
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError("CodeGenPreprocessor does not support functions.")
 
 # }}}
 
 
-def normalize_outputs(result: Union[Array, DictOfNamedArrays,
-                                    Dict[str, Array]]) -> DictOfNamedArrays:
+def normalize_outputs(
+            result: Array | DictOfNamedArrays | dict[str, Array]
+        ) -> DictOfNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
     Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
@@ -225,15 +248,13 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper):
     def __init__(self) -> None:
-        self.name_to_input: Dict[str, InputArgumentBase] = {}
+        self.name_to_input: dict[str, InputArgumentBase] = {}
         super().__init__()
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    # type-ignore-reason: dropped the extra `*args, **kwargs`.
-    def post_visit(self, expr: Any) -> None:  # type: ignore[override]
+    def post_visit(self, expr: Any) -> None:
         if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
             if expr.name is not None:
                 try:
@@ -260,8 +281,8 @@ def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class PreprocessResult:
     outputs: DictOfNamedArrays
-    compute_order: Tuple[str, ...]
-    bound_arguments: Dict[str, DataInterface]
+    compute_order: tuple[str, ...]
+    bound_arguments: dict[str, DataInterface]
 
 
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
@@ -282,8 +303,8 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: get_deps(output.expr)
-            for name, output in outputs.items()}
+    deps: Mapping[str, Any] = immutabledict({name: get_deps(output.expr)
+            for name, output in outputs.items()})
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}
@@ -291,7 +312,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                   - frozenset([name]))
            for name, val in deps.items()}
 
-    output_order: List[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
+    output_order: list[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
 
     # }}}
 

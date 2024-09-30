@@ -1,20 +1,29 @@
 #!/usr/bin/env python
 
 from mpi4py import MPI  # pylint: disable=import-error
+
+
 comm = MPI.COMM_WORLD
 
-import pytato as pt
-import pyopencl as cl
-import pyopencl.array as cl_array
 import numpy as np
 
-from pytato import (find_distributed_partition, generate_code_for_partition,
-        number_distributed_tags,
-        execute_distributed_partition,
-        staple_distributed_send, make_distributed_recv)
+import pyopencl as cl
+import pyopencl.array as cl_array
+
+import pytato as pt
+from pytato import (
+    execute_distributed_partition,
+    find_distributed_partition,
+    generate_code_for_partition,
+    make_distributed_recv,
+    number_distributed_tags,
+    staple_distributed_send,
+)
 
 
 def main():
+    pt.set_traceback_tag_enabled()
+
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 

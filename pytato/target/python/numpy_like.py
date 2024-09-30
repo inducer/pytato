@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
 """
@@ -23,32 +26,58 @@ THE SOFTWARE.
 """
 
 import ast
-import sys
 import os
-import numpy as np
+import sys
+from typing import (
+    Callable,
+    Iterable,
+    Mapping,
+    TypedDict,
+    TypeVar,
+    cast,
+)
 
-from typing import (Callable, Union, Optional, Mapping, Dict, TypeVar, Iterable,
-                    cast, List, Set, Tuple, Type)
+import numpy as np
+from immutabledict import immutabledict
+from typing_extensions import NotRequired
 
 from pytools import UniqueNameGenerator
-from pytato.transform import CachedMapper
-from pytato.array import (Stack, Concatenate, IndexLambda, DataWrapper,
-                          Placeholder, SizeParam, Roll,
-                          AxisPermutation, Einsum,
-                          Reshape, Array, DictOfNamedArrays, IndexBase,
-                          DataInterface, NormalizedSlice, ShapeComponent,
-                          IndexExpr, ArrayOrScalar, NamedArray)
-from immutables import Map
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.utils import are_shape_components_equal
-from pytato.raising import BinaryOpType, C99CallOp
 
-from pytato.target.python import (NumpyLikePythonTarget,
-                                  BoundPythonProgram)
-from pytato.reductions import (ReductionOperation, SumReductionOperation,
-                               ProductReductionOperation,
-                               MaxReductionOperation, MinReductionOperation,
-                               AllReductionOperation, AnyReductionOperation)
+from pytato.array import (
+    Array,
+    ArrayOrScalar,
+    AxisPermutation,
+    Concatenate,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexExpr,
+    IndexLambda,
+    NamedArray,
+    NormalizedSlice,
+    Placeholder,
+    Reshape,
+    Roll,
+    ShapeComponent,
+    SizeParam,
+    Stack,
+)
+from pytato.raising import BinaryOpType, C99CallOp
+from pytato.reductions import (
+    AllReductionOperation,
+    AnyReductionOperation,
+    MaxReductionOperation,
+    MinReductionOperation,
+    ProductReductionOperation,
+    ReductionOperation,
+    SumReductionOperation,
+)
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
+from pytato.transform import CachedMapper
+from pytato.utils import are_shape_components_equal, get_einsum_specification
 
 
 T = TypeVar("T")
@@ -83,7 +112,7 @@ def _c99_callop_numpy_name(hlo: C99CallOp) -> str:
 
 
 def first_true(iterable: Iterable[T], default: T,
-               pred: Optional[Callable[[T], bool]] = None) -> T:
+               pred: Callable[[T], bool] | None = None) -> T:
     """
     Returns the first true value in *iterable*. If no true value is found,
     returns *default* If *pred* is not None, returns the first item for which
@@ -93,30 +122,6 @@ def first_true(iterable: Iterable[T], default: T,
     # first_true([a,b,c], x) --> a or b or c or x
     # first_true([a,b], x, f) --> a if f(a) else b if f(b) else x
     return next(filter(pred, iterable), default)
-
-
-def _get_einsum_subscripts(einsum: Einsum) -> str:
-    from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
-
-    idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-    idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
-    axis_descr_to_idx: Dict[EinsumAxisDescriptor, str] = {}
-    input_specs = []
-    for access_descr in einsum.access_descriptors:
-        spec = ""
-        for axis_descr in access_descr:
-            try:
-                spec += axis_descr_to_idx[axis_descr]
-            except KeyError:
-                axis_descr_to_idx[axis_descr] = idx_gen()
-                spec += axis_descr_to_idx[axis_descr]
-
-        input_specs.append(spec)
-
-    output_spec = "".join(axis_descr_to_idx[EinsumElementwiseAxis(i)]
-                          for i in range(einsum.ndim))
-
-    return f"{', '.join(input_specs)} -> {output_spec}"
 
 
 def _is_slice_trivial(slice_: NormalizedSlice,
@@ -154,7 +159,7 @@ LOGICAL_OP_TO_CALL = {BinaryOpType.LOGICAL_OR:  "logical_or",
                       BinaryOpType.LOGICAL_AND: "logical_and",
                       }
 
-PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[Type[ReductionOperation], str] = {
+PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
     SumReductionOperation: "sum",
     ProductReductionOperation: "product",
     MaxReductionOperation: "max",
@@ -177,9 +182,9 @@ class NumpyCodegenMapper(CachedMapper[str]):
         self.numpy_backend = numpy_backend
         self.vng = vng
 
-        self.lines: List[ast.stmt] = []
-        self.arg_names: Set[str] = set()
-        self.bound_arguments: Dict[str, DataInterface] = {}
+        self.lines: list[ast.stmt] = []
+        self.arg_names: set[str] = set()
+        self.bound_arguments: dict[str, DataInterface] = {}
 
     def _record_line_and_return_lhs(self, lhs: str, rhs: ast.expr) -> str:
         self.lines.append(ast.Assign(targets=[ast.Name(lhs)],
@@ -187,10 +192,15 @@ class NumpyCodegenMapper(CachedMapper[str]):
         return lhs
 
     def map_index_lambda(self, expr: IndexLambda) -> str:
-        from pytato.raising import index_lambda_to_high_level_op
-        from pytato.raising import (FullOp, BinaryOp, WhereOp,
-                                    BroadcastOp, ReduceOp,
-                                    BinaryOpType)
+        from pytato.raising import (
+            BinaryOp,
+            BinaryOpType,
+            BroadcastOp,
+            FullOp,
+            ReduceOp,
+            WhereOp,
+            index_lambda_to_high_level_op,
+        )
         hlo = index_lambda_to_high_level_op(expr)
         lhs = self.vng("_pt_tmp")
         rhs: ast.expr
@@ -435,7 +445,14 @@ class NumpyCodegenMapper(CachedMapper[str]):
                             if are_shape_components_equal(-1, idx.stop)
                             else idx.stop)
 
-                kwargs = {}
+                from ast import expr as expr_t
+
+                class SliceKwargs(TypedDict):
+                    step: NotRequired[expr_t]
+                    lower: NotRequired[expr_t]
+                    upper: NotRequired[expr_t]
+
+                kwargs: SliceKwargs = {}
                 if step is not None:
                     assert isinstance(step, int)
                     kwargs["step"] = ast.Constant(step)
@@ -479,7 +496,7 @@ class NumpyCodegenMapper(CachedMapper[str]):
         lhs = self.vng("_pt_tmp")
         args = [ast.Name(self.rec(arg)) for arg in expr.args]
         rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend), "einsum"),
-                        args=[ast.Constant(_get_einsum_subscripts(expr)),
+                        args=[ast.Constant(get_einsum_specification(expr)),
                               *args],
                        keywords=[],
                        )
@@ -505,8 +522,9 @@ class NumpyCodegenMapper(CachedMapper[str]):
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> str:
         lhs = self.vng("_pt_tmp")
 
-        keys = []
-        values = []
+        from ast import expr as expr_t
+        keys: list[expr_t | None] = []
+        values: list[expr_t] = []
         for name, subexpr in sorted(expr._data.items()):
             keys.append(ast.Constant(name))
             values.append(ast.Name(self.rec(subexpr)))
@@ -516,15 +534,16 @@ class NumpyCodegenMapper(CachedMapper[str]):
         return self._record_line_and_return_lhs(lhs, rhs)
 
 
-def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArrays],
+def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                         target: NumpyLikePythonTarget,
                         function_name: str,
                         show_code: bool,
-                        entrypoint_decorators: Tuple[str, ...],
-                        extra_preambles: Tuple[ast.stmt, ...],
-                        colorize_show_code: Optional[bool] = None,
+                        entrypoint_decorators: tuple[str, ...],
+                        extra_preambles: tuple[ast.stmt, ...],
+                        colorize_show_code: bool | None = None,
                         ) -> BoundPythonProgram:
     import collections
+
     from pytato.transform import InputGatherer
 
     if ((not isinstance(expr, DictOfNamedArrays))
@@ -557,6 +576,9 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
     lines = cgen_mapper.lines
     lines.append(ast.Return(ast.Name(result_var)))
 
+    from ast import expr as expr_t
+    decorator_list: list[expr_t] = [ast.Name(dec) for dec in entrypoint_decorators]
+
     module = ast.Module(
         body=[ast.Import(names=[ast.alias(name=target.numpy_like_module_name,
                                           asname=(
@@ -565,9 +587,10 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
                                           ))]),
               ast.Import(names=[ast.alias(name="numpy", asname="np")]),
               *extra_preambles,
-              ast.FunctionDef(
+              # Mypy's error here seems spurious: one of the provided 'non-matching'
+              # overloads exactly matches the types of what mypy thinks we've provided.
+              ast.FunctionDef(  # type: ignore[call-overload]
                   name=function_name,
-                  posonlyargs=[],
                   args=ast.arguments(
                       args=[],
                       posonlyargs=[],
@@ -576,7 +599,7 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
                       kw_defaults=[None for _ in cgen_mapper.arg_names],
                       defaults=[]),
                   body=lines,
-                  decorator_list=[ast.Name(dec) for dec in entrypoint_decorators])
+                  decorator_list=decorator_list)
               ],
         type_ignores=[])
 
@@ -589,8 +612,8 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
 
         if _can_colorize_output() and colorize_show_code:
             from pygments import highlight
-            from pygments.lexers import PythonLexer
             from pygments.formatters import TerminalTrueColorFormatter
+            from pygments.lexers import PythonLexer
             print(highlight(program,
                             formatter=TerminalTrueColorFormatter(),
                             lexer=PythonLexer()))
@@ -601,4 +624,4 @@ def generate_numpy_like(expr: Union[Array, Mapping[str, Array], DictOfNamedArray
         program,
         function_name,
         expected_arguments=frozenset(cgen_mapper.arg_names),
-        bound_arguments=Map(cgen_mapper.bound_arguments))
+        bound_arguments=immutabledict(cgen_mapper.bound_arguments))

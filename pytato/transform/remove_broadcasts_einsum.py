@@ -3,6 +3,8 @@
 
 .. autofunction:: rewrite_einsums_with_no_broadcasts
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
@@ -27,7 +29,6 @@ THE SOFTWARE.
 """
 
 
-from typing import List, Tuple
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
 from pytato.transform import CopyMapper, MappedT
 from pytato.utils import are_shape_components_equal
@@ -35,13 +36,13 @@ from pytato.utils import are_shape_components_equal
 
 class EinsumWithNoBroadcastsRewriter(CopyMapper):
     def map_einsum(self, expr: Einsum) -> Array:
-        new_args: List[Array] = []
-        new_access_descriptors: List[Tuple[EinsumAxisDescriptor, ...]] = []
+        new_args: list[Array] = []
+        new_access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
         descr_to_axis_len = expr._access_descr_to_axis_len()
 
         for acc_descrs, arg in zip(expr.access_descriptors, expr.args):
             arg = self.rec(arg)
-            axes_to_squeeze: List[int] = []
+            axes_to_squeeze: list[int] = []
             for idim, acc_descr in enumerate(acc_descrs):
                 if not are_shape_components_equal(arg.shape[idim],
                                                   descr_to_axis_len[acc_descr]):
@@ -64,7 +65,6 @@ class EinsumWithNoBroadcastsRewriter(CopyMapper):
         return Einsum(tuple(new_access_descriptors),
                       tuple(new_args),
                       expr.redn_axis_to_redn_descr,
-                      expr.index_to_access_descr,
                       tags=expr.tags,
                       axes=expr.axes,)
 

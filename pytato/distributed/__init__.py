@@ -22,7 +22,8 @@ Internal stuff that is only here because the documentation tool wants it
 
 .. class:: CommTagType
 
-    A type representing a communication tag.
+    A type representing a communication tag. Communication tags must be
+    hashable.
 
 .. class:: ShapeType
 
@@ -34,6 +35,7 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 from __future__ import annotations
+
 
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -61,7 +63,8 @@ THE SOFTWARE.
 
 from typing import Any
 
-# These are here to support hold versions of grudge.
+
+# These are here to support old versions of grudge.
 
 _depr_names = {
         "DistributedGraphPartition",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -55,20 +56,29 @@ __doc__ = """
 
 # }}}
 
+
 import numpy as np
+from immutabledict import immutabledict
+
 import pymbolic.primitives as prim
-from typing import Tuple, Optional
-from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
-                          _get_default_axes, _get_default_tags)
-from pytato.scalar_expr import SCALAR_CLASSES
 from pymbolic import var
-from immutables import Map
+
+from pytato.array import (
+    Array,
+    ArrayOrScalar,
+    IndexLambda,
+    _dtype_any,
+    _get_created_at_tag,
+    _get_default_axes,
+    _get_default_tags,
+)
+from pytato.scalar_expr import SCALAR_CLASSES
 
 
-def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
+def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
                           func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None,
-                          np_func_name: Optional[str] = None
+                          ret_dtype: _dtype_any | None = None,
+                          np_func_name: str | None = None
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         if np_func_name is None:
@@ -113,10 +123,11 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
     return IndexLambda(
         expr=prim.Call(var(f"pytato.c99.{func_name}"),
                   tuple(sym_args)),
-        shape=shape, dtype=ret_dtype, bindings=Map(bindings),
+        shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
         tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(stacklevel=2),
         axes=_get_default_axes(len(shape)),
-        var_to_reduction_descr=Map(),
+        var_to_reduction_descr=immutabledict(),
     )
 
 

@@ -7,8 +7,12 @@
 
 .. autoclass:: AxisTagAttacher
 
+.. autoclass:: AxisIgnoredForPropagationTag
+
 .. autoclass:: AxesTagsEquationCollector
 """
+from __future__ import annotations
+
 
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
@@ -35,30 +39,57 @@ THE SOFTWARE.
 """
 
 
-from typing import (TYPE_CHECKING, Type, Set, Tuple, List, Dict, FrozenSet,
-                    Mapping, Iterable, Any, TypeVar, cast)
+import logging
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    List,
+    Mapping,
+    TypeVar,
+    cast,
+)
+
 from bidict import bidict
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, Mapper, CopyMapper
-
-from pytato.array import (InputArgumentBase, Stack, Concatenate, IndexLambda,
-                          AxisPermutation, BasicIndex,
-                          AdvancedIndexInContiguousAxes,
-                          Array, Reshape, Einsum, NormalizedSlice,
-                          DictOfNamedArrays, NamedArray,
-                          AbstractResultWithNamedArrays, ArrayOrScalar,
-                          EinsumReductionAxis)
-from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-from pytato.utils import are_shape_components_equal, are_shapes_equal
-from pytato.raising import (index_lambda_to_high_level_op,
-                            BinaryOp, FullOp, WhereOp,
-                            BroadcastOp, C99CallOp, ReduceOp)
-
-from pytato.diagnostic import UnknownIndexLambdaExpr
 
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
-import logging
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    Array,
+    ArrayOrScalar,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DictOfNamedArrays,
+    Einsum,
+    EinsumReductionAxis,
+    IndexLambda,
+    InputArgumentBase,
+    NamedArray,
+    NormalizedSlice,
+    Reshape,
+    Stack,
+)
+from pytato.diagnostic import UnknownIndexLambdaExpr
+from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+from pytato.function import NamedCallResult
+from pytato.raising import (
+    BinaryOp,
+    BroadcastOp,
+    C99CallOp,
+    FullOp,
+    ReduceOp,
+    WhereOp,
+    index_lambda_to_high_level_op,
+)
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.transform import ArrayOrNames, CopyMapper, Mapper
+from pytato.utils import are_shape_components_equal, are_shapes_equal
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,23 +144,23 @@ class AxesTagsEquationCollector(Mapper):
         Users are encouraged to derive this mapper to implement domain-specific
         axis tags propagation semantics.
     """
-    def __init__(self, tag_t: Type[Tag]):
-        self.tag_t: Type[Tag] = tag_t
+    def __init__(self, tag_t: type[Tag]):
+        self.tag_t: type[Tag] = tag_t
         super().__init__()
 
         # {{{ mutable state held by the mapper
 
-        self._visited_nodes: Set[ArrayOrNames] = set()
+        self._visited_nodes: set[ArrayOrNames] = set()
 
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.var_name_gen.add_names(["c", ""])
 
         # axis_to_var: mapping from (array, iaxis) to the variable to be
         # used for unification.
-        self.axis_to_var: bidict[Tuple[Array, int], str] = bidict()
-        self.known_tag_to_var: Dict[Tag, str] = {}
+        self.axis_to_var: bidict[tuple[Array, int], str] = bidict()
+        self.known_tag_to_var: dict[Tag, str] = {}
 
-        self.equations: List[Tuple[str, str]] = []
+        self.equations: list[tuple[str, str]] = []
 
         # }}}
 
@@ -175,8 +206,7 @@ class AxesTagsEquationCollector(Mapper):
 
     # {{{ mapper interface
 
-    # type-ignore reason: signature not compatible with Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> None:
         if expr in self._visited_nodes:
             return
 
@@ -212,12 +242,12 @@ class AxesTagsEquationCollector(Mapper):
         except UnknownIndexLambdaExpr:
             from warnings import warn
             warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.")
+                 " no tags were propagated across it.", stacklevel=1)
             # no propagation semantics implemented for such cases
             return
 
         if isinstance(hlo, BinaryOp):
-            subexprs: Tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
+            subexprs: tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
         elif isinstance(hlo, WhereOp):
             subexprs = (hlo.condition, hlo.then, hlo.else_)
         elif isinstance(hlo, FullOp):
@@ -370,7 +400,7 @@ class AxesTagsEquationCollector(Mapper):
         indices adds an equality equation for each non-broadcasted axis of an
         indexing array to its corresponding axis in *expr*.
         """
-        from pytato.utils import partition, get_shape_after_broadcasting
+        from pytato.utils import get_shape_after_broadcasting, partition
 
         self.rec(expr.array)
         for idx in expr.indices:
@@ -387,7 +417,7 @@ class AxesTagsEquationCollector(Mapper):
                                             for i_idx in i_basic_indices
                                             if i_idx > i_adv_indices[-1]])
 
-        indirection_arrays: List[Array] = cast(List[Array],
+        indirection_arrays: list[Array] = cast(List[Array],
                                                [expr.indices[i_idx]
                                                 for i_idx in i_adv_indices
                                                 if isinstance(expr.indices[i_idx],
@@ -482,12 +512,12 @@ class AxesTagsEquationCollector(Mapper):
         :func:`pytato.einsum` thereby having the same the
         :class:`~pytato.array.EinsumAxisDescriptor`.
         """
-        from pytato.array import EinsumElementwiseAxis, EinsumAxisDescriptor
+        from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
         for arg in expr.args:
             self.rec(arg)
 
-        descr_to_var: Dict[EinsumAxisDescriptor, str] = {}
+        descr_to_var: dict[EinsumAxisDescriptor, str] = {}
         for iaxis in range(expr.ndim):
             descr_to_var[EinsumElementwiseAxis(iaxis)] = self.get_var_for_axis(expr,
                                                                                iaxis)
@@ -506,7 +536,7 @@ class AxesTagsEquationCollector(Mapper):
         for _, subexpr in sorted(expr._data.items()):
             self.rec(subexpr)
 
-    def map_loopy_call(self, expr: "LoopyCall") -> None:
+    def map_loopy_call(self, expr: LoopyCall) -> None:
         """
         Does not add any equations.
         """
@@ -546,57 +576,30 @@ class AxesTagsEquationCollector(Mapper):
         more equations are deduced.
         """
 
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError(
+            "AxesTagsEquationCollector does not currently support expressions "
+            "containing functions.")
+
     # }}}
 
 # }}}
 
 
-def _get_propagation_graph_from_constraints(
-        equations: List[Tuple[str, str]]) -> Mapping[str, FrozenSet[str]]:
-    import immutables
-    propagation_graph: Dict[str, Set[str]] = {}
-    for lhs, rhs in equations:
-        assert lhs != rhs
-        propagation_graph.setdefault(lhs, set()).add(rhs)
-        propagation_graph.setdefault(rhs, set()).add(lhs)
-
-    return immutables.Map({k: frozenset(v)
-                           for k, v in propagation_graph.items()})
-
-
-def get_reachable_nodes(undirected_graph: Mapping[GraphNodeT, Iterable[GraphNodeT]],
-                        source_node: GraphNodeT) -> FrozenSet[GraphNodeT]:
-    """
-    Returns a :class:`frozenset` of all nodes in *undirected_graph* that are
-    reachable from *source_node*.
-    """
-    nodes_visited: Set[GraphNodeT] = set()
-    nodes_to_visit = {source_node}
-    while nodes_to_visit:
-        current_node = nodes_to_visit.pop()
-        nodes_visited.add(current_node)
-
-        neighbors = undirected_graph[current_node]
-        nodes_to_visit.update({node
-                               for node in neighbors
-                               if node not in nodes_visited})
-
-    return frozenset(nodes_visited)
-
+# {{{ AxisTagAttacher
 
 class AxisTagAttacher(CopyMapper):
     """
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]],
+                 axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]],
                  tag_corresponding_redn_descr: bool):
         super().__init__()
-        self.axis_to_tags: Mapping[Tuple[Array, int], Iterable[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
-    # type-ignore reason: overrides the type of Mapper.rec
-    def rec(self, expr: ArrayOrNames) -> Any:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> Any:
         if isinstance(expr, (AbstractResultWithNamedArrays,
                              DistributedSendRefHolder)):
             return super().rec(expr)
@@ -644,18 +647,37 @@ class AxisTagAttacher(CopyMapper):
                 self._cache[key] = expr_copy
                 return expr_copy
 
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError(
+            "AxisTagAttacher does not currently support expressions containing "
+            "functions.")
+
     # type-ignore reason: overrides the type of Mapper.__call__
     def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
         result = self.rec(expr)
         assert isinstance(result, (Array, AbstractResultWithNamedArrays))
         return result
 
+# }}}
+
+
+class AxisIgnoredForPropagationTag(Tag):
+    """
+    Disallows tags from propagating across axes equipped with this tag.
+    Effectively removes an edge from the undirected graph whose edges represent
+    propagation pathways. The default tag propagation behavior in the case
+    of an einsum is to propagate all tags across non-reduction axes. Since this
+    is not always desirable, this tag can be used to disable the default
+    behavior at axis-granularity.
+    """
+    pass
+
 
 def unify_axes_tags(
         expr: ArrayOrNames,
         *,
-        tag_t: Type[Tag] = Tag,
-        equations_collector_t: Type[
+        tag_t: type[Tag] = Tag,
+        equations_collector_t: type[
             AxesTagsEquationCollector] = AxesTagsEquationCollector,
         unify_redn_descrs: bool = True,
 ) -> ArrayOrNames:
@@ -684,15 +706,24 @@ def unify_axes_tags(
     # Defn. A Propagation graph is a graph where nodes denote variables and an
     # edge between 2 nodes denotes an equality criterion.
 
-    propagation_graph = _get_propagation_graph_from_constraints(
-        equations_collector.equations)
+    from pytools.graph import (
+        get_reachable_nodes,
+        undirected_graph_from_edges,
+    )
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
-    axis_to_solved_tags: Dict[Tuple[Array, int], Set[Tag]] = {}
+    axis_to_solved_tags: dict[tuple[Array, int], set[Tag]] = {}
+
+    propagation_graph = undirected_graph_from_edges(
+        equations_collector.equations
+    )
 
     for tag, var in equations_collector.known_tag_to_var.items():
-        for reachable_var in (get_reachable_nodes(propagation_graph, var)
-                              - known_tag_vars):
+        if isinstance(tag, AxisIgnoredForPropagationTag):
+            continue
+
+        reachable_nodes = get_reachable_nodes(propagation_graph, var)
+        for reachable_var in (reachable_nodes - known_tag_vars):
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],
                 set()

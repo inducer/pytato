@@ -1,13 +1,15 @@
 #!/usr/bin/env python
+import functools
+
 import numpy as np
 import pytest
-import functools
-from dg_tools import DGDiscr1D, integrate, DGOps1D, DGOps1DRef
+from dg_tools import DGDiscr1D, DGOps1D, DGOps1DRef, integrate
+
 
 memoized = functools.lru_cache(maxsize=None)
 
 
-class AdvectionOperator(object):
+class AdvectionOperator:
     """A class representing a DG advection operator."""
 
     def __init__(self, discr, c, flux_type, dg_ops):
@@ -42,6 +44,8 @@ class AdvectionOperator(object):
                 flux = self.dg.array_ops.stack((vec[:, 0], swp[:, 1]), axis=1)
             else:
                 flux = self.dg.array_ops.stack((swp[:, 0], vec[:, 1]), axis=1)
+        else:
+            raise ValueError("Invalid flux type")
 
         flux = flux * self.c * self.dg.normals
 
@@ -136,8 +140,9 @@ def test_advection_convergence(order, flux_type):
     errors = []
     hs = []
 
-    import pytato as pt
     import pyopencl as cl
+
+    import pytato as pt
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -167,8 +172,9 @@ def test_advection_convergence(order, flux_type):
 
 
 def main():
-    import pytato as pt
     import pyopencl as cl
+
+    import pytato as pt
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
