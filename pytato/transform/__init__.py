@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pytools import memoize_method
-
 
 __copyright__ = """
 Copyright (C) 2020 Matt Wala
@@ -50,6 +48,7 @@ import numpy as np
 from immutabledict import immutabledict
 
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
