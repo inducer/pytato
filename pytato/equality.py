@@ -27,8 +27,6 @@ THE SOFTWARE.
 
 from typing import TYPE_CHECKING, Any, Callable, Union
 
-from pytools import memoize_method
-
 from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
@@ -83,19 +81,23 @@ class EqualityComparer:
           more on this.
     """
     def __init__(self) -> None:
+        # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], bool] = {}
 
-    def rec(self, expr1: ArrayOrNames, expr2: Any) -> bool:
+    def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
         cache_key = id(expr1), id(expr2)
         try:
             return self._cache[cache_key]
         except KeyError:
-
-            method: Callable[[Array | AbstractResultWithNamedArrays, Any],
-                             bool]
+            method: Callable[
+                [Array | AbstractResultWithNamedArrays | FunctionDefinition, Any],
+                bool]
 
             try:
-                method = getattr(self, expr1._mapper_method)
+                method = (
+                    getattr(self, expr1._mapper_method)
+                    if isinstance(expr1, (Array, AbstractResultWithNamedArrays))
+                    else self.map_function_definition)
             except AttributeError:
                 if isinstance(expr1, Array):
                     result = self.handle_unsupported_array(expr1, expr2)
@@ -293,7 +295,6 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    @memoize_method
     def map_function_definition(self, expr1: FunctionDefinition, expr2: Any
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -307,7 +308,7 @@ class EqualityComparer:
 
     def map_call(self, expr1: Call, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
-                and self.map_function_definition(expr1.function, expr2.function)
+                and self.rec(expr1.function, expr2.function)
                 and frozenset(expr1.bindings) == frozenset(expr2.bindings)
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
