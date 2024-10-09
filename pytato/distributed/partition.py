@@ -62,16 +62,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import collections
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
     AbstractSet,
     Any,
-    FrozenSet,
     Hashable,
-    Iterable,
-    Iterator,
     Mapping,
     Sequence,
     TypeVar,
@@ -129,61 +125,6 @@ CommunicationDepGraph = Mapping[
 
 _KeyT = TypeVar("_KeyT")
 _ValueT = TypeVar("_ValueT")
-
-
-# {{{ crude ordered set
-
-
-class _OrderedSet(collections.abc.MutableSet[_ValueT]):
-    def __init__(self, items: Iterable[_ValueT] | None = None):
-        # Could probably also use a valueless dictionary; not sure if it matters
-        self._items: set[_ValueT] = set()
-        self._items_ordered: list[_ValueT] = []
-        if items is not None:
-            for item in items:
-                self.add(item)
-
-    def add(self, item: _ValueT) -> None:
-        if item not in self._items:
-            self._items.add(item)
-            self._items_ordered.append(item)
-
-    def discard(self, item: _ValueT) -> None:
-        # Not currently needed
-        raise NotImplementedError
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __iter__(self) -> Iterator[_ValueT]:
-        return iter(self._items_ordered)
-
-    def __contains__(self, item: Any) -> bool:
-        return item in self._items
-
-    def __and__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet()
-        for item in self._items_ordered:
-            if item in other:
-                result.add(item)
-        return result
-
-    # Must be "Any" instead of "_ValueT", otherwise it violates Liskov substitution
-    # according to mypy. *shrug*
-    def __or__(self, other: AbstractSet[Any]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet(self._items_ordered)
-        for item in other:
-            result.add(item)
-        return result
-
-    def __sub__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
-        result: _OrderedSet[_ValueT] = _OrderedSet()
-        for item in self._items_ordered:
-            if item not in other:
-                result.add(item)
-        return result
-
-# }}}
 
 
 # {{{ distributed graph part
@@ -374,8 +315,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: frozenset[CommunicationOpIdentifier]
-    send_ids: frozenset[CommunicationOpIdentifier]
+    recv_ids: immutabledict[CommunicationOpIdentifier, None]
+    send_ids: immutabledict[CommunicationOpIdentifier, None]
 
 
 # {{{ _make_distributed_partition
@@ -461,12 +402,12 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+        CombineMapper[dict[CommunicationOpIdentifier, None]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
                 dict[CommunicationOpIdentifier,
-                     frozenset[CommunicationOpIdentifier]] = {}
+                     dict[CommunicationOpIdentifier, None]] = {}
 
         self.local_recv_id_to_recv_node: \
                 dict[CommunicationOpIdentifier, DistributedRecv] = {}
@@ -476,13 +417,13 @@ class _LocalSendRecvDepGatherer(
         self.local_rank = local_rank
 
     def combine(
-            self, *args: frozenset[CommunicationOpIdentifier]
-            ) -> frozenset[CommunicationOpIdentifier]:
-        return reduce(frozenset.union, args, frozenset())
+            self, *args: dict[CommunicationOpIdentifier, None]
+            ) -> dict[CommunicationOpIdentifier, None]:
+        return reduce(lambda x, y: x | y, args, {})
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[CommunicationOpIdentifier]:
+                                        ) -> dict[CommunicationOpIdentifier, None]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -496,8 +437,8 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> frozenset[CommunicationOpIdentifier]:
-        return frozenset()
+    def _map_input_base(self, expr: Array) -> dict[CommunicationOpIdentifier, None]:
+        return {}
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
@@ -505,21 +446,21 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> frozenset[CommunicationOpIdentifier]:
+            ) -> dict[CommunicationOpIdentifier, None]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
             from pytato.distributed.verify import DuplicateRecvError
             raise DuplicateRecvError(f"Multiple receives found for '{recv_id}'")
 
-        self.local_comm_ids_to_needed_comm_ids[recv_id] = frozenset()
+        self.local_comm_ids_to_needed_comm_ids[recv_id] = {}
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
-        return frozenset({recv_id})
+        return {recv_id: None}
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> frozenset[CommunicationOpIdentifier]:
+            self, expr: NamedCallResult) -> dict[CommunicationOpIdentifier, None]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
 
@@ -533,7 +474,7 @@ TaskType = TypeVar("TaskType")
 
 def _schedule_task_batches(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Sequence[AbstractSet[TaskType]]:
+        -> Sequence[dict[TaskType, None]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -548,7 +489,7 @@ def _schedule_task_batches(
 
 def _schedule_task_batches_counted(
         task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> tuple[Sequence[AbstractSet[TaskType]], int]:
+        -> tuple[Sequence[dict[TaskType, None]], int]:
     """
     Static type checkers need the functions to return the same type regardless
     of the input. The testing code needs to know about the number of tasks visited
@@ -557,10 +498,11 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches: Sequence[set[TaskType]] = [set() for _ in range(nlevels)]
+    task_batches: Sequence[dict[TaskType, None]] = [{} for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
-        task_batches[dep_level].add(task_id)
+        if task_id not in task_batches[dep_level]:
+            task_batches[dep_level][task_id] = None
 
     return task_batches, visits_in_depend + len(task_to_dep_level.keys())
 
@@ -623,7 +565,7 @@ class _MaterializedArrayCollector(CachedWalkMapper):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.materialized_arrays: _OrderedSet[Array] = _OrderedSet()
+        self.materialized_arrays: dict[Array, None] = {}
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
@@ -633,15 +575,15 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         from pytato.tags import ImplStored
 
         if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
-            self.materialized_arrays.add(expr)
+            self.materialized_arrays[expr] = None
 
         if isinstance(expr, LoopyCallResult):
-            self.materialized_arrays.add(expr)
+            self.materialized_arrays[expr] = None
             from pytato.loopy import LoopyCall
             assert isinstance(expr._container, LoopyCall)
             for _, subexpr in sorted(expr._container.bindings.items()):
                 if isinstance(subexpr, Array):
-                    self.materialized_arrays.add(subexpr)
+                    self.materialized_arrays[subexpr] = None
                 else:
                     assert isinstance(subexpr, SCALAR_CLASSES)
 
@@ -651,13 +593,14 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 # {{{ _set_dict_union_mpi
 
 def _set_dict_union_mpi(
-        dict_a: Mapping[_KeyT, frozenset[_ValueT]],
-        dict_b: Mapping[_KeyT, frozenset[_ValueT]],
-        mpi_data_type: mpi4py.MPI.Datatype) -> Mapping[_KeyT, frozenset[_ValueT]]:
+        dict_a: Mapping[_KeyT, dict[_ValueT, None]],
+        dict_b: Mapping[_KeyT, dict[_ValueT, None]],
+        mpi_data_type: mpi4py.MPI.Datatype | None) \
+            -> Mapping[_KeyT, dict[_ValueT, None]]:
     assert mpi_data_type is None
     result = dict(dict_a)
     for key, values in dict_b.items():
-        result[key] = result.get(key, frozenset()) | values
+        result[key] = result.get(key, {}) | values
     return result
 
 # }}}
@@ -783,6 +726,7 @@ def find_distributed_partition(
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
     import mpi4py.MPI as MPI
+    from immutabledict import immutabledict
 
     from pytato.transform import SubsetDependencyMapper
 
@@ -825,9 +769,7 @@ def find_distributed_partition(
         if isinstance(comm_batches_or_exc, Exception):
             raise comm_batches_or_exc
 
-        comm_batches = cast(
-                Sequence[AbstractSet[CommunicationOpIdentifier]],
-                comm_batches_or_exc)
+        comm_batches = comm_batches_or_exc
 
     # }}}
 
@@ -835,30 +777,31 @@ def find_distributed_partition(
 
     part_comm_ids: list[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: frozenset[CommunicationOpIdentifier] = frozenset()
+        recv_ids: immutabledict[CommunicationOpIdentifier, None] = immutabledict()
         for batch in comm_batches:
-            send_ids = frozenset(
-                comm_id for comm_id in batch
-                if comm_id.src_rank == local_rank)
+            send_ids: immutabledict[CommunicationOpIdentifier, None] \
+                = immutabledict.fromkeys(
+                    comm_id for comm_id in batch
+                    if comm_id.src_rank == local_rank)
             if recv_ids or send_ids:
                 part_comm_ids.append(
                     _PartCommIDs(
                         recv_ids=recv_ids,
                         send_ids=send_ids))
             # These go into the next part
-            recv_ids = frozenset(
+            recv_ids = immutabledict.fromkeys(
                 comm_id for comm_id in batch
                 if comm_id.dest_rank == local_rank)
         if recv_ids:
             part_comm_ids.append(
                 _PartCommIDs(
                     recv_ids=recv_ids,
-                    send_ids=frozenset()))
+                    send_ids=immutabledict()))
     else:
         part_comm_ids.append(
             _PartCommIDs(
-                recv_ids=frozenset(),
-                send_ids=frozenset()))
+                recv_ids=immutabledict(),
+                send_ids=immutabledict()))
 
     nparts = len(part_comm_ids)
 
@@ -885,13 +828,13 @@ def find_distributed_partition(
     materialized_arrays_collector = _MaterializedArrayCollector()
     materialized_arrays_collector(outputs)
 
-    # The sets of arrays below must have a deterministic order in order to ensure
+    # The collections of arrays below must have a deterministic order in order to ensure
     # that the resulting partition is also deterministic
 
-    sent_arrays = _OrderedSet(
+    sent_arrays = dict.fromkeys(
         send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
 
-    received_arrays = _OrderedSet(lsrdg.local_recv_id_to_recv_node.values())
+    received_arrays = dict.fromkeys(lsrdg.local_recv_id_to_recv_node.values())
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
@@ -899,13 +842,12 @@ def find_distributed_partition(
     # We could allow sent *arrays* to be included here because they are distinct
     # from send *nodes*, but we choose to exclude them in order to simplify the
     # processing below.
-    materialized_arrays = (
-        materialized_arrays_collector.materialized_arrays
-        - received_arrays
-        - sent_arrays)
+    materialized_arrays = {a: None
+                           for a in materialized_arrays_collector.materialized_arrays
+                           if a not in received_arrays | sent_arrays}
 
     # "mso" for "materialized/sent/output"
-    output_arrays = _OrderedSet(outputs._data.values())
+    output_arrays = dict.fromkeys(outputs._data.values())
     mso_arrays = materialized_arrays | sent_arrays | output_arrays
 
     # FIXME: This gathers up materialized_arrays recursively, leading to
@@ -970,29 +912,30 @@ def find_distributed_partition(
     assert all(0 <= part_id < nparts
                for part_id in stored_ary_to_part_id.values())
 
-    stored_arrays = _OrderedSet(stored_ary_to_part_id)
+    stored_arrays = dict.fromkeys(stored_ary_to_part_id)
 
     # {{{ find which stored arrays should become part outputs
     # (because they are used in not just their local part, but also others)
 
     direct_preds_getter = DirectPredecessorsGetter()
 
-    def get_materialized_predecessors(ary: Array) -> _OrderedSet[Array]:
-        materialized_preds: _OrderedSet[Array] = _OrderedSet()
+    def get_materialized_predecessors(ary: Array) -> dict[Array, None]:
+        materialized_preds: dict[Array, None] = {}
         for pred in direct_preds_getter(ary):
             if pred in materialized_arrays:
-                materialized_preds.add(pred)
+                materialized_preds[pred] = None
             else:
-                materialized_preds |= get_materialized_predecessors(pred)
+                for p in get_materialized_predecessors(pred):
+                    materialized_preds[p] = None
         return materialized_preds
 
     stored_arrays_promoted_to_part_outputs = {
-                stored_pred
+                stored_pred: None
                 for stored_ary in stored_arrays
                 for stored_pred in get_materialized_predecessors(stored_ary)
                 if (stored_ary_to_part_id[stored_ary]
                     != stored_ary_to_part_id[stored_pred])
-                }
+    }
 
     # }}}
 
