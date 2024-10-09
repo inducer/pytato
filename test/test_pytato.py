@@ -1410,8 +1410,9 @@ def test_persistent_hashing_and_persistent_dict() -> None:
         pkb = PytatoKeyBuilder()
 
         pd = WriteOncePersistentDict("test_persistent_dict",
-                                 key_builder=pkb,
-                                 container_dir=tmpdir)
+                                    key_builder=pkb,
+                                    container_dir=tmpdir,
+                                    safe_sync=False)
 
         for i in range(100):
             rdagc = RandomDAGContext(np.random.default_rng(seed=i),
@@ -1441,7 +1442,8 @@ def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
 
     pd = WriteOncePersistentDict("test_persistent_dict",
                                  key_builder=pkb,
-                                 container_dir=tmpdir)
+                                 container_dir=tmpdir,
+                                 safe_sync=False)
 
     for i in range(100):
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
