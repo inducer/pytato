@@ -62,11 +62,11 @@ from typing import (
     Any,
     Callable,
     ClassVar,
+    Collection,
     Hashable,
     Iterable,
     Iterator,
     Mapping,
-    Sequence,
     Tuple,
     TypeVar,
 )
@@ -264,7 +264,7 @@ class NamedCallResult(NamedArray):
     _mapper_method: ClassVar[str] = "map_named_call_result"
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Sequence[Tag] | Tag) -> Array:
+                         tags: Collection[Tag] | Tag) -> Array:
         raise ValueError("Tagging a NamedCallResult's axis is illegal, use"
                          " Call.with_tagged_axis instead")
 
