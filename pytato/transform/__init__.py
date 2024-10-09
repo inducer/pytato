@@ -121,6 +121,7 @@ __doc__ = """
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
 .. automodule:: pytato.transform.einsum_distributive_law
+.. automodule:: pytato.transform.parameter_study
 .. currentmodule:: pytato.transform
 
 Dict representation of DAGs
