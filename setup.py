@@ -40,6 +40,7 @@ setup(
         "immutabledict",
         "attrs",
         "bidict",
+        "typing_extensions>=4",
         ],
     package_data={"pytato": ["py.typed"]},
     author="Andreas Kloeckner, Matt Wala, Xiaoyu Wei",
