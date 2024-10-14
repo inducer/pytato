@@ -325,37 +325,37 @@ class DirectPredecessorsGetter(Mapper):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> frozenset[ArrayOrNames]:
-        return frozenset({dim for dim in shape if isinstance(dim, Array)})
+    def _get_preds_from_shape(self, shape: ShapeType) -> dict[Array, None]:
+        return dict.fromkeys(dim for dim in shape if isinstance(dim, Array))
 
-    def map_index_lambda(self, expr: IndexLambda) -> frozenset[ArrayOrNames]:
-        return (frozenset(expr.bindings.values())
+    def map_index_lambda(self, expr: IndexLambda) -> dict[Array, None]:
+        return (dict.fromkeys(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) -> frozenset[ArrayOrNames]:
-        return (frozenset(expr.arrays)
+    def map_stack(self, expr: Stack) -> dict[Array, None]:
+        return (dict.fromkeys(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> frozenset[ArrayOrNames]:
-        return (frozenset(expr.arrays)
+    def map_concatenate(self, expr: Concatenate) -> dict[Array, None]:
+        return (dict.fromkeys(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) -> frozenset[ArrayOrNames]:
-        return (frozenset(expr.args)
+    def map_einsum(self, expr: Einsum) -> dict[Array, None]:
+        return (dict.fromkeys(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> frozenset[ArrayOrNames]:
+    def map_loopy_call_result(self, expr: NamedArray) -> dict[Array, None]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
-        return (frozenset(ary
+        return (dict.fromkeys(ary
                           for ary in expr._container.bindings.values()
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> frozenset[ArrayOrNames]:
-        return (frozenset([expr.array])
-                | frozenset(idx for idx in expr.indices
+    def _map_index_base(self, expr: IndexBase) -> dict[Array, None]:
+        return (dict.fromkeys([expr.array])
+                | dict.fromkeys(idx for idx in expr.indices
                             if isinstance(idx, Array))
                 | self._get_preds_from_shape(expr.shape))
 
@@ -364,34 +364,34 @@ class DirectPredecessorsGetter(Mapper):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> frozenset[ArrayOrNames]:
-        return frozenset([expr.array])
+                                  ) -> dict[ArrayOrNames, None]:
+        return dict.fromkeys([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> frozenset[ArrayOrNames]:
+    def _map_input_base(self, expr: InputArgumentBase) -> dict[Array, None]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
     map_data_wrapper = _map_input_base
     map_size_param = _map_input_base
 
-    def map_distributed_recv(self, expr: DistributedRecv) -> frozenset[ArrayOrNames]:
+    def map_distributed_recv(self, expr: DistributedRecv) -> dict[Array, None]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> frozenset[ArrayOrNames]:
-        return frozenset([expr.passthrough_data])
+                                        ) -> dict[ArrayOrNames, None]:
+        return dict.fromkeys([expr.passthrough_data])
 
-    def map_call(self, expr: Call) -> frozenset[ArrayOrNames]:
-        return frozenset(expr.bindings.values())
+    def map_call(self, expr: Call) -> dict[ArrayOrNames, None]:
+        return dict.fromkeys(expr.bindings.values())
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> frozenset[ArrayOrNames]:
-        return frozenset([expr._container])
+            self, expr: NamedCallResult) -> dict[ArrayOrNames, None]:
+        return dict.fromkeys([expr._container])
 
 
 # }}}
