@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,18 +25,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
+from typing import Any, cast
+
 import numpy as np
+from immutabledict import immutabledict
 
 from pytools import memoize_method
 
-from typing import Any, Dict, Tuple, cast
-from pytato.transform import Mapper
-from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
-                          IndexLambda, ReductionDescriptor)
-from pytato.function import FunctionDefinition, Call
+from pytato.array import (
+    Array,
+    Axis,
+    DataWrapper,
+    DictOfNamedArrays,
+    IndexLambda,
+    ReductionDescriptor,
+)
+from pytato.function import Call, FunctionDefinition
 from pytato.loopy import LoopyCall
-from immutabledict import immutabledict
-import dataclasses
+from pytato.transform import Mapper
 
 
 __doc__ = """
@@ -60,7 +68,7 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
-        self._cache: Dict[Tuple[int, int], str] = {}
+        self._cache: dict[tuple[int, int], str] = {}
 
     def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
@@ -150,7 +158,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "data":
-                return object.__repr__(expr.data)
+                return repr(expr.data)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
@@ -199,7 +207,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "translation_unit":
-                return object.__repr__(expr.translation_unit)
+                return repr(expr.translation_unit)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 

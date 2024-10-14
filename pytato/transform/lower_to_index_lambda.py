@@ -3,6 +3,8 @@
 
 .. autofunction:: to_index_lambda
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
@@ -26,55 +28,188 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pymbolic.primitives as prim
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from typing import List, Any, Dict, Tuple, TypeVar, TYPE_CHECKING
 from immutabledict import immutabledict
+
+import pymbolic.primitives as prim
 from pytools import UniqueNameGenerator
-from pytato.array import (Array, IndexLambda, Stack, Concatenate,
-                          Einsum, Reshape, Roll, AxisPermutation,
-                          BasicIndex, AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes,
-                          NormalizedSlice, ShapeType,
-                          AbstractResultWithNamedArrays)
-from pytato.scalar_expr import ScalarExpression, INT_CLASSES, IntegralT
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    Einsum,
+    IndexLambda,
+    NormalizedSlice,
+    Reshape,
+    Roll,
+    ShapeComponent,
+    ShapeType,
+    Stack,
+)
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
+from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
+
 
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
-def _get_reshaped_indices(expr: Reshape) -> Tuple[ScalarExpression, ...]:
-    if expr.array.shape == ():
-        # RHS must be a scalar i.e. RHS' indices are empty
+@dataclass(frozen=True)
+class _ReshapeIndexGroup:
+    old_ax_indices: tuple[ShapeComponent, ...]
+    new_ax_indices: tuple[ShapeComponent, ...]
+
+
+def _generate_index_expressions(
+        old_shape: ShapeType,
+        new_shape: ShapeType,
+        order: str,
+        index_vars: list[prim.Variable]) -> tuple[ScalarExpression, ...]:
+
+    old_strides = [1]
+    new_strides = [1]
+    old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
+
+    old_stride_axs = (old_shape[::-1][:-1] if order == "C" else
+                      old_shape[:-1])
+    for old_ax in old_stride_axs:
+        old_strides.append(old_strides[-1]*old_ax)
+
+    new_stride_axs = (new_shape[::-1][:-1] if order == "C" else
+                      new_shape[:-1])
+    for new_ax in new_stride_axs:
+        new_strides.append(new_strides[-1]*new_ax)
+
+    old_size_till_axs = (old_shape[:-1][::-1] if order == "C" else
+                         old_shape[1:])
+    for old_ax in old_size_till_axs:
+        old_size_tills.append(old_size_tills[-1]*old_ax)
+
+    if order == "C":
+        old_strides = old_strides[::-1]
+        new_strides = new_strides[::-1]
+        old_size_tills = old_size_tills[::-1]
+
+    flattened_index_expn = sum(
+        index_var*new_stride
+        for index_var, new_stride in zip(index_vars, new_strides))
+
+    return tuple(
+        (flattened_index_expn % old_size_till) // old_stride
+        for old_size_till, old_stride in zip(old_size_tills, old_strides))
+
+
+def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
+
+    if expr.order.upper() not in ["C", "F"]:
+        raise NotImplementedError("Order expected to be 'C' or 'F'",
+                                  " (case insensitive). Found order = ",
+                                  f"{expr.order}")
+
+    order = expr.order
+    old_shape = expr.array.shape
+    new_shape = expr.shape
+
+    # index variables need to be unique and depend on the new shape length
+    index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
+
+    # {{{ check for scalars
+
+    if old_shape == ():
         assert expr.size == 1
         return ()
 
-    if expr.order != "C":
-        raise NotImplementedError(expr.order)
+    if new_shape == ():
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
 
-    newstrides: List[IntegralT] = [1]  # reshaped array strides
-    for new_axis_len in reversed(expr.shape[1:]):
-        assert isinstance(new_axis_len, INT_CLASSES)
-        newstrides.insert(0, newstrides[0]*new_axis_len)
+    if 0 in old_shape and 0 in new_shape:
+        return _generate_index_expressions(old_shape, new_shape, order,
+                                           index_vars)
 
-    flattened_idx = sum(prim.Variable(f"_{i}")*stride
-                        for i, stride in enumerate(newstrides))
+    # }}}
 
-    oldstrides: List[IntegralT] = [1]  # input array strides
-    for axis_len in reversed(expr.array.shape[1:]):
-        assert isinstance(axis_len, INT_CLASSES)
-        oldstrides.insert(0, oldstrides[0]*axis_len)
+    # {{{ generate subsets of old axes mapped to subsets of new axes
 
-    assert isinstance(expr.array.shape[-1], INT_CLASSES)
-    oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
-    for old_axis_len in reversed(expr.array.shape[:-1]):
-        assert isinstance(old_axis_len, INT_CLASSES)
-        oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
+    axis_mapping: list[_ReshapeIndexGroup] = []
 
-    return tuple(((flattened_idx % sizetill) // stride)
-                 for stride, sizetill in zip(oldstrides, oldsizetills))
+    old_index = 0
+    new_index = 0
+
+    while old_index < len(old_shape) and new_index < len(new_shape):
+        old_ax_len_product = old_shape[old_index]
+        new_ax_len_product = new_shape[new_index]
+
+        old_product_end = old_index + 1
+        new_product_end = new_index + 1
+
+        while old_ax_len_product != new_ax_len_product:
+            if not isinstance(old_ax_len_product, INT_CLASSES) or \
+                not isinstance(new_ax_len_product, INT_CLASSES):
+                raise TypeError("Cannot determine which axes were expanded or "
+                                "collapsed symbolically")
+
+            if new_ax_len_product < old_ax_len_product:
+                new_ax_len_product *= new_shape[new_product_end]
+                new_product_end += 1
+            else:
+                old_ax_len_product *= old_shape[old_product_end]
+                old_product_end += 1
+
+        old_ax_indices = old_shape[old_index:old_product_end]
+        new_ax_indices = new_shape[new_index:new_product_end]
+
+        axis_mapping.append(_ReshapeIndexGroup(
+            old_ax_indices=old_ax_indices,
+            new_ax_indices=new_ax_indices))
+
+        old_index = old_product_end
+        new_index = new_product_end
+
+    # handle trailing 1s
+    final_reshaped_indices = axis_mapping.pop(-1)
+    old_ax_indices = final_reshaped_indices.old_ax_indices
+    new_ax_indices = final_reshaped_indices.new_ax_indices
+
+    while old_index < len(old_shape):
+        old_ax_indices += tuple([old_shape[old_index]])  # noqa: C409
+        old_index += 1
+
+    while new_index < len(new_shape):
+        new_ax_indices += tuple([new_shape[new_index]])  # noqa: C409
+        new_index += 1
+
+    axis_mapping.append(_ReshapeIndexGroup(old_ax_indices=old_ax_indices,
+                                           new_ax_indices=new_ax_indices))
+
+    # }}}
+
+    # {{{ compute index expressions for sub shapes
+
+    index_vars_begin = 0
+    index_expressions = []
+    for reshaped_indices in axis_mapping:
+        sub_old_shape = reshaped_indices.old_ax_indices
+        sub_new_shape = reshaped_indices.new_ax_indices
+
+        index_vars_end = index_vars_begin + len(sub_new_shape)
+        sub_index_vars = index_vars[index_vars_begin:index_vars_end]
+        index_vars_begin = index_vars_end
+
+        index_expressions.append(_generate_index_expressions(
+            sub_old_shape, sub_new_shape, order, sub_index_vars))
+
+    # }}}
+
+    return sum(index_expressions, ())
 
 
 class ToIndexLambdaMixin:
@@ -122,7 +257,7 @@ class ToIndexLambdaMixin:
             if i == len(expr.arrays) - 1:
                 stack_expr = subarray_expr
             else:
-                from pymbolic.primitives import If, Comparison
+                from pymbolic.primitives import Comparison, If
                 stack_expr = If(Comparison(prim.Variable(f"_{expr.axis}"), "==", i),
                         subarray_expr,
                         stack_expr)
@@ -140,7 +275,7 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate) -> IndexLambda:
-        from pymbolic.primitives import If, Comparison, Subscript
+        from pymbolic.primitives import Comparison, If, Subscript
 
         def get_subscript(array_index: int, offset: ScalarExpression) -> Subscript:
             aggregate = prim.Variable(f"_in{array_index}")
@@ -150,8 +285,8 @@ class ToIndexLambdaMixin:
                      for i in range(len(expr.shape))]
             return Subscript(aggregate, tuple(index))
 
-        lbounds: List[Any] = [0]
-        ubounds: List[Any] = [expr.arrays[0].shape[expr.axis]]
+        lbounds: list[Any] = [0]
+        ubounds: list[Any] = [expr.arrays[0].shape[expr.axis]]
 
         for i, array in enumerate(expr.arrays[1:], start=1):
             ubounds.append(ubounds[i-1]+array.shape[expr.axis])
@@ -191,14 +326,17 @@ class ToIndexLambdaMixin:
     def map_einsum(self, expr: Einsum) -> IndexLambda:
         import operator
         from functools import reduce
-        from pytato.scalar_expr import Reduce
-        from pytato.utils import (dim_to_index_lambda_components,
-                                  are_shape_components_equal)
-        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
 
-        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
-        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
-        args_as_pym_expr: List[prim.Subscript] = []
+        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
+        from pytato.scalar_expr import Reduce
+        from pytato.utils import (
+            are_shape_components_equal,
+            dim_to_index_lambda_components,
+        )
+
+        bindings = {f"_in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
+        args_as_pym_expr: list[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
         var_to_redn_descr = {}
 
@@ -235,7 +373,7 @@ class ToIndexLambdaMixin:
 
                     subscript_indices.append(prim.Variable(redn_idx_name))
 
-            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
+            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"_in{iarg}"),
                                                    tuple(subscript_indices)))
 
         # }}}
@@ -289,8 +427,7 @@ class ToIndexLambdaMixin:
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
                                       ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
+        from pytato.utils import get_indexing_expression, get_shape_after_broadcasting
 
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
@@ -354,8 +491,7 @@ class ToIndexLambdaMixin:
 
     def map_non_contiguous_advanced_index(
             self, expr: AdvancedIndexInNoncontiguousAxes) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
+        from pytato.utils import get_indexing_expression, get_shape_after_broadcasting
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, INT_CLASSES)))
