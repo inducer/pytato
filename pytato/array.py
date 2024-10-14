@@ -188,6 +188,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    dataclass_transform,
 )
 
 import numpy as np
@@ -298,6 +299,14 @@ def normalize_shape(
 
 # {{{ array interface
 
+T = TypeVar("T")
+
+
+@dataclass_transform(eq_default=False, frozen_default=True)
+def array_dataclass(cls: type[T]) -> type[T]:
+    return dataclasses.dataclass(init=True, frozen=True, eq=False, repr=False)(cls)
+
+
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
 PyScalarType = Union[type[bool], type[int], type[float], type[complex]]
@@ -372,7 +381,7 @@ class ReductionDescriptor(Taggable):
         return replace(self, tags=tags)
 
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Array(Taggable):
     r"""
     A base class (abstract interface + supplemental functionality) for lazily
@@ -735,7 +744,7 @@ class Array(Taggable):
 
 # {{{ mixins
 
-@dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
+@array_dataclass
 class _SuppliedAxesAndTagsMixin(Taggable):
     axes: AxesT = dataclasses.field(kw_only=True)
     tags: frozenset[Tag] = dataclasses.field(kw_only=True)
@@ -749,7 +758,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
         return dataclasses.replace(self, tags=tags)
 
 
-@dataclasses.dataclass(frozen=True, eq=False, slots=False, repr=False)
+@array_dataclass
 class _SuppliedShapeAndDtypeMixin:
     """A mixin class for when an array must store its own *shape* and *dtype*,
     rather than when it can derive them easily from inputs.
@@ -762,7 +771,7 @@ class _SuppliedShapeAndDtypeMixin:
 
 # {{{ dict of named arrays
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
@@ -813,7 +822,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
         return self.expr.dtype
 
 
-@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True)
+@array_dataclass
 class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
@@ -863,7 +872,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         return EqualityComparer()(self, other)
 
 
-@dataclasses.dataclass(frozen=True, eq=False, init=False)
+@array_dataclass
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -918,7 +927,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
 # {{{ index lambda
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
@@ -1011,7 +1020,7 @@ class EinsumAxisDescriptor:
     pass
 
 
-@dataclasses.dataclass(frozen=True, order=True)
+@array_dataclass
 class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
@@ -1021,7 +1030,7 @@ class EinsumElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@dataclasses.dataclass(frozen=True, order=True)
+@array_dataclass
 class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
@@ -1031,7 +1040,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
@@ -1368,7 +1377,7 @@ def einsum(subscripts: str, *operands: Array,
 
 # {{{ stack
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
@@ -1401,7 +1410,7 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ concatenate
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
@@ -1438,7 +1447,7 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ index remapping
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class IndexRemappingBase(Array):
     """Base class for operations that remap the indices of an array.
 
@@ -1461,7 +1470,7 @@ class IndexRemappingBase(Array):
 
 # {{{ roll
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
@@ -1487,7 +1496,7 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ axis permutation
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
@@ -1514,7 +1523,7 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ reshape
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
@@ -1549,7 +1558,7 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ indexing
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
@@ -1669,7 +1678,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
 
 # {{{ base class for arguments
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class InputArgumentBase(Array):
     r"""Base class for input arguments.
 
@@ -1778,7 +1787,7 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
 
 # {{{ placeholder
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class Placeholder(
                   _SuppliedAxesAndTagsMixin,
                   _SuppliedShapeAndDtypeMixin,
@@ -1802,7 +1811,7 @@ class Placeholder(
 
 # {{{ size parameter
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, unsafe_hash=True)
+@array_dataclass
 class SizeParam(
                 _SuppliedAxesAndTagsMixin,
                 InputArgumentBase):

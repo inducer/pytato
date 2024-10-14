@@ -84,6 +84,7 @@ from pytato.array import (
     Placeholder,
     ShapeType,
     _dtype_any,
+    array_dataclass,
 )
 
 
@@ -103,8 +104,7 @@ class ReturnType(enum.Enum):
     TUPLE_OF_ARRAYS = 2
 
 
-# eq=False to avoid equality comparison without EqualityMapper
-@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True)
+@array_dataclass
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
@@ -246,7 +246,7 @@ class FunctionDefinition(Taggable):
         return EqualityComparer().map_function_definition(self, other)
 
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False, hash=True, cache_hash=True)
+@array_dataclass
 class NamedCallResult(NamedArray):
     """
     One of the arrays that are returned from a call to :class:`FunctionDefinition`.
@@ -296,7 +296,7 @@ class NamedCallResult(NamedArray):
 
 
 # eq=False to avoid equality comparison without EqualityMapper
-@dataclasses.dataclass(frozen=True, eq=False, unsafe_hash=True, repr=False)
+@array_dataclass
 class Call(AbstractResultWithNamedArrays):
     """
     Records an invocation to a :class:`FunctionDefinition`.
