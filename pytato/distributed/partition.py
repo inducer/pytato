@@ -844,7 +844,7 @@ def find_distributed_partition(
     # processing below.
     materialized_arrays = {a: None
                            for a in materialized_arrays_collector.materialized_arrays
-                           if a not in received_arrays | sent_arrays}
+                           if a not in received_arrays and a not in sent_arrays}
 
     # "mso" for "materialized/sent/output"
     output_arrays = dict.fromkeys(outputs._data.values())
