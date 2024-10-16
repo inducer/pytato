@@ -1013,6 +1013,12 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
 
     _mapper_method: ClassVar[str] = "map_index_lambda"
 
+    if __debug__:
+        def __post_init__(self) -> None:
+            assert isinstance(self.bindings, immutabledict)
+            assert isinstance(self.var_to_reduction_descr, immutabledict)
+            super().__post_init__()
+
     def with_tagged_reduction(self,
                               reduction_variable: str,
                               tag: Tag) -> IndexLambda:
@@ -1124,6 +1130,11 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                      ReductionDescriptor]
     _mapper_method: ClassVar[str] = "map_einsum"
+
+    if __debug__:
+        def __post_init__(self) -> None:
+            assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
+            super().__post_init__()
 
     @memoize_method
     def _access_descr_to_axis_len(self

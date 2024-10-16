@@ -106,6 +106,10 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     copy = dataclasses.replace
 
+    def __post_init__(self) -> None:
+        assert isinstance(self.bindings, immutabledict)
+        super().__post_init__()
+
     @property
     def _result_names(self) -> frozenset[str]:
         return frozenset({name

@@ -160,6 +160,10 @@ class FunctionDefinition(Taggable):
     returns: Mapping[str, Array]
     tags: frozenset[Tag] = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
 
+    if __debug__:
+        def __post_init__(self) -> None:
+            assert isinstance(self.returns, immutabledict)
+
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
         from pytato.transform import InputGatherer
@@ -295,7 +299,6 @@ class NamedCallResult(NamedArray):
         return self._container.function.returns[self.name].dtype  # pylint: disable=no-member
 
 
-# eq=False to avoid equality comparison without EqualityMapper
 @array_dataclass()
 class Call(AbstractResultWithNamedArrays):
     """
@@ -323,6 +326,7 @@ class Call(AbstractResultWithNamedArrays):
             # check that the invocation parameters and the function definition
             # parameters agree with each other.
             assert frozenset(self.bindings) == self.function.parameters
+            assert isinstance(self.bindings, immutabledict)
             super().__post_init__()
 
     def __contains__(self, name: object) -> bool:
