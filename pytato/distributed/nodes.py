@@ -80,7 +80,7 @@ CommTagType = Hashable
 
 # {{{ send
 
-@array_dataclass
+@array_dataclass()
 class DistributedSend(Taggable):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
@@ -104,7 +104,7 @@ class DistributedSend(Taggable):
     data: Array
     dest_rank: int
     comm_tag: CommTagType
-    tags: frozenset[Tag] = dataclasses.field(kw_only=True, default=frozenset())
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True, default=frozenset())  # pylint: disable=invalid-field-call
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> DistributedSend:
         return dataclasses.replace(self, tags=tags)
@@ -117,7 +117,7 @@ class DistributedSend(Taggable):
 
 # {{{ send ref holder
 
-@array_dataclass
+@array_dataclass()
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -182,7 +182,7 @@ class DistributedSendRefHolder(Array):
 
 # {{{ receive
 
-@array_dataclass
+@array_dataclass()
 class DistributedRecv(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation.
 

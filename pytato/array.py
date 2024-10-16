@@ -297,15 +297,60 @@ def normalize_shape(
 # }}}
 
 
-# {{{ array interface
+# {{{ array dataclass helpers
 
 T = TypeVar("T")
 
 
 @dataclass_transform(eq_default=False, frozen_default=True)
-def array_dataclass(cls: type[T]) -> type[T]:
-    return dataclasses.dataclass(init=True, frozen=True, eq=False, repr=False)(cls)
+def array_dataclass() -> Callable[[type[T]], type[T]]:
+    def map_cls(cls: type[T]) -> type[T]:
+        # Frozen dataclasses (empirically) have a ~20% speed penalty,
+        # and their frozen-ness is arguably a debug feature.
+        dc_cls = dataclasses.dataclass(init=True, frozen=__debug__,
+                                       eq=False, repr=False)(cls)
 
+        _augment_array_dataclass(dc_cls)
+        return dc_cls
+
+    return map_cls
+
+
+def _augment_array_dataclass(
+            cls: type,
+        ) -> None:
+    from dataclasses import fields
+    attr_tuple = ", ".join(f"self.{fld.name}"
+                           for fld in fields(cls) if fld.name != "non_equality_tags")
+    if attr_tuple:
+        attr_tuple = f"({attr_tuple},)"
+    else:
+        attr_tuple = "()"
+
+    from pytools.codegen import remove_common_indentation
+    augment_code = remove_common_indentation(
+        f"""
+        def {cls.__name__}_hash(self):
+            try:
+                return self._hash_value
+            except AttributeError:
+                pass
+
+            h = hash(frozenset({attr_tuple}))
+            object.__setattr__(self, "_hash_value", h)
+            return h
+
+        cls.__hash__ = {cls.__name__}_hash
+        """)
+    exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
+    exec(compile(augment_code,
+                 f"<dataclass augmentation code for {cls}>", "exec"),
+         exec_dict)
+
+# }}}
+
+
+# {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
@@ -381,7 +426,7 @@ class ReductionDescriptor(Taggable):
         return replace(self, tags=tags)
 
 
-@array_dataclass
+@array_dataclass()
 class Array(Taggable):
     r"""
     A base class (abstract interface + supplemental functionality) for lazily
@@ -555,7 +600,7 @@ class Array(Taggable):
     @property
     def T(self) -> Array:
         return AxisPermutation(self,
-                               tuple(range(self.ndim)[::-1]),
+                               axis_permutation=tuple(range(self.ndim)[::-1]),
                                tags=_get_default_tags(),
                                axes=_get_default_axes(self.ndim),
                                non_equality_tags=_get_created_at_tag())
@@ -744,7 +789,7 @@ class Array(Taggable):
 
 # {{{ mixins
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, eq=False, repr=False)
 class _SuppliedAxesAndTagsMixin(Taggable):
     axes: AxesT = dataclasses.field(kw_only=True)
     tags: frozenset[Tag] = dataclasses.field(kw_only=True)
@@ -758,7 +803,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
         return dataclasses.replace(self, tags=tags)
 
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, eq=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
     """A mixin class for when an array must store its own *shape* and *dtype*,
     rather than when it can derive them easily from inputs.
@@ -771,7 +816,7 @@ class _SuppliedShapeAndDtypeMixin:
 
 # {{{ dict of named arrays
 
-@array_dataclass
+@array_dataclass()
 class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     """An entry in a :class:`AbstractResultWithNamedArrays`. Holds a reference
     back to the containing instance as well as the name by which *self* is
@@ -822,7 +867,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
         return self.expr.dtype
 
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, eq=False)
 class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
@@ -872,7 +917,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         return EqualityComparer()(self, other)
 
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -927,7 +972,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
 # {{{ index lambda
 
-@array_dataclass
+@array_dataclass()
 class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     r"""Represents an array that can be computed by evaluating
     :attr:`expr` for every value of the input indices. The
@@ -1020,7 +1065,7 @@ class EinsumAxisDescriptor:
     pass
 
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
@@ -1030,7 +1075,7 @@ class EinsumElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@array_dataclass
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the
@@ -1040,7 +1085,7 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@array_dataclass
+@array_dataclass()
 class Einsum(_SuppliedAxesAndTagsMixin, Array):
     """
     An array expression using the `Einstein summation convention
@@ -1377,7 +1422,7 @@ def einsum(subscripts: str, *operands: Array,
 
 # {{{ stack
 
-@array_dataclass
+@array_dataclass()
 class Stack(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along a new axis.
 
@@ -1410,7 +1455,7 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ concatenate
 
-@array_dataclass
+@array_dataclass()
 class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """Join a sequence of arrays along an existing axis.
 
@@ -1447,7 +1492,7 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
 
 # {{{ index remapping
 
-@array_dataclass
+@array_dataclass()
 class IndexRemappingBase(Array):
     """Base class for operations that remap the indices of an array.
 
@@ -1470,7 +1515,7 @@ class IndexRemappingBase(Array):
 
 # {{{ roll
 
-@array_dataclass
+@array_dataclass()
 class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """Roll an array along an axis.
 
@@ -1496,7 +1541,7 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ axis permutation
 
-@array_dataclass
+@array_dataclass()
 class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     r"""Permute the axes of an array.
 
@@ -1523,7 +1568,7 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ reshape
 
-@array_dataclass
+@array_dataclass()
 class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Reshape an array.
@@ -1558,7 +1603,7 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
 # {{{ indexing
 
-@array_dataclass
+@array_dataclass()
 class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     """
     Abstract class for all index expressions on an array.
@@ -1678,7 +1723,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
 
 # {{{ base class for arguments
 
-@array_dataclass
+@array_dataclass()
 class InputArgumentBase(Array):
     r"""Base class for input arguments.
 
@@ -1787,7 +1832,7 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
 
 # {{{ placeholder
 
-@array_dataclass
+@array_dataclass()
 class Placeholder(
                   _SuppliedAxesAndTagsMixin,
                   _SuppliedShapeAndDtypeMixin,
@@ -1811,7 +1856,7 @@ class Placeholder(
 
 # {{{ size parameter
 
-@array_dataclass
+@array_dataclass()
 class SizeParam(
                 _SuppliedAxesAndTagsMixin,
                 InputArgumentBase):
@@ -1823,8 +1868,8 @@ class SizeParam(
         The name by which a value is supplied for the argument once computation
         begins.
     """
-    name: str
-    axes: AxesT = dataclasses.field(kw_only=True, default=())
+    name: str = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
+    axes: AxesT = dataclasses.field(kw_only=True, default=())  # pylint: disable=invalid-field-call
 
     _mapper_method: ClassVar[str] = "map_size_param"
 
@@ -2169,7 +2214,7 @@ def make_size_param(name: str,
     :param tags:       implementation tags
     """
     _check_identifier(name, optional=False)
-    return SizeParam(name, tags=(tags | _get_default_tags()),
+    return SizeParam(name=name, tags=(tags | _get_default_tags()),  # pylint: disable=missing-kwoa
                      non_equality_tags=_get_created_at_tag(),)
 
 

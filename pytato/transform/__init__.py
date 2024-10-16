@@ -646,7 +646,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs):
 
     def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> Array:
         return Einsum(expr.access_descriptors,

@@ -104,7 +104,7 @@ class ReturnType(enum.Enum):
     TUPLE_OF_ARRAYS = 2
 
 
-@array_dataclass
+@array_dataclass()
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
@@ -158,7 +158,7 @@ class FunctionDefinition(Taggable):
     parameters: frozenset[str]
     return_type: ReturnType
     returns: Mapping[str, Array]
-    tags: frozenset[Tag] = dataclasses.field(kw_only=True)
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -246,7 +246,7 @@ class FunctionDefinition(Taggable):
         return EqualityComparer().map_function_definition(self, other)
 
 
-@array_dataclass
+@array_dataclass()
 class NamedCallResult(NamedArray):
     """
     One of the arrays that are returned from a call to :class:`FunctionDefinition`.
@@ -296,7 +296,7 @@ class NamedCallResult(NamedArray):
 
 
 # eq=False to avoid equality comparison without EqualityMapper
-@array_dataclass
+@array_dataclass()
 class Call(AbstractResultWithNamedArrays):
     """
     Records an invocation to a :class:`FunctionDefinition`.
