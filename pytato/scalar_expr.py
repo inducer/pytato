@@ -25,6 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import re
 from typing import (
     TYPE_CHECKING,
@@ -34,7 +35,6 @@ from typing import (
     Union,
 )
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 
@@ -264,7 +264,7 @@ class ExpressionBase(prim.Expression):
         return StringifyMapper()
 
 
-@attrs.frozen(eq=True, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=True, slots=True)
 class Reduce(ExpressionBase):
     """
     .. autoattribute:: inner_expr
@@ -293,14 +293,14 @@ class Reduce(ExpressionBase):
         return (self.inner_expr, self.op, self.bounds)
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             hash(self.bounds)
 
     init_arg_names = ("inner_expr", "op", "bounds")
     mapper_method = "map_reduce"
 
 
-@attrs.frozen(eq=True, hash=True, cache_hash=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class TypeCast(ExpressionBase):
     """
     .. autoattribute:: dtype

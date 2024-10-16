@@ -55,6 +55,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import enum
 import re
 from functools import cached_property
@@ -71,7 +72,6 @@ from typing import (
     TypeVar,
 )
 
-import attrs
 from immutabledict import immutabledict
 
 from pytools import memoize_method
@@ -84,6 +84,7 @@ from pytato.array import (
     Placeholder,
     ShapeType,
     _dtype_any,
+    array_dataclass,
 )
 
 
@@ -103,8 +104,7 @@ class ReturnType(enum.Enum):
     TUPLE_OF_ARRAYS = 2
 
 
-# eq=False to avoid equality comparison without EqualityMaper
-@attrs.define(frozen=True, eq=False, hash=True, cache_hash=True)
+@array_dataclass()
 class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
@@ -157,9 +157,12 @@ class FunctionDefinition(Taggable):
     """
     parameters: frozenset[str]
     return_type: ReturnType
-    returns: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
-    tags: frozenset[Tag] = attrs.field(kw_only=True)
+    returns: Mapping[str, Array]
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
+
+    if __debug__:
+        def __post_init__(self) -> None:
+            assert isinstance(self.returns, immutabledict)
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -193,7 +196,7 @@ class FunctionDefinition(Taggable):
 
     def _with_new_tags(
             self: FunctionDefinition, tags: frozenset[Tag]) -> FunctionDefinition:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
     def __call__(self, **kwargs: Array
                  ) -> Array | tuple[Array, ...] | Mapping[str, Array]:
@@ -247,7 +250,7 @@ class FunctionDefinition(Taggable):
         return EqualityComparer().map_function_definition(self, other)
 
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@array_dataclass()
 class NamedCallResult(NamedArray):
     """
     One of the arrays that are returned from a call to :class:`FunctionDefinition`.
@@ -288,16 +291,15 @@ class NamedCallResult(NamedArray):
     @property
     def shape(self) -> ShapeType:
         assert isinstance(self._container, Call)
-        return self._container.function.returns[self.name].shape
+        return self._container.function.returns[self.name].shape  # pylint: disable=no-member
 
     @property
     def dtype(self) -> _dtype_any:
         assert isinstance(self._container, Call)
-        return self._container.function.returns[self.name].dtype
+        return self._container.function.returns[self.name].dtype  # pylint: disable=no-member
 
 
-# eq=False to avoid equality comparison without EqualityMapper
-@attrs.define(frozen=True, eq=False, hash=True, cache_hash=True, repr=False)
+@array_dataclass()
 class Call(AbstractResultWithNamedArrays):
     """
     Records an invocation to a :class:`FunctionDefinition`.
@@ -313,19 +315,19 @@ class Call(AbstractResultWithNamedArrays):
 
     """
     function: FunctionDefinition
-    bindings: Mapping[str, Array] = attrs.field(
-        validator=attrs.validators.instance_of(immutabledict))
+    bindings: Mapping[str, Array]
 
     _mapper_method: ClassVar[str] = "map_call"
 
-    copy = attrs.evolve
+    copy = dataclasses.replace
 
     if __debug__:
-        def __attrs_post_init__(self) -> None:
+        def __post_init__(self) -> None:
             # check that the invocation parameters and the function definition
             # parameters agree with each other.
             assert frozenset(self.bindings) == self.function.parameters
-            super().__attrs_post_init__()
+            assert isinstance(self.bindings, immutabledict)
+            super().__post_init__()
 
     def __contains__(self, name: object) -> bool:
         return name in self.function.returns
@@ -345,7 +347,7 @@ class Call(AbstractResultWithNamedArrays):
         return len(self.function.returns)
 
     def _with_new_tags(self: Call, tags: frozenset[Tag]) -> Call:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 # }}}
 

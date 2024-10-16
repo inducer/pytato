@@ -53,9 +53,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 from typing import Any, ClassVar, Hashable
 
-import attrs
 import numpy as np
 
 from pytools.tag import Tag, Taggable
@@ -70,6 +70,7 @@ from pytato.array import (
     _get_default_tags,
     _SuppliedAxesAndTagsMixin,
     _SuppliedShapeAndDtypeMixin,
+    array_dataclass,
     normalize_shape,
 )
 
@@ -79,7 +80,7 @@ CommTagType = Hashable
 
 # {{{ send
 
-@attrs.frozen(init=True, eq=True, hash=True, cache_hash=True)
+@array_dataclass()
 class DistributedSend(Taggable):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
@@ -103,20 +104,20 @@ class DistributedSend(Taggable):
     data: Array
     dest_rank: int
     comm_tag: CommTagType
-    tags: frozenset[Tag] = attrs.field(kw_only=True, default=frozenset())
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True, default=frozenset())  # pylint: disable=invalid-field-call
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> DistributedSend:
-        return attrs.evolve(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
     def copy(self, **kwargs: Any) -> DistributedSend:
-        return attrs.evolve(self, **kwargs)
+        return dataclasses.replace(self, **kwargs)
 
 # }}}
 
 
 # {{{ send ref holder
 
-@attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
+@array_dataclass()
 class DistributedSendRefHolder(Array):
     """A node acting as an identity on :attr:`passthrough_data` while also holding
     a reference to a :class:`DistributedSend` in :attr:`send`. Since
@@ -181,7 +182,7 @@ class DistributedSendRefHolder(Array):
 
 # {{{ receive
 
-@attrs.frozen(eq=False, hash=True, cache_hash=True)
+@array_dataclass()
 class DistributedRecv(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array):
     """Class representing a distributed receive operation.
 

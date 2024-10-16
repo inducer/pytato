@@ -27,6 +27,7 @@ THE SOFTWARE.
 """
 
 
+import dataclasses
 import html
 from functools import partial
 from typing import (
@@ -35,8 +36,6 @@ from typing import (
     Callable,
     Mapping,
 )
-
-import attrs
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import remove_common_indentation
@@ -82,7 +81,7 @@ __doc__ = """
 
 # {{{ _DotEmitter
 
-@attrs.define
+@dataclasses.dataclass
 class _SubgraphTree:
     contents: list[str] | None
     subgraphs: dict[str, _SubgraphTree]
@@ -157,7 +156,7 @@ class DotEmitter:
 
 # {{{ array -> dot node converter
 
-@attrs.define
+@dataclasses.dataclass
 class _DotNodeInfo:
     title: str
     fields: dict[str, Any]
@@ -203,7 +202,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         info = self.get_common_dot_info(expr)
 
         # pylint: disable=not-an-iterable
-        for field in attrs.fields(type(expr)):
+        for field in dataclasses.fields(type(expr)):
             if field.name in info.fields:
                 continue
             attr = getattr(expr, field.name)
