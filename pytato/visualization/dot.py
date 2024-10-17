@@ -528,7 +528,7 @@ def _gather_partition_node_information(
         # It is important that seen functions are emitted callee-first.
         # (Otherwise function 'entry' nodes will get declared in the wrong
         # cluster.) So use a data type that preserves order.
-        seen_functions: list[FunctionDefinition] = []
+        seen_functions: dict[FunctionDefinition, None] = {}
 
         def gather_function_info(f: FunctionDefinition) -> None:
             key = (part.pid, f)  # noqa: B023
@@ -545,7 +545,7 @@ def _gather_partition_node_information(
                 gather_function_info(subfunc)
 
             if f not in seen_functions:  # noqa: B023
-                seen_functions.append(f)  # noqa: B023
+                seen_functions[f] = None  # noqa: B023
 
         for f in mapper.functions:
             gather_function_info(f)
@@ -683,7 +683,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
         # }}}
 
-        # {{{ emit receives nodes
+        # {{{ emit receive nodes
 
         part_dist_recv_var_name_to_node_id = {}
         for name, recv in (
