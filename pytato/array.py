@@ -714,7 +714,7 @@ class Array(Taggable):
         return pt.any(self, axis)
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Sequence[Tag] | Tag) -> Array:
+                         tags: Collection[Tag] | Tag) -> Array:
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
