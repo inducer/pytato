@@ -27,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 from typing import (
@@ -43,7 +44,6 @@ from typing import (
     cast,
 )
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 
@@ -485,7 +485,7 @@ class CopyMapper(TransformMapper):
         rec_container = self.rec(expr._container)
         assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                container=rec_container,
+                _container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,
@@ -524,7 +524,7 @@ class CopyMapper(TransformMapper):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return attrs.evolve(expr, returns=immutabledict(new_returns))
+        return dataclasses.replace(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
@@ -646,7 +646,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs):
 
     def map_size_param(self, expr: SizeParam, *args: Any, **kwargs: Any) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: Any, **kwargs: Any) -> Array:
         return Einsum(expr.access_descriptors,
@@ -689,7 +689,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs):
         rec_loopy_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                container=rec_loopy_call,
+                _container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,

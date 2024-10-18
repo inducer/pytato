@@ -27,9 +27,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import sys
 
-import attrs
 import numpy as np
 import pytest
 from testlib import RandomDAGContext, make_random_dag
@@ -1189,14 +1189,14 @@ def test_with_tagged_reduction():
 
 
 def test_derived_class_uses_correct_array_eq():
-    @attrs.define(frozen=True)
+    @dataclasses.dataclass(frozen=True)
     class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
-    @attrs.define(frozen=True, eq=False)
+    @dataclasses.dataclass(frozen=True, eq=False)
     class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
