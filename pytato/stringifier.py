@@ -31,8 +31,6 @@ import attrs
 import numpy as np
 from immutabledict import immutabledict
 
-from pytools import memoize_method
-
 from pytato.array import (
     Array,
     Axis,
@@ -68,6 +66,7 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
+        # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], str] = {}
 
     def rec(self, expr: Any, depth: int) -> str:
@@ -76,6 +75,15 @@ class Reprifier(Mapper):
             return self._cache[cache_key]
         except KeyError:
             result = super().rec(expr, depth)
+            self._cache[cache_key] = result
+            return result  # type: ignore[no-any-return]
+
+    def rec_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
+        cache_key = (id(expr), depth)
+        try:
+            return self._cache[cache_key]
+        except KeyError:
+            result = super().rec_function_definition(expr, depth)
             self._cache[cache_key] = result
             return result  # type: ignore[no-any-return]
 
@@ -168,7 +176,6 @@ class Reprifier(Mapper):
                         for field in attrs.fields(type(expr)))
                 + ")")
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
         if depth > self.truncation_depth:
             return self.truncation_string
@@ -191,7 +198,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "function":
-                return self.map_function_definition(expr.function, depth+1)
+                return self.rec_function_definition(expr.function, depth+1)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
