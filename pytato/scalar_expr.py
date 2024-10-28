@@ -106,6 +106,9 @@ class WalkMapper(WalkMapperBase):
 
 
 class CombineMapper(CombineMapperBase):
+    def map_type_cast(self, expr: TypeCast, *args: Any, **kwargs: Any) -> Any:
+        return self.rec(expr.inner_expr)
+
     def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
         return self.combine([*(self.rec(bnd, *args, **kwargs)
                                for _, bnd in sorted(expr.bounds.items())),
@@ -340,4 +343,11 @@ def get_reduction_induction_variables(expr: prim.Expression) -> frozenset[str]:
     """
     return InductionVariableCollector()(expr)  # type: ignore[no-any-return]
 
+
+def contains_reduction(expr: prim.Expression) -> bool:
+    """
+    Returns true if any operation in the scalar expression, expr, is a reduction
+    operation.
+    """
+    return bool(get_reduction_induction_variables(expr))
 # vim: foldmethod=marker
