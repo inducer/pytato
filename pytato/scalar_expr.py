@@ -349,5 +349,5 @@ def contains_reduction(expr: prim.Expression) -> bool:
     Returns true if any operation in the scalar expression, expr, is a reduction
     operation.
     """
-    return bool(get_reduction_induction_variables(expr))
+    return (len(get_reduction_induction_variables(expr)) > 0)
 # vim: foldmethod=marker
