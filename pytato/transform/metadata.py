@@ -57,7 +57,6 @@ from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
     Array,
-    ArrayOrScalar,
     AxisPermutation,
     BasicIndex,
     Concatenate,
@@ -71,19 +70,8 @@ from pytato.array import (
     Reshape,
     Stack,
 )
-from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
-from pytato.raising import (
-    BinaryOp,
-    BroadcastOp,
-    C99CallOp,
-    FullOp,
-    ReduceOp,
-    WhereOp,
-    index_lambda_to_high_level_op,
-)
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
@@ -96,6 +84,44 @@ if TYPE_CHECKING:
 
 
 GraphNodeT = TypeVar("GraphNodeT")
+
+import pymbolic.primitives as prim
+
+from pytato.scalar_expr import (
+    IdentityMapper as ScalarMap,
+)
+
+
+class AxesUsedMapper(ScalarMap):
+    """
+    Determine which axes are used in the scalar expression and which ones just
+    flow through the expression.
+    """
+
+    def __init__(self, var_names_in_use: list[str]):
+
+        self.var_names_in_use: list[str] = var_names_in_use
+
+        self.usage_dict: Mapping[str, list[str]] = {vname: [] for vname in
+                                                    self.var_names_in_use}
+
+    def map_subscript(self, expr: prim.Subscript) -> None:
+
+        # Check the variable name and if it matches a use case record it.
+
+        name = expr.aggregate.name
+        if name in self.var_names_in_use:
+
+            self.usage_dict[name].append(str(expr))
+
+            self.rec(expr.index)
+
+    def map_variable(self, expr: prim.Variable) -> None:
+        name = expr.name
+
+        if name in self.var_names_in_use:
+
+            self.usage_dict[name].append(str(expr))
 
 
 # {{{ AxesTagsEquationCollector
@@ -235,66 +261,62 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        try:
-            hlo = index_lambda_to_high_level_op(expr)
-        except UnknownIndexLambdaExpr:
-            from warnings import warn
-            warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.", stacklevel=1)
-            # no propagation semantics implemented for such cases
-            return
+        mymap = AxesUsedMapper(list(expr.bindings.keys()))
 
-        if isinstance(hlo, BinaryOp):
-            subexprs: tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
-        elif isinstance(hlo, WhereOp):
-            subexprs = (hlo.condition, hlo.then, hlo.else_)
-        elif isinstance(hlo, FullOp):
-            # A full-op does not impose any equations
-            subexprs = ()
-        elif isinstance(hlo, BroadcastOp):
-            subexprs = (hlo.x,)
-        elif isinstance(hlo, C99CallOp):
-            subexprs = hlo.args
-        elif isinstance(hlo, ReduceOp):
+        mymap(expr.expr)
 
-            # {{{ ReduceOp doesn't quite involve broadcasting
+        keys = list(expr.bindings.keys())
+
+        for k in keys:
+            all_match = True
+            # Confirm self-consistency.
+            start = mymap.usage_dict[k][0]
+            for i in range(1, len(mymap.usage_dict[k])):
+                if start != mymap.usage_dict[k][i]:
+                    all_match = False
+
+            assert all_match
+
+        out_shape = expr.shape
+        assert len(out_shape) == expr.ndim
+        in_shape = [expr.bindings[k].shape for k in keys]
+
+        if expr.var_to_reduction_descr:\
+            # We are in a reduction operation and so need to handle differently.
 
             i_out_axis = 0
-            for i_in_axis in range(hlo.x.ndim):
-                if i_in_axis not in hlo.axes:
-                    self.record_equation(
-                        self.get_var_for_axis(hlo.x, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
+            assert len(in_shape) == 1  # There should be only 1 input.
+            for i_in_axis in range(len(in_shape[0])):
+                out_dim = out_shape[i_out_axis]
+                in_dim = in_shape[0][i_in_axis]
+                if are_shape_components_equal(in_dim, out_dim):
+                    val = (self.get_var_for_axis(expr.bindings[keys[0]], i_in_axis),
+                           self.get_var_for_axis(expr, i_out_axis))
+                    self.equations.append(val)
                     i_out_axis += 1
 
-            assert i_out_axis == expr.ndim
-
-            # }}}
-
+                    if i_out_axis == expr.ndim:
+                        return
             return
 
-        else:
-            raise NotImplementedError(type(hlo))
+        for input_term in range(len(in_shape)):
+            input_length = len(in_shape[input_term])
 
-        for subexpr in subexprs:
-            if isinstance(subexpr, Array):
-                for i_in_axis, i_out_axis in zip(
-                        range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim),
-                        strict=True):
-                    in_dim = subexpr.shape[i_in_axis]
-                    out_dim = expr.shape[i_out_axis]
-                    if are_shape_components_equal(in_dim, out_dim):
-                        self.record_equation(
-                            self.get_var_for_axis(subexpr, i_in_axis),
-                            self.get_var_for_axis(expr, i_out_axis)
-                        )
-                    else:
-                        # i_in_axis is broadcasted => do not propagate
-                        assert are_shape_components_equal(in_dim, 1)
-            else:
-                assert isinstance(subexpr, SCALAR_CLASSES)
+            for i_in_axis, i_out_axis in zip(
+                    range(input_length),
+                    range(expr.ndim - input_length, expr.ndim)):
+                in_dim = in_shape[input_term][i_in_axis]
+                out_dim = out_shape[i_out_axis]
+                if are_shape_components_equal(in_dim, out_dim):
+                    val = (self.get_var_for_axis(expr.bindings[keys[input_term]],
+                                                                    i_in_axis),
+                           self.get_var_for_axis(expr, i_out_axis))
+                    self.equations.append(val)
+
+                else:
+                    assert are_shape_components_equal(in_dim, 1)
+
+        return
 
     def map_stack(self, expr: Stack) -> None:
         """
@@ -632,19 +654,20 @@ class AxisTagAttacher(CopyMapper):
                                     )
 
                     if isinstance(expr, IndexLambda):
-                        assert isinstance(expr_copy, IndexLambda)
-                        try:
-                            hlo = index_lambda_to_high_level_op(expr)
-                        except UnknownIndexLambdaExpr:
-                            pass
-                        else:
-                            if isinstance(hlo, ReduceOp):
-                                for iaxis, redn_var in hlo.axes.items():
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        redn_var,
-                                        self.axis_to_tags.get((hlo.x, iaxis), [])
-                                    )
+                        if expr.var_to_reduction_descr:
+                            # This is a reduction operation.
+                            # We need to find the axes that are reduced over
+                            # and update the tag/tag them appropriately.
+                            for iaxis in range(len(expr.expr.inner_expr.index_tuple)):
+                                name = expr.expr.inner_expr.index_tuple[iaxis].name
+                                if name in expr.var_to_reduction_descr.keys():
+                                    assert len(list(expr.bindings.keys())) == 1
+                                    my_arr: Array = next(iter(expr.bindings.values()))
 
+                                    expr_copy = expr_copy.with_tagged_reduction(
+                                            name,
+                                            self.axis_to_tags.get((my_arr, iaxis), [])
+                                            )
                 # }}}
 
                 self._cache[key] = expr_copy
