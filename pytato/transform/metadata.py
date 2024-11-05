@@ -85,6 +85,39 @@ if TYPE_CHECKING:
 
 GraphNodeT = TypeVar("GraphNodeT")
 
+import pymbolic.primitives as prim
+from pytato.scalar_expr import (
+    IdentityMapper as ScalarMapper
+)
+import re
+
+class AxesUsedMapper(ScalarMapper):
+    """
+    Determine which axes are used in the scalar expressionand which ones just
+    flow through the expression.
+    """
+
+    def __init__(self, var_names_in_use: list[str]):
+        self.var_names_in_use: list[str] = var_names_in_use
+
+        self.usage_dict: Mapping[str, list[tuple[prim.Expression, ...]]] = {vname: [] \
+                                                                            for vname in
+                                                                            self.var_names_in_use}
+    def map_subscript(self, expr: prim.Subscript) -> None:
+
+        name = expr.aggregate.name
+        if name in self.var_names_in_use:
+            self.usage_dict[name].append(expr.index_tuple)
+
+            self.rec(expr.index)
+
+    def map_variable(self, expr: prim.Variable) -> None:
+        name = expr.name
+
+        if name in self.var_names_in_use:
+
+            self.usage_dict[name].append(expr)
+
 
 # {{{ AxesTagsEquationCollector
 
@@ -225,44 +258,36 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
         keys = list(expr.bindings.keys())
 
+        mymapper = AxesUsedMapper(keys)
+
+        mymapper(expr.expr)
+
         out_shape = expr.shape
         assert len(out_shape) == expr.ndim
         in_shape = [expr.bindings[k].shape for k in keys]
 
-        if expr.var_to_reduction_descr:\
-            # We are in a reduction operation and so need to handle differently.
+        reserved_reduction_pattern = re.compile("^(_r[0-9]+)$")
+        reserved_iname_pattern = re.compile("^(_[0-9]+)$")
+        for ikey, key in enumerate(keys):
+            if len(mymapper.usage_dict[key]) > 0:
+                for tup_ind in range(len(mymapper.usage_dict[key][0])):
+                    vname = mymapper.usage_dict[key][0][tup_ind]
+                    if isinstance(vname, prim.Variable):
+                        if reserved_reduction_pattern.match(vname.name):
+                            # Reduction axis. We can ignore it.
+                            pass
+                        elif vname.name[:3] == "_in":
+                            # Variable name axis.
+                            pass
+                        elif reserved_iname_pattern.match(vname.name):
+                            # matched with an iname.
+                            inum = int(vname.name[1:])
+                            val = (self.get_var_for_axis(expr.bindings[key], tup_ind),
+                                   self.get_var_for_axis(expr, inum))
+                            self.equations.append(val)
+                        else:
+                            raise ValueError(f"Unknown index name used in {vname}")
 
-            i_out_axis = 0
-            assert len(in_shape) == 1  # There should be only 1 input.
-            for i_in_axis in range(len(in_shape[0])):
-                out_dim = out_shape[i_out_axis]
-                in_dim = in_shape[0][i_in_axis]
-                if are_shape_components_equal(in_dim, out_dim):
-                    val = (self.get_var_for_axis(expr.bindings[keys[0]], i_in_axis),
-                           self.get_var_for_axis(expr, i_out_axis))
-                    self.equations.append(val)
-                    i_out_axis += 1
-
-                    if i_out_axis == expr.ndim:
-                        return
-            return
-
-        for input_term in range(len(in_shape)):
-            input_length = len(in_shape[input_term])
-
-            for i_in_axis, i_out_axis in zip(
-                    range(input_length),
-                    range(expr.ndim - input_length, expr.ndim)):
-                in_dim = in_shape[input_term][i_in_axis]
-                out_dim = out_shape[i_out_axis]
-                if are_shape_components_equal(in_dim, out_dim):
-                    val = (self.get_var_for_axis(expr.bindings[keys[input_term]],
-                                                                    i_in_axis),
-                           self.get_var_for_axis(expr, i_out_axis))
-                    self.equations.append(val)
-
-                else:
-                    assert are_shape_components_equal(in_dim, 1)
 
         return
 
