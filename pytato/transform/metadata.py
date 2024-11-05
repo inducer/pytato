@@ -85,11 +85,12 @@ if TYPE_CHECKING:
 
 GraphNodeT = TypeVar("GraphNodeT")
 
-import pymbolic.primitives as prim
-from pytato.scalar_expr import (
-    IdentityMapper as ScalarMapper
-)
 import re
+
+import pymbolic.primitives as prim
+
+from pytato.scalar_expr import IdentityMapper as ScalarMapper
+
 
 class AxesUsedMapper(ScalarMapper):
     """
@@ -100,9 +101,10 @@ class AxesUsedMapper(ScalarMapper):
     def __init__(self, var_names_in_use: list[str]):
         self.var_names_in_use: list[str] = var_names_in_use
 
-        self.usage_dict: Mapping[str, list[tuple[prim.Expression, ...]]] = {vname: [] \
+        self.usage_dict: Mapping[str, list[tuple[prim.Expression, ...]]] = {vname: []
                                                                             for vname in
                                                                             self.var_names_in_use}
+
     def map_subscript(self, expr: prim.Subscript) -> None:
 
         name = expr.aggregate.name
@@ -264,11 +266,10 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
         out_shape = expr.shape
         assert len(out_shape) == expr.ndim
-        in_shape = [expr.bindings[k].shape for k in keys]
 
         reserved_reduction_pattern = re.compile("^(_r[0-9]+)$")
         reserved_iname_pattern = re.compile("^(_[0-9]+)$")
-        for ikey, key in enumerate(keys):
+        for key in keys:
             if len(mymapper.usage_dict[key]) > 0:
                 for tup_ind in range(len(mymapper.usage_dict[key][0])):
                     vname = mymapper.usage_dict[key][0][tup_ind]
@@ -287,7 +288,6 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                             self.equations.append(val)
                         else:
                             raise ValueError(f"Unknown index name used in {vname}")
-
 
         return
 
