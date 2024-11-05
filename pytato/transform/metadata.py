@@ -85,44 +85,6 @@ if TYPE_CHECKING:
 
 GraphNodeT = TypeVar("GraphNodeT")
 
-import pymbolic.primitives as prim
-
-from pytato.scalar_expr import (
-    IdentityMapper as ScalarMap,
-)
-
-
-class AxesUsedMapper(ScalarMap):
-    """
-    Determine which axes are used in the scalar expression and which ones just
-    flow through the expression.
-    """
-
-    def __init__(self, var_names_in_use: list[str]):
-
-        self.var_names_in_use: list[str] = var_names_in_use
-
-        self.usage_dict: Mapping[str, list[str]] = {vname: [] for vname in
-                                                    self.var_names_in_use}
-
-    def map_subscript(self, expr: prim.Subscript) -> None:
-
-        # Check the variable name and if it matches a use case record it.
-
-        name = expr.aggregate.name
-        if name in self.var_names_in_use:
-
-            self.usage_dict[name].append(str(expr))
-
-            self.rec(expr.index)
-
-    def map_variable(self, expr: prim.Variable) -> None:
-        name = expr.name
-
-        if name in self.var_names_in_use:
-
-            self.usage_dict[name].append(str(expr))
-
 
 # {{{ AxesTagsEquationCollector
 
@@ -261,21 +223,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        mymap = AxesUsedMapper(list(expr.bindings.keys()))
-
-        mymap(expr.expr)
-
         keys = list(expr.bindings.keys())
-
-        for k in keys:
-            all_match = True
-            # Confirm self-consistency.
-            start = mymap.usage_dict[k][0]
-            for i in range(1, len(mymap.usage_dict[k])):
-                if start != mymap.usage_dict[k][i]:
-                    all_match = False
-
-            assert all_match
 
         out_shape = expr.shape
         assert len(out_shape) == expr.ndim
