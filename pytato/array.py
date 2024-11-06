@@ -355,8 +355,11 @@ class Axis(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
-        from attrs import evolve as replace
-        return replace(self, tags=tags)
+        if tags != self.tags:
+            from attrs import evolve as replace
+            return replace(self, tags=tags)
+        else:
+            return self
 
 
 @attrs.frozen
@@ -368,8 +371,11 @@ class ReductionDescriptor(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
-        from attrs import evolve as replace
-        return replace(self, tags=tags)
+        if tags != self.tags:
+            from attrs import evolve as replace
+            return replace(self, tags=tags)
+        else:
+            return self
 
 
 @attrs.frozen(eq=False, repr=False, hash=True, cache_hash=True)
@@ -714,14 +720,18 @@ class Array(Taggable):
         return pt.any(self, axis)
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Sequence[Tag] | Tag) -> Array:
+                         tags: Collection[Tag] | Tag) -> Array:
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (self.axes[:iaxis]
-                    + (self.axes[iaxis].tagged(tags),)
-                    + self.axes[iaxis+1:])
-        return self.copy(axes=new_axes)
+        new_axis = self.axes[iaxis].tagged(tags)
+        if new_axis is not self.axes[iaxis]:
+            new_axes = (self.axes[:iaxis]
+                        + (self.axes[iaxis].tagged(tags),)
+                        + self.axes[iaxis+1:])
+            return self.copy(axes=new_axes)
+        else:
+            return self
 
     @memoize_method
     def __repr__(self) -> str:
@@ -747,7 +757,10 @@ class _SuppliedAxesAndTagsMixin(Taggable):
                                                     default=frozenset())
 
     def _with_new_tags(self: Self, tags: frozenset[Tag]) -> Self:
-        return attrs.evolve(self, tags=tags)
+        if tags != self.tags:
+            return attrs.evolve(self, tags=tags)
+        else:
+            return self
 
 
 @attrs.frozen(eq=False, slots=False, repr=False)
@@ -987,20 +1000,22 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
                 f" '{self.var_to_reduction_descr.keys()}',"
                 f" got '{reduction_variable}'.")
 
-        assert isinstance(self.var_to_reduction_descr, immutabledict)
-        new_var_to_redn_descr = dict(self.var_to_reduction_descr)
-        new_var_to_redn_descr[reduction_variable] = \
-            self.var_to_reduction_descr[reduction_variable].tagged(tag)
-
-        return type(self)(expr=self.expr,
-                          shape=self.shape,
-                          dtype=self.dtype,
-                          bindings=self.bindings,
-                          axes=self.axes,
-                          var_to_reduction_descr=immutabledict
-                            (new_var_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags)
+        new_redn_descr = self.var_to_reduction_descr[reduction_variable].tagged(tag)
+        if new_redn_descr is not self.var_to_reduction_descr[reduction_variable]:
+            assert isinstance(self.var_to_reduction_descr, immutabledict)
+            new_var_to_redn_descr = dict(self.var_to_reduction_descr)
+            new_var_to_redn_descr[reduction_variable] = new_redn_descr
+            return type(self)(expr=self.expr,
+                              shape=self.shape,
+                              dtype=self.dtype,
+                              bindings=self.bindings,
+                              axes=self.axes,
+                              var_to_reduction_descr=immutabledict
+                                (new_var_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags)
+        else:
+            return self
 
 # }}}
 
@@ -1148,19 +1163,21 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
         # }}}
 
-        assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
-        new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
-        new_redn_axis_to_redn_descr[redn_axis] = \
-            self.redn_axis_to_redn_descr[redn_axis].tagged(tag)
-
-        return type(self)(access_descriptors=self.access_descriptors,
-                          args=self.args,
-                          axes=self.axes,
-                          redn_axis_to_redn_descr=immutabledict
-                            (new_redn_axis_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags,
-                          )
+        new_redn_descr = self.redn_axis_to_redn_descr[redn_axis].tagged(tag)
+        if new_redn_descr is not self.redn_axis_to_redn_descr[redn_axis]:
+            assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
+            new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
+            new_redn_axis_to_redn_descr[redn_axis] = new_redn_descr
+            return type(self)(access_descriptors=self.access_descriptors,
+                              args=self.args,
+                              axes=self.axes,
+                              redn_axis_to_redn_descr=immutabledict
+                                (new_redn_axis_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags,
+                              )
+        else:
+            return self
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")

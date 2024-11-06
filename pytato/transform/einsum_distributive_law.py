@@ -138,6 +138,7 @@ def _can_hlo_be_distributed(hlo: HighLevelOp) -> bool:
                                           hlo.x2.shape))))
 
 
+# FIXME: Can this be made to inherit from CachedMapper?
 class EinsumDistributiveLawMapper(Mapper):
     """
     Primary mapper for :func:`apply_distributive_property_to_einsums`.
