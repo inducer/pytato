@@ -1324,6 +1324,43 @@ def test_unify_axes_tags():
     # }}}
 
 
+def test_unify_axes_tags_with_unbroadcastable_expressions():
+
+    a = pt.make_placeholder("a", (512, 10, 8))
+    b = pt.make_placeholder("b", (512, 10))
+    from testlib import BazTag, FooTag, QuuxTag, TestlibTag
+
+    a = a.with_tagged_axis(0, BazTag())
+    a = a.with_tagged_axis(1, QuuxTag())
+    a = a.with_tagged_axis(2, FooTag())
+
+    from immutabledict import immutabledict
+
+    import pymbolic.primitives as prim
+
+    x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0"), prim.Variable("_1"),
+                                              prim.Variable("_2")))
+    y = prim.Subscript(prim.Variable("_in1"),
+                       (prim.Variable("_0"), prim.Variable("_1")))
+
+    z = pt.IndexLambda(expr=x+y, bindings=immutabledict({"_in0": a, "_in1": b}),
+                       shape=(512, 10, 8), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(3),
+                       dtype=float,
+                       var_to_reduction_descr=immutabledict({}))
+
+    z_unified = pt.unify_axes_tags(z)
+
+    assert (z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+    assert (z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
+    assert (z_unified.axes[2].tags_of_type(TestlibTag) == frozenset([FooTag()]))
+
+    for key in z_unified.bindings.keys():
+        term = z_unified.bindings[key]
+        assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+        assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
+
+
 def test_rewrite_einsums_with_no_broadcasts():
     a = pt.make_placeholder("a", (10, 4, 1))
     b = pt.make_placeholder("b", (10, 1, 4))
