@@ -287,7 +287,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
         return False
 
     for in_subscript, access_descrs in zip(in_spec.split(","),
-                                           expr.access_descriptors):
+                                           expr.access_descriptors, strict=True):
         indices = _get_indices_from_input_subscript(in_subscript,
                                                     is_output=False)
         if len(indices) != len(access_descrs):
@@ -295,7 +295,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
         # {{{ add reduction dims to 'index_to_descr', check for any inconsistencies
 
-        for idx, access_descr in zip(indices, access_descrs):
+        for idx, access_descr in zip(indices, access_descrs, strict=True):
 
             try:
                 if index_to_descrs[idx] != access_descr:

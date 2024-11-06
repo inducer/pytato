@@ -428,7 +428,7 @@ def trace_call(f: Callable[..., ReturnT],
     # type-ignore-reason: return type is dependent on dynamic state i.e.
     # ret_type and hence mypy is unhappy
     return function(  # type: ignore[return-value]
-        **{pl.name: arg for pl, arg in zip(pl_args, args)},
+        **{pl.name: arg for pl, arg in zip(pl_args, args, strict=True)},
         **{pl_kwargs[kw].name: arg for kw, arg in kwargs.items()}
     )
 

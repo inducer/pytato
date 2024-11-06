@@ -39,7 +39,8 @@ def _get_constant_padded_idx_lambda(
         tuple((prim.Variable(f"_{idim}") - pad_width[0])
               for idim, pad_width in enumerate(pad_widths))]
 
-    for idim, (pad_width, constant_val) in enumerate(zip(pad_widths, constant_vals)):
+    for idim, (pad_width, constant_val) in enumerate(
+            zip(pad_widths, constant_vals, strict=True)):
         idx_var = prim.Variable(f"_{idim}")
         axis_len = array.shape[idim]
 
@@ -63,7 +64,8 @@ def _get_constant_padded_idx_lambda(
         expr,
         bindings,
         shape=tuple(axis_len + pad_width[0] + pad_width[1]
-                    for axis_len, pad_width in zip(array.shape, pad_widths)),
+                    for axis_len, pad_width
+                    in zip(array.shape, pad_widths, strict=True)),
         dtype=array.dtype)
 
 

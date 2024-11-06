@@ -1835,14 +1835,15 @@ def _get_masking_array_for_test_pad(array, pad_widths):
                   ).astype(np.int32)
                  for idx, axis_len, pad_width in zip(idxs,
                                                      array.shape,
-                                                     pad_widths)) > 1,
+                                                     pad_widths,
+                                                     strict=True)) > 1,
             0*idxs[0],
             0*idxs[0] + 1)
 
     return np.fromfunction(
         _get_mask_array_idx,
         shape=tuple(dim + pad_width[0] + pad_width[1]
-                    for dim, pad_width in zip(array.shape, pad_widths)),
+                    for dim, pad_width in zip(array.shape, pad_widths, strict=True)),
     )
 
 

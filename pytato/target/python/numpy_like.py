@@ -473,7 +473,8 @@ class NumpyCodegenMapper(CachedMapper[str, []]):
                                     _rec_idx(idx, dim)
                                     for idx, dim in zip(
                                             expr.indices[:last_non_trivial_index+1],
-                                            expr.array.shape)]))
+                                            expr.array.shape,
+                                            strict=False)]))
 
         return self._record_line_and_return_lhs(lhs, rhs)
 

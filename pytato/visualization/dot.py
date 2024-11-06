@@ -294,7 +294,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
         info = self.get_common_dot_info(expr)
 
         for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
-                                                       expr.args)):
+                                                       expr.args,
+                                                       strict=True)):
             self.rec(val)
             info.edges[f"{iarg}: {access_descr}"] = val
 

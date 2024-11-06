@@ -182,7 +182,8 @@ def _is_idx_lambda_broadcast_op(expr: IndexLambda) -> bool:
     to_shape = expr.shape
 
     for in_dim, brdcst_dim in zip(from_shape,
-                                  to_shape[-len(from_shape):]):
+                                  to_shape[-len(from_shape):],
+                                  strict=True):
         if (not are_shape_components_equal(in_dim, brdcst_dim)
                 and not are_shape_components_equal(in_dim, 1)):
             return False
