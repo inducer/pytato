@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing_extensions import TypeAlias, TypeIs
+
 
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
@@ -44,7 +46,7 @@ from pytato.array import (
 )
 from pytato.function import NamedCallResult
 from pytato.loopy import LoopyCall
-from pytato.scalar_expr import IntegralScalarExpression
+from pytato.scalar_expr import IntegralScalarExpression, is_integral_scalar_expression
 from pytato.target import Target
 from pytato.transform import (
     ArrayOrNames,
@@ -55,7 +57,17 @@ from pytato.transform import (
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
-SymbolicIndex = Tuple[IntegralScalarExpression, ...]
+SymbolicIndex: TypeAlias = Tuple[IntegralScalarExpression, ...]
+
+
+def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
+    if isinstance(o, tuple):
+        for i in o:
+            if not is_integral_scalar_expression(i):
+                return False
+        return True
+    else:
+        return False
 
 
 __doc__ = """
@@ -160,6 +172,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
         for name, clbl in translation_unit.callables_table.items():
             if isinstance(clbl, lp.CallableKernel):
+                assert isinstance(name, str)
                 if name in self.kernels_seen and (
                         translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
@@ -246,7 +259,7 @@ def normalize_outputs(
 # {{{ input naming check
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class NamesValidityChecker(CachedWalkMapper):
+class NamesValidityChecker(CachedWalkMapper[[]]):
     def __init__(self) -> None:
         self.name_to_input: dict[str, InputArgumentBase] = {}
         super().__init__()

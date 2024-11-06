@@ -26,7 +26,7 @@ from pytato.transform import Mapper
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper):
+class NumpyBasedEvaluator(Mapper[Any, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.

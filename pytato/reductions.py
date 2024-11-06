@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pymbolic import ArithmeticExpressionT
+
 
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
@@ -187,8 +189,8 @@ def _normalize_reduction_axes(
 def _get_reduction_indices_bounds(shape: ShapeType,
                                   axes: tuple[int, ...],
                                   ) -> tuple[Sequence[prim.Variable],
-                                             Mapping[str, tuple[ScalarExpression,
-                                                             ScalarExpression]]]:
+                                             Mapping[str, tuple[ArithmeticExpressionT,
+                                                             ArithmeticExpressionT]]]:
     """
     Given *shape* and reduction axes *axes*, produce a list of inames
     ``indices`` named appropriately for reduction inames.

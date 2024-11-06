@@ -8,6 +8,7 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as p
+from pymbolic.typing import ScalarT
 
 from pytato.array import Array, ArrayOrScalar, IndexLambda, ShapeType
 from pytato.diagnostic import UnknownIndexLambdaExpr
@@ -16,7 +17,6 @@ from pytato.scalar_expr import (
     SCALAR_CLASSES,
     IdentityMapper,
     Reduce,
-    Scalar,
     ScalarExpression,
     TypeCast,
 )
@@ -46,7 +46,7 @@ class HighLevelOp:
 
 @dataclass(frozen=True, eq=True, repr=True)
 class FullOp(HighLevelOp):
-    fill_value: Scalar
+    fill_value: ScalarT
 
 
 @unique

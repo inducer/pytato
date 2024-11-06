@@ -73,7 +73,7 @@ __doc__ = """
 
 # {{{ NUserCollector
 
-class NUserCollector(Mapper):
+class NUserCollector(Mapper[None, []]):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
     times an array expression is a direct dependency of other nodes.
@@ -314,7 +314,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 # {{{ DirectPredecessorsGetter
 
-class DirectPredecessorsGetter(Mapper):
+class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
     """
     Mapper to get the
     `direct predecessors
@@ -400,7 +400,7 @@ class DirectPredecessorsGetter(Mapper):
 # {{{ NodeCountMapper
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class NodeCountMapper(CachedWalkMapper):
+class NodeCountMapper(CachedWalkMapper[[]]):
     """
     Counts the number of nodes of a given type in a DAG.
 
@@ -476,7 +476,7 @@ def get_num_nodes(
 # {{{ NodeMultiplicityMapper
 
 
-class NodeMultiplicityMapper(CachedWalkMapper):
+class NodeMultiplicityMapper(CachedWalkMapper[[]]):
     """
     Computes the multiplicity of each unique node in a DAG.
 
@@ -518,7 +518,7 @@ def get_node_multiplicities(
 # {{{ CallSiteCountMapper
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class CallSiteCountMapper(CachedWalkMapper):
+class CallSiteCountMapper(CachedWalkMapper[[]]):
     """
     Counts the number of :class:`~pytato.Call` nodes in a DAG.
 

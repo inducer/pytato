@@ -29,11 +29,13 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
+from pymbolic import ArithmeticExpressionT
 from pytools import UniqueNameGenerator
 
 from pytato.array import (
@@ -74,8 +76,8 @@ def _generate_index_expressions(
         order: str,
         index_vars: list[prim.Variable]) -> tuple[ScalarExpression, ...]:
 
-    old_strides = [1]
-    new_strides = [1]
+    old_strides: list[ArithmeticExpressionT] = [1]
+    new_strides: list[ArithmeticExpressionT] = [1]
     old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
 
     old_stride_axs = (old_shape[::-1][:-1] if order == "C" else
@@ -103,7 +105,8 @@ def _generate_index_expressions(
         for index_var, new_stride in zip(index_vars, new_strides))
 
     return tuple(
-        (flattened_index_expn % old_size_till) // old_stride
+        # Mypy has a point: complex numbers don't support '//'.
+        (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
         for old_size_till, old_stride in zip(old_size_tills, old_strides))
 
 
@@ -304,7 +307,7 @@ class ToIndexLambdaMixin:
             lbound, ubound = lbounds[i], ubounds[i]
             subarray_expr = get_subscript(i, lbound)
             if i == len(expr.arrays) - 1:
-                concat_expr = subarray_expr
+                concat_expr: ArithmeticExpressionT = subarray_expr
             else:
                 concat_expr = If(Comparison(prim.Variable(f"_{expr.axis}"),
                                             "<", ubound),
@@ -344,7 +347,7 @@ class ToIndexLambdaMixin:
 
         for access_descr, (iarg, arg) in zip(expr.access_descriptors,
                                             enumerate(expr.args)):
-            subscript_indices = []
+            subscript_indices: list[ArithmeticExpressionT] = []
             for iaxis, axis in enumerate(access_descr):
                 if not are_shape_components_equal(
                             arg.shape[iaxis],
@@ -378,8 +381,9 @@ class ToIndexLambdaMixin:
 
         # }}}
 
-        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
-                            args_as_pym_expr[0])
+        inner_expr: ArithmeticExpressionT = reduce(
+                operator.mul, args_as_pym_expr[1:],
+                args_as_pym_expr[0])
 
         if redn_bounds:
             from pytato.reductions import SumReductionOperation
@@ -399,14 +403,17 @@ class ToIndexLambdaMixin:
     def map_roll(self, expr: Roll) -> IndexLambda:
         from pytato.utils import dim_to_index_lambda_components
 
-        index_expr = prim.Variable("_in0")
-        indices = [prim.Variable(f"_{d}") for d in range(expr.ndim)]
+        index_expr: prim.Expression = prim.Variable("_in0")
+        indices: list[ArithmeticExpressionT] = [
+            prim.Variable(f"_{d}") for d in range(expr.ndim)]
         axis = expr.axis
         axis_len_expr, bindings = dim_to_index_lambda_components(
             expr.shape[axis],
             UniqueNameGenerator({"_in0"}))
 
-        indices[axis] = (indices[axis] - expr.shift) % axis_len_expr
+        # Mypy has a point: the type system does not prove that the operands are
+        # not complex-valued or bool.
+        indices[axis] = (indices[axis] - expr.shift) % axis_len_expr  # type: ignore[operator, call-overload]
 
         if indices:
             index_expr = index_expr[tuple(indices)]
@@ -432,11 +439,12 @@ class ToIndexLambdaMixin:
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
+        adv_idx_shape = get_shape_after_broadcasting([
+                    cast(Array | int | np.integer[Any], expr.indices[i_idx])
+                    for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
-        indices = []
+        indices: list[ArithmeticExpressionT] = []
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
         islice_idx = 0
@@ -457,7 +465,7 @@ class ToIndexLambdaMixin:
                 if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indirect_idx_expr = prim.Subscript(
+                    indirect_idx_expr: ArithmeticExpressionT = prim.Subscript(
                         prim.Variable(bnd_name),
                         get_indexing_expression(
                             idx.shape,
@@ -466,7 +474,10 @@ class ToIndexLambdaMixin:
                     if not idx.tags_of_type(AssumeNonNegative):
                         # We define "upper" out-of bounds access to be undefined
                         # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                        # Mypy has a point: the type system does not prove that the
+                        # operands are not complex-valued.
+                        indirect_idx_expr = indirect_idx_expr % axis_len  # type: ignore[operator]
 
                     indices.append(indirect_idx_expr)
                 else:
@@ -495,11 +506,12 @@ class ToIndexLambdaMixin:
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
+        adv_idx_shape = get_shape_after_broadcasting([
+            cast(Array | int | np.integer[Any], expr.indices[i_idx])
+            for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
-        indices = []
+        indices: list[ArithmeticExpressionT] = []
 
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
@@ -523,15 +535,18 @@ class ToIndexLambdaMixin:
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
 
-                    indirect_idx_expr = prim.Subscript(prim.Variable(bnd_name),
-                                                       get_indexing_expression(
-                                                           idx.shape,
-                                                           adv_idx_shape))
+                    indirect_idx_expr: ArithmeticExpressionT = prim.Subscript(
+                                                        prim.Variable(bnd_name),
+                                                        get_indexing_expression(
+                                                            idx.shape,
+                                                            adv_idx_shape))
 
                     if not idx.tags_of_type(AssumeNonNegative):
                         # We define "upper" out-of bounds access to be undefined
                         # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
+
+                        # Mypy has a point: complex numbers do not have '%'.
+                        indirect_idx_expr = indirect_idx_expr % axis_len  # type: ignore[operator]
 
                     indices.append(indirect_idx_expr)
                 else:
@@ -553,7 +568,7 @@ class ToIndexLambdaMixin:
 
     def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
         vng = UniqueNameGenerator()
-        indices = []
+        indices: list[ArithmeticExpressionT] = []
 
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
@@ -598,11 +613,12 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> IndexLambda:
-        indices = [None] * expr.ndim
+        indices: list[ArithmeticExpressionT | None] = [None] * expr.ndim
         for from_index, to_index in enumerate(expr.axis_permutation):
             indices[to_index] = prim.Variable(f"_{from_index}")
 
-        index_expr = prim.Variable("_in0")[tuple(indices)]
+        index_expr = prim.Variable("_in0")[
+            cast(tuple[ArithmeticExpressionT], tuple(indices))]
 
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
@@ -614,7 +630,7 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
 
-class ToIndexLambdaMapper(Mapper, ToIndexLambdaMixin):
+class ToIndexLambdaMapper(Mapper[Array, []], ToIndexLambdaMixin):
 
     def handle_unsupported_array(self, expr: Any) -> Any:
         raise CannotBeLoweredToIndexLambda(type(expr))
@@ -632,6 +648,8 @@ def to_index_lambda(expr: Array) -> IndexLambda:
 
     :returns: The lowered :class:`~pytato.array.IndexLambda`.
     """
-    return ToIndexLambdaMapper()(expr)  # type: ignore[no-any-return]
+    res = ToIndexLambdaMapper()(expr)
+    assert isinstance(res, IndexLambda)
+    return res
 
 # vim:fdm=marker

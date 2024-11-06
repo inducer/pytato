@@ -37,6 +37,7 @@ dependencies = [
     "immutabledict",
     "loopy>=2020.2",
     "pytools>=2024.1.14",
+    "pymbolic>=2024.1",
     "typing_extensions>=4",
 ]
 

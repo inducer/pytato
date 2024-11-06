@@ -69,6 +69,7 @@ from typing import (
     AbstractSet,
     Any,
     FrozenSet,
+    Generic,
     Hashable,
     Iterable,
     Iterator,
@@ -134,7 +135,7 @@ _ValueT = TypeVar("_ValueT")
 # {{{ crude ordered set
 
 
-class _OrderedSet(collections.abc.MutableSet[_ValueT]):
+class _OrderedSet(Generic[_ValueT], collections.abc.MutableSet[_ValueT]):
     def __init__(self, items: Iterable[_ValueT] | None = None):
         # Could probably also use a valueless dictionary; not sure if it matters
         self._items: set[_ValueT] = set()
@@ -339,8 +340,7 @@ class _DistributedInputReplacer(CopyMapper):
                 tags=expr.tags)
         return new_send
 
-    # type ignore because no args, kwargs
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -399,7 +399,7 @@ def _make_distributed_partition(
 
         for name, val in name_to_part_output.items():
             assert name not in name_to_output
-            name_to_output[name] = comm_replacer(val)
+            name_to_output[name] = comm_replacer.rec_ary(val)
 
         comm_ids = part_comm_ids[part_id]
 
@@ -617,7 +617,7 @@ def _calculate_dependency_levels(
 
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _MaterializedArrayCollector(CachedWalkMapper):
+class _MaterializedArrayCollector(CachedWalkMapper[[]]):
     """
     Collects all nodes that have to be materialized during code-generation.
     """
@@ -980,6 +980,7 @@ def find_distributed_partition(
     def get_materialized_predecessors(ary: Array) -> _OrderedSet[Array]:
         materialized_preds: _OrderedSet[Array] = _OrderedSet()
         for pred in direct_preds_getter(ary):
+            assert isinstance(pred, Array)
             if pred in materialized_arrays:
                 materialized_preds.add(pred)
             else:

@@ -27,8 +27,6 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from typing import (
-    TYPE_CHECKING,
-    Any,
     Mapping,
     Tuple,
 )
@@ -39,8 +37,8 @@ import islpy as isl
 import loopy as lp
 import pymbolic.primitives as prim
 import pytools
-from loopy.typing import ExpressionT
-from pymbolic import var
+from pymbolic import ArithmeticExpressionT, var
+from pymbolic.typing import ExpressionT
 from pytools.tag import Tag
 
 import pytato.reductions as red
@@ -60,12 +58,17 @@ from pytato.array import (
 from pytato.codegen import (
     SymbolicIndex,
     _generate_name_for_temp,
+    is_symbolic_index,
     normalize_outputs,
     preprocess,
 )
 from pytato.function import Call, NamedCallResult
 from pytato.loopy import LoopyCall
-from pytato.scalar_expr import INT_CLASSES, ScalarExpression, TypeCast
+from pytato.scalar_expr import (
+    INT_CLASSES,
+    ScalarExpression,
+    TypeCast,
+)
 from pytato.tags import (
     ImplementationStrategy,
     ImplInlined,
@@ -108,7 +111,10 @@ __doc__ = """
 """
 
 
-def loopy_substitute(expression: Any, variable_assignments: Mapping[str, Any]) -> Any:
+def loopy_substitute(
+            expression: ExpressionT,
+            variable_assignments: Mapping[str, ExpressionT]
+        ) -> ExpressionT:
     from loopy.symbolic import SubstitutionMapper
     from pymbolic.mapper.substitutor import make_subst_func
 
@@ -225,7 +231,7 @@ class ImplementedResult(ABC):
 
     @abstractmethod
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ExpressionT:
         """Return a :mod:`loopy` expression for this result.
 
         :param indices: symbolic expressions for the indices of the array
@@ -252,7 +258,7 @@ class StoredResult(ImplementedResult):
         self.depends_on = depends_on
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ExpressionT:
         assert len(indices) == self.num_indices
         expr_context.update_depends_on(self.depends_on)
         if indices == ():
@@ -279,7 +285,7 @@ class InlinedResult(ImplementedResult):
         self.depends_on = depends_on
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ScalarExpression:
+            expr_context: PersistentExpressionContext) -> ExpressionT:
         assert len(indices) == self.num_indices
         substitutions = {f"_{d}": i for d, i in enumerate(indices)}
         expr_context.update_depends_on(self.depends_on)
@@ -305,7 +311,7 @@ class SubstitutionRuleResult(ImplementedResult):
     def to_loopy_expression(self,
                             indices: SymbolicIndex,
                             expr_context: PersistentExpressionContext
-                            ) -> ScalarExpression:
+                            ) -> ExpressionT:
         assert len(indices) == self.num_args
         expr_context.update_depends_on(self.depends_on)
         return prim.Call(prim.Variable(self.subst_name), indices)
@@ -366,7 +372,7 @@ class CodeGenState:
 
 # {{{ codegen mapper
 
-class CodeGenMapper(Mapper):
+class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
@@ -438,6 +444,7 @@ class CodeGenMapper(Mapper):
             var_to_reduction_descr=expr.var_to_reduction_descr)
         loopy_expr = self.exprgen_mapper(expr.expr, prstnt_ctx, local_ctx)
 
+        assert not isinstance(loopy_expr, tuple)
         result: ImplementedResult = InlinedResult(loopy_expr,
                                                   expr.ndim,
                                                   prstnt_ctx.depends_on)
@@ -583,7 +590,7 @@ class CodeGenMapper(Mapper):
                     assert pt_arg.ndim == 0
                     pt_arg_rec = self.rec(pt_arg, state)
                     params.append(pt_arg_rec.to_loopy_expression((), prstnt_ctx))
-                    depends_on.update(pt_arg_rec.depends_on)
+                    depends_on.update(prstnt_ctx.depends_on)
                 else:
                     local_ctx = LocalExpressionContext(reduction_bounds={},
                                                        num_indices=0,
@@ -642,7 +649,9 @@ PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] 
 }
 
 
-class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
+class InlinedExpressionGenMapper(
+            scalar_expr.IdentityMapper[
+                [PersistentExpressionContext, LocalExpressionContext]]):
     """A mapper for generating :mod:`loopy` expressions with inlined
     sub-expressions.
 
@@ -655,28 +664,25 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
     """
     axis_tag_t_to_not_propagate: frozenset[type[Tag]]
 
-    def __init__(self, axis_tag_t_to_not_propagate: frozenset[type[Tag]]):
+    def __init__(self, axis_tag_t_to_not_propagate: frozenset[type[Tag]]) -> None:
         self.axis_tag_t_to_not_propagate = axis_tag_t_to_not_propagate
-
-    if TYPE_CHECKING:
-        def __call__(self, expr: ScalarExpression,
-                     prstnt_ctx: PersistentExpressionContext,
-                     local_ctx: LocalExpressionContext | None,
-                     ) -> ScalarExpression:
-            return self.rec(expr, prstnt_ctx, local_ctx)
 
     def map_subscript(self, expr: prim.Subscript,
                       prstnt_ctx: PersistentExpressionContext,
                       local_ctx: LocalExpressionContext,
                       ) -> ScalarExpression:
         assert isinstance(expr.aggregate, prim.Variable)
-        return local_ctx.lookup(expr.aggregate.name).to_loopy_expression(
-            self.rec(expr.index, prstnt_ctx, local_ctx), prstnt_ctx)
+        rec_index = self.rec(expr.index, prstnt_ctx, local_ctx)
+        assert is_symbolic_index(rec_index)
+        res = local_ctx.lookup(expr.aggregate.name).to_loopy_expression(
+            rec_index, prstnt_ctx)
+        assert prim.is_arithmetic_expression(res)
+        return res
 
     def map_variable(self, expr: prim.Variable,
                      prstnt_ctx: PersistentExpressionContext,
                      local_ctx: LocalExpressionContext,
-                     ) -> ScalarExpression:
+                     ) -> ExpressionT:
 
         elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
         if elw_match:
@@ -688,18 +694,20 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
         elif expr.name in local_ctx.reduction_bounds:
             return expr
         else:
-            return local_ctx.lookup(expr.name).to_loopy_expression((), prstnt_ctx)
+            res = local_ctx.lookup(expr.name).to_loopy_expression((), prstnt_ctx)
+            assert prim.is_arithmetic_expression(res)
+            return res
 
     def map_call(self, expr: prim.Call,
                  prstnt_ctx: PersistentExpressionContext,
                  local_ctx: LocalExpressionContext
-                 ) -> ScalarExpression:
+                 ) -> ExpressionT:
         if isinstance(expr.function, prim.Variable) and (
                 expr.function.name.startswith("pytato.c99.")):
             name_in_loopy = expr.function.name[11:]
-
-            return prim.Call(prim.Variable(name_in_loopy),
-                             self.rec(expr.parameters, prstnt_ctx, local_ctx))
+            pars = self.rec(expr.parameters, prstnt_ctx, local_ctx)
+            assert isinstance(pars, tuple)
+            return prim.Call(prim.Variable(name_in_loopy), pars)
 
         return super().map_call(expr, prstnt_ctx, local_ctx)
 
@@ -733,8 +741,11 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
                                     inner_expr)
 
         domain = domain_for_shape((), shape=(), reductions={
-            redn_iname: self.rec(bounds, prstnt_ctx, local_ctx)
-            for redn_iname, bounds in new_bounds.items()})
+            redn_iname: (
+                self.rec_arith(lbound, prstnt_ctx, local_ctx),
+                self.rec_arith(ubound, prstnt_ctx, local_ctx),
+                )
+            for redn_iname, (lbound, ubound) in new_bounds.items()})
         kernel = state.kernel
         state.update_kernel(kernel.copy(domains=[*kernel.domains, domain]))
 
@@ -768,16 +779,17 @@ class InlinedExpressionGenMapper(scalar_expr.IdentityMapper):
 def shape_to_scalar_expression(shape: ShapeType,
                                cgen_mapper: CodeGenMapper,
                                state: CodeGenState
-                               ) -> tuple[ScalarExpression, ...]:
+                               ) -> tuple[ArithmeticExpressionT, ...]:
     shape_context = PersistentExpressionContext(state)
-    result: list[ScalarExpression] = []
+    result: list[ArithmeticExpressionT] = []
     for component in shape:
         if isinstance(component, INT_CLASSES):
             result.append(component)
         else:
             assert isinstance(component, Array)
-            result.append(
-                cgen_mapper(component, state).to_loopy_expression((), shape_context))
+            expr = cgen_mapper(component, state).to_loopy_expression((), shape_context)
+            assert prim.is_arithmetic_expression(expr)
+            result.append(expr)
 
     assert not shape_context.depends_on
 
