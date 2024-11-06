@@ -113,13 +113,6 @@ class AxesUsedMapper(ScalarMapper):
 
             self.rec(expr.index)
 
-    def map_variable(self, expr: prim.Variable) -> None:
-        name = expr.name
-
-        if name in self.var_names_in_use:
-
-            self.usage_dict[name].append(expr)
-
 
 # {{{ AxesTagsEquationCollector
 
