@@ -43,9 +43,10 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
+    Collection,
     List,
     Mapping,
+    TypeAlias,
     TypeVar,
     cast,
 )
@@ -592,60 +593,66 @@ class AxisTagAttacher(CopyMapper):
     """
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
+    _FunctionCacheT: TypeAlias = CopyMapper._FunctionCacheT
+
     def __init__(self,
-                 axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]],
-                 tag_corresponding_redn_descr: bool):
-        super().__init__()
-        self.axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]] = axis_to_tags
+                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
+                 tag_corresponding_redn_descr: bool,
+                 _function_cache: _FunctionCacheT | None = None):
+        super().__init__(_function_cache=_function_cache)
+        self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
+    def _attach_tags(self, expr: Array, rec_expr: Array) -> Array:
+        assert rec_expr.ndim == expr.ndim
+
+        result = rec_expr
+
+        for iaxis in range(expr.ndim):
+            result = result.with_tagged_axis(
+                iaxis, self.axis_to_tags.get((expr, iaxis), []))
+
+        # {{{ tag reduction descrs
+
+        if self.tag_corresponding_redn_descr:
+            if isinstance(expr, Einsum):
+                for arg, access_descrs in zip(expr.args,
+                                              expr.access_descriptors):
+                    for iaxis, access_descr in enumerate(access_descrs):
+                        if isinstance(access_descr, EinsumReductionAxis):
+                            result = result.with_tagged_reduction(  # type: ignore[attr-defined]
+                                access_descr,
+                                self.axis_to_tags.get((arg, iaxis), [])
+                            )
+
+            if isinstance(expr, IndexLambda):
+                try:
+                    hlo = index_lambda_to_high_level_op(expr)
+                except UnknownIndexLambdaExpr:
+                    pass
+                else:
+                    if isinstance(hlo, ReduceOp):
+                        for iaxis, redn_var in hlo.axes.items():
+                            result = result.with_tagged_reduction(  # type: ignore[attr-defined]
+                                redn_var,
+                                self.axis_to_tags.get((hlo.x, iaxis), [])
+                            )
+
+        # }}}
+
+        return result
+
     def rec(self, expr: ArrayOrNames) -> Any:
-        if isinstance(expr, (AbstractResultWithNamedArrays,
-                             DistributedSendRefHolder)):
-            return super().rec(expr)
-        else:
-            assert isinstance(expr, Array)
-            key = self.get_cache_key(expr)
-            try:
-                return self._cache[key]
-            except KeyError:
-                expr_copy = Mapper.rec(self, expr)
-                assert expr_copy.ndim == expr.ndim
-
-                for iaxis in range(expr.ndim):
-                    expr_copy = expr_copy.with_tagged_axis(
-                        iaxis, self.axis_to_tags.get((expr, iaxis), []))
-
-                # {{{ tag reduction descrs
-
-                if self.tag_corresponding_redn_descr:
-                    if isinstance(expr, Einsum):
-                        for arg, access_descrs in zip(expr.args,
-                                                      expr.access_descriptors):
-                            for iaxis, access_descr in enumerate(access_descrs):
-                                if isinstance(access_descr, EinsumReductionAxis):
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        access_descr,
-                                        self.axis_to_tags.get((arg, iaxis), [])
-                                    )
-
-                    if isinstance(expr, IndexLambda):
-                        try:
-                            hlo = index_lambda_to_high_level_op(expr)
-                        except UnknownIndexLambdaExpr:
-                            pass
-                        else:
-                            if isinstance(hlo, ReduceOp):
-                                for iaxis, redn_var in hlo.axes.items():
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        redn_var,
-                                        self.axis_to_tags.get((hlo.x, iaxis), [])
-                                    )
-
-                # }}}
-
-                self._cache[key] = expr_copy
-                return expr_copy
+        key = self._cache.get_key(expr)
+        try:
+            return self._cache_retrieve(expr, key=key)
+        except KeyError:
+            result = Mapper.rec(self, expr)
+            if not isinstance(expr, (AbstractResultWithNamedArrays,
+                                     DistributedSendRefHolder)):
+                assert isinstance(expr, Array)
+                result = self._attach_tags(expr, result)
+            return self._cache_add(expr, result, key=key)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
