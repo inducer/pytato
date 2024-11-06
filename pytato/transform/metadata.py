@@ -43,7 +43,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
+    Collection,
     List,
     Mapping,
     TypeVar,
@@ -102,7 +102,7 @@ GraphNodeT = TypeVar("GraphNodeT")
 
 # {{{ AxesTagsEquationCollector
 
-class AxesTagsEquationCollector(Mapper):
+class AxesTagsEquationCollector(Mapper[None, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
     operation. This mapper implements a default set of propagation rules,
@@ -144,7 +144,7 @@ class AxesTagsEquationCollector(Mapper):
         Users are encouraged to derive this mapper to implement domain-specific
         axis tags propagation semantics.
     """
-    def __init__(self, tag_t: type[Tag]):
+    def __init__(self, tag_t: type[Tag]) -> None:
         self.tag_t: type[Tag] = tag_t
         super().__init__()
 
@@ -593,10 +593,10 @@ class AxisTagAttacher(CopyMapper):
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]],
+                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool):
         super().__init__()
-        self.axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
     def rec(self, expr: ArrayOrNames) -> Any:
@@ -610,6 +610,7 @@ class AxisTagAttacher(CopyMapper):
                 return self._cache[key]
             except KeyError:
                 expr_copy = Mapper.rec(self, expr)
+                assert isinstance(expr_copy, Array)
                 assert expr_copy.ndim == expr.ndim
 
                 for iaxis in range(expr.ndim):
@@ -620,6 +621,7 @@ class AxisTagAttacher(CopyMapper):
 
                 if self.tag_corresponding_redn_descr:
                     if isinstance(expr, Einsum):
+                        assert isinstance(expr_copy, Einsum)
                         for arg, access_descrs in zip(expr.args,
                                                       expr.access_descriptors):
                             for iaxis, access_descr in enumerate(access_descrs):
@@ -630,6 +632,7 @@ class AxisTagAttacher(CopyMapper):
                                     )
 
                     if isinstance(expr, IndexLambda):
+                        assert isinstance(expr_copy, IndexLambda)
                         try:
                             hlo = index_lambda_to_high_level_op(expr)
                         except UnknownIndexLambdaExpr:
@@ -651,12 +654,6 @@ class AxisTagAttacher(CopyMapper):
         raise NotImplementedError(
             "AxisTagAttacher does not currently support expressions containing "
             "functions.")
-
-    # type-ignore reason: overrides the type of Mapper.__call__
-    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
-        result = self.rec(expr)
-        assert isinstance(result, (Array, AbstractResultWithNamedArrays))
-        return result
 
 # }}}
 

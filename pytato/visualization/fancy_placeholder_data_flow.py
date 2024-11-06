@@ -96,7 +96,7 @@ def _get_dot_node_from_predecessors(node_id: str,
         return NoShowNode(), frozenset()
 
 
-class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
+class FancyDotWriter(CachedMapper[_FancyDotWriterNode, []]):
     def __init__(self) -> None:
         super().__init__()
         self.vng = UniqueNameGenerator()

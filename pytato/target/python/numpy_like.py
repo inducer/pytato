@@ -74,7 +74,6 @@ from pytato.reductions import (
     ReductionOperation,
     SumReductionOperation,
 )
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 from pytato.transform import CachedMapper
 from pytato.utils import are_shape_components_equal, get_einsum_specification
@@ -169,7 +168,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[str]):
+class NumpyCodegenMapper(CachedMapper[str, []]):
     """
     .. note::
 
@@ -209,12 +208,12 @@ class NumpyCodegenMapper(CachedMapper[str]):
             if isinstance(e, Array):
                 return ast.Name(self.rec(e))
             else:
-                assert isinstance(e, SCALAR_CLASSES)
                 if np.isnan(e):
+                    e_np = np.array(e)
                     # generates code like: `np.float64("nan")`.
                     return ast.Call(
                         func=ast.Attribute(value=ast.Name(self.numpy),
-                                           attr=e.dtype.name),
+                                           attr=e_np.dtype.name),
                         args=[ast.Constant(value="nan")],
                         keywords=[])
                 else:
@@ -587,9 +586,7 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                                           ))]),
               ast.Import(names=[ast.alias(name="numpy", asname="np")]),
               *extra_preambles,
-              # Mypy's error here seems spurious: one of the provided 'non-matching'
-              # overloads exactly matches the types of what mypy thinks we've provided.
-              ast.FunctionDef(  # type: ignore[call-overload]
+              ast.FunctionDef(
                   name=function_name,
                   args=ast.arguments(
                       args=[],

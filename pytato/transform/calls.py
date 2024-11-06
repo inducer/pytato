@@ -73,7 +73,7 @@ class Inliner(CopyMapper):
             substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
-                {name: substitutor(ret)
+                {name: substitutor.rec_ary(ret)
                  for name, ret in new_expr.function.returns.items()},
                 tags=new_expr.tags
             )
