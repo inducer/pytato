@@ -57,16 +57,11 @@ THE SOFTWARE.
 
 import enum
 import re
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
 from functools import cached_property
 from typing import (
     Any,
-    Callable,
     ClassVar,
-    Hashable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Tuple,
     TypeVar,
 )
 
@@ -86,7 +81,7 @@ from pytato.array import (
 )
 
 
-ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Mapping[str, Array])
+ReturnT = TypeVar("ReturnT", Array, tuple[Array, ...], Mapping[str, Array])
 
 
 # {{{ Call/NamedCallResult

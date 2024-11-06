@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing_extensions import TypeAlias, TypeIs
+from typing import TypeAlias
+
+from typing_extensions import TypeIs
 
 
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
@@ -26,7 +28,8 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Any, Mapping, Tuple
+from collections.abc import Mapping
+from typing import Any
 
 from immutabledict import immutabledict
 
@@ -57,7 +60,7 @@ from pytato.transform import (
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
-SymbolicIndex: TypeAlias = Tuple[IntegralScalarExpression, ...]
+SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
 
 
 def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
@@ -241,7 +244,7 @@ def normalize_outputs(
 
     :param result: Outputs of the computation.
     """
-    if not isinstance(result, (Array, DictOfNamedArrays, dict)):
+    if not isinstance(result, Array | DictOfNamedArrays | dict):
         raise TypeError("outputs of the computation should be "
                 "either an Array or a DictOfNamedArrays")
 
@@ -268,7 +271,7 @@ class NamesValidityChecker(CachedWalkMapper[[]]):
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
+        if isinstance(expr, Placeholder | SizeParam | DataWrapper):
             if expr.name is not None:
                 try:
                     ary = self.name_to_input[expr.name]

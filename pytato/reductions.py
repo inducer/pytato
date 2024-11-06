@@ -31,7 +31,8 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 from immutabledict import immutabledict

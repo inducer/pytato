@@ -22,11 +22,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+from collections.abc import Callable, Iterable, Sequence
 from typing import (
     Any,
-    Callable,
-    Iterable,
-    Sequence,
     TypeVar,
     cast,
 )
@@ -338,7 +336,7 @@ def are_shape_components_equal(
     inputs = InputGatherer()(dim1_minus_dim2)
     named_inputs: list[Placeholder | SizeParam] = [
         expr for expr in inputs
-        if isinstance(expr, (SizeParam, Placeholder))
+        if isinstance(expr, SizeParam | Placeholder)
     ]
 
     space = _create_size_param_space({expr.name for expr in named_inputs})

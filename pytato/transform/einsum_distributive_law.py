@@ -34,7 +34,8 @@ THE SOFTWARE.
 """
 
 
-from typing import Callable, Mapping, cast
+from collections.abc import Callable, Mapping
+from typing import cast
 
 import attrs
 import numpy as np

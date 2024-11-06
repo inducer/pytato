@@ -27,18 +27,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
-    FrozenSet,
     Generic,
-    Hashable,
-    Iterable,
-    Mapping,
     ParamSpec,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -84,14 +79,14 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from pytato.tags import ImplStored
 
 
-ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+ArrayOrNames = Array | AbstractResultWithNamedArrays
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
 TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
                             Array, AbstractResultWithNamedArrays, ArrayOrNames)
 CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
-R = FrozenSet[Array]
+R = frozenset[Array]
 
 __doc__ = """
 .. currentmodule:: pytato.transform
@@ -950,7 +945,7 @@ class SubsetDependencyMapper(DependencyMapper):
 
 # {{{ InputGatherer
 
-class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
+class InputGatherer(CombineMapper[frozenset[InputArgumentBase]]):
     """
     Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
@@ -1001,7 +996,7 @@ class InputGatherer(CombineMapper[FrozenSet[InputArgumentBase]]):
 
 # {{{ SizeParamGatherer
 
-class SizeParamGatherer(CombineMapper[FrozenSet[SizeParam]]):
+class SizeParamGatherer(CombineMapper[frozenset[SizeParam]]):
     """
     Mapper to combine all instances of :class:`pytato.array.SizeParam` that
     an array expression depends on.

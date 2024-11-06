@@ -85,14 +85,14 @@ class Reprifier(Mapper[str, [int]]):
     def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (dict, immutabledict)):
+        elif isinstance(expr, dict | immutabledict):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val
                                 in sorted(expr.items(),
                                           key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-        elif isinstance(expr, (frozenset, set)):
+        elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
             return f"'{expr.name}'"

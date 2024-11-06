@@ -50,9 +50,10 @@ Stuff that's only here because the documentation tool wants it
 """
 
 import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from immutabledict import immutabledict

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto, unique
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 from immutabledict import immutabledict
@@ -265,7 +266,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
     # {{{ binary ops
 
     try:
-        if isinstance(inner_expr, (p.Quotient, p.FloorDiv, p.Remainder)):
+        if isinstance(inner_expr, p.Quotient | p.FloorDiv | p.Remainder):
             children = (inner_expr.numerator, inner_expr.denominator)
             bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(inner_expr)]
         elif isinstance(inner_expr, p.Power):
@@ -279,9 +280,9 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
             children = (inner_expr.children[0],
                         inner_expr.children[1].children[1])
             bin_op = BinaryOpType.SUB
-        elif isinstance(inner_expr, (p.Sum, p.Product, p.LogicalAnd,
-                                    p.LogicalOr, p.BitwiseOr, p.BitwiseAnd,
-                                    p.BitwiseXor)):
+        elif isinstance(inner_expr,
+                        p.Sum | p.Product | p.LogicalAnd | p.LogicalOr | p.BitwiseOr
+                            | p.BitwiseAnd | p.BitwiseXor):
             children = inner_expr.children
             bin_op = _SIMPLE_PYMBOLIC_BINARY_OP_MAP[type(inner_expr)]
         elif isinstance(inner_expr, p.Comparison):

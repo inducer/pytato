@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 import ast
-from typing import Mapping
+from collections.abc import Mapping
 
 from pytato.array import Array, DictOfNamedArrays
 from pytato.target.python import BoundJAXPythonProgram, JAXPythonTarget

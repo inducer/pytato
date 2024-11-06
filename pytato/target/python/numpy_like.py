@@ -28,10 +28,8 @@ THE SOFTWARE.
 import ast
 import os
 import sys
+from collections.abc import Callable, Iterable, Mapping
 from typing import (
-    Callable,
-    Iterable,
-    Mapping,
     TypedDict,
     TypeVar,
     cast,
@@ -551,14 +549,14 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
         from pytato.array import make_dict_of_named_arrays
         expr = make_dict_of_named_arrays(dict(expr))
 
-    assert isinstance(expr, (Array, DictOfNamedArrays))
+    assert isinstance(expr, Array | DictOfNamedArrays)
 
     var_name_gen = UniqueNameGenerator()
 
     var_name_gen.add_names({input_expr.name
                             for input_expr in InputGatherer()(expr)
                             if isinstance(input_expr,
-                                          (Placeholder, SizeParam, DataWrapper))
+                                          Placeholder | SizeParam | DataWrapper)
                             if input_expr.name is not None})
     if isinstance(expr, DictOfNamedArrays):
         var_name_gen.add_names(expr)

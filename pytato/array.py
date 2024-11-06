@@ -172,19 +172,14 @@ Internal stuff that is only here because the documentation tool wants it
 import operator
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property, partialmethod
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
-    Collection,
-    Iterable,
-    Iterator,
-    Mapping,
     Protocol,
-    Sequence,
-    Tuple,
+    TypeAlias,
     TypeVar,
     Union,
     cast,
@@ -230,17 +225,15 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
-AxesT = Tuple["Axis", ...]
+AxesT = tuple["Axis", ...]
 ArrayT = TypeVar("ArrayT", bound="Array")
 
 
 # {{{ shape
 
 ShapeComponent = Union[IntegerT, "Array"]
-ShapeType = Tuple[ShapeComponent, ...]
-ConvertibleToShape = Union[
-    ShapeComponent,
-    Sequence[ShapeComponent]]
+ShapeType = tuple[ShapeComponent, ...]
+ConvertibleToShape = ShapeComponent | Sequence[ShapeComponent]
 
 
 def _check_identifier(s: str | None, optional: bool) -> bool:
@@ -287,7 +280,7 @@ def normalize_shape(
     import collections
     from numbers import Number
 
-    if isinstance(shape, (Array, Number)):
+    if isinstance(shape, Array | Number):
         shape = shape,
 
     assert isinstance(shape, collections.abc.Sequence)
@@ -300,9 +293,8 @@ def normalize_shape(
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
 IndexExpr = Union[IntegerT, "NormalizedSlice", "Array", None]
-PyScalarType = Union[type[bool], type[int], type[float], type[complex]]
-DtypeOrPyScalarType = Union[_dtype_any, PyScalarType]
-ArrayOrScalar = Union["Array", ScalarT]
+PyScalarType = type[bool] | type[int] | type[float] | type[complex]
+DtypeOrPyScalarType = _dtype_any | PyScalarType
 
 
 def _np_result_dtype(
@@ -732,6 +724,9 @@ class Array(Taggable):
     def __repr__(self) -> str:
         from pytato.stringifier import Reprifier
         return Reprifier()(self)
+
+
+ArrayOrScalar: TypeAlias = Array | ScalarT
 
 # }}}
 
@@ -1579,7 +1574,7 @@ class BasicIndex(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        assert all(isinstance(idx, (NormalizedSlice, INT_CLASSES))
+        assert all(isinstance(idx, (NormalizedSlice, *INT_CLASSES))
                    for idx in self.indices)
 
         from pytato.utils import _normalized_slice_len

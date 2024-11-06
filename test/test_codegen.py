@@ -1305,7 +1305,7 @@ def test_advanced_indexing_fuzz(ctx_factory):
             else:
                 raise NotImplementedError
 
-        pt_indices = [idx if isinstance(idx, (int, slice))
+        pt_indices = [idx if isinstance(idx, int | slice)
                       else pt.make_data_wrapper(idx)
                       for idx in np_indices]
 
