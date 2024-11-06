@@ -41,7 +41,7 @@ class EinsumWithNoBroadcastsRewriter(CopyMapper):
         new_access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
         descr_to_axis_len = expr._access_descr_to_axis_len()
 
-        for acc_descrs, arg in zip(expr.access_descriptors, expr.args):
+        for acc_descrs, arg in zip(expr.access_descriptors, expr.args, strict=True):
             arg = self.rec_ary(arg)
             axes_to_squeeze: list[int] = []
             for idim, acc_descr in enumerate(acc_descrs):

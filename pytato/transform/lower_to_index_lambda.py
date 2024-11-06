@@ -78,6 +78,9 @@ def _generate_index_expressions(
 
     old_strides: list[ArithmeticExpressionT] = [1]
     new_strides: list[ArithmeticExpressionT] = [1]
+    old_strides = old_strides[:len(old_shape)]
+    new_strides = new_strides[:len(new_shape)]
+
     old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
 
     old_stride_axs = (old_shape[::-1][:-1] if order == "C" else
@@ -102,12 +105,12 @@ def _generate_index_expressions(
 
     flattened_index_expn = sum(
         index_var*new_stride
-        for index_var, new_stride in zip(index_vars, new_strides))
+        for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
     return tuple(
         # Mypy has a point: complex numbers don't support '//'.
         (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
-        for old_size_till, old_stride in zip(old_size_tills, old_strides))
+        for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
@@ -346,7 +349,7 @@ class ToIndexLambdaMixin:
         # {{{ add bindings coming from the shape expressions
 
         for access_descr, (iarg, arg) in zip(expr.access_descriptors,
-                                            enumerate(expr.args)):
+                                            enumerate(expr.args), strict=True):
             subscript_indices: list[ArithmeticExpressionT] = []
             for iaxis, axis in enumerate(access_descr):
                 if not are_shape_components_equal(
@@ -449,7 +452,8 @@ class ToIndexLambdaMixin:
         bindings = {in_ary: self.rec(expr.array)}
         islice_idx = 0
 
-        for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
+        for i_idx, (idx, axis_len) in enumerate(
+                        zip(expr.indices, expr.array.shape, strict=True)):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
@@ -518,7 +522,7 @@ class ToIndexLambdaMixin:
 
         islice_idx = len(adv_idx_shape)
 
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
+        for idx, axis_len in zip(expr.indices, expr.array.shape, strict=True):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
@@ -574,7 +578,7 @@ class ToIndexLambdaMixin:
         bindings = {in_ary: self.rec(expr.array)}
         islice_idx = 0
 
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
+        for idx, axis_len in zip(expr.indices, expr.array.shape, strict=True):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)

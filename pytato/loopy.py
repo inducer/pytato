@@ -481,7 +481,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
             # }}}
 
-            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape):
+            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape, strict=True):
                 pt_dim_expr = pt_subst_map(_get_pt_dim_expr(pt_dim))
                 lp_dim_expr = lp_subst_map(lp_dim)
                 assert prim.is_arithmetic_expression(pt_dim_expr)

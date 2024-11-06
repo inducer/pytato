@@ -1088,9 +1088,9 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
 
         for access_descrs, arg in zip(self.access_descriptors,
-                                      self.args):
+                                      self.args, strict=True):
             assert arg.ndim == len(access_descrs)
-            for arg_axis_len, descr in zip(arg.shape, access_descrs):
+            for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
                 if descr in descr_to_axis_len:
                     seen_axis_len = descr_to_axis_len[descr]
 
@@ -1337,7 +1337,7 @@ def einsum(subscripts: str, *operands: Array,
     index_to_axis_length: Mapping[str, ShapeComponent] = immutabledict()
     access_descriptors = []
 
-    for in_spec, in_operand in zip(in_specs, operands):
+    for in_spec, in_operand in zip(in_specs, operands, strict=True):
         access_descriptor, index_to_descr, index_to_axis_length = (
             _normalize_einsum_in_subscript(in_spec,
                                            in_operand,
@@ -1584,7 +1584,8 @@ class BasicIndex(IndexBase):
 
         from pytato.utils import _normalized_slice_len
         return tuple(_normalized_slice_len(idx)
-                     for idx, axis_len in zip(self.indices, self.array.shape)
+                     for idx, axis_len in zip(
+                                self.indices, self.array.shape, strict=True)
                      if isinstance(idx, NormalizedSlice))
 
 
@@ -2747,7 +2748,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
         raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
 
     for in_dim, brdcst_dim in zip(array.shape,
-                                  shape[-array.ndim:]):
+                                  shape[-array.ndim:], strict=False):
         if (not are_shape_components_equal(in_dim, brdcst_dim)
                 and not are_shape_components_equal(in_dim, 1)):
             raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")

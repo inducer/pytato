@@ -144,7 +144,7 @@ def get_indexing_expression(shape: ShapeType,
     assert len(shape) <= len(result_shape)
     i_start = len(result_shape) - len(shape)
     indices: list[ArithmeticExpressionT] = []
-    for i, (dim1, dim2) in enumerate(zip(shape, result_shape[i_start:])):
+    for i, (dim1, dim2) in enumerate(zip(shape, result_shape[i_start:], strict=True)):
         if not are_shape_components_equal(dim1, dim2):
             assert are_shape_components_equal(dim1, 1)
             indices.append(0)
@@ -358,7 +358,7 @@ def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
     """
     return ((len(shape1) == len(shape2))
             and all(are_shape_components_equal(dim1, dim2)
-                    for dim1, dim2 in zip(shape1, shape2)))
+                    for dim1, dim2 in zip(shape1, shape2, strict=True)))
 
 
 # {{{ ShapeToISLExpressionMapper
@@ -585,8 +585,8 @@ def _index_into(
     normalized_indices: list[IndexExpr] = [_normalize_slice(idx, axis_len)
                                            if isinstance(idx, slice)
                                            else idx
-                                           for idx, axis_len in zip(indices,
-                                                                    ary.shape)]
+                                           for idx, axis_len
+                                           in zip(indices, ary.shape, strict=True)]
 
     del indices
 

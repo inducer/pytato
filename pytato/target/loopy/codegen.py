@@ -841,7 +841,7 @@ def domain_for_shape(dim_names: tuple[str, ...],
     from loopy.symbolic import aff_from_expr
     affs = isl.affs_from_space(dom.space)
 
-    for iname, dim in zip(dim_names, shape):
+    for iname, dim in zip(dim_names, shape, strict=True):
         dom &= affs[0].le_set(affs[iname])
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
 
@@ -944,7 +944,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     # {{{ axes tags -> iname tags
 
     if not result_is_empty:
-        for axis, iname in zip(expr.axes, inames):
+        for axis, iname in zip(expr.axes, inames, strict=True):
             for tag in axis.tags:
                 if all(not isinstance(tag, tag_t)
                        for tag_t in cgen_mapper.axis_tag_t_to_not_propagate):

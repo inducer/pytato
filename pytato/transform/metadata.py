@@ -283,7 +283,8 @@ class AxesTagsEquationCollector(Mapper[None, []]):
             if isinstance(subexpr, Array):
                 for i_in_axis, i_out_axis in zip(
                         range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim)):
+                        range(expr.ndim-subexpr.ndim, expr.ndim),
+                        strict=True):
                     in_dim = subexpr.shape[i_in_axis]
                     out_dim = expr.shape[i_out_axis]
                     if are_shape_components_equal(in_dim, out_dim):
@@ -437,7 +438,8 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                     range(expr.ndim
                           - npost_advanced_basic_indices
                           - subexpr.ndim,
-                          expr.ndim-npost_advanced_basic_indices)):
+                          expr.ndim-npost_advanced_basic_indices),
+                    strict=True):
                 in_dim = subexpr.shape[i_in_axis]
                 out_dim = expr.shape[i_out_axis]
                 if are_shape_components_equal(in_dim, out_dim):
@@ -523,7 +525,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                                                                                iaxis)
 
         for access_descrs, arg in zip(expr.access_descriptors,
-                                      expr.args):
+                                      expr.args, strict=True):
             for iarg_axis, descr in enumerate(access_descrs):
                 in_tag_var = self.get_var_for_axis(arg, iarg_axis)
 
@@ -623,7 +625,8 @@ class AxisTagAttacher(CopyMapper):
                     if isinstance(expr, Einsum):
                         assert isinstance(expr_copy, Einsum)
                         for arg, access_descrs in zip(expr.args,
-                                                      expr.access_descriptors):
+                                                      expr.access_descriptors,
+                                                      strict=True):
                             for iaxis, access_descr in enumerate(access_descrs):
                                 if isinstance(access_descr, EinsumReductionAxis):
                                     expr_copy = expr_copy.with_tagged_reduction(
