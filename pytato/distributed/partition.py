@@ -266,7 +266,7 @@ class DistributedGraphPartition:
        all parts. Observe that the :class:`DistributedGraphPart`, for the most
        part, only stores names. These "outputs" may be 'part outputs' (i.e.
        data computed in one part for use by another, effectively tempoarary
-       variables), or 'overall outputs' of the comutation.
+       variables), or 'overall outputs' of the computation.
 
     .. attribute:: overall_output_names
 
