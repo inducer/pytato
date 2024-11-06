@@ -441,7 +441,7 @@ class ToIndexLambdaMixin:
 
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
+                              if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
                     cast(Array | int | np.integer[Any], expr.indices[i_idx])
                     for i_idx in i_adv_indices])
@@ -509,7 +509,7 @@ class ToIndexLambdaMixin:
         from pytato.utils import get_indexing_expression, get_shape_after_broadcasting
         i_adv_indices = tuple(i
                               for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
+                              if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
             cast(Array | int | np.integer[Any], expr.indices[i_idx])
             for i_idx in i_adv_indices])

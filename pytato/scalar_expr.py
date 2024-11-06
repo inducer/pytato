@@ -28,14 +28,11 @@ THE SOFTWARE.
 """
 
 import re
+from collections.abc import Iterable, Mapping, Set
 from typing import (
     TYPE_CHECKING,
-    AbstractSet,
     Any,
-    Iterable,
-    Mapping,
     Never,
-    Union,
     cast,
 )
 
@@ -90,12 +87,12 @@ INT_CLASSES = (int, np.integer)
 PYTHON_SCALAR_CLASSES = (int, float, complex, bool)
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
-IntegralScalarExpression = Union[IntegerT, prim.Expression]
+IntegralScalarExpression = IntegerT | prim.Expression
 ScalarExpression = ArithmeticExpressionT | BoolT
 
 
 def is_integral_scalar_expression(expr: object) -> TypeIs[IntegralScalarExpression]:
-    return isinstance(expr, (int, np.integer)) or isinstance(expr, prim.Expression)
+    return isinstance(expr, int | np.integer) or isinstance(expr, prim.Expression)
 
 
 def parse(s: str) -> ScalarExpression:
@@ -343,23 +340,23 @@ class TypeCast(ExpressionBase):
 # }}}
 
 
-class InductionVariableCollector(CombineMapper[AbstractSet[str], []]):
-    def combine(self, values: Iterable[AbstractSet[str]]) -> frozenset[str]:
+class InductionVariableCollector(CombineMapper[Set[str], []]):
+    def combine(self, values: Iterable[Set[str]]) -> frozenset[str]:
         from functools import reduce
         return reduce(frozenset.union, values, frozenset())
 
-    def map_reduce(self, expr: Reduce) -> AbstractSet[str]:
+    def map_reduce(self, expr: Reduce) -> Set[str]:
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
     def map_algebraic_leaf(self, expr: prim.Expression) -> frozenset[str]:
         return frozenset()
 
-    def map_constant(self, expr: object) -> AbstractSet[str]:
+    def map_constant(self, expr: object) -> Set[str]:
         return frozenset()
 
 
-def get_reduction_induction_variables(expr: ExpressionT) -> AbstractSet[str]:
+def get_reduction_induction_variables(expr: ExpressionT) -> Set[str]:
     """
     Returns the induction variables for the reduction nodes.
     """

@@ -37,7 +37,8 @@ THE SOFTWARE.
 
 
 import logging
-from typing import TYPE_CHECKING, Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 import attrs
 import numpy as np

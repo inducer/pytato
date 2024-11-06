@@ -28,12 +28,11 @@ THE SOFTWARE.
 
 
 import html
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Mapping,
 )
 
 import attrs
@@ -478,7 +477,7 @@ def _emit_function(
     for array, node in node_to_dot.items():
         for label, tail_item in node.edges.items():
             head = array_to_id[array]
-            if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
+            if isinstance(tail_item, Array | AbstractResultWithNamedArrays):
                 tail = array_to_id[tail_item]
             elif isinstance(tail_item, FunctionDefinition):
                 tail = func_to_id[tail_item]
@@ -788,7 +787,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
             for label, tail_item in node.edges.items():
                 head = array_to_id[array]
 
-                if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
+                if isinstance(tail_item, Array | AbstractResultWithNamedArrays):
                     tail = array_to_id[tail_item]
                 elif isinstance(tail_item, FunctionDefinition):
                     tail = part_id_to_func_to_id[part.pid][tail_item]

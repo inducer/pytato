@@ -28,14 +28,11 @@ THE SOFTWARE.
 """
 
 
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Number
 from typing import (
     Any,
     ClassVar,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
 )
 
 import attrs
@@ -251,7 +248,7 @@ def call_loopy(translation_unit: lp.TranslationUnit,
 
             arg_binding = bindings_new[arg.name]
 
-            if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
+            if isinstance(arg, lp.ArrayArg | lp.ConstantArg):
                 if not isinstance(arg_binding, Array):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             f"pytato.Array, got {type(arg_binding)}.")
@@ -493,7 +490,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                 continue
 
             assert isinstance(lp_arg, lp.ValueArg)
-            assert isinstance(pt_arg, (int, Array))
+            assert isinstance(pt_arg, int | Array)
             pt_arg_expr = pt_subst_map(_get_pt_dim_expr(pt_arg))
             lp_arg_expr = lp_subst_map(prim.Variable(lp_arg.name))
             assert prim.is_arithmetic_expression(pt_arg_expr)

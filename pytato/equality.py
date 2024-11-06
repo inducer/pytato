@@ -25,7 +25,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from pytools import memoize_method
 
@@ -61,7 +62,7 @@ __doc__ = """
 """
 
 
-ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+ArrayOrNames = Array | AbstractResultWithNamedArrays
 
 
 # {{{ EqualityComparer

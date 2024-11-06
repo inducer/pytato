@@ -26,10 +26,7 @@ THE SOFTWARE.
 import re
 import sys
 from abc import ABC, abstractmethod
-from typing import (
-    Mapping,
-    Tuple,
-)
+from collections.abc import Mapping
 
 import attrs
 import islpy as isl
@@ -132,7 +129,7 @@ def loopy_substitute(
 
 # SymbolicIndex and ShapeType are semantically distinct but identical at the
 # type level.
-ReductionBounds = Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
+ReductionBounds = Mapping[str, tuple[ScalarExpression, ScalarExpression]]
 
 
 # {{{ LoopyExpressionContexts
@@ -1056,7 +1053,7 @@ def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],
         :class:`pytato.tags.InlineCallTag` can be lowered to :mod:`loopy` IR.
     """
 
-    result_is_dict = isinstance(result, (dict, DictOfNamedArrays))
+    result_is_dict = isinstance(result, dict | DictOfNamedArrays)
     orig_outputs: DictOfNamedArrays = normalize_outputs(result)
 
     del result
@@ -1102,7 +1099,7 @@ def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],
     state.var_name_gen.add_names({input_expr.name
             for name in compute_order
             for input_expr in ing(outputs[name].expr)
-            if isinstance(input_expr, (Placeholder, SizeParam, DataWrapper))
+            if isinstance(input_expr, Placeholder | SizeParam | DataWrapper)
             if input_expr.name is not None})
 
     state.var_name_gen.add_names(outputs)

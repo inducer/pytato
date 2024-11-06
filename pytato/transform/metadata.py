@@ -40,12 +40,10 @@ THE SOFTWARE.
 
 
 import logging
+from collections.abc import Collection, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
-    Collection,
-    List,
-    Mapping,
     TypeVar,
     cast,
 )
@@ -418,7 +416,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                                             for i_idx in i_basic_indices
                                             if i_idx > i_adv_indices[-1]])
 
-        indirection_arrays: list[Array] = cast(List[Array],
+        indirection_arrays: list[Array] = cast(list[Array],
                                                [expr.indices[i_idx]
                                                 for i_idx in i_adv_indices
                                                 if isinstance(expr.indices[i_idx],
@@ -602,8 +600,7 @@ class AxisTagAttacher(CopyMapper):
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
     def rec(self, expr: ArrayOrNames) -> Any:
-        if isinstance(expr, (AbstractResultWithNamedArrays,
-                             DistributedSendRefHolder)):
+        if isinstance(expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
             return super().rec(expr)
         else:
             assert isinstance(expr, Array)

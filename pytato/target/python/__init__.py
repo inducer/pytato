@@ -37,9 +37,10 @@ __doc__ = """
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import numpy as np
 
