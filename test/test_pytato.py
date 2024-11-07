@@ -1213,6 +1213,34 @@ def test_lower_to_index_lambda():
     assert isinstance(binding, Reshape)
 
 
+def test_reserved_scalar_iname_patterns():
+    from pytato.scalar_expr import (
+        IDX_LAMBDA_INAME,
+        IDX_LAMBDA_JUST_REDUCTIONS,
+        IDX_LAMBDA_RE,
+    )
+
+    test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101"]
+
+    assert IDX_LAMBDA_RE.fullmatch(test_strings[0])
+    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[0])
+    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[0])
+
+    for pat in [IDX_LAMBDA_INAME, IDX_LAMBDA_RE, IDX_LAMBDA_JUST_REDUCTIONS]:
+        assert not pat.fullmatch(test_strings[1])
+        assert not pat.fullmatch(test_strings[2])
+        assert not pat.fullmatch(test_strings[3])
+
+    assert IDX_LAMBDA_RE.fullmatch(test_strings[4])
+    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[4])
+    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[4])
+
+    for i in range(5, len(test_strings)):
+        assert IDX_LAMBDA_RE.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_INAME.fullmatch(test_strings[i])
+        assert not IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[i])
+
+
 def test_cached_walk_mapper_with_extra_args():
     from testlib import RandomDAGContext, make_random_dag
 

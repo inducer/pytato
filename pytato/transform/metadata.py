@@ -89,7 +89,11 @@ import re
 
 import pymbolic.primitives as prim
 
-from pytato.scalar_expr import IdentityMapper as ScalarMapper
+from pytato.scalar_expr import (
+    IdentityMapper as ScalarMapper,
+    IDX_LAMBDA_JUST_REDUCTIONS,
+    IDX_LAMBDA_INAME
+)
 
 
 class AxesUsedMapper(ScalarMapper):
@@ -260,20 +264,18 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         out_shape = expr.shape
         assert len(out_shape) == expr.ndim
 
-        reserved_reduction_pattern = re.compile("^(_r[0-9]+)$")
-        reserved_iname_pattern = re.compile("^(_[0-9]+)$")
         for key in keys:
             if len(mymapper.usage_dict[key]) > 0:
                 for tup_ind in range(len(mymapper.usage_dict[key][0])):
                     vname = mymapper.usage_dict[key][0][tup_ind]
                     if isinstance(vname, prim.Variable):
-                        if reserved_reduction_pattern.match(vname.name):
+                        if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(vname.name):
                             # Reduction axis. We can ignore it.
                             pass
                         elif vname.name[:3] == "_in":
                             # Variable name axis.
                             pass
-                        elif reserved_iname_pattern.match(vname.name):
+                        elif IDX_LAMBDA_INAME.fullmatch(vname.name):
                             # matched with an iname.
                             inum = int(vname.name[1:])
                             val = (self.get_var_for_axis(expr.bindings[key], tup_ind),
