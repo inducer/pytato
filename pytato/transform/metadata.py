@@ -85,14 +85,13 @@ if TYPE_CHECKING:
 
 GraphNodeT = TypeVar("GraphNodeT")
 
-import re
 
 import pymbolic.primitives as prim
 
 from pytato.scalar_expr import (
-    IdentityMapper as ScalarMapper,
+    IDX_LAMBDA_INAME,
     IDX_LAMBDA_JUST_REDUCTIONS,
-    IDX_LAMBDA_INAME
+    IdentityMapper as ScalarMapper,
 )
 
 
