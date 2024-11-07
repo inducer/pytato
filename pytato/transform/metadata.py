@@ -108,13 +108,17 @@ class AxesUsedMapper(ScalarMapper):
                                                                             for vname in
                                                                             self.var_names_in_use}
 
-    def map_subscript(self, expr: prim.Subscript) -> None:
+    def map_subscript(self, expr: prim.Subscript) -> prim.Subscript:
+        """
+        Record the indexing usage for the variable if we are tracking
+        the specific variable.
+        """
 
         name = expr.aggregate.name
         if name in self.var_names_in_use:
             self.usage_dict[name].append(expr.index_tuple)
 
-            self.rec(expr.index)
+        return super().map_subscript(expr)
 
 
 # {{{ AxesTagsEquationCollector
@@ -277,6 +281,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                         elif IDX_LAMBDA_INAME.fullmatch(vname.name):
                             # matched with an iname.
                             inum = int(vname.name[1:])
+                            print(inum)
                             val = (self.get_var_for_axis(expr.bindings[key], tup_ind),
                                    self.get_var_for_axis(expr, inum))
                             self.equations.append(val)
