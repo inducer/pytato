@@ -161,10 +161,14 @@ Internal stuff that is only here because the documentation tool wants it
 
     A :class:`tuple` of :class:`Axis` objects.
 
-.. class:: IntegralT
+.. class:: IntegerT
 
     An integer data type which is a union of integral types of :mod:`numpy` and
     :class:`int`.
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
 """
 
 # }}}

@@ -75,6 +75,13 @@ Helper routines
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
 .. autofunction:: get_einsum_subscript_str
+
+References
+^^^^^^^^^^
+
+.. class:: UniqueNameGenerator
+
+    See :class:`pytools.UniqueNameGenerator`.
 """
 
 

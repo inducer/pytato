@@ -1,3 +1,13 @@
+"""
+.. autoclass:: SymbolicIndex
+
+.. autoclass:: CodeGenPreprocessor
+.. autoclass:: PreprocessResult
+
+.. autofunction:: preprocess
+.. autofunction:: normalize_outputs
+"""
+
 from __future__ import annotations
 
 from typing import TypeAlias
@@ -71,17 +81,6 @@ def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
         return True
     else:
         return False
-
-
-__doc__ = """
-.. currentmodule:: pytato.codegen
-
-.. autoclass:: CodeGenPreprocessor
-.. autoclass:: PreprocessResult
-
-.. autofunction:: preprocess
-.. autofunction:: normalize_outputs
-"""
 
 
 # {{{ _generate_name_for_temp
