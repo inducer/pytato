@@ -89,8 +89,6 @@ IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = frozenset[Array]
 
 __doc__ = """
-.. currentmodule:: pytato.transform
-
 .. autoclass:: Mapper
 .. autoclass:: CachedMapper
 .. autoclass:: TransformMapper
@@ -114,6 +112,7 @@ __doc__ = """
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
 .. automodule:: pytato.transform.einsum_distributive_law
+
 .. currentmodule:: pytato.transform
 
 Dict representation of DAGs
@@ -140,6 +139,11 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: CombineT
 
     A type variable representing the type of a :class:`CombineMapper`.
+
+.. class:: ResultT
+
+    A type variable representing the result type of a :class:`Mapper`.
+
 """
 
 transform_logger = logging.getLogger(__file__)

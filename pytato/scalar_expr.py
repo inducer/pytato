@@ -1,3 +1,20 @@
+"""
+.. class:: ScalarExpression
+
+    Like ``ArithmeticExpressionT`` in :mod:`pymbolic`, but also allows
+    Boolean values.
+
+.. autofunction:: parse
+.. autofunction:: get_dependencies
+.. autofunction:: substitute
+
+.. class:: ExpressionT
+
+    See ``ExpressionT`` in :mod:`pymbolic`.
+"""
+
+# FIXME: Unclear why the direct links to pymbolic don't work
+
 from __future__ import annotations
 
 from typing_extensions import TypeIs
@@ -63,23 +80,6 @@ from pymbolic.typing import IntegerT
 if TYPE_CHECKING:
     from pytato.reductions import ReductionOperation
 
-
-__doc__ = """
-.. currentmodule:: pytato.scalar_expr
-
-.. data:: ScalarExpression
-
-    A :class:`type` for scalar-valued symbolic expressions. Expressions are
-    composable and manipulable via :mod:`pymbolic`.
-
-    Concretely, this is an alias for
-    ``Union[Number, np.bool_, bool, pymbolic.primitives.Expression]``.
-
-.. autofunction:: parse
-.. autofunction:: get_dependencies
-.. autofunction:: substitute
-
-"""
 
 # {{{ scalar expressions
 
