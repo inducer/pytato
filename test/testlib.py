@@ -3,7 +3,8 @@ from __future__ import annotations
 import operator
 import random
 import types
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -26,7 +27,7 @@ from pytato.transform import Mapper
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper):
+class NumpyBasedEvaluator(Mapper[Any, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.

@@ -25,7 +25,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from pytools import memoize_method
 
@@ -61,7 +62,7 @@ __doc__ = """
 """
 
 
-ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+ArrayOrNames = Array | AbstractResultWithNamedArrays
 
 
 # {{{ EqualityComparer
@@ -148,7 +149,7 @@ class EqualityComparer:
                 and all(self.rec(dim1, dim2)
                         if isinstance(dim1, Array)
                         else dim1 == dim2
-                        for dim1, dim2 in zip(expr1.shape, expr2.shape))
+                        for dim1, dim2 in zip(expr1.shape, expr2.shape, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.var_to_reduction_descr == expr2.var_to_reduction_descr
@@ -159,7 +160,7 @@ class EqualityComparer:
                 and expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
-                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
+                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -169,7 +170,7 @@ class EqualityComparer:
                 and expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
-                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
+                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -199,7 +200,8 @@ class EqualityComparer:
                         if (isinstance(idx1, Array)
                             and isinstance(idx2, Array))
                         else idx1 == idx2
-                        for idx1, idx2 in zip(expr1.indices, expr2.indices))
+                        for idx1, idx2 in zip(
+                            expr1.indices, expr2.indices, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -232,7 +234,7 @@ class EqualityComparer:
                 and expr1.access_descriptors == expr2.access_descriptors
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.args,
-                                              expr2.args))
+                                              expr2.args, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.redn_axis_to_redn_descr == expr2.redn_axis_to_redn_descr

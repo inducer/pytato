@@ -28,12 +28,11 @@ THE SOFTWARE.
 
 
 import html
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Mapping,
 )
 
 import attrs
@@ -178,7 +177,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
+class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
     def __init__(self) -> None:
         super().__init__()
         self.node_to_dot: dict[ArrayOrNames, _DotNodeInfo] = {}
@@ -294,7 +293,8 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames]):
         info = self.get_common_dot_info(expr)
 
         for iarg, (access_descr, val) in enumerate(zip(expr.access_descriptors,
-                                                       expr.args)):
+                                                       expr.args,
+                                                       strict=True)):
             self.rec(val)
             info.edges[f"{iarg}: {access_descr}"] = val
 
@@ -477,7 +477,7 @@ def _emit_function(
     for array, node in node_to_dot.items():
         for label, tail_item in node.edges.items():
             head = array_to_id[array]
-            if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
+            if isinstance(tail_item, Array | AbstractResultWithNamedArrays):
                 tail = array_to_id[tail_item]
             elif isinstance(tail_item, FunctionDefinition):
                 tail = func_to_id[tail_item]
@@ -787,7 +787,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
             for label, tail_item in node.edges.items():
                 head = array_to_id[array]
 
-                if isinstance(tail_item, (Array, AbstractResultWithNamedArrays)):
+                if isinstance(tail_item, Array | AbstractResultWithNamedArrays):
                     tail = array_to_id[tail_item]
                 elif isinstance(tail_item, FunctionDefinition):
                     tail = part_id_to_func_to_id[part.pid][tail_item]

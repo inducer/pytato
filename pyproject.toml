@@ -1,3 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytato"
+version = "2024.1"
+description = "Get Descriptions of Array Computations via Lazy Evaluation"
+readme = "README.rst"
+license = "MIT"
+requires-python = "~=3.10"
+authors = [
+    { name = "Andreas Kloeckner", email = "inform@tiker.net" },
+    { name = "Matt Wala" },
+    { name = "Xiaoyu Wei" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Other Audience",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "attrs",
+    "bidict",
+    "immutabledict",
+    "loopy>=2020.2",
+    "pytools>=2024.1.14",
+    "pymbolic>=2024.1",
+    "typing_extensions>=4",
+]
+
+[project.urls]
+Homepage = "https://github.com/inducer/pytato"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pytato",
+]
+
 [tool.ruff.lint]
 preview = true
 extend-select = [
@@ -51,10 +102,13 @@ inline-quotes = "double"
 docstring-quotes = "double"
 multiline-quotes = "double"
 
+[tool.mypy]
+strict = true
+warn_unused_ignores = true
+
 [[tool.mypy.overrides]]
 module = [
   "islpy",
-  "pymbolic.*",
   "pyopencl.*",
   "jax.*",
   "pygments.*",
@@ -64,11 +118,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
-  "pytato.transform",
-  "pytato.scalar_expr",
+  "pytato.raising",
 ]
-allow_subclassing_any = true
-
+# We'll be getting rid of it, no point in fixing it.
+ignore_errors = true
 
 [tool.typos.default]
 extend-ignore-re = [

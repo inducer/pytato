@@ -55,7 +55,7 @@ __doc__ = """
 
 # {{{ Reprifier
 
-class Reprifier(Mapper):
+class Reprifier(Mapper[str, [int]]):
     """
     Stringifies :mod:`pytato`-types to closely resemble CPython's implementation
     of :func:`repr` for its builtin datatypes.
@@ -77,7 +77,7 @@ class Reprifier(Mapper):
         except KeyError:
             result = super().rec(expr, depth)
             self._cache[cache_key] = result
-            return result  # type: ignore[no-any-return]
+            return result
 
     def __call__(self, expr: Any, depth: int = 0) -> str:
         return self.rec(expr, depth)
@@ -85,14 +85,14 @@ class Reprifier(Mapper):
     def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (dict, immutabledict)):
+        elif isinstance(expr, dict | immutabledict):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val
                                 in sorted(expr.items(),
                                           key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-        elif isinstance(expr, (frozenset, set)):
+        elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
             return f"'{expr.name}'"
