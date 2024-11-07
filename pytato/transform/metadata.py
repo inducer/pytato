@@ -99,6 +99,34 @@ if TYPE_CHECKING:
 
 GraphNodeT = TypeVar("GraphNodeT")
 
+from pytato.scalar_expr import (
+    IDX_LAMBDA_INAME,
+    IDX_LAMBDA_JUST_REDUCTIONS,
+    IdentityMapper as ScalarMapper,
+)
+
+class AxesUsedMapper(ScalarMapper):
+    """
+    Determine which axes are used in the scalar expression and which ones just flow
+    through the expression.
+    """
+
+    def __init__(self, var_names_in_use: list[str]):
+        self.var_names_in_use: list[str] = var_names_in_use
+
+        self.usage_dict: Mapping[str, list[tuple[prim.Expression, ...]]] = {vname: []
+                                                                           for vname in
+                                                                self.var_names_in_use}
+
+    def map_subscript(self, expr: prim.Subscript) -> None:
+
+        name = expr.aggregate.name
+        if name in self.var_names_in_use:
+            self.usage_dict[name].append(expr.index_tuple)
+
+            self.rec(expr.index)
+
+
 
 # {{{ AxesTagsEquationCollector
 
@@ -237,65 +265,36 @@ class AxesTagsEquationCollector(Mapper):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        try:
-            hlo = index_lambda_to_high_level_op(expr)
-        except UnknownIndexLambdaExpr:
-            from warnings import warn
-            warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.", stacklevel=1)
-            # no propagation semantics implemented for such cases
-            return
 
-        if isinstance(hlo, BinaryOp):
-            subexprs: tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
-        elif isinstance(hlo, WhereOp):
-            subexprs = (hlo.condition, hlo.then, hlo.else_)
-        elif isinstance(hlo, FullOp):
-            # A full-op does not impose any equations
-            subexprs = ()
-        elif isinstance(hlo, BroadcastOp):
-            subexprs = (hlo.x,)
-        elif isinstance(hlo, C99CallOp):
-            subexprs = hlo.args
-        elif isinstance(hlo, ReduceOp):
+        keys = list(expr.bindings.keys())
 
-            # {{{ ReduceOp doesn't quite involve broadcasting
+        mymapper = AxesUsedMapper(keys)
 
-            i_out_axis = 0
-            for i_in_axis in range(hlo.x.ndim):
-                if i_in_axis not in hlo.axes:
-                    self.record_equation(
-                        self.get_var_for_axis(hlo.x, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-                    i_out_axis += 1
+        mymapper(expr.expr)
 
-            assert i_out_axis == expr.ndim
+        out_shape = expr.shape
+        assert len(out_shape) == expr.ndim
 
-            # }}}
-
-            return
-
-        else:
-            raise NotImplementedError(type(hlo))
-
-        for subexpr in subexprs:
-            if isinstance(subexpr, Array):
-                for i_in_axis, i_out_axis in zip(
-                        range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim)):
-                    in_dim = subexpr.shape[i_in_axis]
-                    out_dim = expr.shape[i_out_axis]
-                    if are_shape_components_equal(in_dim, out_dim):
-                        self.record_equation(
-                            self.get_var_for_axis(subexpr, i_in_axis),
-                            self.get_var_for_axis(expr, i_out_axis)
-                        )
-                    else:
-                        # i_in_axis is broadcasted => do not propagate
-                        assert are_shape_components_equal(in_dim, 1)
-            else:
-                assert isinstance(subexpr, SCALAR_CLASSES)
+        for key in keys:
+            if len(mymapper.usage_dict[key]) > 0:
+                for tup_ind in range(len(mymapper.usage_dict[key][0])):
+                    vname = mymapper.usage_dict[key][0][tup_ind]
+                    if isinstance(vname, prim.Variable):
+                        if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(vname.name):
+                            # Reduction axis. Pass for now.
+                            pass
+                        elif vname.name[:3] == "_in":
+                            # Array used as part of the index. Pass for now.
+                            pass
+                        elif IDX_LAMBDA_INAME.fullmatch(vname.name):
+                            # Matched with an output axis.
+                            inum = int(vname.name[1:])
+                            val = (self.get_var_for_axis(expr.bindings[key], tup_ind),
+                                   self.get_var_for_axis(expr, inum))
+                            self.equations.append(val)
+                        else:
+                            raise ValueError(f"Unknown index name used in {vname}")
+        return
 
     def map_stack(self, expr: Stack) -> None:
         """
