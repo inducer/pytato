@@ -167,6 +167,7 @@ IDX_LAMBDA_RE = re.compile("^(_r?(0|([1-9][0-9]*)))$")
 IDX_LAMBDA_INAME = re.compile("^(_(0|([1-9][0-9]*)))$")
 IDX_LAMBDA_JUST_REDUCTIONS = re.compile("^(_r(0|([1-9][0-9]*)))$")
 
+
 class DependencyMapper(DependencyMapperBase[P]):
     def __init__(self, *,
                  include_idx_lambda_indices: bool = True,
