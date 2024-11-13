@@ -52,6 +52,7 @@ from pytato.array import (
     NamedArray,
     ShapeType,
     SizeParam,
+    array_dataclass,
 )
 from pytato.scalar_expr import (
     EvaluationMapper,
@@ -91,7 +92,7 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-@dataclasses.dataclass(frozen=True, eq=False)
+@array_dataclass()
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
