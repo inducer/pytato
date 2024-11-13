@@ -161,10 +161,14 @@ Internal stuff that is only here because the documentation tool wants it
 
     A :class:`tuple` of :class:`Axis` objects.
 
-.. class:: IntegralT
+.. class:: IntegerT
 
     An integer data type which is a union of integral types of :mod:`numpy` and
     :class:`int`.
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
 """
 
 # }}}
@@ -173,18 +177,14 @@ import dataclasses
 import operator
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property, partialmethod
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
-    Collection,
-    Iterator,
-    Mapping,
     Protocol,
-    Sequence,
-    Tuple,
+    TypeAlias,
     TypeVar,
     Union,
     cast,
@@ -196,15 +196,14 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 import pymbolic.primitives as prim
-from pymbolic import var
+from pymbolic import ArithmeticExpressionT, var
+from pymbolic.typing import IntegerT, ScalarT, not_none
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (
     INT_CLASSES,
     SCALAR_CLASSES,
-    IntegralT,
-    Scalar,
     ScalarExpression,
     get_reduction_induction_variables,
 )
@@ -231,17 +230,15 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
-AxesT = Tuple["Axis", ...]
+AxesT = tuple["Axis", ...]
 ArrayT = TypeVar("ArrayT", bound="Array")
 
 
 # {{{ shape
 
-ShapeComponent = Union[IntegralT, "Array"]
-ShapeType = Tuple[ShapeComponent, ...]
-ConvertibleToShape = Union[
-    ShapeComponent,
-    Sequence[ShapeComponent]]
+ShapeComponent = Union[IntegerT, "Array"]
+ShapeType = tuple[ShapeComponent, ...]
+ConvertibleToShape = ShapeComponent | Sequence[ShapeComponent]
 
 
 def _check_identifier(s: str | None, optional: bool) -> bool:
@@ -288,7 +285,7 @@ def normalize_shape(
     import collections
     from numbers import Number
 
-    if isinstance(shape, (Array, Number)):
+    if isinstance(shape, Array | Number):
         shape = shape,
 
     assert isinstance(shape, collections.abc.Sequence)
@@ -353,10 +350,9 @@ def _augment_array_dataclass(
 # {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
-IndexExpr = Union[IntegralT, "NormalizedSlice", "Array", None, EllipsisType]
-PyScalarType = Union[type[bool], type[int], type[float], type[complex]]
-DtypeOrPyScalarType = Union[_dtype_any, PyScalarType]
-ArrayOrScalar = Union["Array", Scalar]
+IndexExpr = Union[IntegerT, "NormalizedSlice", "Array", None]
+PyScalarType = type[bool] | type[int] | type[float] | type[complex]
+DtypeOrPyScalarType = _dtype_any | PyScalarType
 
 
 def _np_result_dtype(
@@ -397,7 +393,7 @@ class NormalizedSlice:
     """
     start: ShapeComponent
     stop: ShapeComponent
-    step: IntegralT
+    step: IntegerT
 
 
 @dataclasses.dataclass(frozen=True)
@@ -641,7 +637,9 @@ class Array(Taggable):
         # {{{ sanity checks
 
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
-            return NotImplemented
+            # https://github.com/python/mypy/issues/4791
+            # This type-ignore will become necessary with mypy 1.14.
+            return NotImplemented  # not-yet-type: ignore[no-any-return]
 
         # }}}
 
@@ -703,6 +701,9 @@ class Array(Taggable):
             get_result_type=_truediv_result_type)
     __rtruediv__ = partialmethod(_binary_op, operator.truediv,
             get_result_type=_truediv_result_type, reverse=True)
+
+    __mod__ = partialmethod(_binary_op, operator.mod)
+    __rmod__ = partialmethod(_binary_op, operator.mod, reverse=True)
 
     __pow__ = partialmethod(_binary_op, operator.pow, is_pow=True)
     __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True, is_pow=True)
@@ -767,7 +768,7 @@ class Array(Taggable):
         return pt.any(self, axis)
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Sequence[Tag] | Tag) -> Array:
+                         tags: Iterable[Tag] | Tag) -> Array:
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
@@ -780,6 +781,9 @@ class Array(Taggable):
     def __repr__(self) -> str:
         from pytato.stringifier import Reprifier
         return Reprifier()(self)
+
+
+ArrayOrScalar: TypeAlias = Array | ScalarT
 
 # }}}
 
@@ -1007,7 +1011,7 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
 
     .. automethod:: with_tagged_reduction
     """
-    expr: prim.Expression
+    expr: ScalarExpression
     bindings: Mapping[str, Array]
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
 
@@ -1021,7 +1025,7 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
 
     def with_tagged_reduction(self,
                               reduction_variable: str,
-                              tag: Tag) -> IndexLambda:
+                              tags: Tag | Iterable[Tag]) -> IndexLambda:
         """
         Returns a copy of *self* with the :class:`ReductionDescriptor`
         associated with *reduction_variable* tagged with *tag*.
@@ -1046,7 +1050,7 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
         assert isinstance(self.var_to_reduction_descr, immutabledict)
         new_var_to_redn_descr = dict(self.var_to_reduction_descr)
         new_var_to_redn_descr[reduction_variable] = \
-            self.var_to_reduction_descr[reduction_variable].tagged(tag)
+            self.var_to_reduction_descr[reduction_variable].tagged(tags)
 
         return type(self)(expr=self.expr,
                           shape=self.shape,
@@ -1143,9 +1147,9 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
 
         for access_descrs, arg in zip(self.access_descriptors,
-                                      self.args):
+                                      self.args, strict=True):
             assert arg.ndim == len(access_descrs)
-            for arg_axis_len, descr in zip(arg.shape, access_descrs):
+            for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
                 if descr in descr_to_axis_len:
                     seen_axis_len = descr_to_axis_len[descr]
 
@@ -1184,7 +1188,7 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
     def with_tagged_reduction(self,
                               redn_axis: EinsumReductionAxis,
-                              tag: Tag) -> Einsum:
+                              tags: Tag | Iterable[Tag]) -> Einsum:
         """
         Returns a copy of *self* with the :class:`ReductionDescriptor`
         associated with *redn_axis* tagged with *tag*.
@@ -1211,7 +1215,7 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
         assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
         new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
         new_redn_axis_to_redn_descr[redn_axis] = \
-            self.redn_axis_to_redn_descr[redn_axis].tagged(tag)
+            self.redn_axis_to_redn_descr[redn_axis].tagged(tags)
 
         return type(self)(access_descriptors=self.access_descriptors,
                           args=self.args,
@@ -1392,7 +1396,7 @@ def einsum(subscripts: str, *operands: Array,
     index_to_axis_length: Mapping[str, ShapeComponent] = immutabledict()
     access_descriptors = []
 
-    for in_spec, in_operand in zip(in_specs, operands):
+    for in_spec, in_operand in zip(in_specs, operands, strict=True):
         access_descriptor, index_to_descr, index_to_axis_length = (
             _normalize_einsum_in_subscript(in_spec,
                                            in_operand,
@@ -1634,12 +1638,13 @@ class BasicIndex(IndexBase):
     @property
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
-        assert all(isinstance(idx, (NormalizedSlice, INT_CLASSES))
+        assert all(isinstance(idx, (NormalizedSlice, *INT_CLASSES))
                    for idx in self.indices)
 
         from pytato.utils import _normalized_slice_len
         return tuple(_normalized_slice_len(idx)
-                     for idx, axis_len in zip(self.indices, self.array.shape)
+                     for idx, axis_len in zip(
+                                self.indices, self.array.shape, strict=True)
                      if isinstance(idx, NormalizedSlice))
 
 
@@ -1673,8 +1678,9 @@ class AdvancedIndexInContiguousAxes(IndexBase):
         assert not any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
                        for i_basic_idx in i_basic_indices)
 
-        adv_idx_shape = get_shape_after_broadcasting([self.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
+        adv_idx_shape = get_shape_after_broadcasting([
+            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
         # to slices
@@ -1720,8 +1726,9 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
         assert any(i_adv_indices[0] < i_basic_idx < i_adv_indices[-1]
                    for i_basic_idx in i_basic_indices)
 
-        adv_idx_shape = get_shape_after_broadcasting([self.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
+        adv_idx_shape = get_shape_after_broadcasting([
+            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
         basic_idx_shape = tuple(_normalized_slice_len(self.indices[i_idx])  # type: ignore[arg-type]
@@ -2273,7 +2280,7 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: Scalar,
+def full(shape: ConvertibleToShape, fill_value: ScalarT | prim.NaN,
          dtype: Any = None, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
@@ -2282,19 +2289,20 @@ def full(shape: ConvertibleToShape, fill_value: Scalar,
         raise ValueError("Only C-ordered arrays supported for now.")
 
     if dtype is None:
-        dtype = np.array(fill_value).dtype
+        conv_dtype = np.array(fill_value).dtype
     else:
-        dtype = np.dtype(dtype)
+        conv_dtype = np.dtype(dtype)
 
     shape = normalize_shape(shape)
 
-    if np.isnan(fill_value):
+    if not isinstance(fill_value, prim.NaN) and np.isnan(fill_value):
         from pymbolic.primitives import NaN
-        fill_value = NaN(dtype.type)
+        fill_value = NaN(conv_dtype.type)
     else:
-        fill_value = dtype.type(fill_value)
+        fill_value = conv_dtype.type(fill_value)
 
-    return IndexLambda(expr=fill_value, shape=shape, dtype=dtype,
+    return IndexLambda(expr=cast(ArithmeticExpressionT, fill_value),
+                       shape=shape, dtype=conv_dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),
                        non_equality_tags=_get_created_at_tag(),
@@ -2341,7 +2349,7 @@ def eye(N: int, M: int | None = None, k: int = 0,  # noqa: N803
     if not isinstance(k, INT_CLASSES):
         raise ValueError(f"k must be int, got {type(k)}.")
 
-    return IndexLambda(expr=parse(f"1 if ((_1 - _0) == {k}) else 0"),
+    return IndexLambda(expr=prim.If(parse(f"(_1 - _0) == {k}"), 1, 0),
                        shape=(N, M), dtype=dtype, bindings=immutabledict({}),
                        tags=_get_default_tags(),
                        non_equality_tags=_get_created_at_tag(),
@@ -2553,7 +2561,7 @@ def logical_not(x: ArrayOrScalar) -> Array | bool:
     """
     Returns the element-wise logical NOT of *x*.
     """
-    if isinstance(x, SCALAR_CLASSES):
+    if prim.is_constant(x):
         # https://github.com/python/mypy/issues/3186
         return np.logical_not(x)  # type: ignore[no-any-return]
 
@@ -2594,10 +2602,8 @@ def where(condition: ArrayOrScalar,
 
     # }}}
 
-    if (isinstance(condition, SCALAR_CLASSES) and isinstance(x, SCALAR_CLASSES)
-            and isinstance(y, SCALAR_CLASSES)):
-        # https://github.com/python/mypy/issues/3186
-        return x if condition else y  # type: ignore[no-any-return]
+    if (prim.is_constant(condition) and prim.is_constant(x) and prim.is_constant(y)):
+        return x if condition else y
 
     # {{{ find dtype
 
@@ -2797,7 +2803,7 @@ def broadcast_to(array: Array, shape: ShapeType) -> Array:
         raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")
 
     for in_dim, brdcst_dim in zip(array.shape,
-                                  shape[-array.ndim:]):
+                                  shape[-array.ndim:], strict=False):
         if (not are_shape_components_equal(in_dim, brdcst_dim)
                 and not are_shape_components_equal(in_dim, 1)):
             raise ValueError(f"Cannot broadcast '{array.shape}' into '{shape}'")

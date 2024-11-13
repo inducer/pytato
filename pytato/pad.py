@@ -7,21 +7,23 @@ from __future__ import annotations
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
 import collections.abc as abc
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
 import pymbolic.primitives as prim
+from pymbolic.typing import IntegerT, ScalarT
 from pytools import UniqueNameGenerator
 
 from pytato.array import Array, IndexLambda
-from pytato.scalar_expr import INT_CLASSES, IntegralT, Scalar
+from pytato.scalar_expr import INT_CLASSES
 
 
 def _get_constant_padded_idx_lambda(
     array: Array,
-    pad_widths: Sequence[tuple[IntegralT, IntegralT]],
-    constant_vals: Sequence[tuple[Scalar, Scalar]]
+    pad_widths: Sequence[tuple[IntegerT, IntegerT]],
+    constant_vals: Sequence[tuple[ScalarT, ScalarT]]
 ) -> IndexLambda:
     """
     Internal routine used by :func:`pad` for constant-mode padding.
@@ -38,7 +40,8 @@ def _get_constant_padded_idx_lambda(
         tuple((prim.Variable(f"_{idim}") - pad_width[0])
               for idim, pad_width in enumerate(pad_widths))]
 
-    for idim, (pad_width, constant_val) in enumerate(zip(pad_widths, constant_vals)):
+    for idim, (pad_width, constant_val) in enumerate(
+            zip(pad_widths, constant_vals, strict=True)):
         idx_var = prim.Variable(f"_{idim}")
         axis_len = array.shape[idim]
 
@@ -62,15 +65,16 @@ def _get_constant_padded_idx_lambda(
         expr,
         bindings,
         shape=tuple(axis_len + pad_width[0] + pad_width[1]
-                    for axis_len, pad_width in zip(array.shape, pad_widths)),
+                    for axis_len, pad_width
+                    in zip(array.shape, pad_widths, strict=True)),
         dtype=array.dtype)
 
 
 def _normalize_pad_width(
         array: Array,
-        pad_width: IntegralT | Sequence[IntegralT],
-        ) -> Sequence[tuple[IntegralT, IntegralT]]:
-    processed_pad_widths: list[tuple[IntegralT, IntegralT]]
+        pad_width: IntegerT | Sequence[IntegerT],
+        ) -> Sequence[tuple[IntegerT, IntegerT]]:
+    processed_pad_widths: list[tuple[IntegerT, IntegerT]]
 
     if isinstance(pad_width, INT_CLASSES):
         processed_pad_widths = [(pad_width, pad_width)
@@ -114,7 +118,7 @@ def _normalize_pad_width(
 
 
 def pad(array: Array,
-        pad_width: IntegralT | Sequence[IntegralT],
+        pad_width: IntegerT | Sequence[IntegerT],
         mode: str = "constant",
         **kwargs: Any) -> Array:
     r"""
@@ -169,7 +173,7 @@ def pad(array: Array,
 
         # {{{ normalize constant_values
 
-        processed_constant_vals: Sequence[tuple[Scalar, Scalar]]
+        processed_constant_vals: Sequence[tuple[ScalarT, ScalarT]]
 
         try:
             constant_vals = kwargs.pop("constant_values")

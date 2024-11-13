@@ -54,7 +54,8 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import Any, ClassVar, Hashable
+from collections.abc import Hashable
+from typing import Any, ClassVar
 
 import numpy as np
 

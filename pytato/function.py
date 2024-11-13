@@ -58,17 +58,11 @@ THE SOFTWARE.
 import dataclasses
 import enum
 import re
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
 from functools import cached_property
 from typing import (
     Any,
-    Callable,
     ClassVar,
-    Hashable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-    Tuple,
     TypeVar,
 )
 
@@ -88,7 +82,7 @@ from pytato.array import (
 )
 
 
-ReturnT = TypeVar("ReturnT", Array, Tuple[Array, ...], Mapping[str, Array])
+ReturnT = TypeVar("ReturnT", Array, tuple[Array, ...], Mapping[str, Array])
 
 
 # {{{ Call/NamedCallResult
@@ -267,7 +261,7 @@ class NamedCallResult(NamedArray):
     _mapper_method: ClassVar[str] = "map_named_call_result"
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Sequence[Tag] | Tag) -> Array:
+                         tags: Iterable[Tag] | Tag) -> Array:
         raise ValueError("Tagging a NamedCallResult's axis is illegal, use"
                          " Call.with_tagged_axis instead")
 
@@ -431,7 +425,7 @@ def trace_call(f: Callable[..., ReturnT],
     # type-ignore-reason: return type is dependent on dynamic state i.e.
     # ret_type and hence mypy is unhappy
     return function(  # type: ignore[return-value]
-        **{pl.name: arg for pl, arg in zip(pl_args, args)},
+        **{pl.name: arg for pl, arg in zip(pl_args, args, strict=True)},
         **{pl_kwargs[kw].name: arg for kw, arg in kwargs.items()}
     )
 

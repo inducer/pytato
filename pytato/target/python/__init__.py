@@ -36,10 +36,11 @@ __doc__ = """
 .. autoclass:: BoundJAXPythonProgram
 """
 
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -125,11 +126,13 @@ class BoundPythonProgram(BoundProgram):
 
 class NumpyLikePythonTarget(Target, ABC):
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def numpy_like_module_name(self) -> str:
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def numpy_like_module_name_shorthand(self) -> str:
         pass
 

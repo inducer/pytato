@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pymbolic import ArithmeticExpressionT, ExpressionT
+
 
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
@@ -27,14 +29,11 @@ THE SOFTWARE.
 
 
 import dataclasses
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Number
 from typing import (
     Any,
     ClassVar,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
 )
 
 import islpy as isl
@@ -43,6 +42,7 @@ from immutabledict import immutabledict
 
 import loopy as lp
 import pymbolic.primitives as prim
+from pymbolic.typing import IntegerT, not_none
 from pytools import memoize_method
 
 from pytato.array import (
@@ -55,7 +55,6 @@ from pytato.array import (
 )
 from pytato.scalar_expr import (
     EvaluationMapper,
-    IntegralT,
     ScalarExpression,
     SubstitutionMapper,
 )
@@ -117,9 +116,9 @@ class LoopyCall(AbstractResultWithNamedArrays):
                           if lp_arg.is_output})
 
     @memoize_method
-    def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
-        from pymbolic.mapper.substitutor import make_subst_func
-        return SubstitutionMapper(make_subst_func(self.bindings))(expr)
+    def _to_pytato(self, expr: ScalarExpression) -> ExpressionT:
+        from pytato.scalar_expr import substitute
+        return substitute(expr, self.bindings)
 
     @property
     def _entry_kernel(self) -> lp.LoopKernel:
@@ -252,7 +251,7 @@ def call_loopy(translation_unit: lp.TranslationUnit,
 
             arg_binding = bindings_new[arg.name]
 
-            if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
+            if isinstance(arg, lp.ArrayArg | lp.ConstantArg):
                 if not isinstance(arg_binding, Array):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             f"pytato.Array, got {type(arg_binding)}.")
@@ -327,8 +326,8 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
 
 def solve_constraints(variables: Iterable[str],
                       parameters: Iterable[str],
-                      constraints: Sequence[tuple[ScalarExpression,
-                                                  ScalarExpression]],
+                      constraints: Sequence[tuple[ArithmeticExpressionT,
+                                                  ArithmeticExpressionT]],
 
                       ) -> Mapping[str, ScalarExpression]:
     """
@@ -351,8 +350,7 @@ def solve_constraints(variables: Iterable[str],
     shape_inference_bset = isl.BasicSet.universe(space)
 
     for lhs, rhs in constraints:
-        # type-ignored reason: no "(-)" support for Number
-        aff = aff_from_expr(space, lhs-rhs)  # type: ignore
+        aff = aff_from_expr(space, lhs-rhs)
 
         shape_inference_bset = (shape_inference_bset
                                 .add_constraint(isl.Constraint
@@ -391,17 +389,18 @@ def _pt_var_to_global_namespace(name: str | None) -> str:
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: IntegralT | Array) -> ScalarExpression:
-    from pymbolic.mapper.substitutor import substitute
-
+def _get_pt_dim_expr(dim: IntegerT | Array) -> ScalarExpression:
+    from pytato.scalar_expr import substitute
     from pytato.utils import dim_to_index_lambda_components
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
     assert all(isinstance(dim_bnd, SizeParam)
                 for dim_bnd in dim_bnds.values())
 
-    return substitute(dim_expr,
+    res = substitute(dim_expr,
                         {k: prim.Variable(v.name)
                         for k, v in dim_bnds.items()})
+    assert not isinstance(res, tuple)
+    return res
 
 # }}}
 
@@ -420,7 +419,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     get_size_param_deps = SizeParamGatherer()
 
     lp_size_params: frozenset[str] = reduce(frozenset.union,
-                                            (lpy_get_deps(arg.shape)
+                                            (lpy_get_deps(not_none(arg.shape))
                                              for arg in knl.args
                                              if isinstance(arg, ArrayBase)),
                                             frozenset())
@@ -447,7 +446,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     # }}}
 
-    constraints = []
+    constraints: list[tuple[ArithmeticExpressionT, ArithmeticExpressionT]] = []
 
     # {{{ collect constraints from passed arguments
 
@@ -482,9 +481,11 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
             # }}}
 
-            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape):
+            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape, strict=True):
                 pt_dim_expr = pt_subst_map(_get_pt_dim_expr(pt_dim))
                 lp_dim_expr = lp_subst_map(lp_dim)
+                assert prim.is_arithmetic_expression(pt_dim_expr)
+                assert prim.is_arithmetic_expression(lp_dim_expr)
                 constraints.append((pt_dim_expr, lp_dim_expr))
 
         else:
@@ -492,9 +493,11 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                 continue
 
             assert isinstance(lp_arg, lp.ValueArg)
-            assert isinstance(pt_arg, (int, Array))
+            assert isinstance(pt_arg, int | Array)
             pt_arg_expr = pt_subst_map(_get_pt_dim_expr(pt_arg))
             lp_arg_expr = lp_subst_map(prim.Variable(lp_arg.name))
+            assert prim.is_arithmetic_expression(pt_arg_expr)
+            assert prim.is_arithmetic_expression(lp_arg_expr)
             constraints.append((pt_arg_expr, lp_arg_expr))
 
     # }}}
@@ -514,7 +517,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
         # map the pymbolic expression back into an expression in terms of
         # pt.SizeParams
         var = _lp_var_from_global_namespace(var)
-        val = as_pt_size_param(val)
+        val_sp = as_pt_size_param(val)
 
         # {{{ respect callee's scalar dtype preference if there exists one
 
@@ -526,7 +529,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         # }}}
 
-        bindings_dict[var] = val
+        bindings_dict[var] = val_sp
 
     return immutabledict(bindings_dict)
 

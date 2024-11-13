@@ -32,7 +32,7 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: CommunicationDepGraph
 
     An alias for
-    ``Mapping[CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]``.
+    ``Mapping[CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]``.
 """
 
 from __future__ import annotations
@@ -64,17 +64,12 @@ THE SOFTWARE.
 
 import collections
 import dataclasses
+from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
-    AbstractSet,
     Any,
-    FrozenSet,
-    Hashable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
+    Generic,
     TypeVar,
     cast,
 )
@@ -124,7 +119,7 @@ class CommunicationOpIdentifier:
 
 
 CommunicationDepGraph = Mapping[
-        CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]
+        CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]
 
 
 _KeyT = TypeVar("_KeyT")
@@ -134,7 +129,7 @@ _ValueT = TypeVar("_ValueT")
 # {{{ crude ordered set
 
 
-class _OrderedSet(collections.abc.MutableSet[_ValueT]):
+class _OrderedSet(Generic[_ValueT], collections.abc.MutableSet[_ValueT]):
     def __init__(self, items: Iterable[_ValueT] | None = None):
         # Could probably also use a valueless dictionary; not sure if it matters
         self._items: set[_ValueT] = set()
@@ -161,7 +156,7 @@ class _OrderedSet(collections.abc.MutableSet[_ValueT]):
     def __contains__(self, item: Any) -> bool:
         return item in self._items
 
-    def __and__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
+    def __and__(self, other: Set[_ValueT]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet()
         for item in self._items_ordered:
             if item in other:
@@ -170,13 +165,13 @@ class _OrderedSet(collections.abc.MutableSet[_ValueT]):
 
     # Must be "Any" instead of "_ValueT", otherwise it violates Liskov substitution
     # according to mypy. *shrug*
-    def __or__(self, other: AbstractSet[Any]) -> _OrderedSet[_ValueT]:
+    def __or__(self, other: Set[Any]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet(self._items_ordered)
         for item in other:
             result.add(item)
         return result
 
-    def __sub__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
+    def __sub__(self, other: Set[_ValueT]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet()
         for item in self._items_ordered:
             if item not in other:
@@ -265,7 +260,7 @@ class DistributedGraphPartition:
        all parts. Observe that the :class:`DistributedGraphPart`, for the most
        part, only stores names. These "outputs" may be 'part outputs' (i.e.
        data computed in one part for use by another, effectively tempoarary
-       variables), or 'overall outputs' of the comutation.
+       variables), or 'overall outputs' of the computation.
 
     .. attribute:: overall_output_names
 
@@ -339,8 +334,7 @@ class _DistributedInputReplacer(CopyMapper):
                 tags=expr.tags)
         return new_send
 
-    # type ignore because no args, kwargs
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -399,7 +393,7 @@ def _make_distributed_partition(
 
         for name, val in name_to_part_output.items():
             assert name not in name_to_output
-            name_to_output[name] = comm_replacer(val)
+            name_to_output[name] = comm_replacer.rec_ary(val)
 
         comm_ids = part_comm_ids[part_id]
 
@@ -461,7 +455,7 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+        CombineMapper[frozenset[CommunicationOpIdentifier]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
@@ -532,8 +526,8 @@ TaskType = TypeVar("TaskType")
 # {{{ _schedule_task_batches (and related)
 
 def _schedule_task_batches(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Sequence[AbstractSet[TaskType]]:
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        -> Sequence[Set[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -547,8 +541,8 @@ def _schedule_task_batches(
 # {{{ _schedule_task_batches_counted
 
 def _schedule_task_batches_counted(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> tuple[Sequence[AbstractSet[TaskType]], int]:
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        -> tuple[Sequence[Set[TaskType]], int]:
     """
     Static type checkers need the functions to return the same type regardless
     of the input. The testing code needs to know about the number of tasks visited
@@ -570,7 +564,7 @@ def _schedule_task_batches_counted(
 # {{{ _calculate_dependency_levels
 
 def _calculate_dependency_levels(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]
         ) -> tuple[Mapping[TaskType, int], int]:
     """Calculate the minimum dependency level needed before a task of
     type TaskType can be scheduled. We assume that any number of tasks
@@ -617,7 +611,7 @@ def _calculate_dependency_levels(
 
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _MaterializedArrayCollector(CachedWalkMapper):
+class _MaterializedArrayCollector(CachedWalkMapper[[]]):
     """
     Collects all nodes that have to be materialized during code-generation.
     """
@@ -826,7 +820,7 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[AbstractSet[CommunicationOpIdentifier]],
+                Sequence[Set[CommunicationOpIdentifier]],
                 comm_batches_or_exc)
 
     # }}}
@@ -980,6 +974,7 @@ def find_distributed_partition(
     def get_materialized_predecessors(ary: Array) -> _OrderedSet[Array]:
         materialized_preds: _OrderedSet[Array] = _OrderedSet()
         for pred in direct_preds_getter(ary):
+            assert isinstance(pred, Array)
             if pred in materialized_arrays:
                 materialized_preds.add(pred)
             else:

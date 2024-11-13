@@ -28,19 +28,15 @@ THE SOFTWARE.
 """
 
 # {{{ debug control
+
 import os
 
 from numpy import dtype
 
+from pytools import strtobool
 
-try:
-    v = os.environ.get("PYTATO_DEBUG")
-    if v is None:
-        v = ""
 
-    DEBUG_ENABLED = bool(eval(v))
-except Exception:
-    DEBUG_ENABLED = False
+DEBUG_ENABLED = strtobool(os.environ.get("PYTATO_DEBUG", "no"))
 
 
 def set_debug_enabled(flag: bool) -> None:
