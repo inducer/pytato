@@ -37,7 +37,8 @@ THE SOFTWARE.
 
 
 import logging
-from typing import TYPE_CHECKING, Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 import attrs
 import numpy as np
@@ -141,7 +142,7 @@ class MissingRecvError(DistributedPartitionVerificationError):
 # {{{ _check_partition_disjointness
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _SeenNodesWalkMapper(CachedWalkMapper):
+class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
     def __init__(self) -> None:
         super().__init__()
         self.seen_nodes: set[ArrayOrNames] = set()

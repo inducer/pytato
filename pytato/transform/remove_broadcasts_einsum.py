@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import cast
 
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
 from pytato.transform import CopyMapper, MappedT
@@ -40,8 +41,8 @@ class EinsumWithNoBroadcastsRewriter(CopyMapper):
         new_access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
         descr_to_axis_len = expr._access_descr_to_axis_len()
 
-        for acc_descrs, arg in zip(expr.access_descriptors, expr.args):
-            arg = self.rec(arg)
+        for acc_descrs, arg in zip(expr.access_descriptors, expr.args, strict=True):
+            arg = self.rec_ary(arg)
             axes_to_squeeze: list[int] = []
             for idim, acc_descr in enumerate(acc_descrs):
                 if not are_shape_components_equal(arg.shape[idim],
@@ -96,6 +97,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return mapper(expr)
+    return cast(MappedT, mapper(expr))
 
 # vim:fdm=marker

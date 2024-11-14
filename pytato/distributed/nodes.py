@@ -53,7 +53,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, ClassVar, Hashable
+from collections.abc import Hashable
+from typing import Any, ClassVar
 
 import attrs
 import numpy as np

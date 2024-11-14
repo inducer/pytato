@@ -28,6 +28,12 @@ THE SOFTWARE.
 """
 
 
-VERSION = (2021, 2)
-VERSION_STATUS = ""
-VERSION_TEXT = ".".join(str(x) for x in VERSION) + VERSION_STATUS
+import re
+from importlib import metadata
+
+
+VERSION_TEXT = metadata.version("pytato")
+_match = re.match("^([0-9.]+)([a-z0-9]*?)$", VERSION_TEXT)
+assert _match is not None
+VERSION_STATUS = _match.group(2)
+VERSION = tuple(int(nr) for nr in _match.group(1).split("."))

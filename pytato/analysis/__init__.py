@@ -26,7 +26,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
@@ -73,7 +74,7 @@ __doc__ = """
 
 # {{{ NUserCollector
 
-class NUserCollector(Mapper):
+class NUserCollector(Mapper[None, []]):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
     times an array expression is a direct dependency of other nodes.
@@ -287,7 +288,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
         return False
 
     for in_subscript, access_descrs in zip(in_spec.split(","),
-                                           expr.access_descriptors):
+                                           expr.access_descriptors, strict=True):
         indices = _get_indices_from_input_subscript(in_subscript,
                                                     is_output=False)
         if len(indices) != len(access_descrs):
@@ -295,7 +296,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
         # {{{ add reduction dims to 'index_to_descr', check for any inconsistencies
 
-        for idx, access_descr in zip(indices, access_descrs):
+        for idx, access_descr in zip(indices, access_descrs, strict=True):
 
             try:
                 if index_to_descrs[idx] != access_descr:
@@ -314,7 +315,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 # {{{ DirectPredecessorsGetter
 
-class DirectPredecessorsGetter(Mapper):
+class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
     """
     Mapper to get the
     `direct predecessors
@@ -400,7 +401,7 @@ class DirectPredecessorsGetter(Mapper):
 # {{{ NodeCountMapper
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class NodeCountMapper(CachedWalkMapper):
+class NodeCountMapper(CachedWalkMapper[[]]):
     """
     Counts the number of nodes of a given type in a DAG.
 
@@ -476,7 +477,7 @@ def get_num_nodes(
 # {{{ NodeMultiplicityMapper
 
 
-class NodeMultiplicityMapper(CachedWalkMapper):
+class NodeMultiplicityMapper(CachedWalkMapper[[]]):
     """
     Computes the multiplicity of each unique node in a DAG.
 
@@ -518,7 +519,7 @@ def get_node_multiplicities(
 # {{{ CallSiteCountMapper
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class CallSiteCountMapper(CachedWalkMapper):
+class CallSiteCountMapper(CachedWalkMapper[[]]):
     """
     Counts the number of :class:`~pytato.Call` nodes in a DAG.
 

@@ -5,8 +5,9 @@
 """
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any, Collection
+from typing import Any
 
 from pytools import UniqueNameGenerator
 
@@ -96,7 +97,7 @@ def _get_dot_node_from_predecessors(node_id: str,
         return NoShowNode(), frozenset()
 
 
-class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
+class FancyDotWriter(CachedMapper[_FancyDotWriterNode, []]):
     def __init__(self) -> None:
         super().__init__()
         self.vng = UniqueNameGenerator()
@@ -128,8 +129,8 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode]):
 
         if isinstance(hlo, FullOp):
             return NoShowNode()
-        elif isinstance(hlo, (BinaryOp, C99CallOp, WhereOp,
-                              BroadcastOp, LogicalNotOp)):
+        elif isinstance(hlo,
+                        BinaryOp | C99CallOp | WhereOp | BroadcastOp | LogicalNotOp):
             node_id = self.vng("_pt_elem")
 
             node_decl = (f"{node_id}"

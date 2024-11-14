@@ -178,7 +178,8 @@ class DGDiscr1D:
         h = (self.right - self.left) / self.nelements
         return np.array(list(zip(
             np.linspace(self.left, self.right, self.nelements, endpoint=False),
-            np.linspace(h + self.left, self.right, self.nelements))))
+            np.linspace(h + self.left, self.right, self.nelements),
+            strict=True)))
 
     @property
     def dg_ops(self):

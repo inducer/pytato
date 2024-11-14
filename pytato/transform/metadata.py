@@ -40,12 +40,10 @@ THE SOFTWARE.
 
 
 import logging
+from collections.abc import Collection, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
-    Iterable,
-    List,
-    Mapping,
     TypeVar,
     cast,
 )
@@ -102,7 +100,7 @@ GraphNodeT = TypeVar("GraphNodeT")
 
 # {{{ AxesTagsEquationCollector
 
-class AxesTagsEquationCollector(Mapper):
+class AxesTagsEquationCollector(Mapper[None, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
     operation. This mapper implements a default set of propagation rules,
@@ -144,7 +142,7 @@ class AxesTagsEquationCollector(Mapper):
         Users are encouraged to derive this mapper to implement domain-specific
         axis tags propagation semantics.
     """
-    def __init__(self, tag_t: type[Tag]):
+    def __init__(self, tag_t: type[Tag]) -> None:
         self.tag_t: type[Tag] = tag_t
         super().__init__()
 
@@ -283,7 +281,8 @@ class AxesTagsEquationCollector(Mapper):
             if isinstance(subexpr, Array):
                 for i_in_axis, i_out_axis in zip(
                         range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim)):
+                        range(expr.ndim-subexpr.ndim, expr.ndim),
+                        strict=True):
                     in_dim = subexpr.shape[i_in_axis]
                     out_dim = expr.shape[i_out_axis]
                     if are_shape_components_equal(in_dim, out_dim):
@@ -417,7 +416,7 @@ class AxesTagsEquationCollector(Mapper):
                                             for i_idx in i_basic_indices
                                             if i_idx > i_adv_indices[-1]])
 
-        indirection_arrays: list[Array] = cast(List[Array],
+        indirection_arrays: list[Array] = cast(list[Array],
                                                [expr.indices[i_idx]
                                                 for i_idx in i_adv_indices
                                                 if isinstance(expr.indices[i_idx],
@@ -437,7 +436,8 @@ class AxesTagsEquationCollector(Mapper):
                     range(expr.ndim
                           - npost_advanced_basic_indices
                           - subexpr.ndim,
-                          expr.ndim-npost_advanced_basic_indices)):
+                          expr.ndim-npost_advanced_basic_indices),
+                    strict=True):
                 in_dim = subexpr.shape[i_in_axis]
                 out_dim = expr.shape[i_out_axis]
                 if are_shape_components_equal(in_dim, out_dim):
@@ -523,7 +523,7 @@ class AxesTagsEquationCollector(Mapper):
                                                                                iaxis)
 
         for access_descrs, arg in zip(expr.access_descriptors,
-                                      expr.args):
+                                      expr.args, strict=True):
             for iarg_axis, descr in enumerate(access_descrs):
                 in_tag_var = self.get_var_for_axis(arg, iarg_axis)
 
@@ -593,15 +593,14 @@ class AxisTagAttacher(CopyMapper):
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]],
+                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool):
         super().__init__()
-        self.axis_to_tags: Mapping[tuple[Array, int], Iterable[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
     def rec(self, expr: ArrayOrNames) -> Any:
-        if isinstance(expr, (AbstractResultWithNamedArrays,
-                             DistributedSendRefHolder)):
+        if isinstance(expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
             return super().rec(expr)
         else:
             assert isinstance(expr, Array)
@@ -610,6 +609,7 @@ class AxisTagAttacher(CopyMapper):
                 return self._cache[key]
             except KeyError:
                 expr_copy = Mapper.rec(self, expr)
+                assert isinstance(expr_copy, Array)
                 assert expr_copy.ndim == expr.ndim
 
                 for iaxis in range(expr.ndim):
@@ -620,8 +620,10 @@ class AxisTagAttacher(CopyMapper):
 
                 if self.tag_corresponding_redn_descr:
                     if isinstance(expr, Einsum):
+                        assert isinstance(expr_copy, Einsum)
                         for arg, access_descrs in zip(expr.args,
-                                                      expr.access_descriptors):
+                                                      expr.access_descriptors,
+                                                      strict=True):
                             for iaxis, access_descr in enumerate(access_descrs):
                                 if isinstance(access_descr, EinsumReductionAxis):
                                     expr_copy = expr_copy.with_tagged_reduction(
@@ -630,6 +632,7 @@ class AxisTagAttacher(CopyMapper):
                                     )
 
                     if isinstance(expr, IndexLambda):
+                        assert isinstance(expr_copy, IndexLambda)
                         try:
                             hlo = index_lambda_to_high_level_op(expr)
                         except UnknownIndexLambdaExpr:
@@ -651,12 +654,6 @@ class AxisTagAttacher(CopyMapper):
         raise NotImplementedError(
             "AxisTagAttacher does not currently support expressions containing "
             "functions.")
-
-    # type-ignore reason: overrides the type of Mapper.__call__
-    def __call__(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
-        result = self.rec(expr)
-        assert isinstance(result, (Array, AbstractResultWithNamedArrays))
-        return result
 
 # }}}
 

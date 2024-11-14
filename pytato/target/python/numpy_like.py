@@ -28,10 +28,8 @@ THE SOFTWARE.
 import ast
 import os
 import sys
+from collections.abc import Callable, Iterable, Mapping
 from typing import (
-    Callable,
-    Iterable,
-    Mapping,
     TypedDict,
     TypeVar,
     cast,
@@ -74,7 +72,6 @@ from pytato.reductions import (
     ReductionOperation,
     SumReductionOperation,
 )
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 from pytato.transform import CachedMapper
 from pytato.utils import are_shape_components_equal, get_einsum_specification
@@ -169,7 +166,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[str]):
+class NumpyCodegenMapper(CachedMapper[str, []]):
     """
     .. note::
 
@@ -209,12 +206,12 @@ class NumpyCodegenMapper(CachedMapper[str]):
             if isinstance(e, Array):
                 return ast.Name(self.rec(e))
             else:
-                assert isinstance(e, SCALAR_CLASSES)
                 if np.isnan(e):
+                    e_np = np.array(e)
                     # generates code like: `np.float64("nan")`.
                     return ast.Call(
                         func=ast.Attribute(value=ast.Name(self.numpy),
-                                           attr=e.dtype.name),
+                                           attr=e_np.dtype.name),
                         args=[ast.Constant(value="nan")],
                         keywords=[])
                 else:
@@ -474,7 +471,8 @@ class NumpyCodegenMapper(CachedMapper[str]):
                                     _rec_idx(idx, dim)
                                     for idx, dim in zip(
                                             expr.indices[:last_non_trivial_index+1],
-                                            expr.array.shape)]))
+                                            expr.array.shape,
+                                            strict=False)]))
 
         return self._record_line_and_return_lhs(lhs, rhs)
 
@@ -551,14 +549,14 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
         from pytato.array import make_dict_of_named_arrays
         expr = make_dict_of_named_arrays(dict(expr))
 
-    assert isinstance(expr, (Array, DictOfNamedArrays))
+    assert isinstance(expr, Array | DictOfNamedArrays)
 
     var_name_gen = UniqueNameGenerator()
 
     var_name_gen.add_names({input_expr.name
                             for input_expr in InputGatherer()(expr)
                             if isinstance(input_expr,
-                                          (Placeholder, SizeParam, DataWrapper))
+                                          Placeholder | SizeParam | DataWrapper)
                             if input_expr.name is not None})
     if isinstance(expr, DictOfNamedArrays):
         var_name_gen.add_names(expr)
@@ -587,9 +585,7 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                                           ))]),
               ast.Import(names=[ast.alias(name="numpy", asname="np")]),
               *extra_preambles,
-              # Mypy's error here seems spurious: one of the provided 'non-matching'
-              # overloads exactly matches the types of what mypy thinks we've provided.
-              ast.FunctionDef(  # type: ignore[call-overload]
+              ast.FunctionDef(
                   name=function_name,
                   args=ast.arguments(
                       args=[],
