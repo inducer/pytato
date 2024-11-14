@@ -62,22 +62,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import collections
-from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
+from collections.abc import Hashable, Mapping, Sequence, Set
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
-    Hashable,
-    Mapping,
-    Sequence,
-    FrozenSet,
-    Hashable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-    Generic,
     TypeVar,
     cast,
 )
