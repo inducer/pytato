@@ -295,7 +295,7 @@ def normalize_shape(
 
 # {{{ array interface
 
-ConvertibleToIndexExpr = Union[int, slice, "Array", None, EllipsisType]
+ConvertibleToIndexExpr = Union[int, slice, "Array", EllipsisType, None]
 IndexExpr = Union[IntegerT, "NormalizedSlice", "Array", None]
 PyScalarType = type[bool] | type[int] | type[float] | type[complex]
 DtypeOrPyScalarType = _dtype_any | PyScalarType
