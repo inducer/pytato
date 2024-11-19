@@ -33,7 +33,6 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Number
 from typing import (
     Any,
-    ClassVar,
 )
 
 import islpy as isl
@@ -102,8 +101,6 @@ class LoopyCall(AbstractResultWithNamedArrays):
     bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
-    _mapper_method: ClassVar[str] = "map_loopy_call"
-
     copy = dataclasses.replace
 
     def __post_init__(self) -> None:
@@ -155,13 +152,14 @@ class LoopyCall(AbstractResultWithNamedArrays):
         return iter(self._result_names)
 
 
-@dataclasses.dataclass(frozen=True, eq=False)
-class LoopyCallResult(NamedArray):
+@array_dataclass()
+# https://github.com/python/mypy/issues/18115
+# https://github.com/python/mypy/issues/17623
+class LoopyCallResult(NamedArray):   # type: ignore[override]
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
-    _mapper_method = "map_loopy_call_result"
     _container: LoopyCall
 
     @property

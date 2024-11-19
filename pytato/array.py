@@ -179,6 +179,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property, partialmethod
+from sys import intern
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -190,6 +191,7 @@ from typing import (
     cast,
     dataclass_transform,
 )
+from warnings import warn
 
 import numpy as np
 from immutabledict import immutabledict
@@ -300,21 +302,39 @@ T = TypeVar("T")
 
 
 @dataclass_transform(eq_default=False, frozen_default=True)
-def array_dataclass() -> Callable[[type[T]], type[T]]:
+def array_dataclass(hash: bool = True) -> Callable[[type[T]], type[T]]:
     def map_cls(cls: type[T]) -> type[T]:
         # Frozen dataclasses (empirically) have a ~20% speed penalty,
         # and their frozen-ness is arguably a debug feature.
         dc_cls = dataclasses.dataclass(init=True, frozen=__debug__,
                                        eq=False, repr=False)(cls)
 
-        _augment_array_dataclass(dc_cls)
+        _augment_array_dataclass(dc_cls, generate_hash=hash)
         return dc_cls
 
     return map_cls
 
 
+# https://stackoverflow.com/a/1176023
+_CAMEL_TO_SNAKE_RE = re.compile(
+    r"""
+        (?<=[a-z])      # preceded by lowercase
+        (?=[A-Z])       # followed by uppercase
+        |               #   OR
+        (?<=[A-Z])      # preceded by lowercase
+        (?=[A-Z][a-z])  # followed by uppercase, then lowercase
+    """,
+    re.X,
+)
+
+
+class _HasMapperMethod(Protocol):
+    _mapper_method: ClassVar[str]
+
+
 def _augment_array_dataclass(
             cls: type,
+            generate_hash: bool,
         ) -> None:
     from dataclasses import fields
     attr_tuple = ", ".join(f"self.{fld.name}"
@@ -324,25 +344,48 @@ def _augment_array_dataclass(
     else:
         attr_tuple = "()"
 
-    from pytools.codegen import remove_common_indentation
-    augment_code = remove_common_indentation(
-        f"""
-        def {cls.__name__}_hash(self):
-            try:
-                return self._hash_value
-            except AttributeError:
-                pass
+    if generate_hash:
+        from pytools.codegen import remove_common_indentation
+        augment_code = remove_common_indentation(
+            f"""
+            def {cls.__name__}_hash(self):
+                try:
+                    return self._hash_value
+                except AttributeError:
+                    pass
 
-            h = hash(frozenset({attr_tuple}))
-            object.__setattr__(self, "_hash_value", h)
-            return h
+                h = hash(frozenset({attr_tuple}))
+                object.__setattr__(self, "_hash_value", h)
+                return h
 
-        cls.__hash__ = {cls.__name__}_hash
-        """)
-    exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-    exec(compile(augment_code,
-                 f"<dataclass augmentation code for {cls}>", "exec"),
-         exec_dict)
+            cls.__hash__ = {cls.__name__}_hash
+            """)
+        exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
+        exec(compile(augment_code,
+                     f"<dataclass augmentation code for {cls}>", "exec"),
+             exec_dict)
+
+    # {{{ assign mapper_method
+
+    mm_cls = cast(type[_HasMapperMethod], cls)
+
+    snake_clsname = _CAMEL_TO_SNAKE_RE.sub("_", mm_cls.__name__).lower()
+    default_mapper_method_name = f"map_{snake_clsname}"
+
+    # This covers two cases: the class does not have the attribute in the first
+    # place, or it inherits a value but does not set it itself.
+    sets_mapper_method = "_mapper_method" in mm_cls.__dict__
+
+    if sets_mapper_method:
+        if default_mapper_method_name == mm_cls._mapper_method:
+            warn(f"Explicit _mapper_method on {mm_cls} not needed, default matches "
+                 "explicit assignment. Just delete the explicit assignment.",
+                 stacklevel=3)
+
+    if not sets_mapper_method:
+        mm_cls._mapper_method = intern(default_mapper_method_name)
+
+    # }}}
 
 # }}}
 
@@ -831,8 +874,6 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     _container: AbstractResultWithNamedArrays
     name: str
 
-    _mapper_method: ClassVar[str] = "map_named_array"
-
     # type-ignore reason: `copy` signature incompatible with super-class
     def copy(self, *,  # type: ignore[override]
              container: AbstractResultWithNamedArrays | None = None,
@@ -937,7 +978,6 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __init__(self, data: Mapping[str, Array], *,
                  tags: frozenset[Tag] | None = None) -> None:
         if tags is None:
-            from warnings import warn
             warn("Passing `tags=None` is deprecated and will result"
                  " in an error from 2023. To remove this message either"
                  " call make_dict_of_named_arrays or pass the `tags` argument.",
@@ -1014,8 +1054,6 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
     expr: ScalarExpression
     bindings: Mapping[str, Array]
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
-
-    _mapper_method: ClassVar[str] = "map_index_lambda"
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1133,7 +1171,6 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     args: tuple[Array, ...]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                      ReductionDescriptor]
-    _mapper_method: ClassVar[str] = "map_einsum"
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1453,8 +1490,6 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
     arrays: tuple[Array, ...]
     axis: int
 
-    _mapper_method: ClassVar[str] = "map_stack"
-
     @property
     def dtype(self) -> np.dtype[Any]:
         return _np_result_dtype(*(arr.dtype for arr in self.arrays))
@@ -1485,8 +1520,6 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     """
     arrays: tuple[Array, ...]
     axis: int
-
-    _mapper_method: ClassVar[str] = "map_concatenate"
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -1545,8 +1578,6 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     shift: int
     axis: int
 
-    _mapper_method: ClassVar[str] = "map_roll"
-
     @property
     def shape(self) -> ShapeType:
         return self.array.shape
@@ -1567,8 +1598,6 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
         A permutation of the input axes.
     """
     axis_permutation: tuple[int, ...]
-
-    _mapper_method: ClassVar[str] = "map_axis_permutation"
 
     @property
     def shape(self) -> ShapeType:
@@ -1603,8 +1632,6 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     newshape: ShapeType
     order: str
 
-    _mapper_method: ClassVar[str] = "map_reshape"
-
     if __debug__:
         def __post_init__(self) -> None:
             super().__post_init__()
@@ -1628,12 +1655,12 @@ class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     indices: tuple[IndexExpr, ...]
 
 
+@array_dataclass()
 class BasicIndex(IndexBase):
     """
     An indexing expression with all indices being either an :class:`int` or
     :class:`slice`.
     """
-    _mapper_method: ClassVar[str] = "map_basic_index"
 
     @property
     def shape(self) -> ShapeType:
@@ -1781,7 +1808,7 @@ class DataInterface(Protocol):
         pass
 
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False)
+@array_dataclass(hash=False)
 class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     """Takes concrete array data and packages it to be compatible with the
     :class:`Array` interface.
@@ -1824,8 +1851,6 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     data: DataInterface
     shape: ShapeType
 
-    _mapper_method: ClassVar[str] = "map_data_wrapper"
-
     @property
     def name(self) -> None:
         return None
@@ -1867,8 +1892,6 @@ class Placeholder(
     """
     name: str
 
-    _mapper_method: ClassVar[str] = "map_placeholder"
-
 # }}}
 
 
@@ -1888,8 +1911,6 @@ class SizeParam(
     """
     name: str = dataclasses.field(kw_only=True)
     axes: AxesT = dataclasses.field(kw_only=True, default=())
-
-    _mapper_method: ClassVar[str] = "map_size_param"
 
     @property
     def shape(self) -> ShapeType:
@@ -2254,7 +2275,6 @@ def make_data_wrapper(data: DataInterface,
         shape = data.shape
 
     if name is not None:
-        from warnings import warn
         warn("Naming DataWrappers is deprecated and "
                 "will be converted to a PrefixNamed tag. "
                 "This will stop working in 2023. "

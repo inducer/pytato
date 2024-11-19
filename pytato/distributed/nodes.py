@@ -55,7 +55,7 @@ THE SOFTWARE.
 
 import dataclasses
 from collections.abc import Hashable
-from typing import Any, ClassVar
+from typing import Any
 
 import numpy as np
 
@@ -156,8 +156,6 @@ class DistributedSendRefHolder(Array):
     send: DistributedSend
     passthrough_data: Array
 
-    _mapper_method: ClassVar[str] = "map_distributed_send_ref_holder"
-
     @property
     def shape(self) -> ShapeType:
         return self.passthrough_data.shape
@@ -212,8 +210,6 @@ class DistributedRecv(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Ar
     """
     src_rank: int
     comm_tag: CommTagType
-
-    _mapper_method: ClassVar[str] = "map_distributed_recv"
 
 # }}}
 

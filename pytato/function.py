@@ -62,7 +62,6 @@ from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
 from functools import cached_property
 from typing import (
     Any,
-    ClassVar,
     TypeVar,
 )
 
@@ -258,7 +257,6 @@ class NamedCallResult(NamedArray):
         The name by which the returned array is referred to in
         :attr:`FunctionDefinition.returns`.
     """
-    _mapper_method: ClassVar[str] = "map_named_call_result"
 
     def with_tagged_axis(self, iaxis: int,
                          tags: Iterable[Tag] | Tag) -> Array:
@@ -310,8 +308,6 @@ class Call(AbstractResultWithNamedArrays):
     """
     function: FunctionDefinition
     bindings: Mapping[str, Array]
-
-    _mapper_method: ClassVar[str] = "map_call"
 
     copy = dataclasses.replace
 
