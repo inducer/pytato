@@ -26,9 +26,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import dataclasses
 import logging
 from collections.abc import Callable, Hashable, Iterable, Mapping
-from dataclasses import dataclass
 from typing import (
     Any,
     Generic,
@@ -37,7 +37,6 @@ from typing import (
     cast,
 )
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 from typing_extensions import Self
@@ -452,7 +451,7 @@ class CopyMapper(TransformMapper):
         rec_container = self.rec(expr._container)
         assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                container=rec_container,
+                _container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,
@@ -491,7 +490,7 @@ class CopyMapper(TransformMapper):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return attrs.evolve(expr, returns=immutabledict(new_returns))
+        return dataclasses.replace(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
@@ -618,7 +617,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_size_param(self,
                        expr: SizeParam, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> Array:
         return Einsum(expr.access_descriptors,
@@ -665,7 +664,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         rec_loopy_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                container=rec_loopy_call,
+                _container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,
@@ -1329,7 +1328,7 @@ class CachedMapAndCopyMapper(CopyMapper):
 
 # {{{ MPMS materializer
 
-@dataclass(frozen=True, eq=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class MPMSMaterializerAccumulator:
     """This class serves as the return value of :class:`MPMSMaterializer`. It
     contains the set of materialized predecessors and the rewritten expression

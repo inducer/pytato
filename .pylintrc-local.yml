@@ -13,3 +13,4 @@
     - too-many-function-args
     - redundant-keyword-arg
     - no-value-for-parameter
+    - invalid-field-call

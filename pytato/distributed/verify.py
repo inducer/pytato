@@ -36,11 +36,11 @@ THE SOFTWARE.
 """
 
 
+import dataclasses
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-import attrs
 import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 
 # {{{ data structures
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedSend:
     src_rank: int
     dest_rank: int
@@ -79,19 +79,19 @@ class _SummarizedDistributedSend:
     dtype: np.dtype[Any]
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _DistributedPartId:
     rank: int
     part_id: PartId
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _DistributedName:
     rank: int
     name: str
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedGraphPart:
     pid: _DistributedPartId
     needed_pids: frozenset[_DistributedPartId]
