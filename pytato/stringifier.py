@@ -25,9 +25,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 from typing import Any, cast
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 
@@ -104,7 +104,7 @@ class Reprifier(Mapper[str, [int]]):
             return self.truncation_string
 
         # pylint: disable=not-an-iterable
-        fields = tuple(field.name for field in attrs.fields(type(expr)))
+        fields = tuple(field.name for field in dataclasses.fields(type(expr)))
 
         fields = tuple(field for field in fields if field != "non_equality_tags")
 
@@ -165,7 +165,7 @@ class Reprifier(Mapper[str, [int]]):
         # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                        for field in attrs.fields(type(expr)))
+                        for field in dataclasses.fields(type(expr)))
                 + ")")
 
     @memoize_method
@@ -182,7 +182,7 @@ class Reprifier(Mapper[str, [int]]):
         # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                        for field in attrs.fields(type(expr)))
+                        for field in dataclasses.fields(type(expr)))
                 + ")")
 
     def map_call(self, expr: Call, depth: int) -> str:

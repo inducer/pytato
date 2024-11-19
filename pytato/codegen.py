@@ -144,7 +144,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(
+        return SizeParam(  # pylint: disable=missing-kwoa
             name=name,
             tags=expr.tags,
             non_equality_tags=expr.non_equality_tags)
