@@ -105,7 +105,7 @@ class DistributedSend(Taggable):
     data: Array
     dest_rank: int
     comm_tag: CommTagType
-    tags: frozenset[Tag] = dataclasses.field(kw_only=True, default=frozenset())  # pylint: disable=invalid-field-call
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True, default=frozenset())
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> DistributedSend:
         return dataclasses.replace(self, tags=tags)

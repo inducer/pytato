@@ -1886,8 +1886,8 @@ class SizeParam(
         The name by which a value is supplied for the argument once computation
         begins.
     """
-    name: str = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
-    axes: AxesT = dataclasses.field(kw_only=True, default=())  # pylint: disable=invalid-field-call
+    name: str = dataclasses.field(kw_only=True)
+    axes: AxesT = dataclasses.field(kw_only=True, default=())
 
     _mapper_method: ClassVar[str] = "map_size_param"
 

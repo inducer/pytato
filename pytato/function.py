@@ -152,7 +152,7 @@ class FunctionDefinition(Taggable):
     parameters: frozenset[str]
     return_type: ReturnType
     returns: Mapping[str, Array]
-    tags: frozenset[Tag] = dataclasses.field(kw_only=True)  # pylint: disable=invalid-field-call
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
