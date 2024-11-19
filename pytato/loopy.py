@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pymbolic import ArithmeticExpressionT, ExpressionT
+
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -25,20 +28,37 @@ THE SOFTWARE.
 """
 
 
-import numpy as np
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from numbers import Number
+from typing import (
+    Any,
+    ClassVar,
+)
+
 import attrs
+import islpy as isl
+import numpy as np
+from immutabledict import immutabledict
+
 import loopy as lp
 import pymbolic.primitives as prim
-from typing import (Dict, Optional, Any, Iterator, FrozenSet, Union, Sequence,
-                    Tuple, Iterable, Mapping, ClassVar)
-from numbers import Number
-from pytato.array import (AbstractResultWithNamedArrays, Array, ShapeType,
-                          NamedArray, ArrayOrScalar, SizeParam)
-from pytato.scalar_expr import (SubstitutionMapper, ScalarExpression,
-                                EvaluationMapper, IntegralT)
+from pymbolic.typing import IntegerT, not_none
 from pytools import memoize_method
-from immutabledict import immutabledict
-import islpy as isl
+
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    ArrayOrScalar,
+    NamedArray,
+    ShapeType,
+    SizeParam,
+)
+from pytato.scalar_expr import (
+    EvaluationMapper,
+    ScalarExpression,
+    SubstitutionMapper,
+)
+
 
 __doc__ = r"""
 .. currentmodule:: pytato.loopy
@@ -77,7 +97,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
-    translation_unit: "lp.TranslationUnit"
+    translation_unit: lp.TranslationUnit
     bindings: Mapping[str, ArrayOrScalar] = \
         attrs.field(validator=attrs.validators.instance_of(immutabledict))
     entrypoint: str
@@ -87,15 +107,15 @@ class LoopyCall(AbstractResultWithNamedArrays):
     copy = attrs.evolve
 
     @property
-    def _result_names(self) -> FrozenSet[str]:
+    def _result_names(self) -> frozenset[str]:
         return frozenset({name
                           for name, lp_arg in self._entry_kernel.arg_dict.items()
                           if lp_arg.is_output})
 
     @memoize_method
-    def _to_pytato(self, expr: ScalarExpression) -> ScalarExpression:
-        from pymbolic.mapper.substitutor import make_subst_func
-        return SubstitutionMapper(make_subst_func(self.bindings))(expr)
+    def _to_pytato(self, expr: ScalarExpression) -> ExpressionT:
+        from pytato.scalar_expr import substitute
+        return substitute(expr, self.bindings)
 
     @property
     def _entry_kernel(self) -> lp.LoopKernel:
@@ -164,12 +184,13 @@ class LoopyCallResult(NamedArray):
         # reason: (pylint doesn't respect the asserts)
         assert isinstance(self._container, LoopyCall)
         loopy_arg = self._container._entry_kernel.arg_dict[self.name]
+        assert loopy_arg.dtype is not None
         return np.dtype(loopy_arg.dtype.numpy_dtype)
 
 
-def call_loopy(translation_unit: "lp.TranslationUnit",
-               bindings: Dict[str, ArrayOrScalar],
-               entrypoint: Optional[str] = None) -> LoopyCall:
+def call_loopy(translation_unit: lp.TranslationUnit,
+               bindings: dict[str, ArrayOrScalar],
+               entrypoint: str | None = None) -> LoopyCall:
     """
     Invokes an entry point of a :class:`loopy.TranslationUnit` on the array inputs as
     specified by *bindings*.
@@ -231,7 +252,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
             arg_binding = bindings_new[arg.name]
 
-            if isinstance(arg, (lp.ArrayArg, lp.ConstantArg)):
+            if isinstance(arg, lp.ArrayArg | lp.ConstantArg):
                 if not isinstance(arg_binding, Array):
                     raise ValueError(f"Argument '{arg.name}' expected to be a "
                             f"pytato.Array, got {type(arg_binding)}.")
@@ -249,15 +270,15 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
     # {{{ infer types of the translation_unit
 
     for name, ary in bindings_new.items():
-        if translation_unit[entrypoint].arg_dict[name].dtype not in [lp.auto,
-                                                                     None]:
+        if translation_unit[entrypoint].arg_dict[name].dtype is not None:
             continue
 
         if isinstance(ary, Array):
             translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})
         else:
             assert isinstance(ary, Number)
-            translation_unit = lp.add_dtypes(translation_unit, {name: type(ary)})
+            translation_unit = lp.add_dtypes(translation_unit,
+                                             {name: np.dtype(type(ary))})
 
     translation_unit = lp.infer_unknown_types(translation_unit)
 
@@ -277,7 +298,7 @@ def call_loopy(translation_unit: "lp.TranslationUnit",
 
 # {{{ shape inference
 
-class ShapeInferenceFailure(RuntimeError):
+class ShapeInferenceFailure(RuntimeError):  # noqa: N818
     pass
 
 
@@ -306,8 +327,8 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
 
 def solve_constraints(variables: Iterable[str],
                       parameters: Iterable[str],
-                      constraints: Sequence[Tuple[ScalarExpression,
-                                                  ScalarExpression]],
+                      constraints: Sequence[tuple[ArithmeticExpressionT,
+                                                  ArithmeticExpressionT]],
 
                       ) -> Mapping[str, ScalarExpression]:
     """
@@ -330,8 +351,7 @@ def solve_constraints(variables: Iterable[str],
     shape_inference_bset = isl.BasicSet.universe(space)
 
     for lhs, rhs in constraints:
-        # type-ignored reason: no "(-)" support for Number
-        aff = aff_from_expr(space, lhs-rhs)  # type: ignore
+        aff = aff_from_expr(space, lhs-rhs)
 
         shape_inference_bset = (shape_inference_bset
                                 .add_constraint(isl.Constraint
@@ -365,21 +385,23 @@ def _lp_var_from_global_namespace(name: str) -> str:
     return name[4:]
 
 
-def _pt_var_to_global_namespace(name: Optional[str]) -> str:
+def _pt_var_to_global_namespace(name: str | None) -> str:
     assert name is not None  # size params are always named
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: Union[IntegralT, Array]) -> ScalarExpression:
+def _get_pt_dim_expr(dim: IntegerT | Array) -> ScalarExpression:
+    from pytato.scalar_expr import substitute
     from pytato.utils import dim_to_index_lambda_components
-    from pymbolic.mapper.substitutor import substitute
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
     assert all(isinstance(dim_bnd, SizeParam)
                 for dim_bnd in dim_bnds.values())
 
-    return substitute(dim_expr,
+    res = substitute(dim_expr,
                         {k: prim.Variable(v.name)
                         for k, v in dim_bnds.items()})
+    assert not isinstance(res, tuple)
+    return res
 
 # }}}
 
@@ -388,20 +410,22 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                                          bindings: Mapping[str, ArrayOrScalar]
                                          ) -> immutabledict[str, ArrayOrScalar]:
     from functools import reduce
-    from loopy.symbolic import get_dependencies as lpy_get_deps
+
     from loopy.kernel.array import ArrayBase
+    from loopy.symbolic import get_dependencies as lpy_get_deps
     from pymbolic.mapper.substitutor import make_subst_func
+
     from pytato.transform import SizeParamGatherer
 
     get_size_param_deps = SizeParamGatherer()
 
-    lp_size_params: FrozenSet[str] = reduce(frozenset.union,
-                                            (lpy_get_deps(arg.shape)
+    lp_size_params: frozenset[str] = reduce(frozenset.union,
+                                            (lpy_get_deps(not_none(arg.shape))
                                              for arg in knl.args
                                              if isinstance(arg, ArrayBase)),
                                             frozenset())
 
-    pt_size_params: FrozenSet[SizeParam] = reduce(frozenset.union,
+    pt_size_params: frozenset[SizeParam] = reduce(frozenset.union,
                                                   (get_size_param_deps(bnd)
                                                    for bnd in bindings.values()
                                                    if isinstance(bnd, Array)),
@@ -423,7 +447,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     # }}}
 
-    constraints = []
+    constraints: list[tuple[ArithmeticExpressionT, ArithmeticExpressionT]] = []
 
     # {{{ collect constraints from passed arguments
 
@@ -458,9 +482,11 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
             # }}}
 
-            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape):
+            for lp_dim, pt_dim in zip(lp_arg.shape, pt_arg.shape, strict=True):
                 pt_dim_expr = pt_subst_map(_get_pt_dim_expr(pt_dim))
                 lp_dim_expr = lp_subst_map(lp_dim)
+                assert prim.is_arithmetic_expression(pt_dim_expr)
+                assert prim.is_arithmetic_expression(lp_dim_expr)
                 constraints.append((pt_dim_expr, lp_dim_expr))
 
         else:
@@ -468,9 +494,11 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                 continue
 
             assert isinstance(lp_arg, lp.ValueArg)
-            assert isinstance(pt_arg, (int, Array))
+            assert isinstance(pt_arg, int | Array)
             pt_arg_expr = pt_subst_map(_get_pt_dim_expr(pt_arg))
             lp_arg_expr = lp_subst_map(prim.Variable(lp_arg.name))
+            assert prim.is_arithmetic_expression(pt_arg_expr)
+            assert prim.is_arithmetic_expression(lp_arg_expr)
             constraints.append((pt_arg_expr, lp_arg_expr))
 
     # }}}
@@ -490,19 +518,19 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
         # map the pymbolic expression back into an expression in terms of
         # pt.SizeParams
         var = _lp_var_from_global_namespace(var)
-        val = as_pt_size_param(val)
+        val_sp = as_pt_size_param(val)
 
         # {{{ respect callee's scalar dtype preference if there exists one
 
         # TODO: remove this once
         # https://github.com/inducer/loopy/issues/442 is resolved.
-        if (isinstance(val, Number)
-                and knl.arg_dict[var].dtype not in [lp.auto, None]):
-            val = knl.arg_dict[var].dtype.numpy_dtype.type(val)
+        dtype = knl.arg_dict[var].dtype
+        if (isinstance(val, Number) and dtype is not None):
+            val = dtype.numpy_dtype.type(val)
 
         # }}}
 
-        bindings_dict[var] = val
+        bindings_dict[var] = val_sp
 
     return immutabledict(bindings_dict)
 

@@ -1,0 +1,137 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytato"
+version = "2024.1"
+description = "Get Descriptions of Array Computations via Lazy Evaluation"
+readme = "README.rst"
+license = "MIT"
+requires-python = "~=3.10"
+authors = [
+    { name = "Andreas Kloeckner", email = "inform@tiker.net" },
+    { name = "Matt Wala" },
+    { name = "Xiaoyu Wei" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Other Audience",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "attrs",
+    "bidict",
+    "immutabledict",
+    "loopy>=2020.2",
+    "pytools>=2024.1.14",
+    "pymbolic>=2024.1",
+    "typing_extensions>=4",
+]
+
+[project.urls]
+Homepage = "https://github.com/inducer/pytato"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pytato",
+]
+
+[tool.ruff.lint]
+preview = true
+extend-select = [
+    "B",    # flake8-bugbear
+    "C",    # flake8-comprehensions
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # flake8-isort
+    "N",    # pep8-naming
+    "Q",    # flake8-quotes
+    "W",    # pycodestyle
+    "NPY",   # numpy
+    "RUF",
+    "UP",
+]
+extend-ignore = [
+  "E226",
+  "E241",
+  "E242",
+  "E265",
+  "N802",
+  "E402",
+  "N814",
+  "N817",
+  "C90",
+
+  # numpy random generators---disable for now
+  "NPY002",
+]
+
+allowed-confusables = [
+  "∪", # union
+  " ", # nbsp
+  ]
+
+[tool.ruff.lint.per-file-ignores]
+"examples/advection.py" = ["B023"]
+"test/test_linalg.py" = ["N806"]
+"doc/*.py" = ["I002"]
+"examples/*.py" = ["I002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]
+known-local-folder = ["pytato"]
+lines-after-imports = 2
+combine-as-imports = true
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+docstring-quotes = "double"
+multiline-quotes = "double"
+
+[tool.mypy]
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+  "islpy",
+  "pyopencl.*",
+  "jax.*",
+  "pygments.*",
+  "mako.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "pytato.raising",
+]
+# We'll be getting rid of it, no point in fixing it.
+ignore_errors = true
+
+[tool.typos.default]
+extend-ignore-re = [
+  "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"
+]
+
+[tool.typos.default.extend-words]
+# like the numpy function, array range
+arange = "arange"
+
+[tool.typos.files]
+extend-exclude = [
+]

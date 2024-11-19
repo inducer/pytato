@@ -1,26 +1,38 @@
 from __future__ import annotations
 
-import types
-from typing import Any, Dict, Optional, List, Tuple, Union, Sequence, Callable
 import operator
-import pyopencl as cl
+import random
+import types
+from collections.abc import Callable, Sequence
+from typing import Any
+
 import numpy as np
-import pytato as pt
-from pytato.transform import Mapper
-from pytato.array import (Array, Placeholder, Stack, Roll,
-                          AxisPermutation, DataWrapper, Reshape,
-                          Concatenate)
+
+import pyopencl as cl
 from pytools.tag import Tag
+
+import pytato as pt
+from pytato.array import (
+    Array,
+    AxisPermutation,
+    Concatenate,
+    DataWrapper,
+    Placeholder,
+    Reshape,
+    Roll,
+    Stack,
+)
+from pytato.transform import Mapper
 
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper):
+class NumpyBasedEvaluator(Mapper[Any, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.
     """
-    def __init__(self, np: Any, placeholders: Dict[Placeholder, Array]) -> None:
+    def __init__(self, np: Any, placeholders: dict[Placeholder, Array]) -> None:
         self.np = np
         self.placeholders = placeholders
         super().__init__()
@@ -42,7 +54,7 @@ class NumpyBasedEvaluator(Mapper):
         return self.np.transpose(self.rec(expr.array), expr.axis_permutation)
 
     def map_reshape(self, expr: Reshape) -> Any:
-        return self.np.reshape(self.rec(expr.array), expr.newshape, expr.order)
+        return self.np.reshape(self.rec(expr.array), expr.newshape, order=expr.order)
 
     def map_concatenate(self, expr: Concatenate) -> Any:
         arrays = [self.rec(array) for array in expr.arrays]
@@ -50,7 +62,7 @@ class NumpyBasedEvaluator(Mapper):
 
 
 def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
-                              parameters: Optional[Dict[Placeholder, Any]] = None,
+                              parameters: dict[Placeholder, Any] | None = None,
                               rtol: float = 1e-7) -> None:
     """
     Raises an :class:`AssertionError`, if there is a discrepancy between *expr*
@@ -65,13 +77,13 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     np_result = NumpyBasedEvaluator(np, parameters)(expr)
     prog = pt.generate_loopy(expr)
 
-    evt, (pt_result,) = prog(queue, **{placeholder.name: data
+    _evt, (pt_result,) = prog(queue, **{placeholder.name: data
                                 for placeholder, data in parameters.items()})
 
     assert pt_result.shape == np_result.shape
     assert pt_result.dtype == np_result.dtype
 
-    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)  # noqa: E501
+    np.testing.assert_allclose(np_result, pt_result, rtol=rtol)
 
 # }}}
 
@@ -79,9 +91,15 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
 # {{{ random DAG generation
 
 class RandomDAGContext:
-    def __init__(self, rng: np.random.Generator, axis_len: int, use_numpy: bool,
-            additional_generators: Optional[Sequence[
-                Tuple[int, Callable[[RandomDAGContext], Array]]]] = None) -> None:
+    def __init__(
+                 self,
+                 rng: np.random.Generator,
+                 axis_len: int,
+                 use_numpy: bool,
+                 additional_generators: (
+                     Sequence[tuple[int, Callable[[RandomDAGContext], Array]]]
+                         | None) = None
+             ) -> None:
         """
         :param additional_generators: A sequence of tuples
             ``(fake_probability, gen_func)``, where *fake_probability* is
@@ -90,7 +108,7 @@ class RandomDAGContext:
         """
         self.rng = rng
         self.axis_len = axis_len
-        self.past_results: List[Array] = []
+        self.past_results: list[Array] = []
         self.use_numpy = use_numpy
 
         if additional_generators is None:
@@ -115,8 +133,8 @@ def make_random_constant(rdagc: RandomDAGContext, naxes: int) -> Any:
 
 
 def make_random_reshape(
-        rdagc: RandomDAGContext, s: Tuple[int, ...], shape_len: int) \
-        -> Tuple[int, ...]:
+        rdagc: RandomDAGContext, s: tuple[int, ...], shape_len: int) \
+        -> tuple[int, ...]:
     rng = rdagc.rng
 
     s_list = list(s)
@@ -221,7 +239,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
         v = rng.integers(0, 2)
         if v == 0:
             # index away an axis
-            subscript: List[Union[int, slice]] = [slice(None)] * result.ndim
+            subscript: list[int | slice] = [slice(None)] * result.ndim
             subscript[rng.integers(0, result.ndim)] = int(
                     rng.integers(0, rdagc.axis_len))
 
@@ -244,22 +262,22 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
 # }}}
 
 
-# {{{ get_random_dag_w_no_placholders
+# {{{ get_random_dag_w_no_placeholders
 
 def get_random_pt_dag(seed: int,
                       *,
-                      additional_generators: Optional[
-                          Sequence[Tuple[int,
-                                         Callable[[RandomDAGContext], Array]]]
-                      ] = None,
+                      additional_generators: (
+                          Sequence[tuple[int, Callable[[RandomDAGContext], Array]]]
+                              | None) = None,
                       axis_len: int = 4,
                       convert_dws_to_placeholders: bool = False
                       ) -> pt.DictOfNamedArrays:
     if additional_generators is None:
         additional_generators = []
 
-    from testlib import RandomDAGContext, make_random_dag
     from typing import cast
+
+    from testlib import RandomDAGContext, make_random_dag
 
     rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
             axis_len=axis_len, use_numpy=False,
@@ -310,6 +328,73 @@ def get_random_pt_dag_with_send_recv_nodes(
         axis_len=axis_len,
         convert_dws_to_placeholders=convert_dws_to_placeholders,
         additional_generators=[(comm_fake_probability, gen_comm)])
+
+
+def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
+    """
+    Builds a DAG with emphasis on number of operations.
+    """
+
+    rng = np.random.default_rng(seed)
+    random.seed(seed)
+
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+    # DAG should have `iterations` number of operations
+    return pt.make_dict_of_named_arrays({"result": current})
+
+
+def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+
+    expr1 = 2 * x
+    expr2 = 2 * x
+
+    y = expr1 + expr2
+
+    # Has duplicates of the 2*x operation
+    return pt.make_dict_of_named_arrays({"result": y})
+
+
+def make_large_dag_with_duplicates(iterations: int,
+                                   seed: int = 0) -> pt.DictOfNamedArrays:
+
+    random.seed(seed)
+    rng = np.random.default_rng(seed)
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    current = a
+
+    # Will randomly choose from the operators
+    operations = [operator.add, operator.sub, operator.mul, operator.truediv]
+    duplicates = []
+
+    for _ in range(iterations):
+        operation = random.choice(operations)
+        value = rng.uniform(1, 10)
+        current = operation(current, value)
+
+        # Introduce duplicates intentionally
+        if rng.uniform() > 0.2:
+            dup1 = operation(a, value)
+            dup2 = operation(a, value)
+            duplicates.append(dup1)
+            duplicates.append(dup2)
+            current = operation(current, dup1)
+
+    all_exprs = [current, *duplicates]
+    combined_expr = pt.stack(all_exprs, axis=0)
+
+    result = pt.sum(combined_expr, axis=0)
+    return pt.make_dict_of_named_arrays({"result": result})
 
 # }}}
 

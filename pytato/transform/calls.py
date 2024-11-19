@@ -4,6 +4,9 @@
 .. autofunction:: inline_calls
 .. autofunction:: tag_all_calls_to_be_inlined
 """
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Kaushik Kulkarni"
 
 __license__ = """
@@ -26,13 +29,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Mapping
-from pytato.transform import (ArrayOrNames, CopyMapper)
-from pytato.array import (AbstractResultWithNamedArrays, Array,
-                          DictOfNamedArrays, Placeholder)
+from collections.abc import Mapping
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    DictOfNamedArrays,
+    Placeholder,
+)
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
+from pytato.transform import ArrayOrNames, CopyMapper
 
 
 # {{{ inlining
@@ -66,7 +73,7 @@ class Inliner(CopyMapper):
             substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
-                {name: substitutor(ret)
+                {name: substitutor.rec_ary(ret)
                  for name, ret in new_expr.function.returns.items()},
                 tags=new_expr.tags
             )

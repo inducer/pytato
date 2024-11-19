@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -32,8 +33,9 @@ Code Generation Targets
 .. autoclass:: BoundProgram
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 class Target:

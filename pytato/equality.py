@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,26 +25,44 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Callable, Dict, TYPE_CHECKING, Tuple, Union
-from pytato.array import (AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, AxisPermutation,
-                          BasicIndex, Concatenate, DataWrapper, Einsum,
-                          IndexBase, IndexLambda, NamedArray,
-                          Reshape, Roll, Stack, AbstractResultWithNamedArrays,
-                          Array, DictOfNamedArrays, Placeholder, SizeParam)
-from pytato.function import Call, NamedCallResult, FunctionDefinition
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
 from pytools import memoize_method
 
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    AdvancedIndexInContiguousAxes,
+    AdvancedIndexInNoncontiguousAxes,
+    Array,
+    AxisPermutation,
+    BasicIndex,
+    Concatenate,
+    DataWrapper,
+    DictOfNamedArrays,
+    Einsum,
+    IndexBase,
+    IndexLambda,
+    NamedArray,
+    Placeholder,
+    Reshape,
+    Roll,
+    SizeParam,
+    Stack,
+)
+from pytato.function import Call, FunctionDefinition, NamedCallResult
+
+
 if TYPE_CHECKING:
-    from pytato.loopy import LoopyCall, LoopyCallResult
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """
 .. autoclass:: EqualityComparer
 """
 
 
-ArrayOrNames = Union[Array, AbstractResultWithNamedArrays]
+ArrayOrNames = Array | AbstractResultWithNamedArrays
 
 
 # {{{ EqualityComparer
@@ -65,7 +84,7 @@ class EqualityComparer:
           more on this.
     """
     def __init__(self) -> None:
-        self._cache: Dict[Tuple[int, int], bool] = {}
+        self._cache: dict[tuple[int, int], bool] = {}
 
     def rec(self, expr1: ArrayOrNames, expr2: Any) -> bool:
         cache_key = id(expr1), id(expr2)
@@ -73,7 +92,7 @@ class EqualityComparer:
             return self._cache[cache_key]
         except KeyError:
 
-            method: Callable[[Union[Array, AbstractResultWithNamedArrays], Any],
+            method: Callable[[Array | AbstractResultWithNamedArrays, Any],
                              bool]
 
             try:
@@ -130,7 +149,7 @@ class EqualityComparer:
                 and all(self.rec(dim1, dim2)
                         if isinstance(dim1, Array)
                         else dim1 == dim2
-                        for dim1, dim2 in zip(expr1.shape, expr2.shape))
+                        for dim1, dim2 in zip(expr1.shape, expr2.shape, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.var_to_reduction_descr == expr2.var_to_reduction_descr
@@ -141,7 +160,7 @@ class EqualityComparer:
                 and expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
-                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
+                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -151,7 +170,7 @@ class EqualityComparer:
                 and expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
-                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays))
+                        for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -181,7 +200,8 @@ class EqualityComparer:
                         if (isinstance(idx1, Array)
                             and isinstance(idx2, Array))
                         else idx1 == idx2
-                        for idx1, idx2 in zip(expr1.indices, expr2.indices))
+                        for idx1, idx2 in zip(
+                            expr1.indices, expr2.indices, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
@@ -214,7 +234,7 @@ class EqualityComparer:
                 and expr1.access_descriptors == expr2.access_descriptors
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.args,
-                                              expr2.args))
+                                              expr2.args, strict=True))
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.redn_axis_to_redn_descr == expr2.redn_axis_to_redn_descr
@@ -280,6 +300,7 @@ class EqualityComparer:
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
                 and expr1.parameters == expr2.parameters
+                and expr1.return_type == expr2.return_type
                 and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
                 and all(self.rec(expr1.returns[k], expr2.returns[k])
                         for k in expr1.returns)
@@ -293,6 +314,7 @@ class EqualityComparer:
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
                         for name, bnd in expr1.bindings.items())
+                and expr1.tags == expr2.tags
                 )
 
     def map_named_call_result(self, expr1: NamedCallResult, expr2: Any) -> bool:

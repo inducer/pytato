@@ -32,10 +32,11 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: CommunicationDepGraph
 
     An alias for
-    ``Mapping[CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]``.
+    ``Mapping[CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]``.
 """
 
 from __future__ import annotations
+
 
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -61,32 +62,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from functools import reduce
 import collections
+from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
+from functools import reduce
 from typing import (
-        Iterator, Iterable, Sequence, Any, Mapping, FrozenSet, Set, Dict, cast,
-        List, AbstractSet, TypeVar, TYPE_CHECKING, Hashable, Optional, Tuple)
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    TypeVar,
+    cast,
+)
 
 import attrs
 from immutabledict import immutabledict
 
-from pytools.graph import CycleError
-from pytools import memoize_method
-
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import UniqueNameGenerator
+from pytools import UniqueNameGenerator, memoize_method
+from pytools.graph import CycleError
 
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.array import (Array, DictOfNamedArrays, Placeholder, make_placeholder)
-from pytato.transform import (ArrayOrNames, CopyMapper,
-                              CachedWalkMapper,
-                              CombineMapper)
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend, DistributedSendRefHolder)
-from pytato.distributed.nodes import CommTagType
 from pytato.analysis import DirectPredecessorsGetter
-
+from pytato.array import Array, DictOfNamedArrays, Placeholder, make_placeholder
+from pytato.distributed.nodes import (
+    CommTagType,
+    DistributedRecv,
+    DistributedSend,
+    DistributedSendRefHolder,
+)
 from pytato.function import FunctionDefinition, NamedCallResult
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
+
 
 if TYPE_CHECKING:
     import mpi4py.MPI
@@ -114,7 +119,7 @@ class CommunicationOpIdentifier:
 
 
 CommunicationDepGraph = Mapping[
-        CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]
+        CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]
 
 
 _KeyT = TypeVar("_KeyT")
@@ -124,11 +129,11 @@ _ValueT = TypeVar("_ValueT")
 # {{{ crude ordered set
 
 
-class _OrderedSet(collections.abc.MutableSet[_ValueT]):
-    def __init__(self, items: Optional[Iterable[_ValueT]] = None):
+class _OrderedSet(Generic[_ValueT], collections.abc.MutableSet[_ValueT]):
+    def __init__(self, items: Iterable[_ValueT] | None = None):
         # Could probably also use a valueless dictionary; not sure if it matters
-        self._items: Set[_ValueT] = set()
-        self._items_ordered: List[_ValueT] = []
+        self._items: set[_ValueT] = set()
+        self._items_ordered: list[_ValueT] = []
         if items is not None:
             for item in items:
                 self.add(item)
@@ -151,7 +156,7 @@ class _OrderedSet(collections.abc.MutableSet[_ValueT]):
     def __contains__(self, item: Any) -> bool:
         return item in self._items
 
-    def __and__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
+    def __and__(self, other: Set[_ValueT]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet()
         for item in self._items_ordered:
             if item in other:
@@ -160,13 +165,13 @@ class _OrderedSet(collections.abc.MutableSet[_ValueT]):
 
     # Must be "Any" instead of "_ValueT", otherwise it violates Liskov substitution
     # according to mypy. *shrug*
-    def __or__(self, other: AbstractSet[Any]) -> _OrderedSet[_ValueT]:
+    def __or__(self, other: Set[Any]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet(self._items_ordered)
         for item in other:
             result.add(item)
         return result
 
-    def __sub__(self, other: AbstractSet[_ValueT]) -> _OrderedSet[_ValueT]:
+    def __sub__(self, other: Set[_ValueT]) -> _OrderedSet[_ValueT]:
         result: _OrderedSet[_ValueT] = _OrderedSet()
         for item in self._items_ordered:
             if item not in other:
@@ -224,16 +229,16 @@ class DistributedGraphPart:
     .. automethod:: all_input_names
     """
     pid: PartId
-    needed_pids: FrozenSet[PartId]
-    user_input_names: FrozenSet[str]
-    partition_input_names: FrozenSet[str]
-    output_names: FrozenSet[str]
+    needed_pids: frozenset[PartId]
+    user_input_names: frozenset[str]
+    partition_input_names: frozenset[str]
+    output_names: frozenset[str]
 
     name_to_recv_node: Mapping[str, DistributedRecv]
     name_to_send_nodes: Mapping[str, Sequence[DistributedSend]]
 
     @memoize_method
-    def all_input_names(self) -> FrozenSet[str]:
+    def all_input_names(self) -> frozenset[str]:
         return self.user_input_names | self. partition_input_names
 
 # }}}
@@ -255,7 +260,7 @@ class DistributedGraphPartition:
        all parts. Observe that the :class:`DistributedGraphPart`, for the most
        part, only stores names. These "outputs" may be 'part outputs' (i.e.
        data computed in one part for use by another, effectively tempoarary
-       variables), or 'overall outputs' of the comutation.
+       variables), or 'overall outputs' of the computation.
 
     .. attribute:: overall_output_names
 
@@ -290,8 +295,8 @@ class _DistributedInputReplacer(CopyMapper):
         self.name_to_output = name_to_output
         self.output_arrays = frozenset(name_to_output.values())
 
-        self.user_input_names: Set[str] = set()
-        self.partition_input_name_to_placeholder: Dict[str, Placeholder] = {}
+        self.user_input_names: set[str] = set()
+        self.partition_input_name_to_placeholder: dict[str, Placeholder] = {}
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
@@ -329,8 +334,7 @@ class _DistributedInputReplacer(CopyMapper):
                 tags=expr.tags)
         return new_send
 
-    # type ignore because no args, kwargs
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:  # type: ignore[override]
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         key = self.get_cache_key(expr)
         try:
             return self._cache[key]
@@ -364,8 +368,8 @@ class _DistributedInputReplacer(CopyMapper):
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
-    recv_ids: FrozenSet[CommunicationOpIdentifier]
-    send_ids: FrozenSet[CommunicationOpIdentifier]
+    recv_ids: frozenset[CommunicationOpIdentifier]
+    send_ids: frozenset[CommunicationOpIdentifier]
 
 
 # {{{ _make_distributed_partition
@@ -376,24 +380,24 @@ def _make_distributed_partition(
         recvd_ary_to_name: Mapping[Array, str],
         sent_ary_to_name: Mapping[Array, str],
         sptpo_ary_to_name: Mapping[Array, str],
-        local_recv_id_to_recv_node: Dict[CommunicationOpIdentifier, DistributedRecv],
-        local_send_id_to_send_node: Dict[CommunicationOpIdentifier, DistributedSend],
+        local_recv_id_to_recv_node: dict[CommunicationOpIdentifier, DistributedRecv],
+        local_send_id_to_send_node: dict[CommunicationOpIdentifier, DistributedSend],
         overall_output_names: Sequence[str],
         ) -> DistributedGraphPartition:
     name_to_output = {}
-    parts: Dict[PartId, DistributedGraphPart] = {}
+    parts: dict[PartId, DistributedGraphPart] = {}
 
-    for part_id, name_to_ouput in enumerate(name_to_output_per_part):
+    for part_id, name_to_part_output in enumerate(name_to_output_per_part):
         comm_replacer = _DistributedInputReplacer(
-            recvd_ary_to_name, sptpo_ary_to_name, name_to_ouput)
+            recvd_ary_to_name, sptpo_ary_to_name, name_to_part_output)
 
-        for name, val in name_to_ouput.items():
+        for name, val in name_to_part_output.items():
             assert name not in name_to_output
-            name_to_output[name] = comm_replacer(val)
+            name_to_output[name] = comm_replacer.rec_ary(val)
 
         comm_ids = part_comm_ids[part_id]
 
-        name_to_send_nodes: Dict[str, List[DistributedSend]] = {}
+        name_to_send_nodes: dict[str, list[DistributedSend]] = {}
         for send_id in comm_ids.send_ids:
             send_node = local_send_id_to_send_node[send_id]
             name = sent_ary_to_name[send_node.data]
@@ -406,7 +410,7 @@ def _make_distributed_partition(
                 user_input_names=frozenset(comm_replacer.user_input_names),
                 partition_input_names=frozenset(
                     comm_replacer.partition_input_name_to_placeholder.keys()),
-                output_names=frozenset(name_to_ouput.keys()),
+                output_names=frozenset(name_to_part_output.keys()),
                 name_to_recv_node=immutabledict({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
@@ -451,28 +455,28 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenSet[CommunicationOpIdentifier]]):
+        CombineMapper[frozenset[CommunicationOpIdentifier]]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
-                Dict[CommunicationOpIdentifier,
-                     FrozenSet[CommunicationOpIdentifier]] = {}
+                dict[CommunicationOpIdentifier,
+                     frozenset[CommunicationOpIdentifier]] = {}
 
         self.local_recv_id_to_recv_node: \
-                Dict[CommunicationOpIdentifier, DistributedRecv] = {}
+                dict[CommunicationOpIdentifier, DistributedRecv] = {}
         self.local_send_id_to_send_node: \
-                Dict[CommunicationOpIdentifier, DistributedSend] = {}
+                dict[CommunicationOpIdentifier, DistributedSend] = {}
 
         self.local_rank = local_rank
 
     def combine(
-            self, *args: FrozenSet[CommunicationOpIdentifier]
-            ) -> FrozenSet[CommunicationOpIdentifier]:
+            self, *args: frozenset[CommunicationOpIdentifier]
+            ) -> frozenset[CommunicationOpIdentifier]:
         return reduce(frozenset.union, args, frozenset())
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenSet[CommunicationOpIdentifier]:
+                                        ) -> frozenset[CommunicationOpIdentifier]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -486,7 +490,7 @@ class _LocalSendRecvDepGatherer(
 
         return self.rec(expr.passthrough_data)
 
-    def _map_input_base(self, expr: Array) -> FrozenSet[CommunicationOpIdentifier]:
+    def _map_input_base(self, expr: Array) -> frozenset[CommunicationOpIdentifier]:
         return frozenset()
 
     map_placeholder = _map_input_base
@@ -495,7 +499,7 @@ class _LocalSendRecvDepGatherer(
 
     def map_distributed_recv(
             self, expr: DistributedRecv
-            ) -> FrozenSet[CommunicationOpIdentifier]:
+            ) -> frozenset[CommunicationOpIdentifier]:
         recv_id = _recv_to_comm_id(self.local_rank, expr)
 
         if recv_id in self.local_recv_id_to_recv_node:
@@ -509,7 +513,7 @@ class _LocalSendRecvDepGatherer(
         return frozenset({recv_id})
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> FrozenSet[CommunicationOpIdentifier]:
+            self, expr: NamedCallResult) -> frozenset[CommunicationOpIdentifier]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
 
@@ -522,8 +526,8 @@ TaskType = TypeVar("TaskType")
 # {{{ _schedule_task_batches (and related)
 
 def _schedule_task_batches(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Sequence[AbstractSet[TaskType]]:
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        -> Sequence[Set[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -537,8 +541,8 @@ def _schedule_task_batches(
 # {{{ _schedule_task_batches_counted
 
 def _schedule_task_batches_counted(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
-        -> Tuple[Sequence[AbstractSet[TaskType]], int]:
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        -> tuple[Sequence[Set[TaskType]], int]:
     """
     Static type checkers need the functions to return the same type regardless
     of the input. The testing code needs to know about the number of tasks visited
@@ -547,7 +551,7 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches: Sequence[Set[TaskType]] = [set() for _ in range(nlevels)]
+    task_batches: Sequence[set[TaskType]] = [set() for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
         task_batches[dep_level].add(task_id)
@@ -560,9 +564,9 @@ def _schedule_task_batches_counted(
 # {{{ _calculate_dependency_levels
 
 def _calculate_dependency_levels(
-        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
-        ) -> Tuple[Mapping[TaskType, int], int]:
-    """Calculate the minimum dependendency level needed before a task of
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]
+        ) -> tuple[Mapping[TaskType, int], int]:
+    """Calculate the minimum dependency level needed before a task of
     type TaskType can be scheduled. We assume that any number of tasks
     can be scheduled at the same time. To attain complexity linear in the
     number of nodes, we assume that each task has a constant number of direct
@@ -571,7 +575,7 @@ def _calculate_dependency_levels(
     The minimum dependency level for a task, i, is defined as
     1 + the maximum dependency level for its children.
     """
-    task_to_dep_level: Dict[TaskType, int] = {}
+    task_to_dep_level: dict[TaskType, int] = {}
     seen: set[TaskType] = set()
     nodes_visited: int = 0
 
@@ -607,7 +611,7 @@ def _calculate_dependency_levels(
 
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _MaterializedArrayCollector(CachedWalkMapper):
+class _MaterializedArrayCollector(CachedWalkMapper[[]]):
     """
     Collects all nodes that have to be materialized during code-generation.
     """
@@ -619,8 +623,8 @@ class _MaterializedArrayCollector(CachedWalkMapper):
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        from pytato.tags import ImplStored
         from pytato.loopy import LoopyCallResult
+        from pytato.tags import ImplStored
 
         if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
             self.materialized_arrays.add(expr)
@@ -641,9 +645,9 @@ class _MaterializedArrayCollector(CachedWalkMapper):
 # {{{ _set_dict_union_mpi
 
 def _set_dict_union_mpi(
-        dict_a: Mapping[_KeyT, FrozenSet[_ValueT]],
-        dict_b: Mapping[_KeyT, FrozenSet[_ValueT]],
-        mpi_data_type: mpi4py.MPI.Datatype) -> Mapping[_KeyT, FrozenSet[_ValueT]]:
+        dict_a: Mapping[_KeyT, frozenset[_ValueT]],
+        dict_b: Mapping[_KeyT, frozenset[_ValueT]],
+        mpi_data_type: mpi4py.MPI.Datatype) -> Mapping[_KeyT, frozenset[_ValueT]]:
     assert mpi_data_type is None
     result = dict(dict_a)
     for key, values in dict_b.items():
@@ -772,9 +776,9 @@ def find_distributed_partition(
     - Gather sent arrays into
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
-    from pytato.transform import SubsetDependencyMapper
-
     import mpi4py.MPI as MPI
+
+    from pytato.transform import SubsetDependencyMapper
 
     local_rank = mpi_communicator.rank
 
@@ -816,16 +820,16 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[AbstractSet[CommunicationOpIdentifier]],
+                Sequence[Set[CommunicationOpIdentifier]],
                 comm_batches_or_exc)
 
     # }}}
 
     # {{{ create (local) parts out of batch ids
 
-    part_comm_ids: List[_PartCommIDs] = []
+    part_comm_ids: list[_PartCommIDs] = []
     if comm_batches:
-        recv_ids: FrozenSet[CommunicationOpIdentifier] = frozenset()
+        recv_ids: frozenset[CommunicationOpIdentifier] = frozenset()
         for batch in comm_batches:
             send_ids = frozenset(
                 comm_id for comm_id in batch
@@ -902,9 +906,8 @@ def find_distributed_partition(
     # result sizes potentially quadratic in the number of materialized arrays.
     mso_array_dep_mapper = SubsetDependencyMapper(frozenset(mso_arrays))
 
-    mso_ary_to_first_dep_send_part_id: Dict[Array, int] = {
-        ary: nparts
-        for ary in mso_arrays}
+    mso_ary_to_first_dep_send_part_id: dict[Array, int] = \
+        dict.fromkeys(mso_arrays, nparts)
     for send_id, send_node in lsrdg.local_send_id_to_send_node.items():
         for ary in mso_array_dep_mapper(send_node.data):
             mso_ary_to_first_dep_send_part_id[ary] = min(
@@ -914,7 +917,7 @@ def find_distributed_partition(
     if __debug__:
         recvd_array_dep_mapper = SubsetDependencyMapper(frozenset(received_arrays))
 
-        mso_ary_to_last_dep_recv_part_id: Dict[Array, int] = {
+        mso_ary_to_last_dep_recv_part_id: dict[Array, int] = {
                 ary: max(
                         (comm_id_to_part_id[
                             _recv_to_comm_id(local_rank,
@@ -935,7 +938,7 @@ def find_distributed_partition(
     # Evaluation of materialized arrays is pushed as late as possible,
     # in order to minimize the amount of computation that might prevent
     # data from being sent.
-    mso_ary_to_part_id: Dict[Array, int] = {
+    mso_ary_to_part_id: dict[Array, int] = {
             ary: min(
                 mso_ary_to_first_dep_send_part_id[ary],
                 nparts-1)
@@ -943,7 +946,7 @@ def find_distributed_partition(
 
     # }}}
 
-    recvd_ary_to_part_id: Dict[Array, int] = {
+    recvd_ary_to_part_id: dict[Array, int] = {
             recvd_ary: (
                 comm_id_to_part_id[
                     _recv_to_comm_id(local_rank, recvd_ary)])
@@ -971,6 +974,7 @@ def find_distributed_partition(
     def get_materialized_predecessors(ary: Array) -> _OrderedSet[Array]:
         materialized_preds: _OrderedSet[Array] = _OrderedSet()
         for pred in direct_preds_getter(ary):
+            assert isinstance(pred, Array)
             if pred in materialized_arrays:
                 materialized_preds.add(pred)
             else:
@@ -990,7 +994,7 @@ def find_distributed_partition(
     # Don't be tempted to put outputs in _array_names; the mapping from output array
     # to name may not be unique
     _array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
-    _array_names: Dict[Array, str] = {}
+    _array_names: dict[Array, str] = {}
 
     def gen_array_name(ary: Array) -> str:
         name = _array_names.get(ary)
@@ -1001,24 +1005,24 @@ def find_distributed_partition(
             _array_names[ary] = name
             return name
 
-    recvd_ary_to_name: Dict[Array, str] = {
+    recvd_ary_to_name: dict[Array, str] = {
         ary: gen_array_name(ary)
         for ary in received_arrays}
 
-    name_to_output_per_part: List[Dict[str, Array]] = [{} for _pid in range(nparts)]
+    name_to_output_per_part: list[dict[str, Array]] = [{} for _pid in range(nparts)]
 
     for name, ary in outputs._data.items():
         pid = stored_ary_to_part_id[ary]
         name_to_output_per_part[pid][name] = ary
 
-    sent_ary_to_name: Dict[Array, str] = {}
+    sent_ary_to_name: dict[Array, str] = {}
     for ary in sent_arrays:
         pid = stored_ary_to_part_id[ary]
         name = gen_array_name(ary)
         sent_ary_to_name[ary] = name
         name_to_output_per_part[pid][name] = ary
 
-    sptpo_ary_to_name: Dict[Array, str] = {}
+    sptpo_ary_to_name: dict[Array, str] = {}
     for ary in stored_arrays_promoted_to_part_outputs:
         pid = stored_ary_to_part_id[ary]
         name = gen_array_name(ary)

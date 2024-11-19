@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,18 +25,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Any, cast
+
+import attrs
 import numpy as np
+from immutabledict import immutabledict
 
 from pytools import memoize_method
 
-from typing import Any, Dict, Tuple, cast
-from pytato.transform import Mapper
-from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
-                          IndexLambda, ReductionDescriptor)
-from pytato.function import FunctionDefinition, Call
+from pytato.array import (
+    Array,
+    Axis,
+    DataWrapper,
+    DictOfNamedArrays,
+    IndexLambda,
+    ReductionDescriptor,
+)
+from pytato.function import Call, FunctionDefinition
 from pytato.loopy import LoopyCall
-from immutabledict import immutabledict
-import attrs
+from pytato.transform import Mapper
 
 
 __doc__ = """
@@ -47,7 +55,7 @@ __doc__ = """
 
 # {{{ Reprifier
 
-class Reprifier(Mapper):
+class Reprifier(Mapper[str, [int]]):
     """
     Stringifies :mod:`pytato`-types to closely resemble CPython's implementation
     of :func:`repr` for its builtin datatypes.
@@ -60,7 +68,7 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
-        self._cache: Dict[Tuple[int, int], str] = {}
+        self._cache: dict[tuple[int, int], str] = {}
 
     def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
@@ -69,7 +77,7 @@ class Reprifier(Mapper):
         except KeyError:
             result = super().rec(expr, depth)
             self._cache[cache_key] = result
-            return result  # type: ignore[no-any-return]
+            return result
 
     def __call__(self, expr: Any, depth: int = 0) -> str:
         return self.rec(expr, depth)
@@ -77,14 +85,14 @@ class Reprifier(Mapper):
     def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (dict, immutabledict)):
+        elif isinstance(expr, dict | immutabledict):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val
                                 in sorted(expr.items(),
                                           key=lambda k_x_v: cast(str, k_x_v[0])))
                     + "}")
-        elif isinstance(expr, (frozenset, set)):
+        elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
             return f"'{expr.name}'"
@@ -150,7 +158,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "data":
-                return object.__repr__(expr.data)
+                return repr(expr.data)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
@@ -199,7 +207,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "translation_unit":
-                return object.__repr__(expr.translation_unit)
+                return repr(expr.translation_unit)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 

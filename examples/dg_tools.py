@@ -1,7 +1,9 @@
-import numpy as np
-import numpy.polynomial.legendre as leg
-import numpy.linalg as la
 import contextlib
+
+import numpy as np
+import numpy.linalg as la
+import numpy.polynomial.legendre as leg
+
 
 __doc__ = """
 Notation convention for operator shapes
@@ -36,7 +38,7 @@ def ortholegval(x, c):
     return leg.legval(x, c * factors)
 
 
-class DGDiscr1D(object):
+class DGDiscr1D:
     """A one-dimensional Discontinuous Galerkin discretization."""
 
     def __init__(self, left, right, nelements, nnodes):
@@ -176,7 +178,8 @@ class DGDiscr1D(object):
         h = (self.right - self.left) / self.nelements
         return np.array(list(zip(
             np.linspace(self.left, self.right, self.nelements, endpoint=False),
-            np.linspace(h + self.left, self.right, self.nelements))))
+            np.linspace(h + self.left, self.right, self.nelements),
+            strict=True)))
 
     @property
     def dg_ops(self):
@@ -260,7 +263,7 @@ def elementwise(mat, vec):
     return np.einsum("ij,kj->ki", mat, vec)
 
 
-class AbstractDGOps1D(object):
+class AbstractDGOps1D:
     def __init__(self, discr):
         self.discr = discr
 

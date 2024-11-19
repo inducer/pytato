@@ -1,4 +1,24 @@
+"""
+.. class:: ScalarExpression
+
+    Like ``ArithmeticExpressionT`` in :mod:`pymbolic`, but also allows
+    Boolean values.
+
+.. autofunction:: parse
+.. autofunction:: get_dependencies
+.. autofunction:: substitute
+
+.. class:: ExpressionT
+
+    See ``ExpressionT`` in :mod:`pymbolic`.
+"""
+
+# FIXME: Unclear why the direct links to pymbolic don't work
+
 from __future__ import annotations
+
+from typing_extensions import TypeIs
+
 
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
@@ -24,72 +44,71 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import (
-        Any, Union, Mapping, FrozenSet, Set, Tuple, Optional, TYPE_CHECKING,
-        Iterable)
-
-from pymbolic.mapper import (WalkMapper as WalkMapperBase, IdentityMapper as
-        IdentityMapperBase)
-from pymbolic.mapper.substitutor import (SubstitutionMapper as
-        SubstitutionMapperBase)
-from pymbolic.mapper.dependency import (DependencyMapper as
-        DependencyMapperBase)
-from pymbolic.mapper.evaluator import (EvaluationMapper as
-        EvaluationMapperBase)
-from pymbolic.mapper.distributor import (DistributeMapper as
-        DistributeMapperBase)
-from pymbolic.mapper.stringifier import (StringifyMapper as
-        StringifyMapperBase)
-from pymbolic.mapper import CombineMapper as CombineMapperBase
-from pymbolic.mapper.collector import TermCollector as TermCollectorBase
-from immutabledict import immutabledict
-import pymbolic.primitives as prim
-import numpy as np
 import re
+from collections.abc import Iterable, Mapping, Set
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Never,
+    cast,
+)
+
+import numpy as np
+from immutabledict import immutabledict
+
+import pymbolic.primitives as prim
+from pymbolic import ArithmeticExpressionT, BoolT, ExpressionT, expr_dataclass
+from pymbolic.mapper import (
+    CombineMapper as CombineMapperBase,
+    IdentityMapper as IdentityMapperBase,
+    P,
+    ResultT,
+    WalkMapper as WalkMapperBase,
+)
+from pymbolic.mapper.collector import TermCollector as TermCollectorBase
+from pymbolic.mapper.dependency import (
+    DependenciesT,
+    DependencyMapper as DependencyMapperBase,
+)
+from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
+from pymbolic.mapper.evaluator import EvaluationMapper as EvaluationMapperBase
+from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
+from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
+from pymbolic.typing import IntegerT
+
 
 if TYPE_CHECKING:
     from pytato.reductions import ReductionOperation
 
 
-__doc__ = """
-.. currentmodule:: pytato.scalar_expr
-
-.. data:: ScalarExpression
-
-    A :class:`type` for scalar-valued symbolic expressions. Expressions are
-    composable and manipulable via :mod:`pymbolic`.
-
-    Concretely, this is an alias for
-    ``Union[Number, np.bool_, bool, pymbolic.primitives.Expression]``.
-
-.. autofunction:: parse
-.. autofunction:: get_dependencies
-.. autofunction:: substitute
-
-"""
-
 # {{{ scalar expressions
 
-IntegralT = Union[int, np.integer[Any]]
-BoolT = Union[bool, np.bool_]
 INT_CLASSES = (int, np.integer)
-IntegralScalarExpression = Union[IntegralT, prim.Expression]
-ScalarType = Union[np.number[Any], int, np.bool_, bool, float, complex]
-
-ScalarExpression = Union[ScalarType, prim.Expression]
+PYTHON_SCALAR_CLASSES = (int, float, complex, bool)
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
+
+IntegralScalarExpression = IntegerT | prim.Expression
+ScalarExpression = ArithmeticExpressionT | BoolT
+
+
+def is_integral_scalar_expression(expr: object) -> TypeIs[IntegralScalarExpression]:
+    return isinstance(expr, int | np.integer) or isinstance(expr, prim.Expression)
 
 
 def parse(s: str) -> ScalarExpression:
     from pymbolic.parser import Parser
-    return Parser()(s)
+    res = Parser()(s)
+    if not prim.is_arithmetic_expression(res):
+        raise ValueError(f"'{s}' is not an arithmetic expression")
+
+    return res
 
 # }}}
 
 
 # {{{ mapper classes
 
-class WalkMapper(WalkMapperBase):
+class WalkMapper(WalkMapperBase[[]]):
     def map_reduce(self, expr: Reduce) -> None:
         if not self.visit(expr):
             return
@@ -99,20 +118,45 @@ class WalkMapper(WalkMapperBase):
         self.post_visit(expr)
 
 
-class CombineMapper(CombineMapperBase):
-    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> Any:
+class CombineMapper(CombineMapperBase[ResultT, P]):
+    def map_type_cast(self,
+                      expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.rec(expr.inner_expr, *args, **kwargs)
+
+    def map_reduce(self, expr: Reduce, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         return self.combine([*(self.rec(bnd, *args, **kwargs)
                                for _, bnd in sorted(expr.bounds.items())),
                              self.rec(expr.inner_expr, *args, **kwargs)])
 
 
-class IdentityMapper(IdentityMapperBase):
-    pass
+class IdentityMapper(IdentityMapperBase[P]):
+    def map_reduce(self,
+                   expr: Reduce,
+                   *args: P.args, **kwargs: P.kwargs) -> ExpressionT:
+        return Reduce(
+                      cast(ArithmeticExpressionT,
+                           self.rec(expr.inner_expr, *args, **kwargs)),
+                      expr.op,
+                      immutabledict({
+                                        name: (
+                                            self.rec(lower, *args, **kwargs),
+                                            self.rec(upper, *args, **kwargs)
+                                        )
+                                        for name, (lower, upper) in expr.bounds.items()
+                                    }))
+
+    def map_type_cast(self,
+                expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> ExpressionT:
+        return TypeCast(expr.dtype,
+                        cast(ArithmeticExpressionT,
+                             self.rec(expr.inner_expr, *args, **kwargs)))
 
 
 class SubstitutionMapper(SubstitutionMapperBase):
     def map_reduce(self, expr: Reduce) -> ScalarExpression:
-        return Reduce(self.rec(expr.inner_expr),
+        inner_expr = self.rec(expr.inner_expr)
+        assert not isinstance(inner_expr, tuple)
+        return Reduce(inner_expr,
                       op=expr.op,
                       bounds=immutabledict(
                           {name: self.rec(bound)
@@ -122,14 +166,14 @@ class SubstitutionMapper(SubstitutionMapperBase):
 IDX_LAMBDA_RE = re.compile("_r?(0|([1-9][0-9]*))")
 
 
-class DependencyMapper(DependencyMapperBase):
+class DependencyMapper(DependencyMapperBase[P]):
     def __init__(self, *,
                  include_idx_lambda_indices: bool = True,
                  include_subscripts: bool = True,
                  include_lookups: bool = True,
                  include_calls: bool = True,
                  include_cses: bool = False,
-                 composite_leaves: Optional[bool] = None) -> None:
+                 composite_leaves: bool | None = None) -> None:
         super().__init__(include_subscripts=include_subscripts,
                          include_lookups=include_lookups,
                          include_calls=include_calls,
@@ -137,85 +181,101 @@ class DependencyMapper(DependencyMapperBase):
                          composite_leaves=composite_leaves)
         self.include_idx_lambda_indices = include_idx_lambda_indices
 
-    def map_variable(self, expr: prim.Variable) -> Set[prim.Variable]:
+    def map_variable(self,
+                expr: prim.Variable, *args: P.args, **kwargs: P.kwargs
+            ) -> DependenciesT:
         if ((not self.include_idx_lambda_indices)
                 and IDX_LAMBDA_RE.fullmatch(str(expr))):
             return set()
         else:
-            return super().map_variable(expr)  # type: ignore
+            return super().map_variable(expr, *args, **kwargs)
 
     def map_reduce(self, expr: Reduce,
-            *args: Any, **kwargs: Any) -> Set[prim.Variable]:
-        return self.combine([  # type: ignore
-            self.rec(expr.inner_expr),
-            set().union(*(self.rec((lb, ub)) for (lb, ub) in expr.bounds.values()))])
+            *args: P.args, **kwargs: P.kwargs) -> DependenciesT:
+        return self.combine([
+            self.rec(expr.inner_expr, *args, **kwargs),
+            set().union(*(self.rec((lb, ub), *args, **kwargs)
+                        for (lb, ub) in expr.bounds.values()))])
 
 
-class EvaluationMapper(EvaluationMapperBase):
+class EvaluationMapper(EvaluationMapperBase[ResultT]):
 
-    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+    def map_reduce(self, expr: Reduce) -> Never:
         # TODO: not trivial to evaluate symbolic reduction nodes
         raise NotImplementedError()
 
 
 class DistributeMapper(DistributeMapperBase):
 
-    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+    def map_reduce(self, expr: Reduce) -> None:
         # TODO: not trivial to distribute symbolic reduction nodes
         raise NotImplementedError()
 
 
 class TermCollector(TermCollectorBase):
 
-    def map_reduce(self, expr: Reduce, *args: Any, **kwargs: Any) -> None:
+    def map_reduce(self, expr: Reduce) -> None:
         raise NotImplementedError()
 
 
-class StringifyMapper(StringifyMapperBase):
-    def map_reduce(self, expr: Any, enclosing_prec: Any, *args: Any) -> str:
-        from pymbolic.mapper.stringifier import (
-                PREC_COMPARISON as PC,
-                PREC_NONE as PN)
+class StringifyMapper(StringifyMapperBase[P]):
+    def map_reduce(self,
+                   expr: Any, enclosing_prec: int, *args: P.args, **kwargs: P.kwargs
+               ) -> str:
+        from pymbolic.mapper.stringifier import PREC_COMPARISON, PREC_NONE
         bounds_expr = " and ".join(
-                f"{self.rec(lb, PC)}<={name}<{self.rec(ub, PC)}"
+                f"{self.rec(lb, PREC_COMPARISON, *args, **kwargs)}"
+                f"<={name}<{self.rec(ub, PREC_COMPARISON, *args, **kwargs)}"
                 for name, (lb, ub) in expr.bounds.items())
         bounds_expr = "{" + bounds_expr + "}"
-        return (f"{expr.op}({bounds_expr}, {self.rec(expr.inner_expr, PN)})")
+        return (f"{expr.op}({bounds_expr}, "
+                f"{self.rec(expr.inner_expr, PREC_NONE, *args, **kwargs)})")
+
+    def map_type_cast(self,
+                      expr: TypeCast, enclosing_prec: int,
+                      *args: P.args, **kwargs: P.kwargs) -> str:
+        from pymbolic.mapper.stringifier import PREC_NONE
+        inner_str = self.rec(expr.inner_expr, PREC_NONE, *args, **kwargs)
+        return f"cast({expr.dtype}, {inner_str})"
 
 # }}}
 
 
 # {{{ mapper frontends
 
-def get_dependencies(expression: Any,
-        include_idx_lambda_indices: bool = True) -> FrozenSet[str]:
+def get_dependencies(expression: ExpressionT,
+        include_idx_lambda_indices: bool = True) -> frozenset[str]:
     """Return the set of variable names in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
     """
-    mapper = DependencyMapper(
+    mapper = DependencyMapper[[]](
             composite_leaves=False,
             include_idx_lambda_indices=include_idx_lambda_indices)
-    return frozenset(dep.name for dep in mapper(expression))
+    return frozenset(dep.name
+                     for dep in mapper(expression)
+                     if isinstance(dep, prim.Variable))
 
 
-def substitute(expression: Any,
-        variable_assigments: Optional[Mapping[str, Any]]) -> Any:
+def substitute(expression: ExpressionT,
+        variable_assignments: Mapping[str, Any] | None) -> ExpressionT:
     """Perform variable substitution in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
         (e.g., a tuple of scalar expressions)
-    :param variable_assigments: A mapping from variable names to substitutions
+    :param variable_assignments: A mapping from variable names to substitutions
     """
-    if variable_assigments is None:
-        variable_assigments = {}
+    if variable_assignments is None:
+        variable_assignments = {}
 
     from pymbolic.mapper.substitutor import make_subst_func
-    return SubstitutionMapper(make_subst_func(variable_assigments))(expression)
+    return SubstitutionMapper(make_subst_func(variable_assignments))(expression)
 
 
-def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> Any:
+def evaluate(
+            expression: ExpressionT, context: Mapping[str, ResultT] | None = None
+        ) -> ResultT:
     """
     Evaluates *expression* by substituting the variable values as provided in
     *context*.
@@ -225,8 +285,8 @@ def evaluate(expression: Any, context: Optional[Mapping[str, Any]] = None) -> An
     return EvaluationMapper(context)(expression)
 
 
-def distribute(expr: Any, parameters: FrozenSet[Any] = frozenset(),
-               commutative: bool = True) -> Any:
+def distribute(expr: ExpressionT, parameters: frozenset[Any] = frozenset(),
+               commutative: bool = True) -> ExpressionT:
     if commutative:
         return DistributeMapper(TermCollector(parameters))(expr)
     else:
@@ -238,70 +298,68 @@ def distribute(expr: Any, parameters: FrozenSet[Any] = frozenset(),
 # {{{ custom scalar expression nodes
 
 class ExpressionBase(prim.Expression):
-    def make_stringifier(self, originating_stringifier: Any = None) -> str:
+    def make_stringifier(self,
+                 originating_stringifier: StringifyMapperBase[[]] | None = None
+             ) -> StringifyMapperBase[[]]:
         return StringifyMapper()
 
 
+@expr_dataclass()
 class Reduce(ExpressionBase):
     """
-    .. attribute:: inner_expr
-
-        A :class:`ScalarExpression` to be reduced over.
-
-    .. attribute:: op
-
-        A :class:`pytato.reductions.ReductionOperation`.
-
-    .. attribute:: bounds
-
-        A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
-        identifying half-open bounds intervals.  Must be hashable.
+    .. autoattribute:: inner_expr
+    .. autoattribute:: op
+    .. autoattribute:: bounds
     """
+
     inner_expr: ScalarExpression
+    """The expression to be reduced over."""
+
     op: ReductionOperation
-    bounds: Mapping[str, Tuple[ScalarExpression, ScalarExpression]]
 
-    def __init__(self, inner_expr: ScalarExpression,
-            op: ReductionOperation, bounds: Any) -> None:
-        self.inner_expr = inner_expr
-        self.op = op
-        self.bounds = bounds
+    bounds: Mapping[str, tuple[ArithmeticExpressionT, ArithmeticExpressionT]]
+    """
+    A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
+    identifying half-open bounds intervals.  Must be hashable.
+    """
 
-    def __hash__(self) -> int:
-        return hash((self.inner_expr,
-                self.op,
-                tuple(self.bounds.keys()),
-                tuple(self.bounds.values())))
+    if __debug__:
+        def __post_init__(self) -> None:
+            hash(self.bounds)
 
-    def __getinitargs__(self) -> Tuple[ScalarExpression, ReductionOperation, Any]:
-        return (self.inner_expr, self.op, self.bounds)
 
-    init_arg_names = ("inner_expr", "op", "bounds")
-    mapper_method = "map_reduce"
+@expr_dataclass()
+class TypeCast(ExpressionBase):
+    """
+    .. autoattribute:: dtype
+    .. autoattribute:: dtype
+    """
+    dtype: np.dtype[Any]
+    inner_expr: ScalarExpression
 
 # }}}
 
 
-class InductionVariableCollector(CombineMapper):
-    def combine(self, values: Iterable[FrozenSet[str]]) -> FrozenSet[str]:
+class InductionVariableCollector(CombineMapper[Set[str], []]):
+    def combine(self, values: Iterable[Set[str]]) -> frozenset[str]:
         from functools import reduce
         return reduce(frozenset.union, values, frozenset())
 
-    def map_reduce(self, expr: Reduce) -> FrozenSet[str]:
+    def map_reduce(self, expr: Reduce) -> Set[str]:
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
-    def map_algebraic_leaf(self, expr: prim.Expression) -> FrozenSet[str]:
+    def map_algebraic_leaf(self, expr: prim.Expression) -> frozenset[str]:
         return frozenset()
 
-    def map_constant(self, expr: Any) -> FrozenSet[str]:
+    def map_constant(self, expr: object) -> Set[str]:
         return frozenset()
 
 
-def get_reduction_induction_variables(expr: prim.Expression) -> FrozenSet[str]:
+def get_reduction_induction_variables(expr: ExpressionT) -> Set[str]:
     """
     Returns the induction variables for the reduction nodes.
     """
-    return InductionVariableCollector()(expr)  # type: ignore[no-any-return]
+    return InductionVariableCollector()(expr)
 
 # vim: foldmethod=marker

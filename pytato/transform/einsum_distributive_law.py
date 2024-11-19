@@ -8,6 +8,8 @@
 
 .. autofunction:: apply_distributive_property_to_einsums
 """
+from __future__ import annotations
+
 
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
@@ -32,19 +34,37 @@ THE SOFTWARE.
 """
 
 
-from typing import Callable, Dict, Tuple, Optional, FrozenSet, Mapping
+from collections.abc import Callable, Mapping
+from typing import cast
+
 import attrs
-from pytato.transform import ArrayOrNames, Mapper, MappedT
-from pytato.array import (Array, AxesT, Einsum, IndexLambda,
-                          EinsumReductionAxis,
-                          EinsumAxisDescriptor, ReductionDescriptor,
-                          Stack, Concatenate, Roll, AxisPermutation,
-                          IndexBase, Reshape, InputArgumentBase)
-from pytato.raising import HighLevelOp
-from immutabledict import immutabledict
-from pytools.tag import Tag
-from pytato.utils import are_shapes_equal
 import numpy as np
+from immutabledict import immutabledict
+
+from pytools.tag import Tag
+
+from pytato.array import (
+    Array,
+    AxesT,
+    AxisPermutation,
+    Concatenate,
+    Einsum,
+    EinsumAxisDescriptor,
+    EinsumReductionAxis,
+    IndexBase,
+    IndexLambda,
+    InputArgumentBase,
+    ReductionDescriptor,
+    Reshape,
+    Roll,
+    Stack,
+)
+from pytato.raising import HighLevelOp
+from pytato.transform import (
+    MappedT,
+    TransformMapperWithExtraArgs,
+)
+from pytato.utils import are_shapes_equal
 
 
 class EinsumDistributiveLawDescriptor:
@@ -73,13 +93,12 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
 
 @attrs.frozen
 class _EinsumDistributiveLawMapperContext:
-    access_descriptors: Tuple[Tuple[EinsumAxisDescriptor, ...], ...]
+    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
     surrounding_args: Mapping[int, Array]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
-    index_to_access_descr: Mapping[str, EinsumAxisDescriptor]
     axes: AxesT = attrs.field(kw_only=True)
-    tags: FrozenSet[Tag] = attrs.field(kw_only=True)
+    tags: frozenset[Tag] = attrs.field(kw_only=True)
 
     def __attrs_post_init__(self) -> None:
         # {{{ check that exactly one of the args is missing
@@ -93,7 +112,7 @@ class _EinsumDistributiveLawMapperContext:
 
 
 def _wrap_einsum_from_ctx(expr: Array,
-                          ctx: Optional[_EinsumDistributiveLawMapperContext]
+                          ctx: _EinsumDistributiveLawMapperContext | None
                           ) -> Array:
     if ctx is None:
         return expr
@@ -106,7 +125,6 @@ def _wrap_einsum_from_ctx(expr: Array,
             ctx.access_descriptors,
             new_args,
             ctx.redn_axis_to_redn_descr,
-            ctx.index_to_access_descr,
             tags=ctx.tags,
             axes=ctx.axes
         )
@@ -124,7 +142,9 @@ def _can_hlo_be_distributed(hlo: HighLevelOp) -> bool:
                                           hlo.x2.shape))))
 
 
-class EinsumDistributiveLawMapper(Mapper):
+class EinsumDistributiveLawMapper(
+                TransformMapperWithExtraArgs[
+                    [_EinsumDistributiveLawMapperContext | None]]):
     """
     Primary mapper for :func:`apply_distributive_property_to_einsums`.
     """
@@ -132,45 +152,12 @@ class EinsumDistributiveLawMapper(Mapper):
                  how_to_distribute: Callable[[Array],
                                              EinsumDistributiveLawDescriptor]
                  ) -> None:
-        self.how_to_distribute = how_to_distribute
-        self._cache: Dict[Tuple[ArrayOrNames,
-                                Optional[_EinsumDistributiveLawMapperContext]],
-                          ArrayOrNames] = {}
         super().__init__()
-
-    # {{{ override __call__ / rec / get_cache_key
-
-    def get_cache_key(self,
-                      expr: ArrayOrNames,
-                      ctx: Optional[_EinsumDistributiveLawMapperContext]
-                      ) -> Tuple[ArrayOrNames,
-                                 Optional[_EinsumDistributiveLawMapperContext]]:
-        return (expr, ctx)
-
-    def rec(self,
-            expr: MappedT,
-            ctx: Optional[_EinsumDistributiveLawMapperContext]
-            ) -> MappedT:
-        key = self.get_cache_key(expr, ctx)
-        try:
-            return self._cache[key]  # type: ignore[return-value]
-        except KeyError:
-            result = super().rec(expr, ctx)
-            self._cache[key] = result
-            # type-ignore-reason: Mapper.rec has imprecise func. signature
-            return result  # type: ignore[no-any-return]
-
-    def __call__(self,
-                 expr: MappedT,
-                 ctx: Optional[_EinsumDistributiveLawMapperContext],
-                 ) -> MappedT:
-        return self.rec(expr, ctx)
-
-    # }}}
+        self.how_to_distribute = how_to_distribute
 
     def _map_input_base(self,
                         expr: InputArgumentBase,
-                        ctx: Optional[_EinsumDistributiveLawMapperContext],
+                        ctx: _EinsumDistributiveLawMapperContext | None,
                         ) -> Array:
         return _wrap_einsum_from_ctx(expr, ctx)
 
@@ -180,10 +167,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_index_lambda(self,
                          expr: IndexLambda,
-                         ctx: Optional[_EinsumDistributiveLawMapperContext],
+                         ctx: _EinsumDistributiveLawMapperContext | None,
                          ) -> Array:
-        from pytato.raising import (index_lambda_to_high_level_op,
-                                    BinaryOp, BinaryOpType)
+        from pytato.raising import BinaryOp, BinaryOpType, index_lambda_to_high_level_op
 
         hlo = index_lambda_to_high_level_op(expr)
 
@@ -196,30 +182,30 @@ class EinsumDistributiveLawMapper(Mapper):
                         and isinstance(hlo.x2, Array)
                         and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
                 # https://github.com/python/mypy/issues/16499
-                return self.rec(hlo.x1, ctx) + self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
+                return self.rec_ary(hlo.x1, ctx) + self.rec_ary(hlo.x2, ctx)  # type: ignore[no-any-return]
             elif hlo.binary_op == BinaryOpType.SUB:
                 assert (isinstance(hlo.x1, Array)
                         and isinstance(hlo.x2, Array)
                         and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
                 assert are_shapes_equal(hlo.x1.shape, hlo.x2.shape)
                 # https://github.com/python/mypy/issues/16499
-                return self.rec(hlo.x1, ctx) - self.rec(hlo.x2, ctx)  # type: ignore[no-any-return] # noqa: E501
+                return self.rec_ary(hlo.x1, ctx) - self.rec_ary(hlo.x2, ctx)  # type: ignore[no-any-return]
             elif hlo.binary_op == BinaryOpType.MULT:
                 if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
                     # https://github.com/python/mypy/issues/16499
-                    return self.rec(hlo.x1, ctx) * hlo.x2  # type: ignore[no-any-return]  # noqa: E501
+                    return self.rec_ary(hlo.x1, ctx) * hlo.x2  # type: ignore[no-any-return]
                 else:
                     assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
                     # https://github.com/python/mypy/issues/16499
-                    return hlo.x1 * self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
+                    return hlo.x1 * self.rec_ary(hlo.x2, ctx)  # type: ignore[no-any-return]
             elif hlo.binary_op == BinaryOpType.TRUEDIV:
                 if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
                     # https://github.com/python/mypy/issues/16499
-                    return self.rec(hlo.x1, ctx) / hlo.x2  # type: ignore[no-any-return]  # noqa: E501
+                    return self.rec_ary(hlo.x1, ctx) / hlo.x2  # type: ignore[no-any-return]
                 else:
                     assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
                     # https://github.com/python/mypy/issues/16499
-                    return hlo.x1 / self.rec(hlo.x2, ctx)  # type: ignore[no-any-return]  # noqa: E501
+                    return hlo.x1 / self.rec_ary(hlo.x2, ctx)  # type: ignore[no-any-return]
             else:
                 raise NotImplementedError(hlo)
         else:
@@ -227,7 +213,7 @@ class EinsumDistributiveLawMapper(Mapper):
                 expr=expr.expr,
                 shape=expr.shape,
                 dtype=expr.dtype,
-                bindings=immutabledict({name: self.rec(bnd, None)
+                bindings=immutabledict({name: self.rec_ary(bnd, None)
                               for name, bnd in sorted(expr.bindings.items())}),
                 var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
@@ -237,7 +223,7 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_einsum(self,
                    expr: Einsum,
-                   ctx: Optional[_EinsumDistributiveLawMapperContext],
+                   ctx: _EinsumDistributiveLawMapperContext | None,
                    ) -> Array:
         distributive_law_descr = self.how_to_distribute(expr)
 
@@ -251,18 +237,16 @@ class EinsumDistributiveLawMapper(Mapper):
                          for iarg, arg in enumerate(expr.args)
                          if iarg != distributive_law_descr.ioperand}),
                     immutabledict(expr.redn_axis_to_redn_descr),
-                    immutabledict(expr.index_to_access_descr),
                     tags=expr.tags,
                     axes=expr.axes,
                 )
-                return self.rec(expr.args[distributive_law_descr.ioperand], ctx)
+                return self.rec_ary(expr.args[distributive_law_descr.ioperand], ctx)
         else:
             assert isinstance(distributive_law_descr, DoNotDistribute)
             rec_expr = Einsum(
                 expr.access_descriptors,
-                tuple(self.rec(arg, None) for arg in expr.args),
+                tuple(self.rec_ary(arg, None) for arg in expr.args),
                 expr.redn_axis_to_redn_descr,
-                index_to_access_descr=expr.index_to_access_descr,
                 tags=expr.tags,
                 axes=expr.axes
             )
@@ -271,8 +255,8 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_stack(self,
                   expr: Stack,
-                  ctx: Optional[_EinsumDistributiveLawMapperContext]) -> Array:
-        rec_expr = Stack(tuple(self.rec(ary, None)
+                  ctx: _EinsumDistributiveLawMapperContext | None) -> Array:
+        rec_expr = Stack(tuple(self.rec_ary(ary, None)
                                for ary in expr.arrays),
                          expr.axis,
                          tags=expr.tags,
@@ -281,9 +265,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_concatenate(self,
                         expr: Concatenate,
-                        ctx: Optional[_EinsumDistributiveLawMapperContext]
+                        ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = Concatenate(tuple(self.rec(ary, None)
+        rec_expr = Concatenate(tuple(self.rec_ary(ary, None)
                                      for ary in expr.arrays),
                                expr.axis,
                                tags=expr.tags,
@@ -292,9 +276,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_roll(self,
                  expr: Roll,
-                 ctx: Optional[_EinsumDistributiveLawMapperContext]
+                 ctx: _EinsumDistributiveLawMapperContext | None
                  ) -> Array:
-        rec_expr = Roll(self.rec(expr.array, None),
+        rec_expr = Roll(self.rec_ary(expr.array, None),
                         expr.shift,
                         expr.axis,
                         tags=expr.tags,
@@ -303,9 +287,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_axis_permutation(self,
                              expr: AxisPermutation,
-                             ctx: Optional[_EinsumDistributiveLawMapperContext]
+                             ctx: _EinsumDistributiveLawMapperContext | None
                              ) -> Array:
-        rec_expr = AxisPermutation(self.rec(expr.array, None),
+        rec_expr = AxisPermutation(self.rec_ary(expr.array, None),
                                    expr.axis_permutation,
                                    tags=expr.tags,
                                    axes=expr.axes)
@@ -313,9 +297,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def _map_index_base(self,
                         expr: IndexBase,
-                        ctx: Optional[_EinsumDistributiveLawMapperContext]
+                        ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = type(expr)(self.rec(expr.array, None),
+        rec_expr = type(expr)(self.rec_ary(expr.array, None),
                               expr.indices,
                               tags=expr.tags,
                               axes=expr.axes)
@@ -327,9 +311,9 @@ class EinsumDistributiveLawMapper(Mapper):
 
     def map_reshape(self,
                     expr: Reshape,
-                    ctx: Optional[_EinsumDistributiveLawMapperContext]
+                    ctx: _EinsumDistributiveLawMapperContext | None
                     ) -> Array:
-        rec_expr = Reshape(self.rec(expr.array, None),
+        rec_expr = Reshape(self.rec_ary(expr.array, None),
                            expr.newshape,
                            expr.order,
                            tags=expr.tags,
@@ -374,4 +358,4 @@ def apply_distributive_property_to_einsums(
         True
     """
     mapper = EinsumDistributiveLawMapper(how_to_distribute)
-    return mapper(expr, None)
+    return cast(MappedT, mapper(expr, None))

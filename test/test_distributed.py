@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
@@ -21,17 +24,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import os
+import sys
+
+import numpy as np
 import pytest
-from pytools.graph import CycleError
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pytest  # noqa
+
 import pyopencl as cl
 import pyopencl.array as cla
-import numpy as np
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+from pytools.graph import CycleError
+
 import pytato as pt
-import sys
-import os
 
 
 # {{{ mpi test infrastructure
@@ -42,9 +48,8 @@ def run_test_with_mpi(num_ranks, f, *args, extra_env_vars=None):
     if extra_env_vars is None:
         extra_env_vars = {}
 
-    from pickle import dumps
     from base64 import b64encode
-
+    from pickle import dumps
     from subprocess import check_call
 
     env_vars = {
@@ -65,8 +70,8 @@ def run_test_with_mpi(num_ranks, f, *args, extra_env_vars=None):
 
 
 def run_test_with_mpi_inner():
-    from pickle import loads
     from base64 import b64decode
+    from pickle import loads
     f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
 
     f(cl.create_some_context, *args)
@@ -210,8 +215,9 @@ def test_distributed_scheduling_constant_look_back_tree():
     to confirm that the scheduling algorithm utilizing the minimum number of batch
     levels possible.
     """
-    from pytato.distributed.partition import _schedule_task_batches_counted
     import math
+
+    from pytato.distributed.partition import _schedule_task_batches_counted
     sizes = np.logspace(0, 6, 10, dtype=int)
     count_list = np.zeros(len(sizes))
     branching_factor = 5
@@ -286,7 +292,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
             elif comm_tag % 5 == 3:
                 tag = (_RandomDAGTag, comm_tag)
             else:
-                tag = (comm_tag, _RandomDAGTag)  # noqa: B023
+                tag = (comm_tag, _RandomDAGTag)
 
             inner = make_random_dag(rdagc)
             return pt.staple_distributed_send(
@@ -348,8 +354,8 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 # {{{ test DAG with no comm nodes
 
 def _test_dag_with_no_comm_nodes_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -385,8 +391,8 @@ def test_dag_with_no_comm_nodes():
 # {{{ test DAG with duplicated output arrays
 
 def _test_dag_with_duplicated_output_arrays_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -421,8 +427,8 @@ def test_dag_with_duplicated_output_arrays():
 # {{{ test DAG with a receive as an output
 
 def _test_dag_with_recv_as_output_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -468,8 +474,8 @@ def test_dag_with_recv_as_output():
 # {{{ test DAG with a materialized array promoted to a part output
 
 def _test_dag_with_materialized_array_promoted_to_part_output_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -536,8 +542,8 @@ def test_dag_with_materialized_array_promoted_to_part_output():
 # {{{ test DAG with multiple send nodes per sent array
 
 def _test_dag_with_multiple_send_nodes_per_sent_array_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -589,8 +595,8 @@ def test_dag_with_multiple_send_nodes_per_sent_array():
 # {{{ test DAG with periodic communication
 
 def _test_dag_with_periodic_communication_inner(ctx_factory):
-    from numpy.random import default_rng
     from mpi4py import MPI  # pylint: disable=import-error
+    from numpy.random import default_rng
     comm = MPI.COMM_WORLD
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -674,6 +680,7 @@ def _gather_random_dist_partitions(ctx_factory):
 def test_deterministic_partitioning(seed):
     import os
     from pickle import load
+
     from pytools import is_single_valued
 
     partitions_across_seeds = []
@@ -760,8 +767,12 @@ def test_verify_distributed_partition():
 def _do_verify_distributed_partition(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
-    from pytato.distributed.verify import (DuplicateSendError,
-                DuplicateRecvError, MissingSendError, MissingRecvError)
+    from pytato.distributed.verify import (
+        DuplicateRecvError,
+        DuplicateSendError,
+        MissingRecvError,
+        MissingSendError,
+    )
 
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -865,8 +876,7 @@ class FooTag2:
 def test_number_symbolic_tags_bare_classes(ctx_factory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
-    from pytato.distributed.nodes import (staple_distributed_send,
-                make_distributed_recv)
+    from pytato.distributed.nodes import make_distributed_recv, staple_distributed_send
 
     rank = 0
     size = 2
@@ -889,7 +899,7 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
     outputs = pt.make_dict_of_named_arrays({"out": res})
     partition = pt.find_distributed_partition(comm, outputs)
 
-    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+    (_distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
 
     assert next_tag == 4244
 

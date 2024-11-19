@@ -8,6 +8,7 @@ Execution
 
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
 """
@@ -32,22 +33,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, Hashable, Tuple, Optional, TYPE_CHECKING, Mapping
-
-
-from pytato.array import make_dict_of_named_arrays
-from pytato.target import BoundProgram
-from pytato.scalar_expr import INT_CLASSES
+import logging
+from collections.abc import Hashable, Mapping
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-
-from pytato.distributed.nodes import (
-        DistributedRecv, DistributedSend)
+from pytato.array import make_dict_of_named_arrays
+from pytato.distributed.nodes import DistributedRecv, DistributedSend
 from pytato.distributed.partition import (
-        DistributedGraphPartition, DistributedGraphPart, PartId)
+    DistributedGraphPart,
+    DistributedGraphPartition,
+    PartId,
+)
+from pytato.scalar_expr import INT_CLASSES
+from pytato.target import BoundProgram
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +82,7 @@ def generate_code_for_partition(partition: DistributedGraphPartition) \
 # {{{ distributed execute
 
 def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
-                 recv: DistributedRecv) -> Tuple[Any, np.ndarray[Any, Any]]:
+                 recv: DistributedRecv) -> tuple[Any, np.ndarray[Any, Any]]:
     if not all(isinstance(dim, INT_CLASSES) for dim in recv.shape):
         raise NotImplementedError("Parametric shapes not supported yet.")
 
@@ -102,11 +104,11 @@ def _mpi_send(mpi_communicator: Any, send_node: DistributedSend,
 
 def execute_distributed_partition(
         partition: DistributedGraphPartition, prg_per_partition:
-        Dict[Hashable, BoundProgram],
+        Mapping[Hashable, BoundProgram],
         queue: Any, mpi_communicator: Any,
         *,
-        allocator: Optional[Any] = None,
-        input_args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        allocator: Any | None = None,
+        input_args: dict[str, Any] | None = None) -> dict[str, Any]:
 
     if input_args is None:
         input_args = {}
@@ -115,9 +117,9 @@ def execute_distributed_partition(
 
     if any(part.name_to_recv_node for part in partition.parts.values()):
         recv_names_tup, recv_requests_tup, recv_buffers_tup = zip(*[
-            (name,) + _post_receive(mpi_communicator, recv)
+            (name, *_post_receive(mpi_communicator, recv))
             for part in partition.parts.values()
-            for name, recv in part.name_to_recv_node.items()])
+            for name, recv in part.name_to_recv_node.items()], strict=True)
         recv_names = list(recv_names_tup)
         recv_requests = list(recv_requests_tup)
         recv_buffers = list(recv_buffers_tup)
@@ -129,7 +131,7 @@ def execute_distributed_partition(
         recv_requests = []
         recv_buffers = []
 
-    context: Dict[str, Any] = input_args.copy()
+    context: dict[str, Any] = input_args.copy()
 
     pids_to_execute = set(partition.parts)
     pids_executed = set()
@@ -145,8 +147,8 @@ def execute_distributed_partition(
 
     @memoize_on_first_arg
     def _get_partition_input_name_refcount(partition: DistributedGraphPartition) \
-            -> Dict[str, int]:
-        partition_input_names_refcount: Dict[str, int] = {}
+            -> dict[str, int]:
+        partition_input_names_refcount: dict[str, int] = {}
         for pid in set(partition.parts):
             for name in partition.parts[pid].all_input_names():
                 if name in partition_input_names_refcount:
