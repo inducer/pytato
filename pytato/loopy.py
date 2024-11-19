@@ -151,7 +151,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
         return iter(self._result_names)
 
     # type-ignore-reason: AbstractResultWithNamedArrays returns a KeysView here
-    def keys(self) -> FrozenSet[str]:  # type: ignore[override]
+    def keys(self) -> frozenset[str]:  # type: ignore[override]
         return self._result_names
 
 

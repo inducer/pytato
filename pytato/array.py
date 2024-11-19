@@ -176,7 +176,15 @@ Internal stuff that is only here because the documentation tool wants it
 import operator
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Iterable, Iterator, KeysView, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+    Sequence,
+)
 from functools import cached_property, partialmethod
 from typing import (
     TYPE_CHECKING,

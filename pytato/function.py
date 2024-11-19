@@ -57,7 +57,14 @@ THE SOFTWARE.
 
 import enum
 import re
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from collections.abc import (
+    Callable,
+    Hashable,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+)
 from functools import cached_property
 from typing import (
     Any,
@@ -65,9 +72,6 @@ from typing import (
     TypeVar,
 )
 
-from typing import (Callable, Dict, FrozenSet, Tuple, Union, TypeVar, Optional,
-                    Hashable, Sequence, ClassVar, Iterator, Iterable, Mapping,
-                    KeysView)
 import attrs
 from immutabledict import immutabledict
 
