@@ -62,7 +62,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Hashable, Mapping, Sequence, Set
+import collections
+import dataclasses
+from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -71,7 +73,6 @@ from typing import (
     cast,
 )
 
-import attrs
 from immutabledict import immutabledict
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -95,7 +96,7 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class CommunicationOpIdentifier:
     """Identifies a communication operation (consisting of a pair of
     a send and a receive).
@@ -129,7 +130,7 @@ _ValueT = TypeVar("_ValueT")
 PartId = Hashable
 
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPart:
     """For one graph part, record send/receive information for input/
     output names.
@@ -189,7 +190,7 @@ class DistributedGraphPart:
 
 # {{{ distributed graph partition
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPartition:
     """
     .. attribute:: parts
@@ -307,7 +308,7 @@ class _DistributedInputReplacer(CopyMapper):
 # }}}
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """

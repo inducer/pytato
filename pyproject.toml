@@ -32,7 +32,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "attrs",
     "bidict",
     "immutabledict",
     "loopy>=2020.2",
