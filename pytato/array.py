@@ -336,15 +336,34 @@ def _augment_array_dataclass(
             cls: type,
             generate_hash: bool,
         ) -> None:
-    from dataclasses import fields
-    attr_tuple = ", ".join(f"self.{fld.name}"
-                           for fld in fields(cls) if fld.name != "non_equality_tags")
-    if attr_tuple:
-        attr_tuple = f"({attr_tuple},)"
-    else:
-        attr_tuple = "()"
+
+    # {{{ hashing and hash caching
 
     if generate_hash:
+        from dataclasses import fields
+
+        attr_tuple = ", ".join(f"self.{fld.name}" for fld in fields(cls))
+        if attr_tuple:
+            attr_tuple = f"({attr_tuple},)"
+        else:
+            attr_tuple = "()"
+
+        fld_name_tuple = ", ".join(f"'{fld.name}'" for fld in fields(cls))
+        if fld_name_tuple:
+            fld_name_tuple = f"({fld_name_tuple},)"
+        else:
+            fld_name_tuple = "()"
+
+        # Non-equality tags are automatically excluded from equality in
+        # EqualityComparer, and are excluded here from hashing.
+        attr_tuple_hash = ", ".join(f"self.{fld.name}"
+                            for fld in fields(cls) if fld.name != "non_equality_tags")
+
+        if attr_tuple_hash:
+            attr_tuple_hash = f"({attr_tuple_hash},)"
+        else:
+            attr_tuple_hash = "()"
+
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
             f"""
@@ -354,16 +373,25 @@ def _augment_array_dataclass(
                 except AttributeError:
                     pass
 
-                h = hash(frozenset({attr_tuple}))
+                h = hash(frozenset({attr_tuple_hash}))
                 object.__setattr__(self, "_hash_value", h)
                 return h
 
             cls.__hash__ = {cls.__name__}_hash
+
+            def {cls.__name__}_getstate(self):
+                # This must not return the cached hash value.
+                return {{name: val
+                for name, val in zip({fld_name_tuple}, {attr_tuple}, strict=True)}}
+
+            cls.__getstate__ = {cls.__name__}_getstate
             """)
         exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
         exec(compile(augment_code,
                      f"<dataclass augmentation code for {cls}>", "exec"),
              exec_dict)
+
+    # }}}
 
     # {{{ assign mapper_method
 
