@@ -198,8 +198,8 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpressionT, var
-from pymbolic.typing import IntegerT, ScalarT, not_none
+from pymbolic import ArithmeticExpression, var
+from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
@@ -238,7 +238,7 @@ ArrayT = TypeVar("ArrayT", bound="Array")
 
 # {{{ shape
 
-ShapeComponent = Union[IntegerT, "Array"]
+ShapeComponent = Union[Integer, "Array"]
 ShapeType = tuple[ShapeComponent, ...]
 ConvertibleToShape = ShapeComponent | Sequence[ShapeComponent]
 
@@ -393,7 +393,7 @@ def _augment_array_dataclass(
 # {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", EllipsisType, None]
-IndexExpr = Union[IntegerT, "NormalizedSlice", "Array", None]
+IndexExpr = Union[Integer, "NormalizedSlice", "Array", None]
 PyScalarType = type[bool] | type[int] | type[float] | type[complex]
 DtypeOrPyScalarType = _dtype_any | PyScalarType
 
@@ -436,7 +436,7 @@ class NormalizedSlice:
     """
     start: ShapeComponent
     stop: ShapeComponent
-    step: IntegerT
+    step: Integer
 
 
 @dataclasses.dataclass(frozen=True)
@@ -826,7 +826,7 @@ class Array(Taggable):
         return Reprifier()(self)
 
 
-ArrayOrScalar: TypeAlias = Array | ScalarT
+ArrayOrScalar: TypeAlias = Array | Scalar
 
 # }}}
 
@@ -1706,7 +1706,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
                        for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            cast(Array | Integer, not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
@@ -1754,7 +1754,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                    for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            cast(Array | Integer, not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
@@ -2300,7 +2300,7 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: ScalarT | prim.NaN,
+def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
          dtype: Any = None, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
@@ -2321,7 +2321,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarT | prim.NaN,
     else:
         fill_value = conv_dtype.type(fill_value)
 
-    return IndexLambda(expr=cast(ArithmeticExpressionT, fill_value),
+    return IndexLambda(expr=cast(ArithmeticExpression, fill_value),
                        shape=shape, dtype=conv_dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),
