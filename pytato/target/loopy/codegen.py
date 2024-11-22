@@ -641,8 +641,8 @@ class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
 
 # {{{ inlined expression gen mapper
 
-ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
-REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
+ELWISE_INDEX_RE = re.compile(r"_(0|([1-9][0-9]*))")
+REDUCTION_INDEX_RE = re.compile(r"_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
 PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] = {
