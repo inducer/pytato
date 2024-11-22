@@ -367,6 +367,8 @@ def _augment_array_dataclass(
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
             f"""
+            import dataclasses
+
             def {cls.__name__}_hash(self):
                 try:
                     return self._hash_value
@@ -379,12 +381,8 @@ def _augment_array_dataclass(
 
             cls.__hash__ = {cls.__name__}_hash
 
-            def {cls.__name__}_getstate(self):
-                # This must not return the cached hash value.
-                return {{name: val
-                for name, val in zip({fld_name_tuple}, {attr_tuple}, strict=True)}}
-
-            cls.__getstate__ = {cls.__name__}_getstate
+            cls.__getstate__ = dataclasses._dataclass_getstate
+            cls.__setstate__ = dataclasses._dataclass_setstate
             """)
         exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
         exec(compile(augment_code,
