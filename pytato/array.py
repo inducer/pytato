@@ -342,18 +342,6 @@ def _augment_array_dataclass(
     if generate_hash:
         from dataclasses import fields
 
-        attr_tuple = ", ".join(f"self.{fld.name}" for fld in fields(cls))
-        if attr_tuple:
-            attr_tuple = f"({attr_tuple},)"
-        else:
-            attr_tuple = "()"
-
-        fld_name_tuple = ", ".join(f"'{fld.name}'" for fld in fields(cls))
-        if fld_name_tuple:
-            fld_name_tuple = f"({fld_name_tuple},)"
-        else:
-            fld_name_tuple = "()"
-
         # Non-equality tags are automatically excluded from equality in
         # EqualityComparer, and are excluded here from hashing.
         attr_tuple_hash = ", ".join(f"self.{fld.name}"
