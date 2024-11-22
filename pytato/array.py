@@ -369,6 +369,12 @@ def _augment_array_dataclass(
 
             cls.__hash__ = {cls.__name__}_hash
 
+            # By default (when slots=False), dataclasses do not have special
+            # handling for pickling, using pickle's default behavior that
+            # looks at obj.__dict__. This would also pickle the cached hash,
+            # which may change across invocations. Here, we override the
+            # pickling methods such that only fields are pickled.
+            # See also https://github.com/python/cpython/blob/5468d219df65d4fe3335e2bcc09d2f6032a32c70/Lib/dataclasses.py#L1267-L1272
             cls.__getstate__ = dataclasses._dataclass_getstate
             cls.__setstate__ = dataclasses._dataclass_setstate
             """)
