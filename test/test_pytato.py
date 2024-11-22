@@ -1379,6 +1379,24 @@ def test_numpy_type_promotion_with_pytato_arrays():
     assert _np_result_dtype(42.0, NotReallyAnArray()) == np.float64
 
 
+def test_pickling_hash():
+    # See https://github.com/inducer/pytato/pull/563 for context
+    p = pt.make_placeholder("p", (4, 4), int)
+
+    assert not hasattr(p, "_hash_value")
+
+    # Force hash creation:
+    hash(p)
+
+    assert hasattr(p, "_hash_value")
+
+    from pickle import dumps, loads
+
+    p_new = loads(dumps(p))
+
+    assert not hasattr(p_new, "_hash_value")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
