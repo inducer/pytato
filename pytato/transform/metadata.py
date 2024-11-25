@@ -86,6 +86,8 @@ if TYPE_CHECKING:
 GraphNodeT = TypeVar("GraphNodeT")
 
 
+from typing import ParamSpec
+
 import pymbolic.primitives as prim
 
 from pytato.scalar_expr import (
@@ -95,7 +97,10 @@ from pytato.scalar_expr import (
 )
 
 
-class AxesUsedMapper(ScalarMapper):
+P = ParamSpec("P")
+
+
+class AxesUsedMapper(ScalarMapper[P]):
     """
     Determine which axes are used in the scalar expressionand which ones just
     flow through the expression.
