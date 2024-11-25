@@ -10,7 +10,7 @@
 
 .. class:: Expression
 
-    See :attr:`pymbolic.typing.Expression`.
+    See :data:`pymbolic.typing.Expression`.
 """
 
 # FIXME: Unclear why the direct links to pymbolic don't work
