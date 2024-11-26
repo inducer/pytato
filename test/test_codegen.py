@@ -906,7 +906,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_einsum_with_parametrized_shapes(ctx_factory):
+def test_einsum_with_parameterized_shapes(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
