@@ -20,9 +20,9 @@ Pre-Defined Tags
 """
 
 from collections.abc import Hashable
+from dataclasses import dataclass
 from traceback import FrameSummary, StackSummary
 
-from pytools import opt_frozen_dataclass
 from pytools.tag import Tag, UniqueTag, tag_dataclass
 
 
@@ -114,7 +114,7 @@ class AssumeNonNegative(Tag):
     """
 
 
-@opt_frozen_dataclass(eq=True)
+@dataclass(frozen=True, eq=True)
 class _PytatoFrameSummary:
     """Class to store a single call frame, similar to
     :class:`traceback.FrameSummary`, but immutable."""
@@ -135,7 +135,7 @@ class _PytatoFrameSummary:
         return f"{self.filename}:{self.lineno}, in {self.name}(): {self.line}"
 
 
-@opt_frozen_dataclass(eq=True)
+@dataclass(frozen=True, eq=True)
 class _PytatoStackSummary:
     """Class to store a list of :class:`_PytatoFrameSummary` call frames,
     similar to :class:`traceback.StackSummary`, but immutable."""

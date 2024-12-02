@@ -63,6 +63,7 @@ THE SOFTWARE.
 """
 
 import collections
+import dataclasses
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
 from functools import reduce
 from typing import (
@@ -76,7 +77,7 @@ from typing import (
 from immutabledict import immutabledict
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import UniqueNameGenerator, memoize_method, opt_frozen_dataclass
+from pytools import UniqueNameGenerator, memoize_method
 from pytools.graph import CycleError
 
 from pytato.analysis import DirectPredecessorsGetter
@@ -96,7 +97,7 @@ if TYPE_CHECKING:
     import mpi4py.MPI
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class CommunicationOpIdentifier:
     """Identifies a communication operation (consisting of a pair of
     a send and a receive).
@@ -185,7 +186,7 @@ class _OrderedSet(Generic[_ValueT], collections.abc.MutableSet[_ValueT]):
 PartId = Hashable
 
 
-@opt_frozen_dataclass(slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPart:
     """For one graph part, record send/receive information for input/
     output names.
@@ -245,7 +246,7 @@ class DistributedGraphPart:
 
 # {{{ distributed graph partition
 
-@opt_frozen_dataclass(slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPartition:
     """
     .. attribute:: parts
@@ -363,7 +364,7 @@ class _DistributedInputReplacer(CopyMapper):
 # }}}
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """

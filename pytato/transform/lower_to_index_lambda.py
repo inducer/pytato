@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
@@ -35,7 +36,7 @@ from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
-from pytools import UniqueNameGenerator, opt_frozen_dataclass
+from pytools import UniqueNameGenerator
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -63,7 +64,7 @@ from pytato.transform import Mapper
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
-@opt_frozen_dataclass()
+@dataclass(frozen=True)
 class _ReshapeIndexGroup:
     old_ax_indices: tuple[ShapeComponent, ...]
     new_ax_indices: tuple[ShapeComponent, ...]

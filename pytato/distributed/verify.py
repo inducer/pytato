@@ -36,6 +36,7 @@ THE SOFTWARE.
 """
 
 
+import dataclasses
 import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
@@ -43,7 +44,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import opt_frozen_dataclass
 
 from pytato.array import (
     DictOfNamedArrays,
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 
 # {{{ data structures
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedSend:
     src_rank: int
     dest_rank: int
@@ -79,19 +79,19 @@ class _SummarizedDistributedSend:
     dtype: np.dtype[Any]
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class _DistributedPartId:
     rank: int
     part_id: PartId
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class _DistributedName:
     rank: int
     name: str
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedGraphPart:
     pid: _DistributedPartId
     needed_pids: frozenset[_DistributedPartId]

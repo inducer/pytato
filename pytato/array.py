@@ -208,7 +208,7 @@ from typing_extensions import Self
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Integer, Scalar, not_none
-from pytools import memoize_method, opt_frozen_dataclass
+from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (
@@ -314,7 +314,8 @@ def array_dataclass(hash: bool = True) -> Callable[[type[T]], type[T]]:
     def map_cls(cls: type[T]) -> type[T]:
         # Frozen dataclasses (empirically) have a ~20% speed penalty,
         # and their frozen-ness is arguably a debug feature.
-        dc_cls = opt_frozen_dataclass(init=True, eq=False, repr=False)(cls)
+        dc_cls = dataclasses.dataclass(init=True, frozen=__debug__,
+                                       eq=False, repr=False)(cls)
 
         _augment_array_dataclass(dc_cls, generate_hash=hash)
         return dc_cls
@@ -421,7 +422,7 @@ def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
         return dtype
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class NormalizedSlice:
     """
     A normalized version of :class:`slice`. "Normalized" is explained in
@@ -446,7 +447,7 @@ class NormalizedSlice:
     step: Integer
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class Axis(Taggable):
     """
     A type for recording the information about an :class:`~pytato.Array`'s
@@ -459,7 +460,7 @@ class Axis(Taggable):
         return replace(self, tags=tags)
 
 
-@opt_frozen_dataclass()
+@dataclasses.dataclass(frozen=True)
 class ReductionDescriptor(Taggable):
     """
     Records information about a reduction dimension in an
@@ -843,7 +844,7 @@ ArrayOrScalar: TypeAlias = Array | Scalar
 
 # {{{ mixins
 
-@opt_frozen_dataclass(eq=False, repr=False)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False)
 class _SuppliedAxesAndTagsMixin(Taggable):
     axes: AxesT = dataclasses.field(kw_only=True)
     tags: frozenset[Tag] = dataclasses.field(kw_only=True)
@@ -857,7 +858,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
         return dataclasses.replace(self, tags=tags)
 
 
-@opt_frozen_dataclass(eq=False, repr=False)
+@dataclasses.dataclass(frozen=True, eq=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
     """A mixin class for when an array must store its own *shape* and *dtype*,
     rather than when it can derive them easily from inputs.
@@ -919,7 +920,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
         return self.expr.dtype
 
 
-@opt_frozen_dataclass(eq=False)
+@dataclasses.dataclass(frozen=True, eq=False)
 class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
@@ -975,7 +976,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         pass
 
 
-@opt_frozen_dataclass(eq=False, init=False)
+@dataclasses.dataclass(frozen=True, eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
@@ -1131,7 +1132,7 @@ class EinsumAxisDescriptor:
     pass
 
 
-@opt_frozen_dataclass(order=True)
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumElementwiseAxis(EinsumAxisDescriptor):
     """
     Describes an elementwise access pattern of an array's axis.  In terms of the
@@ -1141,7 +1142,7 @@ class EinsumElementwiseAxis(EinsumAxisDescriptor):
     dim: int
 
 
-@opt_frozen_dataclass(order=True)
+@dataclasses.dataclass(frozen=True, order=True)
 class EinsumReductionAxis(EinsumAxisDescriptor):
     """
     Describes a reduction access pattern of an array's axis.  In terms of the

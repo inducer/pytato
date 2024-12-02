@@ -27,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import sys
 
 import numpy as np
@@ -36,7 +37,6 @@ from testlib import RandomDAGContext, make_random_dag
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from pytools import opt_frozen_dataclass
 
 import pytato as pt
 from pytato.array import _SuppliedAxesAndTagsMixin
@@ -1189,14 +1189,14 @@ def test_with_tagged_reduction():
 
 
 def test_derived_class_uses_correct_array_eq():
-    @opt_frozen_dataclass()
+    @dataclasses.dataclass(frozen=True)
     class MyNewArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
     with pytest.raises(AssertionError):
         MyNewArrayT(tags=frozenset(), axes=())
 
-    @opt_frozen_dataclass(eq=False)
+    @dataclasses.dataclass(frozen=True, eq=False)
     class MyNewAndCorrectArrayT(_SuppliedAxesAndTagsMixin, pt.Array):
         pass
 
