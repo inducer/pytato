@@ -36,6 +36,7 @@ import pymbolic.primitives as prim
 import pytools
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Expression
+from pytools import opt_frozen_dataclass
 from pytools.tag import Tag
 
 import pytato.reductions as red
@@ -178,7 +179,7 @@ class PersistentExpressionContext:
         self._depends_on = self._depends_on | other
 
 
-@dataclasses.dataclass(frozen=True)
+@opt_frozen_dataclass()
 class LocalExpressionContext:
     """
     Records context being to be conveyed from a parent expression to its
@@ -302,7 +303,7 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-@dataclasses.dataclass(frozen=True, eq=True)
+@opt_frozen_dataclass(eq=True)
 class SubstitutionRuleResult(ImplementedResult):
     """
     An array expression generated as a

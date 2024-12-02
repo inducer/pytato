@@ -41,6 +41,7 @@ from typing import cast
 import numpy as np
 from immutabledict import immutabledict
 
+from pytools import opt_frozen_dataclass
 from pytools.tag import Tag
 
 from pytato.array import (
@@ -74,7 +75,7 @@ class EinsumDistributiveLawDescriptor:
     """
 
 
-@dataclasses.dataclass(frozen=True)
+@opt_frozen_dataclass()
 class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to not apply
@@ -82,7 +83,7 @@ class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
 
 
-@dataclasses.dataclass(frozen=True)
+@opt_frozen_dataclass()
 class DoDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to apply distributive
@@ -91,7 +92,7 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
     ioperand: int
 
 
-@dataclasses.dataclass(frozen=True)
+@opt_frozen_dataclass()
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
     surrounding_args: Mapping[int, Array]

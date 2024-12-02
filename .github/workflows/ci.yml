@@ -123,5 +123,9 @@ jobs:
 
                 if [[ "$DOWNSTREAM_PROJECT" = "grudge" ]]; then
                     mpirun -n 2 python ../examples/wave/wave-op-mpi.py --lazy
+
+                    # Also test with optimizations on, to check for correct dataclass
+                    # inheritance regarding their "frozenness".
+                    mpirun -n 2 python -O ../examples/wave/wave-op-mpi.py --lazy
                 fi
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from enum import Enum, auto, unique
 from typing import Any
 
@@ -10,6 +9,7 @@ from immutabledict import immutabledict
 
 import pymbolic.primitives as p
 from pymbolic.typing import Scalar
+from pytools import opt_frozen_dataclass
 
 from pytato.array import Array, ArrayOrScalar, IndexLambda, ShapeType
 from pytato.diagnostic import UnknownIndexLambdaExpr
@@ -45,7 +45,7 @@ class HighLevelOp:
     """
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class FullOp(HighLevelOp):
     fill_value: Scalar
 
@@ -72,7 +72,7 @@ class BinaryOpType(Enum):
     NOT_EQUAL = auto()
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class BinaryOp(HighLevelOp):
     """
     Records a ``x1 binary_op x2``-type expression.
@@ -82,30 +82,30 @@ class BinaryOp(HighLevelOp):
     x2: ArrayOrScalar
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class C99CallOp(HighLevelOp):
     function: str
     args: tuple[ArrayOrScalar, ...]
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class WhereOp(HighLevelOp):
     condition: ArrayOrScalar
     then: ArrayOrScalar
     else_: ArrayOrScalar
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class BroadcastOp(HighLevelOp):
     x: Array
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class LogicalNotOp(HighLevelOp):
     x: Array
 
 
-@dataclass(frozen=True, eq=True, repr=True)
+@opt_frozen_dataclass(eq=True, repr=True)
 class ReduceOp(HighLevelOp):
     """
     .. attribute:: axes

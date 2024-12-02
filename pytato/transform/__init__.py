@@ -42,7 +42,7 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
+from pytools import memoize_method, opt_frozen_dataclass
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -1328,7 +1328,7 @@ class CachedMapAndCopyMapper(CopyMapper):
 
 # {{{ MPMS materializer
 
-@dataclasses.dataclass(frozen=True, eq=True)
+@opt_frozen_dataclass(eq=True)
 class MPMSMaterializerAccumulator:
     """This class serves as the return value of :class:`MPMSMaterializer`. It
     contains the set of materialized predecessors and the rewritten expression
