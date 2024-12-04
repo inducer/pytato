@@ -1379,6 +1379,53 @@ def test_numpy_type_promotion_with_pytato_arrays():
     assert _np_result_dtype(42.0, NotReallyAnArray()) == np.float64
 
 
+def test_pickling_hash():
+    # See https://github.com/inducer/pytato/pull/563 for context
+
+    # {{{ Placeholder
+
+    p = pt.make_placeholder("p", (4, 4), int)
+
+    assert not hasattr(p, "_hash_value")
+
+    # Force hash creation:
+    hash(p)
+
+    assert hasattr(p, "_hash_value")
+
+    from pickle import dumps, loads
+
+    p_new = loads(dumps(p))
+
+    assert not hasattr(p_new, "_hash_value")
+
+    assert p == p_new
+
+    # }}}
+
+    # {{{ DataWrapper
+
+    dw = pt.make_data_wrapper(np.zeros((4, 4), int))
+
+    assert not hasattr(dw, "_hash_value")
+
+    hash(dw)
+
+    # DataWrappers have no hash caching
+    assert not hasattr(dw, "_hash_value")
+
+    dw_new = loads(dumps(dw))
+
+    assert dw_new.shape == dw.shape
+    assert dw_new.dtype == dw.dtype
+    assert np.all(dw_new.data == dw.data)
+
+    # DataWrappers that are not the same object compare unequal
+    assert dw != dw_new
+
+    # }}}
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
