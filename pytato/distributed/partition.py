@@ -414,7 +414,8 @@ class _LocalSendRecvDepGatherer(CombineMapper[dict[CommunicationOpIdentifier, No
     def combine(
             self, *args: dict[CommunicationOpIdentifier, None]
             ) -> dict[CommunicationOpIdentifier, None]:
-        return reduce(lambda x, y: x | y, args, {})
+        import operator
+        return reduce(operator.or_, args, {})
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
