@@ -78,6 +78,7 @@ __doc__ = """
 T = TypeVar("T")
 
 FakeOrderedFrozenSet: TypeAlias = immutabledict[T, None]
+FakeOrderedSet: TypeAlias = dict[T, None]
 
 # {{{ NUserCollector
 
