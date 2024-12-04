@@ -1364,6 +1364,99 @@ def test_dot_visualizers():
     # }}}
 
 
+# {{{ Test PytatoKeyBuilder
+
+def run_test_with_new_python_invocation(f, *args, extra_env_vars=None) -> None:
+    import os
+    if extra_env_vars is None:
+        extra_env_vars = {}
+
+    from base64 import b64encode
+    from pickle import dumps
+    from subprocess import check_call
+
+    env_vars = {
+        "INVOCATION_INFO": b64encode(dumps((f, args))).decode(),
+    }
+    env_vars.update(extra_env_vars)
+
+    my_env = os.environ.copy()
+    my_env.update(env_vars)
+
+    check_call([sys.executable, __file__], env=my_env)
+
+
+def run_test_with_new_python_invocation_inner() -> None:
+    import os
+    from base64 import b64decode
+    from pickle import loads
+
+    f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
+
+    f(*args)
+
+
+def test_persistent_hashing_and_persistent_dict() -> None:
+    import shutil
+    import tempfile
+
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
+
+    from pytato.analysis import PytatoKeyBuilder
+
+    try:
+        tmpdir = tempfile.mkdtemp()
+
+        pkb = PytatoKeyBuilder()
+
+        pd = WriteOncePersistentDict("test_persistent_dict",
+                                    key_builder=pkb,
+                                    container_dir=tmpdir,
+                                    safe_sync=False)
+
+        for i in range(100):
+            rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                    axis_len=5, use_numpy=True)
+
+            dag = make_random_dag(rdagc)
+
+            # Make sure the PytatoKeyBuilder can handle 'dag'
+            pd[dag] = 42
+
+            # Make sure that the key stays the same within the same Python invocation
+            with pytest.raises(ReadOnlyEntryError):
+                pd[dag] = 42
+
+        # Make sure that the key stays the same across Python invocations
+        run_test_with_new_python_invocation(
+            _test_persistent_hashing_and_persistent_dict_stage2, tmpdir)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
+
+    from pytato.analysis import PytatoKeyBuilder
+    pkb = PytatoKeyBuilder()
+
+    pd = WriteOncePersistentDict("test_persistent_dict",
+                                 key_builder=pkb,
+                                 container_dir=tmpdir,
+                                 safe_sync=False)
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=5, use_numpy=True)
+
+        dag = make_random_dag(rdagc)
+
+        with pytest.raises(ReadOnlyEntryError):
+            pd[dag] = 42
+
+# }}}
+
+
 def test_numpy_type_promotion_with_pytato_arrays():
     class NotReallyAnArray:
         @property
@@ -1427,7 +1520,10 @@ def test_pickling_hash():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    import os
+    if "INVOCATION_INFO" in os.environ:
+        run_test_with_new_python_invocation_inner()
+    elif len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
         from pytest import main
