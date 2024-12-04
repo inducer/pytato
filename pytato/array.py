@@ -344,34 +344,64 @@ def _augment_array_dataclass(
             cls: type,
             generate_hash: bool,
         ) -> None:
-    from dataclasses import fields
-    attr_tuple = ", ".join(f"self.{fld.name}"
-                           for fld in fields(cls) if fld.name != "non_equality_tags")
-    if attr_tuple:
-        attr_tuple = f"({attr_tuple},)"
-    else:
-        attr_tuple = "()"
+
+    # {{{ hashing and hash caching
 
     if generate_hash:
+        from dataclasses import fields
+
+        # Non-equality tags are automatically excluded from equality in
+        # EqualityComparer, and are excluded here from hashing.
+        attr_tuple_hash = ", ".join(f"self.{fld.name}"
+                            for fld in fields(cls) if fld.name != "non_equality_tags")
+
+        if attr_tuple_hash:
+            attr_tuple_hash = f"({attr_tuple_hash},)"
+        else:
+            attr_tuple_hash = "()"
+
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
             f"""
+            from dataclasses import fields
+
             def {cls.__name__}_hash(self):
                 try:
                     return self._hash_value
                 except AttributeError:
                     pass
 
-                h = hash(frozenset({attr_tuple}))
+                h = hash(frozenset({attr_tuple_hash}))
                 object.__setattr__(self, "_hash_value", h)
                 return h
 
             cls.__hash__ = {cls.__name__}_hash
+
+            # By default (when slots=False), dataclasses do not have special
+            # handling for pickling, thus using pickle's default behavior that
+            # looks at obj.__dict__. This would also pickle the cached hash,
+            # which may change across invocations. Here, we override the
+            # pickling methods such that only fields are pickled.
+            # See also https://github.com/python/cpython/blob/5468d219df65d4fe3335e2bcc09d2f6032a32c70/Lib/dataclasses.py#L1267-L1272
+
+            def _dataclass_getstate(self):
+                return [getattr(self, f.name) for f in fields(self)]
+
+
+            def _dataclass_setstate(self, state):
+                for field, value in zip(fields(self), state, strict=True):
+                    # use setattr because dataclass may be frozen
+                    object.__setattr__(self, field.name, value)
+
+            cls.__getstate__ = _dataclass_getstate
+            cls.__setstate__ = _dataclass_setstate
             """)
         exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
         exec(compile(augment_code,
                      f"<dataclass augmentation code for {cls}>", "exec"),
              exec_dict)
+
+    # }}}
 
     # {{{ assign mapper_method
 

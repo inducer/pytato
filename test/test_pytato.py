@@ -1364,6 +1364,99 @@ def test_dot_visualizers():
     # }}}
 
 
+# {{{ Test PytatoKeyBuilder
+
+def run_test_with_new_python_invocation(f, *args, extra_env_vars=None) -> None:
+    import os
+    if extra_env_vars is None:
+        extra_env_vars = {}
+
+    from base64 import b64encode
+    from pickle import dumps
+    from subprocess import check_call
+
+    env_vars = {
+        "INVOCATION_INFO": b64encode(dumps((f, args))).decode(),
+    }
+    env_vars.update(extra_env_vars)
+
+    my_env = os.environ.copy()
+    my_env.update(env_vars)
+
+    check_call([sys.executable, __file__], env=my_env)
+
+
+def run_test_with_new_python_invocation_inner() -> None:
+    import os
+    from base64 import b64decode
+    from pickle import loads
+
+    f, args = loads(b64decode(os.environ["INVOCATION_INFO"].encode()))
+
+    f(*args)
+
+
+def test_persistent_hashing_and_persistent_dict() -> None:
+    import shutil
+    import tempfile
+
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
+
+    from pytato.analysis import PytatoKeyBuilder
+
+    try:
+        tmpdir = tempfile.mkdtemp()
+
+        pkb = PytatoKeyBuilder()
+
+        pd = WriteOncePersistentDict("test_persistent_dict",
+                                    key_builder=pkb,
+                                    container_dir=tmpdir,
+                                    safe_sync=False)
+
+        for i in range(100):
+            rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                    axis_len=5, use_numpy=True)
+
+            dag = make_random_dag(rdagc)
+
+            # Make sure the PytatoKeyBuilder can handle 'dag'
+            pd[dag] = 42
+
+            # Make sure that the key stays the same within the same Python invocation
+            with pytest.raises(ReadOnlyEntryError):
+                pd[dag] = 42
+
+        # Make sure that the key stays the same across Python invocations
+        run_test_with_new_python_invocation(
+            _test_persistent_hashing_and_persistent_dict_stage2, tmpdir)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def _test_persistent_hashing_and_persistent_dict_stage2(tmpdir) -> None:
+    from pytools.persistent_dict import ReadOnlyEntryError, WriteOncePersistentDict
+
+    from pytato.analysis import PytatoKeyBuilder
+    pkb = PytatoKeyBuilder()
+
+    pd = WriteOncePersistentDict("test_persistent_dict",
+                                 key_builder=pkb,
+                                 container_dir=tmpdir,
+                                 safe_sync=False)
+
+    for i in range(100):
+        rdagc = RandomDAGContext(np.random.default_rng(seed=i),
+                axis_len=5, use_numpy=True)
+
+        dag = make_random_dag(rdagc)
+
+        with pytest.raises(ReadOnlyEntryError):
+            pd[dag] = 42
+
+# }}}
+
+
 def test_numpy_type_promotion_with_pytato_arrays():
     class NotReallyAnArray:
         @property
@@ -1379,8 +1472,58 @@ def test_numpy_type_promotion_with_pytato_arrays():
     assert _np_result_dtype(42.0, NotReallyAnArray()) == np.float64
 
 
+def test_pickling_hash():
+    # See https://github.com/inducer/pytato/pull/563 for context
+
+    # {{{ Placeholder
+
+    p = pt.make_placeholder("p", (4, 4), int)
+
+    assert not hasattr(p, "_hash_value")
+
+    # Force hash creation:
+    hash(p)
+
+    assert hasattr(p, "_hash_value")
+
+    from pickle import dumps, loads
+
+    p_new = loads(dumps(p))
+
+    assert not hasattr(p_new, "_hash_value")
+
+    assert p == p_new
+
+    # }}}
+
+    # {{{ DataWrapper
+
+    dw = pt.make_data_wrapper(np.zeros((4, 4), int))
+
+    assert not hasattr(dw, "_hash_value")
+
+    hash(dw)
+
+    # DataWrappers have no hash caching
+    assert not hasattr(dw, "_hash_value")
+
+    dw_new = loads(dumps(dw))
+
+    assert dw_new.shape == dw.shape
+    assert dw_new.dtype == dw.dtype
+    assert np.all(dw_new.data == dw.data)
+
+    # DataWrappers that are not the same object compare unequal
+    assert dw != dw_new
+
+    # }}}
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    import os
+    if "INVOCATION_INFO" in os.environ:
+        run_test_with_new_python_invocation_inner()
+    elif len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
         from pytest import main
