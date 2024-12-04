@@ -765,6 +765,126 @@ def test_large_dag_with_duplicates_count():
         dag, count_duplicates=False)
 
 
+def test_empty_dag_edge_count():
+    from pytato.analysis import get_edge_multiplicities, get_num_edges
+
+    empty_dag = pt.make_dict_of_named_arrays({})
+
+    # Verify that get_num_edges returns 0 for an empty DAG
+    assert get_num_edges(empty_dag, count_duplicates=False) == 0
+
+    counts = get_edge_multiplicities(empty_dag)
+    assert len(counts) == 0
+
+
+def test_single_node_dag_edge_count():
+    from pytato.analysis import get_edge_multiplicities, get_num_edges
+
+    data = np.random.rand(4, 4)
+    single_node_dag = pt.make_dict_of_named_arrays(
+        {"result": pt.make_data_wrapper(data)})
+
+    edge_counts = get_edge_multiplicities(single_node_dag)
+
+    # Assert that there are no edges in a single-node DAG
+    assert len(edge_counts) == 0
+
+    # Get total number of edges
+    total_edges = get_num_edges(single_node_dag, count_duplicates=False)
+
+    assert total_edges == 0
+
+
+def test_small_dag_edge_count():
+    from pytato.analysis import get_edge_multiplicities, get_num_edges
+
+    # Make a DAG using two nodes and one operation
+    a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
+    b = a + 1
+    dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
+
+    # Verify that get_num_edges returns 1 for a DAG with one edge
+    assert get_num_edges(dag, count_duplicates=False) == 1
+
+    counts = get_edge_multiplicities(dag)
+    assert len(counts) == 1
+    assert counts[a, b] == 1  # One edge between a and b
+
+
+def test_large_dag_edge_count():
+    from testlib import make_large_dag
+
+    from pytato.analysis import get_edge_multiplicities, get_num_edges
+
+    iterations = 100
+    dag = make_large_dag(iterations, seed=42)
+
+    # Verify that the number of edges is equal to the number of iterations
+    assert get_num_edges(dag, count_duplicates=False) == iterations
+
+    counts = get_edge_multiplicities(dag)
+    assert len(counts) == iterations
+
+
+def test_random_dag_edge_count():
+    from testlib import count_edges_using_dependency_mapper, get_random_pt_dag
+
+    from pytato.analysis import get_num_edges
+
+    for i in range(100):
+        dag = get_random_pt_dag(seed=i, axis_len=5)
+
+        edge_count = get_num_edges(dag, count_duplicates=False)
+
+        sum_edges = count_edges_using_dependency_mapper(dag)
+
+        assert edge_count == sum_edges
+
+
+def test_small_dag_with_duplicates_edge_count():
+    from testlib import make_small_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_num_edges,
+    )
+
+    dag = make_small_dag_with_duplicates()
+
+    # Get the number of edges, including duplicates
+    edge_count = get_num_edges(dag, count_duplicates=True)
+    expected_edge_count = 3
+    assert edge_count == expected_edge_count
+
+
+def test_large_dag_with_duplicates_edge_count():
+    from testlib import make_large_dag_with_duplicates
+
+    from pytato.analysis import (
+        get_edge_multiplicities,
+        get_num_edges,
+    )
+
+    iterations = 100
+    dag = make_large_dag_with_duplicates(iterations, seed=42)
+
+    # Get the number of edges, including duplicates
+    edge_count = get_num_edges(dag, count_duplicates=True)
+
+    # Get the number of occurrences of each unique edge
+    edge_multiplicity = get_edge_multiplicities(dag)
+    assert any(count > 1 for count in edge_multiplicity.values())
+
+    expected_edge_count = sum(edge_multiplicity.values())
+    assert edge_count == expected_edge_count
+
+    # Check that duplicates are correctly calculated
+    num_duplicates = sum(count - 1 for count in edge_multiplicity.values())
+
+    # Ensure edge count is accurate
+    assert edge_count - num_duplicates == get_num_edges(
+        dag, count_duplicates=False)
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))
