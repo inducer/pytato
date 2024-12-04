@@ -58,7 +58,14 @@ THE SOFTWARE.
 import dataclasses
 import enum
 import re
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping
+from collections.abc import (
+    Callable,
+    Hashable,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+)
 from functools import cached_property
 from typing import (
     Any,
@@ -338,6 +345,9 @@ class Call(AbstractResultWithNamedArrays):
 
     def _with_new_tags(self: Call, tags: frozenset[Tag]) -> Call:
         return dataclasses.replace(self, tags=tags)
+
+    def keys(self) -> KeysView[str]:
+        return self.function.returns.keys()
 
 # }}}
 

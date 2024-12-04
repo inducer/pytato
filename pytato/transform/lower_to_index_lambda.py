@@ -35,7 +35,7 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpressionT
+from pymbolic import ArithmeticExpression
 from pytools import UniqueNameGenerator
 
 from pytato.array import (
@@ -76,8 +76,8 @@ def _generate_index_expressions(
         order: str,
         index_vars: list[prim.Variable]) -> tuple[ScalarExpression, ...]:
 
-    old_strides: list[ArithmeticExpressionT] = [1]
-    new_strides: list[ArithmeticExpressionT] = [1]
+    old_strides: list[ArithmeticExpression] = [1]
+    new_strides: list[ArithmeticExpression] = [1]
     old_strides = old_strides[:len(old_shape)]
     new_strides = new_strides[:len(new_shape)]
 
@@ -310,7 +310,7 @@ class ToIndexLambdaMixin:
             lbound, ubound = lbounds[i], ubounds[i]
             subarray_expr = get_subscript(i, lbound)
             if i == len(expr.arrays) - 1:
-                concat_expr: ArithmeticExpressionT = subarray_expr
+                concat_expr: ArithmeticExpression = subarray_expr
             else:
                 concat_expr = If(Comparison(prim.Variable(f"_{expr.axis}"),
                                             "<", ubound),
@@ -350,7 +350,7 @@ class ToIndexLambdaMixin:
 
         for access_descr, (iarg, arg) in zip(expr.access_descriptors,
                                             enumerate(expr.args), strict=True):
-            subscript_indices: list[ArithmeticExpressionT] = []
+            subscript_indices: list[ArithmeticExpression] = []
             for iaxis, axis in enumerate(access_descr):
                 if not are_shape_components_equal(
                             arg.shape[iaxis],
@@ -384,7 +384,7 @@ class ToIndexLambdaMixin:
 
         # }}}
 
-        inner_expr: ArithmeticExpressionT = reduce(
+        inner_expr: ArithmeticExpression = reduce(
                 operator.mul, args_as_pym_expr[1:],
                 args_as_pym_expr[0])
 
@@ -407,7 +407,7 @@ class ToIndexLambdaMixin:
         from pytato.utils import dim_to_index_lambda_components
 
         index_expr: prim.Expression = prim.Variable("_in0")
-        indices: list[ArithmeticExpressionT] = [
+        indices: list[ArithmeticExpression] = [
             prim.Variable(f"_{d}") for d in range(expr.ndim)]
         axis = expr.axis
         axis_len_expr, bindings = dim_to_index_lambda_components(
@@ -447,7 +447,7 @@ class ToIndexLambdaMixin:
                     for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
-        indices: list[ArithmeticExpressionT] = []
+        indices: list[ArithmeticExpression] = []
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
         islice_idx = 0
@@ -469,7 +469,7 @@ class ToIndexLambdaMixin:
                 if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
-                    indirect_idx_expr: ArithmeticExpressionT = prim.Subscript(
+                    indirect_idx_expr: ArithmeticExpression = prim.Subscript(
                         prim.Variable(bnd_name),
                         get_indexing_expression(
                             idx.shape,
@@ -515,7 +515,7 @@ class ToIndexLambdaMixin:
             for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
-        indices: list[ArithmeticExpressionT] = []
+        indices: list[ArithmeticExpression] = []
 
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
@@ -539,7 +539,7 @@ class ToIndexLambdaMixin:
                     bnd_name = vng("in")
                     bindings[bnd_name] = self.rec(idx)
 
-                    indirect_idx_expr: ArithmeticExpressionT = prim.Subscript(
+                    indirect_idx_expr: ArithmeticExpression = prim.Subscript(
                                                         prim.Variable(bnd_name),
                                                         get_indexing_expression(
                                                             idx.shape,
@@ -572,7 +572,7 @@ class ToIndexLambdaMixin:
 
     def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
         vng = UniqueNameGenerator()
-        indices: list[ArithmeticExpressionT] = []
+        indices: list[ArithmeticExpression] = []
 
         in_ary = vng("in")
         bindings = {in_ary: self.rec(expr.array)}
@@ -617,12 +617,12 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> IndexLambda:
-        indices: list[ArithmeticExpressionT | None] = [None] * expr.ndim
+        indices: list[ArithmeticExpression | None] = [None] * expr.ndim
         for from_index, to_index in enumerate(expr.axis_permutation):
             indices[to_index] = prim.Variable(f"_{from_index}")
 
         index_expr = prim.Variable("_in0")[
-            cast(tuple[ArithmeticExpressionT], tuple(indices))]
+            cast(tuple[ArithmeticExpression], tuple(indices))]
 
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),

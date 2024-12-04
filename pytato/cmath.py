@@ -63,7 +63,8 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import ExpressionT, ScalarT, var
+from pymbolic import Scalar, var
+from pymbolic.typing import Expression
 
 from pytato.array import (
     Array,
@@ -94,7 +95,7 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
 
     shape = None
 
-    sym_args: list[ExpressionT] = []
+    sym_args: list[Expression] = []
     bindings: dict[str, Array] = {}
     for index, inp in enumerate(inputs):
         if isinstance(inp, Array):
@@ -232,7 +233,7 @@ def imag(x: ArrayOrScalar) -> ArrayOrScalar:
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
     else:
         if np.isscalar(x):
-            return cast(ScalarT, x_dtype.type(0))
+            return cast(Scalar, x_dtype.type(0))
         else:
             assert isinstance(x, Array)
             import pytato as pt

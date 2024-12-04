@@ -177,7 +177,15 @@ import dataclasses
 import operator
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+    Sequence,
+)
 from functools import cached_property, partialmethod
 from sys import intern
 from typing import (
@@ -198,8 +206,8 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpressionT, var
-from pymbolic.typing import IntegerT, ScalarT, not_none
+from pymbolic import ArithmeticExpression, var
+from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
 
@@ -238,7 +246,7 @@ ArrayT = TypeVar("ArrayT", bound="Array")
 
 # {{{ shape
 
-ShapeComponent = Union[IntegerT, "Array"]
+ShapeComponent = Union[Integer, "Array"]
 ShapeType = tuple[ShapeComponent, ...]
 ConvertibleToShape = ShapeComponent | Sequence[ShapeComponent]
 
@@ -336,34 +344,64 @@ def _augment_array_dataclass(
             cls: type,
             generate_hash: bool,
         ) -> None:
-    from dataclasses import fields
-    attr_tuple = ", ".join(f"self.{fld.name}"
-                           for fld in fields(cls) if fld.name != "non_equality_tags")
-    if attr_tuple:
-        attr_tuple = f"({attr_tuple},)"
-    else:
-        attr_tuple = "()"
+
+    # {{{ hashing and hash caching
 
     if generate_hash:
+        from dataclasses import fields
+
+        # Non-equality tags are automatically excluded from equality in
+        # EqualityComparer, and are excluded here from hashing.
+        attr_tuple_hash = ", ".join(f"self.{fld.name}"
+                            for fld in fields(cls) if fld.name != "non_equality_tags")
+
+        if attr_tuple_hash:
+            attr_tuple_hash = f"({attr_tuple_hash},)"
+        else:
+            attr_tuple_hash = "()"
+
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
             f"""
+            from dataclasses import fields
+
             def {cls.__name__}_hash(self):
                 try:
                     return self._hash_value
                 except AttributeError:
                     pass
 
-                h = hash(frozenset({attr_tuple}))
+                h = hash(frozenset({attr_tuple_hash}))
                 object.__setattr__(self, "_hash_value", h)
                 return h
 
             cls.__hash__ = {cls.__name__}_hash
+
+            # By default (when slots=False), dataclasses do not have special
+            # handling for pickling, thus using pickle's default behavior that
+            # looks at obj.__dict__. This would also pickle the cached hash,
+            # which may change across invocations. Here, we override the
+            # pickling methods such that only fields are pickled.
+            # See also https://github.com/python/cpython/blob/5468d219df65d4fe3335e2bcc09d2f6032a32c70/Lib/dataclasses.py#L1267-L1272
+
+            def _dataclass_getstate(self):
+                return [getattr(self, f.name) for f in fields(self)]
+
+
+            def _dataclass_setstate(self, state):
+                for field, value in zip(fields(self), state, strict=True):
+                    # use setattr because dataclass may be frozen
+                    object.__setattr__(self, field.name, value)
+
+            cls.__getstate__ = _dataclass_getstate
+            cls.__setstate__ = _dataclass_setstate
             """)
         exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
         exec(compile(augment_code,
                      f"<dataclass augmentation code for {cls}>", "exec"),
              exec_dict)
+
+    # }}}
 
     # {{{ assign mapper_method
 
@@ -393,7 +431,7 @@ def _augment_array_dataclass(
 # {{{ array interface
 
 ConvertibleToIndexExpr = Union[int, slice, "Array", EllipsisType, None]
-IndexExpr = Union[IntegerT, "NormalizedSlice", "Array", None]
+IndexExpr = Union[Integer, "NormalizedSlice", "Array", None]
 PyScalarType = type[bool] | type[int] | type[float] | type[complex]
 DtypeOrPyScalarType = _dtype_any | PyScalarType
 
@@ -436,7 +474,7 @@ class NormalizedSlice:
     """
     start: ShapeComponent
     stop: ShapeComponent
-    step: IntegerT
+    step: Integer
 
 
 @dataclasses.dataclass(frozen=True)
@@ -826,7 +864,7 @@ class Array(Taggable):
         return Reprifier()(self)
 
 
-ArrayOrScalar: TypeAlias = Array | ScalarT
+ArrayOrScalar: TypeAlias = Array | Scalar
 
 # }}}
 
@@ -923,6 +961,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     .. automethod:: __contains__
     .. automethod:: __getitem__
     .. automethod:: __len__
+    .. automethod:: keys
 
     .. note::
 
@@ -960,6 +999,11 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
 
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
+
+    @abstractmethod
+    def keys(self) -> KeysView[str]:
+        """Return a :class:`KeysView` of the names of the named arrays."""
+        pass
 
 
 @dataclasses.dataclass(frozen=True, eq=False, init=False)
@@ -1009,7 +1053,12 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         return iter(self._data)
 
     def __repr__(self) -> str:
-        return "DictOfNamedArrays(" + str(self._data) + ")"
+        return f"DictOfNamedArrays(tags={self.tags!r}, data={self._data!r})"
+
+    # Note: items() and values() are not implemented here, they go through
+    # __iter__()/__getitem__() above.
+    def keys(self) -> KeysView[str]:
+        return self._data.keys()
 
 # }}}
 
@@ -1706,7 +1755,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
                        for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            cast(Array | Integer, not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
@@ -1754,7 +1803,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                    for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | IntegerT, not_none(self.indices[i_idx]))
+            cast(Array | Integer, not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
@@ -2300,7 +2349,7 @@ def make_data_wrapper(data: DataInterface,
 
 # {{{ full
 
-def full(shape: ConvertibleToShape, fill_value: ScalarT | prim.NaN,
+def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
          dtype: Any = None, order: str = "C") -> Array:
     """
     Returns an array of shape *shape* with all entries equal to *fill_value*.
@@ -2321,7 +2370,7 @@ def full(shape: ConvertibleToShape, fill_value: ScalarT | prim.NaN,
     else:
         fill_value = conv_dtype.type(fill_value)
 
-    return IndexLambda(expr=cast(ArithmeticExpressionT, fill_value),
+    return IndexLambda(expr=cast(ArithmeticExpression, fill_value),
                        shape=shape, dtype=conv_dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),

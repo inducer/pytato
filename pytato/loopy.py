@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pymbolic import ArithmeticExpressionT, ExpressionT
-
 
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
@@ -41,7 +39,7 @@ from immutabledict import immutabledict
 
 import loopy as lp
 import pymbolic.primitives as prim
-from pymbolic.typing import IntegerT, not_none
+from pymbolic.typing import ArithmeticExpression, Expression, Integer, not_none
 from pytools import memoize_method
 
 from pytato.array import (
@@ -114,7 +112,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
                           if lp_arg.is_output})
 
     @memoize_method
-    def _to_pytato(self, expr: ScalarExpression) -> ExpressionT:
+    def _to_pytato(self, expr: ScalarExpression) -> Expression:
         from pytato.scalar_expr import substitute
         return substitute(expr, self.bindings)
 
@@ -150,6 +148,10 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
+
+    # type-ignore-reason: AbstractResultWithNamedArrays returns a KeysView here
+    def keys(self) -> frozenset[str]:  # type: ignore[override]
+        return self._result_names
 
 
 @array_dataclass()
@@ -325,8 +327,8 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
 
 def solve_constraints(variables: Iterable[str],
                       parameters: Iterable[str],
-                      constraints: Sequence[tuple[ArithmeticExpressionT,
-                                                  ArithmeticExpressionT]],
+                      constraints: Sequence[tuple[ArithmeticExpression,
+                                                  ArithmeticExpression]],
 
                       ) -> Mapping[str, ScalarExpression]:
     """
@@ -388,7 +390,7 @@ def _pt_var_to_global_namespace(name: str | None) -> str:
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: IntegerT | Array) -> ScalarExpression:
+def _get_pt_dim_expr(dim: Integer | Array) -> ScalarExpression:
     from pytato.scalar_expr import substitute
     from pytato.utils import dim_to_index_lambda_components
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
@@ -445,7 +447,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     # }}}
 
-    constraints: list[tuple[ArithmeticExpressionT, ArithmeticExpressionT]] = []
+    constraints: list[tuple[ArithmeticExpression, ArithmeticExpression]] = []
 
     # {{{ collect constraints from passed arguments
 
