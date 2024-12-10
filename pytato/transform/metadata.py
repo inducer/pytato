@@ -43,11 +43,14 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
+    TypeAlias,
     TypeVar,
     cast,
 )
 
 from bidict import bidict
+
+from collections.abc import Hashable
 
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
@@ -96,7 +99,9 @@ if TYPE_CHECKING:
     from pytato.loopy import LoopyCall
 
 
-GraphNodeT = TypeVar("GraphNodeT")
+
+NodeT = TypeVar("NodeT", bound=Hashable)
+GraphT: TypeAlias[NodeT] = Mapping[NodeT, Collection[NodeT]]
 
 
 # {{{ AxesTagsEquationCollector
@@ -711,7 +716,9 @@ def unify_axes_tags(
     propagation_graph = undirected_graph_from_edges(
         equations_collector.equations)
 
-    def get_reachable_subgraph(undirected_graph, source_node):
+    def get_reachable_subgraph(
+            undirected_graph: GraphT[NodeT],
+            source_node: NodeT) -> frozenset[NodeT]:
         """
         Partitions a graph along nodes representing axes tagged with
         `AxisIgnoredForPropagationTag` or nodes representing the
