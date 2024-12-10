@@ -38,10 +38,7 @@ THE SOFTWARE.
 
 import dataclasses
 import logging
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
-
-import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -51,7 +48,6 @@ from pytato.array import (
     ShapeType,
     make_dict_of_named_arrays,
 )
-from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.distributed.partition import (
     CommunicationOpIdentifier,
     DistributedGraphPartition,
@@ -64,7 +60,12 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import mpi4py.MPI
+    import numpy as np
+
+    from pytato.distributed.nodes import CommTagType, DistributedRecv
 
 
 # {{{ data structures

@@ -31,7 +31,6 @@ THE SOFTWARE.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
@@ -59,6 +58,10 @@ from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
@@ -443,7 +446,7 @@ class ToIndexLambdaMixin:
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-                    cast(Array | int | np.integer[Any], expr.indices[i_idx])
+                    cast("Array | int | np.integer[Any]", expr.indices[i_idx])
                     for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
@@ -511,7 +514,7 @@ class ToIndexLambdaMixin:
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | int | np.integer[Any], expr.indices[i_idx])
+            cast("Array | int | np.integer[Any]", expr.indices[i_idx])
             for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
@@ -622,7 +625,7 @@ class ToIndexLambdaMixin:
             indices[to_index] = prim.Variable(f"_{from_index}")
 
         index_expr = prim.Variable("_in0")[
-            cast(tuple[ArithmeticExpression], tuple(indices))]
+            cast("tuple[ArithmeticExpression]", tuple(indices))]
 
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),

@@ -1,5 +1,12 @@
 """
 .. autofunction:: pad
+
+Cross-references
+----------------
+
+.. class:: Integer
+
+    See :mod:`pymbolic.typing`.
 """
 from __future__ import annotations
 
@@ -7,18 +14,22 @@ from __future__ import annotations
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
 import collections.abc as abc
-from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 import pymbolic.primitives as prim
 from pymbolic import Scalar
-from pymbolic.typing import Integer
 from pytools import UniqueNameGenerator
 
 from pytato.array import Array, IndexLambda
 from pytato.scalar_expr import INT_CLASSES
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from pymbolic.typing import Integer
 
 
 def _get_constant_padded_idx_lambda(

@@ -134,7 +134,7 @@ class IdentityMapper(IdentityMapperBase[P]):
                    expr: Reduce,
                    *args: P.args, **kwargs: P.kwargs) -> Expression:
         return Reduce(
-                      cast(ArithmeticExpression,
+                      cast("ArithmeticExpression",
                            self.rec(expr.inner_expr, *args, **kwargs)),
                       expr.op,
                       immutabledict({
@@ -148,7 +148,7 @@ class IdentityMapper(IdentityMapperBase[P]):
     def map_type_cast(self,
                 expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> Expression:
         return TypeCast(expr.dtype,
-                        cast(ArithmeticExpression,
+                        cast("ArithmeticExpression",
                              self.rec(expr.inner_expr, *args, **kwargs)))
 
 

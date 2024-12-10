@@ -35,13 +35,10 @@ THE SOFTWARE.
 
 
 import dataclasses
-from collections.abc import Callable, Mapping
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from immutabledict import immutabledict
-
-from pytools.tag import Tag
 
 from pytato.array import (
     Array,
@@ -59,12 +56,19 @@ from pytato.array import (
     Roll,
     Stack,
 )
-from pytato.raising import HighLevelOp
 from pytato.transform import (
     MappedT,
     TransformMapperWithExtraArgs,
 )
 from pytato.utils import are_shapes_equal
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from pytools.tag import Tag
+
+    from pytato.raising import HighLevelOp
 
 
 class EinsumDistributiveLawDescriptor:
@@ -358,4 +362,4 @@ def apply_distributive_property_to_einsums(
         True
     """
     mapper = EinsumDistributiveLawMapper(how_to_distribute)
-    return cast(MappedT, mapper(expr, None))
+    return cast("MappedT", mapper(expr, None))
