@@ -992,18 +992,18 @@ def find_distributed_partition(
 
     # }}}
 
-    # Don't be tempted to put outputs in _array_names; the mapping from output array
+    # Don't be tempted to put outputs in array_names; the mapping from output array
     # to name may not be unique
-    _array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
-    _array_names: dict[Array, str] = {}
+    array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
+    array_names: dict[Array, str] = {}
 
     def gen_array_name(ary: Array) -> str:
-        name = _array_names.get(ary)
+        name = array_names.get(ary)
         if name is not None:
             return name
         else:
-            name = _array_name_gen()
-            _array_names[ary] = name
+            name = array_name_gen()
+            array_names[ary] = name
             return name
 
     recvd_ary_to_name: dict[Array, str] = {
