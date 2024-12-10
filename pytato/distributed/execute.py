@@ -88,7 +88,7 @@ def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
 
     assert isinstance(recv.comm_tag, int)
     # mypy is right here, size params in 'recv.shape' must be evaluated
-    buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[arg-type]
+    buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[type-var]
 
     return mpi_communicator.Irecv(
             buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
