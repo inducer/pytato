@@ -2513,7 +2513,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     from math import ceil
     # np.real() suppresses "ComplexWarning: Casting complex values to real
     # discards the imaginary part":
-    size = max(0, int(ceil((np.real(stop)-np.real(start))/np.real(step))))
+    size = max(0, ceil((np.real(stop)-np.real(start))/np.real(step)))
 
     from pymbolic.primitives import Variable
     return IndexLambda(expr=start + Variable("_0") * step,
