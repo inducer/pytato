@@ -708,7 +708,7 @@ def unify_axes_tags(
     propagation_graph = undirected_graph_from_edges(
         equations_collector.equations)
 
-    def get_reachable_subgraph(
+    def get_reachable_nodes(
             undirected_graph: dict[str, Sequence[str]],
             source_node: str) -> frozenset[str]:
         """
@@ -752,7 +752,7 @@ def unify_axes_tags(
     known_ax_vars = frozenset(equations_collector.axis_to_var.values())
 
     for tag, var in equations_collector.known_tag_to_var.items():
-        reachable_nodes = get_reachable_subgraph(propagation_graph, var)
+        reachable_nodes = get_reachable_nodes(propagation_graph, var)
         for reachable_var in (reachable_nodes - known_tag_vars):
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],
