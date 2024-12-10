@@ -25,7 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from pytools import memoize_method
@@ -50,11 +49,13 @@ from pytato.array import (
     SizeParam,
     Stack,
 )
-from pytato.function import Call, FunctionDefinition, NamedCallResult
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.function import Call, FunctionDefinition, NamedCallResult
     from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """

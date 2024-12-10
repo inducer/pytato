@@ -46,8 +46,13 @@ import sys
 
 sys._BUILDING_SPHINX_DOCS = True
 
+
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"numpy.bool_"],
     ["py:class", r"typing_extensions(.+)"],
+    ["py:class", r"P\.args"],
+    ["py:class", r"P\.kwargs"],
+    ["py:class", r"lp\.LoopKernel"],
+    ["py:class", r"_dtype_any"],
 ]

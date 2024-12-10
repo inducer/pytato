@@ -30,8 +30,7 @@ THE SOFTWARE.
 
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from immutabledict import immutabledict
@@ -41,6 +40,10 @@ from pymbolic import ArithmeticExpression
 
 from pytato.array import Array, ReductionDescriptor, ShapeType, make_index_lambda
 from pytato.scalar_expr import INT_CLASSES, Reduce, ScalarExpression
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 # {{{ docs

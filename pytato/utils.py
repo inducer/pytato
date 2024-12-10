@@ -22,8 +22,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from collections.abc import Callable, Iterable, Sequence
 from typing import (
+    TYPE_CHECKING,
     Any,
     TypeVar,
     cast,
@@ -36,7 +36,6 @@ from immutabledict import immutabledict
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Scalar
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
 
 from pytato.array import (
     AdvancedIndexInContiguousAxes,
@@ -62,6 +61,12 @@ from pytato.scalar_expr import (
     TypeCast,
 )
 from pytato.transform import CachedMapper
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Sequence
+
+    from pytools.tag import Tag
 
 
 __doc__ = """
@@ -534,7 +539,7 @@ def _index_into(
                    + (slice(None, None, None),) * (ary.ndim - len(indices) + 1)
                    + indices[ellipsis_pos+1:])
 
-    indices = cast(tuple[int, slice, "Array", None], indices)
+    indices = cast("tuple[int, slice, Array, None]", indices)
 
     # }}}
 

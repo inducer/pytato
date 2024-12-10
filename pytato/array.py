@@ -405,7 +405,7 @@ def _augment_array_dataclass(
 
     # {{{ assign mapper_method
 
-    mm_cls = cast(type[_HasMapperMethod], cls)
+    mm_cls = cast("type[_HasMapperMethod]", cls)
 
     snake_clsname = _CAMEL_TO_SNAKE_RE.sub("_", mm_cls.__name__).lower()
     default_mapper_method_name = f"map_{snake_clsname}"
@@ -804,7 +804,7 @@ class Array(Taggable):
 
     def __abs__(self) -> Array:
         import pytato as pt
-        return cast(Array, pt.abs(self))
+        return cast("Array", pt.abs(self))
 
     def __pos__(self) -> Array:
         return self
@@ -1755,7 +1755,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
                        for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | Integer, not_none(self.indices[i_idx]))
+            cast("Array | Integer", not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
@@ -1803,7 +1803,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                    for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | Integer, not_none(self.indices[i_idx]))
+            cast("Array | Integer", not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
@@ -2037,7 +2037,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
     elif x1.ndim == 1:
-        return cast(Array, pt.dot(x1, x2))
+        return cast("Array", pt.dot(x1, x2))
     elif x2.ndim == 1:
         x1_indices = index_names[:x1.ndim]
         return pt.einsum(f"{x1_indices}, {x1_indices[-1]} -> {x1_indices[:-1]}",
@@ -2370,7 +2370,7 @@ def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
     else:
         fill_value = conv_dtype.type(fill_value)
 
-    return IndexLambda(expr=cast(ArithmeticExpression, fill_value),
+    return IndexLambda(expr=cast("ArithmeticExpression", fill_value),
                        shape=shape, dtype=conv_dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),

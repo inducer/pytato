@@ -88,13 +88,14 @@ from pytato.distributed.nodes import (
     DistributedSend,
     DistributedSendRefHolder,
 )
-from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
 
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+
+    from pytato.function import FunctionDefinition, NamedCallResult
 
 
 @dataclasses.dataclass(frozen=True)
@@ -350,7 +351,7 @@ class _DistributedInputReplacer(CopyMapper):
             if name is not None:
                 return self._get_placeholder_for(name, expr)
 
-        return cast(ArrayOrNames, super().rec(expr))
+        return cast("ArrayOrNames", super().rec(expr))
 
     def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
         placeholder = self.partition_input_name_to_placeholder.get(name)
@@ -820,7 +821,7 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[Set[CommunicationOpIdentifier]],
+                "Sequence[Set[CommunicationOpIdentifier]]",
                 comm_batches_or_exc)
 
     # }}}
@@ -921,7 +922,7 @@ def find_distributed_partition(
                 ary: max(
                         (comm_id_to_part_id[
                             _recv_to_comm_id(local_rank,
-                                            cast(DistributedRecv, recvd_ary))]
+                                            cast("DistributedRecv", recvd_ary))]
                         for recvd_ary in recvd_array_dep_mapper(ary)),
                         default=-1)
                 for ary in mso_arrays

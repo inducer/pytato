@@ -62,6 +62,7 @@ extend-select = [
     "NPY",   # numpy
     "RUF",
     "UP",
+    "TC",
 ]
 extend-ignore = [
   "E226",

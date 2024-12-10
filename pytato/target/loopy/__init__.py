@@ -50,7 +50,6 @@ Stuff that's only here because the documentation tool wants it
 """
 
 import sys
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
@@ -64,6 +63,12 @@ from pytato.tags import ImplementationStrategy
 from pytato.target import BoundProgram, Target
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    import pyopencl
+
+
 class ImplSubstitution(ImplementationStrategy):
     """
     An :class:`~pytato.tags.ImplementationStrategy` that lowers the array
@@ -75,7 +80,7 @@ class ImplSubstitution(ImplementationStrategy):
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False) or TYPE_CHECKING:
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
-    import pyopencl
+    pass
 
 
 class LoopyTarget(Target):
