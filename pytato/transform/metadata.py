@@ -709,7 +709,7 @@ def unify_axes_tags(
         equations_collector.equations)
 
     def get_reachable_nodes(
-            undirected_graph: dict[str, Sequence[str]],
+            undirected_graph: Mapping[str, Collection[str]],
             source_node: str) -> frozenset[str]:
         """
         Partitions a graph along nodes representing axes tagged with
