@@ -43,7 +43,6 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Sequence,
     cast,
 )
 
