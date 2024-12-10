@@ -371,7 +371,7 @@ def _augment_array_dataclass(
                 except AttributeError:
                     pass
 
-                h = hash(frozenset({attr_tuple_hash}))
+                h = hash({attr_tuple_hash})
                 object.__setattr__(self, "_hash_value", h)
                 return h
 
