@@ -755,9 +755,6 @@ def unify_axes_tags(
     for tag, var in equations_collector.known_tag_to_var.items():
         reachable_nodes = get_reachable_subgraph(propagation_graph, var)
         for reachable_var in (reachable_nodes - known_tag_vars):
-            ary, ax = equations_collector.axis_to_var.inverse[reachable_var]
-            if ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag):
-                continue
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],
                 set()
