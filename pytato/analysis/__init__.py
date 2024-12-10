@@ -49,12 +49,14 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.loopy import LoopyCall
 
 __doc__ = """
 .. currentmodule:: pytato.analysis

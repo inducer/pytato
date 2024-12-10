@@ -40,7 +40,6 @@ THE SOFTWARE.
 
 
 import logging
-from collections.abc import Collection, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -73,7 +72,6 @@ from pytato.array import (
 )
 from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-from pytato.function import NamedCallResult
 from pytato.raising import (
     BinaryOp,
     BroadcastOp,
@@ -92,6 +90,9 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Mapping
+
+    from pytato.function import NamedCallResult
     from pytato.loopy import LoopyCall
 
 
@@ -416,7 +417,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                                             for i_idx in i_basic_indices
                                             if i_idx > i_adv_indices[-1]])
 
-        indirection_arrays: list[Array] = cast(list[Array],
+        indirection_arrays: list[Array] = cast("list[Array]",
                                                [expr.indices[i_idx]
                                                 for i_idx in i_adv_indices
                                                 if isinstance(expr.indices[i_idx],

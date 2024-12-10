@@ -28,15 +28,13 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import islpy as isl
 
 import loopy as lp
 import pymbolic.primitives as prim
-import pytools
 from pymbolic import ArithmeticExpression, var
-from pymbolic.typing import Expression
-from pytools.tag import Tag
 
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
@@ -59,8 +57,6 @@ from pytato.codegen import (
     normalize_outputs,
     preprocess,
 )
-from pytato.function import Call, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.scalar_expr import (
     INT_CLASSES,
     ScalarExpression,
@@ -73,16 +69,26 @@ from pytato.tags import (
     Named,
     PrefixNamed,
 )
-from pytato.target import BoundProgram
 from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    import pyopencl
+    import pytools
+    from pymbolic.typing import Expression
+    from pytools.tag import Tag
+
+    from pytato.function import Call, NamedCallResult
+    from pytato.loopy import LoopyCall
+    from pytato.target import BoundProgram
 
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
-    import pyopencl
+    from pytools.tag import Tag  # noqa: TC001
 
 __doc__ = """
 .. autoclass:: PersistentExpressionContext

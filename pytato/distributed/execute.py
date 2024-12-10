@@ -34,27 +34,29 @@ THE SOFTWARE.
 """
 
 import logging
-from collections.abc import Hashable, Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from pytato.array import make_dict_of_named_arrays
-from pytato.distributed.nodes import DistributedRecv, DistributedSend
-from pytato.distributed.partition import (
-    DistributedGraphPart,
-    DistributedGraphPartition,
-    PartId,
-)
 from pytato.scalar_expr import INT_CLASSES
-from pytato.target import BoundProgram
 
 
 logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Hashable, Mapping
+
     import mpi4py.MPI
+
+    from pytato.distributed.nodes import DistributedRecv, DistributedSend
+    from pytato.distributed.partition import (
+        DistributedGraphPart,
+        DistributedGraphPartition,
+        PartId,
+    )
+    from pytato.target import BoundProgram
 
 
 # {{{ generate_code_for_partition
@@ -88,7 +90,7 @@ def _post_receive(mpi_communicator: mpi4py.MPI.Comm,
 
     assert isinstance(recv.comm_tag, int)
     # mypy is right here, size params in 'recv.shape' must be evaluated
-    buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[arg-type]
+    buf = np.empty(recv.shape, dtype=recv.dtype)  # type: ignore[type-var]
 
     return mpi_communicator.Irecv(
             buf=buf, source=recv.src_rank, tag=recv.comm_tag), buf
@@ -134,7 +136,7 @@ def execute_distributed_partition(
     context: dict[str, Any] = input_args.copy()
 
     pids_to_execute = set(partition.parts)
-    pids_executed = set()
+    pids_executed: set[PartId] = set()
     recv_names_completed = set()
     send_requests = []
 

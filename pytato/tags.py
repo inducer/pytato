@@ -19,11 +19,15 @@ Pre-Defined Tags
 .. autoclass:: InlineCallTag
 """
 
-from collections.abc import Hashable
 from dataclasses import dataclass
 from traceback import FrameSummary, StackSummary
+from typing import TYPE_CHECKING
 
 from pytools.tag import Tag, UniqueTag, tag_dataclass
+
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable
 
 
 # {{{ pre-defined tag: ImplementationStrategy

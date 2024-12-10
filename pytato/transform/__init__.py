@@ -28,11 +28,12 @@ THE SOFTWARE.
 """
 import dataclasses
 import logging
-from collections.abc import Callable, Hashable, Iterable, Mapping
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     ParamSpec,
+    TypeAlias,
     TypeVar,
     cast,
 )
@@ -78,7 +79,11 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from pytato.tags import ImplStored
 
 
-ArrayOrNames = Array | AbstractResultWithNamedArrays
+if TYPE_CHECKING:
+    from collections.abc import Callable, Hashable, Iterable, Mapping
+
+
+ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
 TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
@@ -131,6 +136,8 @@ Transforming call sites
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. class:: ArrayOrNames
+
 .. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
@@ -143,6 +150,9 @@ Internal stuff that is only here because the documentation tool wants it
 
     A type variable representing the result type of a :class:`Mapper`.
 
+.. class:: Scalar
+
+    See :data:`pymbolic.Scalar`.
 """
 
 transform_logger = logging.getLogger(__file__)
@@ -211,7 +221,7 @@ class Mapper(Generic[ResultT, P]):
                 return self.map_foreign(expr, *args, **kwargs)
 
         assert method is not None
-        return cast(ResultT, method(expr, *args, **kwargs))
+        return cast("ResultT", method(expr, *args, **kwargs))
 
     def __call__(self,
                  expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
@@ -1572,7 +1582,7 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast(MappedT, CachedMapAndCopyMapper(map_fn)(expr))
+    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
 
 
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:

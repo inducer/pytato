@@ -29,7 +29,6 @@ THE SOFTWARE.
 
 import dataclasses
 import html
-from collections.abc import Callable, Mapping
 from functools import partial
 from typing import (
     TYPE_CHECKING,
@@ -38,7 +37,6 @@ from typing import (
 
 from pytools import UniqueNameGenerator
 from pytools.codegen import remove_common_indentation
-from pytools.tag import Tag
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -60,13 +58,17 @@ from pytato.distributed.partition import (
     PartId,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.tags import FunctionIdentifier
 from pytato.transform import ArrayOrNames, CachedMapper, InputGatherer
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from pytools.tag import Tag
+
     from pytato.distributed.nodes import DistributedSendRefHolder
+    from pytato.loopy import LoopyCall
 
 
 __doc__ = """

@@ -97,6 +97,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return cast(MappedT, mapper(expr))
+    return cast("MappedT", mapper(expr))
 
 # vim:fdm=marker

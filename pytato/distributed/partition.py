@@ -90,13 +90,14 @@ from pytato.distributed.nodes import (
     DistributedSend,
     DistributedSendRefHolder,
 )
-from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
 
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+
+    from pytato.function import FunctionDefinition, NamedCallResult
 
 
 @dataclasses.dataclass(frozen=True)
@@ -297,7 +298,7 @@ class _DistributedInputReplacer(CopyMapper):
             if name is not None:
                 return self._get_placeholder_for(name, expr)
 
-        return cast(ArrayOrNames, super().rec(expr))
+        return cast("ArrayOrNames", super().rec(expr))
 
     def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
         placeholder = self.partition_input_name_to_placeholder.get(name)
@@ -873,7 +874,7 @@ def find_distributed_partition(
                 ary: max(
                         (comm_id_to_part_id[
                             _recv_to_comm_id(local_rank,
-                                            cast(DistributedRecv, recvd_ary))]
+                                            cast("DistributedRecv", recvd_ary))]
                         for recvd_ary in recvd_array_dep_mapper(ary)),
                         default=-1)
                 for ary in mso_arrays
@@ -946,18 +947,18 @@ def find_distributed_partition(
 
     # }}}
 
-    # Don't be tempted to put outputs in _array_names; the mapping from output array
+    # Don't be tempted to put outputs in array_names; the mapping from output array
     # to name may not be unique
-    _array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
-    _array_names: dict[Array, str] = {}
+    array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
+    array_names: dict[Array, str] = {}
 
     def gen_array_name(ary: Array) -> str:
-        name = _array_names.get(ary)
+        name = array_names.get(ary)
         if name is not None:
             return name
         else:
-            name = _array_name_gen()
-            _array_names[ary] = name
+            name = array_name_gen()
+            array_names[ary] = name
             return name
 
     recvd_ary_to_name: dict[Array, str] = {

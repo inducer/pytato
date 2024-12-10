@@ -27,9 +27,9 @@ THE SOFTWARE.
 
 
 import dataclasses
-from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Number
 from typing import (
+    TYPE_CHECKING,
     Any,
 )
 
@@ -56,6 +56,10 @@ from pytato.scalar_expr import (
     ScalarExpression,
     SubstitutionMapper,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 
 __doc__ = r"""
