@@ -86,44 +86,58 @@ if TYPE_CHECKING:
 GraphNodeT = TypeVar("GraphNodeT")
 
 
-from typing import ParamSpec
+from collections.abc import Iterable
+from typing import ParamSpec, TypeAlias
 
 import pymbolic.primitives as prim
+from pymbolic.typing import Expression
 
 from pytato.scalar_expr import (
     IDX_LAMBDA_INAME,
     IDX_LAMBDA_JUST_REDUCTIONS,
-    IdentityMapper as ScalarMapper,
+    CombineMapper,
 )
 
 
+BindingName: TypeAlias = str
 P = ParamSpec("P")
 
 
-class AxesUsedMapper(ScalarMapper[P]):
+class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
+                                                     set[tuple[Expression, ...]]],
+                                                      P]):
     """
     Determine which axes are used in the scalar expressionand which ones just
     flow through the expression.
     """
+    def combine(self,
+                values: Iterable[Mapping[BindingName, set[tuple[Expression, ...]]]]) \
+                        -> Mapping[BindingName, set[tuple[Expression, ...]]]:
+        out: dict[BindingName, set[tuple[Expression, ...]]] = {}
+        for val in values:
+            out.update(val)
+        return out
 
-    def __init__(self, var_names_in_use: list[str]):
-        self.var_names_in_use: list[str] = var_names_in_use
-
-        self.usage_dict: Mapping[str, list[tuple[prim.Expression, ...]]] = {vname: []
-                                                                            for vname in
-                                                                            self.var_names_in_use}
-
-    def map_subscript(self, expr: prim.Subscript) -> prim.Subscript:
+    def map_subscript(self, expr: prim.Subscript) -> Mapping[BindingName,
+                                                    set[tuple[Expression, ...]]]:
         """
         Record the indexing usage for the variable if we are tracking
         the specific variable.
         """
 
         name = expr.aggregate.name
-        if name in self.var_names_in_use:
-            self.usage_dict[name].append(expr.index_tuple)
+        base = {name: expr.index_tuple}
 
-        return super().map_subscript(expr)
+        return self.combine([base, self.rec(expr.index)])
+
+    def map_constant(self, expr: object) -> Mapping[BindingName,
+                                                      set[tuple[Expression, ...]]]:
+        return {}
+
+    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> Mapping[BindingName,
+                                                      set[tuple[Expression, ...]]]:
+
+        return {}
 
 
 # {{{ AxesTagsEquationCollector
@@ -263,36 +277,30 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        keys = list(expr.bindings.keys())
+        index_expr_used = IndexExpressionsUsedInIndexLambda()(expr.expr)
 
-        mymapper = AxesUsedMapper(keys)
+        if __debug__:
+            out_shape = expr.shape
+            assert len(out_shape) == expr.ndim
 
-        mymapper(expr.expr)
-
-        out_shape = expr.shape
-        assert len(out_shape) == expr.ndim
-
-        for key in keys:
-            if len(mymapper.usage_dict[key]) > 0:
-                for tup_ind in range(len(mymapper.usage_dict[key][0])):
-                    vname = mymapper.usage_dict[key][0][tup_ind]
-                    if isinstance(vname, prim.Variable):
-                        if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(vname.name):
-                            # Reduction axis. We can ignore it.
-                            pass
-                        elif vname.name[:3] == "_in":
-                            # Variable name axis.
-                            pass
-                        elif IDX_LAMBDA_INAME.fullmatch(vname.name):
-                            # matched with an iname.
-                            inum = int(vname.name[1:])
-                            print(inum)
-                            val = (self.get_var_for_axis(expr.bindings[key], tup_ind),
-                                   self.get_var_for_axis(expr, inum))
-                            self.equations.append(val)
-                        else:
-                            raise ValueError(f"Unknown index name used in {vname}")
-
+        for vname, ind_tuple in index_expr_used.items():
+            for axis_ind in range(len(ind_tuple)):
+                var_ind_name = ind_tuple[axis_ind]
+                if isinstance(var_ind_name, prim.Variable):
+                    if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(var_ind_name.name):
+                        # Reduction axis. We can ignore it.
+                        pass
+                    elif var_ind_name.name[:3] == "_in":
+                        # Variable name axis.
+                        pass
+                    elif IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
+                        # matched with an iname.
+                        inum = int(var_ind_name.name[1:])
+                        val = (self.get_var_for_axis(expr.bindings[vname], axis_ind),
+                               self.get_var_for_axis(expr, inum))
+                        self.equations.append(val)
+                    else:
+                        raise ValueError(f"Unknown index name used in {vname}")
         return
 
     def map_stack(self, expr: Stack) -> None:
