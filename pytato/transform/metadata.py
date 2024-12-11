@@ -43,9 +43,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Mapping,
     TypeVar,
-    Iterable,
     TypeAlias,
     cast,
     ParamSpec,
@@ -78,21 +76,6 @@ from pytato.function import NamedCallResult
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
-
-logger = logging.getLogger(__name__)
-
-
-if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping
-
-    from pytato.function import NamedCallResult
-    from pytato.loopy import LoopyCall
-
-
-GraphNodeT = TypeVar("GraphNodeT")
-
-
-
 import pymbolic.primitives as prim
 from pymbolic.typing import Expression
 
@@ -102,6 +85,17 @@ from pytato.scalar_expr import (
     CombineMapper,
 )
 
+logger = logging.getLogger(__name__)
+
+
+if TYPE_CHECKING:
+    from collections.abc import Collection, Mapping, Iterable
+
+    from pytato.function import NamedCallResult
+    from pytato.loopy import LoopyCall
+
+
+GraphNodeT = TypeVar("GraphNodeT")
 
 BindingName: TypeAlias = str
 P = ParamSpec("P")
