@@ -906,7 +906,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_einsum_with_parametrized_shapes(ctx_factory):
+def test_einsum_with_parameterized_shapes(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1571,11 +1571,11 @@ def test_regression_reduction_in_conditional(ctx_factory):
     cq = cl.CommandQueue(ctx)
 
     def kernel(usr_np, _pt_data_9):
-        _pt_tmp_53 = _pt_data_9 @ _pt_data_9
-        _pt_tmp_42 = usr_np.maximum(_pt_tmp_53, _pt_tmp_53)
-        _pt_tmp_27 = usr_np.sum(_pt_tmp_42)
-        _pt_tmp_0 = usr_np.maximum(_pt_tmp_27, _pt_tmp_53)
-        return _pt_tmp_0
+        pt_tmp_53 = _pt_data_9 @ _pt_data_9
+        pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
+        pt_tmp_27 = usr_np.sum(pt_tmp_42)
+        pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
+        return pt_tmp_0
 
     def get_np_input_args():
         return {

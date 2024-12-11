@@ -57,13 +57,13 @@ __doc__ = """
 # }}}
 
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import ExpressionT, ScalarT, var
+from pymbolic import Scalar, var
 
 from pytato.array import (
     Array,
@@ -77,6 +77,10 @@ from pytato.array import (
 from pytato.scalar_expr import SCALAR_CLASSES
 
 
+if TYPE_CHECKING:
+    from pymbolic.typing import Expression
+
+
 def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
                           func_name: str,
                           ret_dtype: _dtype_any | None = None,
@@ -87,14 +91,14 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
             np_func_name = func_name
 
         np_func = getattr(np, np_func_name)
-        return cast(ArrayOrScalar, np_func(*inputs))
+        return cast("ArrayOrScalar", np_func(*inputs))
 
     if not inputs:
         raise ValueError("at least one argument must be present")
 
     shape = None
 
-    sym_args: list[ExpressionT] = []
+    sym_args: list[Expression] = []
     bindings: dict[str, Array] = {}
     for index, inp in enumerate(inputs):
         if isinstance(inp, Array):
@@ -232,7 +236,7 @@ def imag(x: ArrayOrScalar) -> ArrayOrScalar:
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
     else:
         if np.isscalar(x):
-            return cast(ScalarT, x_dtype.type(0))
+            return cast("Scalar", x_dtype.type(0))
         else:
             assert isinstance(x, Array)
             import pytato as pt

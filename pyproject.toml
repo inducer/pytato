@@ -32,12 +32,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "attrs",
     "bidict",
     "immutabledict",
     "loopy>=2020.2",
     "pytools>=2024.1.14",
-    "pymbolic>=2024.1",
+    "pymbolic>=2024.2",
     "typing_extensions>=4",
 ]
 
@@ -63,6 +62,7 @@ extend-select = [
     "NPY",   # numpy
     "RUF",
     "UP",
+    "TC",
 ]
 extend-ignore = [
   "E226",

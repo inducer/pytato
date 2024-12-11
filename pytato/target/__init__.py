@@ -33,9 +33,12 @@ Code Generation Targets
 .. autoclass:: BoundProgram
 """
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class Target:

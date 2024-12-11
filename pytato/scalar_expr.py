@@ -8,9 +8,9 @@
 .. autofunction:: get_dependencies
 .. autofunction:: substitute
 
-.. class:: ExpressionT
+.. class:: Expression
 
-    See ``ExpressionT`` in :mod:`pymbolic`.
+    See :data:`pymbolic.typing.Expression`.
 """
 
 # FIXME: Unclear why the direct links to pymbolic don't work
@@ -57,7 +57,7 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpressionT, BoolT, ExpressionT, expr_dataclass
+from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
 from pymbolic.mapper import (
     CombineMapper as CombineMapperBase,
     IdentityMapper as IdentityMapperBase,
@@ -74,7 +74,7 @@ from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
 from pymbolic.mapper.evaluator import EvaluationMapper as EvaluationMapperBase
 from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
 from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
-from pymbolic.typing import IntegerT
+from pymbolic.typing import Integer
 
 
 if TYPE_CHECKING:
@@ -87,12 +87,12 @@ INT_CLASSES = (int, np.integer)
 PYTHON_SCALAR_CLASSES = (int, float, complex, bool)
 SCALAR_CLASSES = prim.VALID_CONSTANT_CLASSES
 
-IntegralScalarExpression = IntegerT | prim.Expression
-ScalarExpression = ArithmeticExpressionT | BoolT
+IntegralScalarExpression = Integer | prim.ExpressionNode
+ScalarExpression = ArithmeticExpression | Bool
 
 
 def is_integral_scalar_expression(expr: object) -> TypeIs[IntegralScalarExpression]:
-    return isinstance(expr, int | np.integer) or isinstance(expr, prim.Expression)
+    return isinstance(expr, int | np.integer) or isinstance(expr, prim.ExpressionNode)
 
 
 def parse(s: str) -> ScalarExpression:
@@ -132,9 +132,9 @@ class CombineMapper(CombineMapperBase[ResultT, P]):
 class IdentityMapper(IdentityMapperBase[P]):
     def map_reduce(self,
                    expr: Reduce,
-                   *args: P.args, **kwargs: P.kwargs) -> ExpressionT:
+                   *args: P.args, **kwargs: P.kwargs) -> Expression:
         return Reduce(
-                      cast(ArithmeticExpressionT,
+                      cast("ArithmeticExpression",
                            self.rec(expr.inner_expr, *args, **kwargs)),
                       expr.op,
                       immutabledict({
@@ -146,9 +146,9 @@ class IdentityMapper(IdentityMapperBase[P]):
                                     }))
 
     def map_type_cast(self,
-                expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> ExpressionT:
+                expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> Expression:
         return TypeCast(expr.dtype,
-                        cast(ArithmeticExpressionT,
+                        cast("ArithmeticExpression",
                              self.rec(expr.inner_expr, *args, **kwargs)))
 
 
@@ -245,7 +245,7 @@ class StringifyMapper(StringifyMapperBase[P]):
 
 # {{{ mapper frontends
 
-def get_dependencies(expression: ExpressionT,
+def get_dependencies(expression: Expression,
         include_idx_lambda_indices: bool = True) -> frozenset[str]:
     """Return the set of variable names in an expression.
 
@@ -260,8 +260,8 @@ def get_dependencies(expression: ExpressionT,
                      if isinstance(dep, prim.Variable))
 
 
-def substitute(expression: ExpressionT,
-        variable_assignments: Mapping[str, Any] | None) -> ExpressionT:
+def substitute(expression: Expression,
+        variable_assignments: Mapping[str, Any] | None) -> Expression:
     """Perform variable substitution in an expression.
 
     :param expression: A scalar expression, or an expression derived from such
@@ -276,7 +276,7 @@ def substitute(expression: ExpressionT,
 
 
 def evaluate(
-            expression: ExpressionT, context: Mapping[str, ResultT] | None = None
+            expression: Expression, context: Mapping[str, ResultT] | None = None
         ) -> ResultT:
     """
     Evaluates *expression* by substituting the variable values as provided in
@@ -287,8 +287,8 @@ def evaluate(
     return EvaluationMapper(context)(expression)
 
 
-def distribute(expr: ExpressionT, parameters: frozenset[Any] = frozenset(),
-               commutative: bool = True) -> ExpressionT:
+def distribute(expr: Expression, parameters: frozenset[Any] = frozenset(),
+               commutative: bool = True) -> Expression:
     if commutative:
         return DistributeMapper(TermCollector(parameters))(expr)
     else:
@@ -299,7 +299,7 @@ def distribute(expr: ExpressionT, parameters: frozenset[Any] = frozenset(),
 
 # {{{ custom scalar expression nodes
 
-class ExpressionBase(prim.Expression):
+class ExpressionBase(prim.ExpressionNode):
     def make_stringifier(self,
                  originating_stringifier: StringifyMapperBase[[]] | None = None
              ) -> StringifyMapperBase[[]]:
@@ -319,7 +319,7 @@ class Reduce(ExpressionBase):
 
     op: ReductionOperation
 
-    bounds: Mapping[str, tuple[ArithmeticExpressionT, ArithmeticExpressionT]]
+    bounds: Mapping[str, tuple[ArithmeticExpression, ArithmeticExpression]]
     """
     A mapping from reduction inames to tuples ``(lower_bound, upper_bound)``
     identifying half-open bounds intervals.  Must be hashable.
@@ -351,14 +351,14 @@ class InductionVariableCollector(CombineMapper[Set[str], []]):
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
-    def map_algebraic_leaf(self, expr: prim.Expression) -> frozenset[str]:
+    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> frozenset[str]:
         return frozenset()
 
     def map_constant(self, expr: object) -> Set[str]:
         return frozenset()
 
 
-def get_reduction_induction_variables(expr: ExpressionT) -> Set[str]:
+def get_reduction_induction_variables(expr: Expression) -> Set[str]:
     """
     Returns the induction variables for the reduction nodes.
     """

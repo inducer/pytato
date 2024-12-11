@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pymbolic import ArithmeticExpressionT, ExpressionT
-
 
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
@@ -28,21 +26,20 @@ THE SOFTWARE.
 """
 
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+import dataclasses
 from numbers import Number
 from typing import (
+    TYPE_CHECKING,
     Any,
-    ClassVar,
 )
 
-import attrs
 import islpy as isl
 import numpy as np
 from immutabledict import immutabledict
 
 import loopy as lp
 import pymbolic.primitives as prim
-from pymbolic.typing import IntegerT, not_none
+from pymbolic.typing import ArithmeticExpression, Expression, Integer, not_none
 from pytools import memoize_method
 
 from pytato.array import (
@@ -52,12 +49,17 @@ from pytato.array import (
     NamedArray,
     ShapeType,
     SizeParam,
+    array_dataclass,
 )
 from pytato.scalar_expr import (
     EvaluationMapper,
     ScalarExpression,
     SubstitutionMapper,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 
 __doc__ = r"""
@@ -91,20 +93,21 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-@attrs.frozen(eq=False)
+@array_dataclass()
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
     :mod:`loopy` translation unit.
     """
     translation_unit: lp.TranslationUnit
-    bindings: Mapping[str, ArrayOrScalar] = \
-        attrs.field(validator=attrs.validators.instance_of(immutabledict))
+    bindings: Mapping[str, ArrayOrScalar]
     entrypoint: str
 
-    _mapper_method: ClassVar[str] = "map_loopy_call"
+    copy = dataclasses.replace
 
-    copy = attrs.evolve
+    def __post_init__(self) -> None:
+        assert isinstance(self.bindings, immutabledict)
+        super().__post_init__()
 
     @property
     def _result_names(self) -> frozenset[str]:
@@ -113,7 +116,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
                           if lp_arg.is_output})
 
     @memoize_method
-    def _to_pytato(self, expr: ScalarExpression) -> ExpressionT:
+    def _to_pytato(self, expr: ScalarExpression) -> Expression:
         from pytato.scalar_expr import substitute
         return substitute(expr, self.bindings)
 
@@ -136,7 +139,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
             raise KeyError(name)
 
         # TODO: Attach a filtered set of tags from loopy's arg.
-        return LoopyCallResult(container=self,
+        return LoopyCallResult(_container=self,
                                name=name,
                                axes=_get_default_axes(len(self
                                                           ._entry_kernel
@@ -150,14 +153,19 @@ class LoopyCall(AbstractResultWithNamedArrays):
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
 
+    # type-ignore-reason: AbstractResultWithNamedArrays returns a KeysView here
+    def keys(self) -> frozenset[str]:  # type: ignore[override]
+        return self._result_names
 
-@attrs.frozen(eq=False, hash=True, cache_hash=True)
-class LoopyCallResult(NamedArray):
+
+@array_dataclass()
+# https://github.com/python/mypy/issues/18115
+# https://github.com/python/mypy/issues/17623
+class LoopyCallResult(NamedArray):   # type: ignore[override]
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
     """
-    _mapper_method = "map_loopy_call_result"
     _container: LoopyCall
 
     @property
@@ -323,8 +331,8 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
 
 def solve_constraints(variables: Iterable[str],
                       parameters: Iterable[str],
-                      constraints: Sequence[tuple[ArithmeticExpressionT,
-                                                  ArithmeticExpressionT]],
+                      constraints: Sequence[tuple[ArithmeticExpression,
+                                                  ArithmeticExpression]],
 
                       ) -> Mapping[str, ScalarExpression]:
     """
@@ -386,7 +394,7 @@ def _pt_var_to_global_namespace(name: str | None) -> str:
     return f"_pt_{name}"
 
 
-def _get_pt_dim_expr(dim: IntegerT | Array) -> ScalarExpression:
+def _get_pt_dim_expr(dim: Integer | Array) -> ScalarExpression:
     from pytato.scalar_expr import substitute
     from pytato.utils import dim_to_index_lambda_components
     dim_expr, dim_bnds = dim_to_index_lambda_components(dim)
@@ -443,7 +451,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     # }}}
 
-    constraints: list[tuple[ArithmeticExpressionT, ArithmeticExpressionT]] = []
+    constraints: list[tuple[ArithmeticExpression, ArithmeticExpression]] = []
 
     # {{{ collect constraints from passed arguments
 

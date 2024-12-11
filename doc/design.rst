@@ -226,20 +226,15 @@ that relies on memory layout information to do its job is undefined in :mod:`pyt
 At the most basic level, the attribute :attr:`numpy.ndarray.strides` is not available
 on subclasses of :class:`pytato.Array`.
 
-Dataclasses / :mod:`attrs`
---------------------------
+Dataclasses
+-----------
 
 :mod:`dataclasses` helps us reduce most of the boilerplate involved in
-instantiating a new type. However, :mod:`dataclasses` does not support
-keyword-only argument until Python-3.10. To overcome this, we prefer
-:mod:`attrs` which gives us all the required functionality of
-:mod:`dataclasses` and works with Python-3.8.
-
-
+instantiating a new type.
 We have checks in place to avoid developer errors that could happen by using
-the defaults of these libraries. For eg. both :mod:`dataclasses` and
-:mod:`attrs` override the implementation of ``__eq__`` for the class being
-implemented, which could potentially lead lead to an `exponential complex
+the defaults of this library. For example, :mod:`dataclasses` overrides the
+implementation of ``__eq__`` for the class being implemented, which could
+potentially lead to an `exponentially complex
 operation <https://github.com/inducer/pytato/issues/163>`_.
 
 Lessons learned

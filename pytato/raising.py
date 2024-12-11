@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto, unique
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as p
-from pymbolic.typing import ScalarT
 
 from pytato.array import Array, ArrayOrScalar, IndexLambda, ShapeType
 from pytato.diagnostic import UnknownIndexLambdaExpr
-from pytato.reductions import ReductionOperation
 from pytato.scalar_expr import (
     SCALAR_CLASSES,
     IdentityMapper,
@@ -26,6 +23,14 @@ from pytato.utils import (
     get_indexing_expression,
     get_shape_after_broadcasting,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from pymbolic.typing import Scalar
+
+    from pytato.reductions import ReductionOperation
 
 
 __doc__ = """
@@ -47,7 +52,7 @@ class HighLevelOp:
 
 @dataclass(frozen=True, eq=True, repr=True)
 class FullOp(HighLevelOp):
-    fill_value: ScalarT
+    fill_value: Scalar
 
 
 @unique

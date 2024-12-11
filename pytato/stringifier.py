@@ -25,9 +25,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, cast
+import dataclasses
+from typing import TYPE_CHECKING, Any, cast
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 
@@ -41,9 +41,12 @@ from pytato.array import (
     IndexLambda,
     ReductionDescriptor,
 )
-from pytato.function import Call, FunctionDefinition
-from pytato.loopy import LoopyCall
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    from pytato.function import Call, FunctionDefinition
+    from pytato.loopy import LoopyCall
 
 
 __doc__ = """
@@ -90,7 +93,7 @@ class Reprifier(Mapper[str, [int]]):
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val
                                 in sorted(expr.items(),
-                                          key=lambda k_x_v: cast(str, k_x_v[0])))
+                                          key=lambda k_x_v: cast("str", k_x_v[0])))
                     + "}")
         elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
@@ -104,7 +107,7 @@ class Reprifier(Mapper[str, [int]]):
             return self.truncation_string
 
         # pylint: disable=not-an-iterable
-        fields = tuple(field.name for field in attrs.fields(type(expr)))
+        fields = tuple(field.name for field in dataclasses.fields(type(expr)))
 
         fields = tuple(field for field in fields if field != "non_equality_tags")
 
@@ -165,7 +168,7 @@ class Reprifier(Mapper[str, [int]]):
         # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                        for field in attrs.fields(type(expr)))
+                        for field in dataclasses.fields(type(expr)))
                 + ")")
 
     @memoize_method
@@ -182,7 +185,7 @@ class Reprifier(Mapper[str, [int]]):
         # pylint: disable=not-an-iterable
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field.name}={_get_field_val(field.name)}"
-                        for field in attrs.fields(type(expr)))
+                        for field in dataclasses.fields(type(expr)))
                 + ")")
 
     def map_call(self, expr: Call, depth: int) -> str:

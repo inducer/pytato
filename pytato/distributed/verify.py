@@ -36,12 +36,9 @@ THE SOFTWARE.
 """
 
 
+import dataclasses
 import logging
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
-
-import attrs
-import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -51,7 +48,6 @@ from pytato.array import (
     ShapeType,
     make_dict_of_named_arrays,
 )
-from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.distributed.partition import (
     CommunicationOpIdentifier,
     DistributedGraphPartition,
@@ -64,12 +60,17 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import mpi4py.MPI
+    import numpy as np
+
+    from pytato.distributed.nodes import CommTagType, DistributedRecv
 
 
 # {{{ data structures
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedSend:
     src_rank: int
     dest_rank: int
@@ -79,19 +80,19 @@ class _SummarizedDistributedSend:
     dtype: np.dtype[Any]
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _DistributedPartId:
     rank: int
     part_id: PartId
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _DistributedName:
     rank: int
     name: str
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _SummarizedDistributedGraphPart:
     pid: _DistributedPartId
     needed_pids: frozenset[_DistributedPartId]

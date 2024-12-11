@@ -29,7 +29,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Mapping
+
+from typing import TYPE_CHECKING
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -40,6 +41,10 @@ from pytato.array import (
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
 from pytato.transform import ArrayOrNames, CopyMapper
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 # {{{ inlining

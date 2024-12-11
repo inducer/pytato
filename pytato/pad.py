@@ -1,5 +1,12 @@
 """
 .. autofunction:: pad
+
+Cross-references
+----------------
+
+.. class:: Integer
+
+    See :mod:`pymbolic.typing`.
 """
 from __future__ import annotations
 
@@ -7,23 +14,28 @@ from __future__ import annotations
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
 import collections.abc as abc
-from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 import pymbolic.primitives as prim
-from pymbolic.typing import IntegerT, ScalarT
+from pymbolic import Scalar
 from pytools import UniqueNameGenerator
 
 from pytato.array import Array, IndexLambda
 from pytato.scalar_expr import INT_CLASSES
 
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from pymbolic.typing import Integer
+
+
 def _get_constant_padded_idx_lambda(
     array: Array,
-    pad_widths: Sequence[tuple[IntegerT, IntegerT]],
-    constant_vals: Sequence[tuple[ScalarT, ScalarT]]
+    pad_widths: Sequence[tuple[Integer, Integer]],
+    constant_vals: Sequence[tuple[Scalar, Scalar]]
 ) -> IndexLambda:
     """
     Internal routine used by :func:`pad` for constant-mode padding.
@@ -72,9 +84,9 @@ def _get_constant_padded_idx_lambda(
 
 def _normalize_pad_width(
         array: Array,
-        pad_width: IntegerT | Sequence[IntegerT],
-        ) -> Sequence[tuple[IntegerT, IntegerT]]:
-    processed_pad_widths: list[tuple[IntegerT, IntegerT]]
+        pad_width: Integer | Sequence[Integer],
+        ) -> Sequence[tuple[Integer, Integer]]:
+    processed_pad_widths: list[tuple[Integer, Integer]]
 
     if isinstance(pad_width, INT_CLASSES):
         processed_pad_widths = [(pad_width, pad_width)
@@ -118,7 +130,7 @@ def _normalize_pad_width(
 
 
 def pad(array: Array,
-        pad_width: IntegerT | Sequence[IntegerT],
+        pad_width: Integer | Sequence[Integer],
         mode: str = "constant",
         **kwargs: Any) -> Array:
     r"""
@@ -173,7 +185,7 @@ def pad(array: Array,
 
         # {{{ normalize constant_values
 
-        processed_constant_vals: Sequence[tuple[ScalarT, ScalarT]]
+        processed_constant_vals: Sequence[tuple[Scalar, Scalar]]
 
         try:
             constant_vals = kwargs.pop("constant_values")

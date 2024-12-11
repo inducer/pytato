@@ -34,14 +34,11 @@ THE SOFTWARE.
 """
 
 
-from collections.abc import Callable, Mapping
-from typing import cast
+import dataclasses
+from typing import TYPE_CHECKING, cast
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
-
-from pytools.tag import Tag
 
 from pytato.array import (
     Array,
@@ -59,12 +56,19 @@ from pytato.array import (
     Roll,
     Stack,
 )
-from pytato.raising import HighLevelOp
 from pytato.transform import (
     MappedT,
     TransformMapperWithExtraArgs,
 )
 from pytato.utils import are_shapes_equal
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from pytools.tag import Tag
+
+    from pytato.raising import HighLevelOp
 
 
 class EinsumDistributiveLawDescriptor:
@@ -74,7 +78,7 @@ class EinsumDistributiveLawDescriptor:
     """
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to not apply
@@ -82,7 +86,7 @@ class DoNotDistribute(EinsumDistributiveLawDescriptor):
     """
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class DoDistribute(EinsumDistributiveLawDescriptor):
     """
     Tells :func:`apply_distributive_property_to_einsums` to apply distributive
@@ -91,16 +95,16 @@ class DoDistribute(EinsumDistributiveLawDescriptor):
     ioperand: int
 
 
-@attrs.frozen
+@dataclasses.dataclass(frozen=True)
 class _EinsumDistributiveLawMapperContext:
     access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
     surrounding_args: Mapping[int, Array]
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
                                  ReductionDescriptor]
-    axes: AxesT = attrs.field(kw_only=True)
-    tags: frozenset[Tag] = attrs.field(kw_only=True)
+    axes: AxesT = dataclasses.field(kw_only=True)
+    tags: frozenset[Tag] = dataclasses.field(kw_only=True)
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         # {{{ check that exactly one of the args is missing
 
         assert len(self.surrounding_args) == (
@@ -358,4 +362,4 @@ def apply_distributive_property_to_einsums(
         True
     """
     mapper = EinsumDistributiveLawMapper(how_to_distribute)
-    return cast(MappedT, mapper(expr, None))
+    return cast("MappedT", mapper(expr, None))

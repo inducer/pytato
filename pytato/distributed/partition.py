@@ -63,6 +63,7 @@ THE SOFTWARE.
 """
 
 import collections
+import dataclasses
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence, Set
 from functools import reduce
 from typing import (
@@ -73,7 +74,6 @@ from typing import (
     cast,
 )
 
-import attrs
 from immutabledict import immutabledict
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -88,7 +88,6 @@ from pytato.distributed.nodes import (
     DistributedSend,
     DistributedSendRefHolder,
 )
-from pytato.function import FunctionDefinition, NamedCallResult
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
 
@@ -96,8 +95,10 @@ from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Copy
 if TYPE_CHECKING:
     import mpi4py.MPI
 
+    from pytato.function import FunctionDefinition, NamedCallResult
 
-@attrs.define(frozen=True)
+
+@dataclasses.dataclass(frozen=True)
 class CommunicationOpIdentifier:
     """Identifies a communication operation (consisting of a pair of
     a send and a receive).
@@ -186,7 +187,7 @@ class _OrderedSet(Generic[_ValueT], collections.abc.MutableSet[_ValueT]):
 PartId = Hashable
 
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPart:
     """For one graph part, record send/receive information for input/
     output names.
@@ -246,7 +247,7 @@ class DistributedGraphPart:
 
 # {{{ distributed graph partition
 
-@attrs.define(frozen=True, slots=False)
+@dataclasses.dataclass(frozen=True, slots=False)
 class DistributedGraphPartition:
     """
     .. attribute:: parts
@@ -350,7 +351,7 @@ class _DistributedInputReplacer(CopyMapper):
             if name is not None:
                 return self._get_placeholder_for(name, expr)
 
-        return cast(ArrayOrNames, super().rec(expr))
+        return cast("ArrayOrNames", super().rec(expr))
 
     def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
         placeholder = self.partition_input_name_to_placeholder.get(name)
@@ -364,7 +365,7 @@ class _DistributedInputReplacer(CopyMapper):
 # }}}
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class _PartCommIDs:
     """A *part*, unlike a *batch*, begins with receives and ends with sends.
     """
@@ -820,7 +821,7 @@ def find_distributed_partition(
             raise comm_batches_or_exc
 
         comm_batches = cast(
-                Sequence[Set[CommunicationOpIdentifier]],
+                "Sequence[Set[CommunicationOpIdentifier]]",
                 comm_batches_or_exc)
 
     # }}}
@@ -921,7 +922,7 @@ def find_distributed_partition(
                 ary: max(
                         (comm_id_to_part_id[
                             _recv_to_comm_id(local_rank,
-                                            cast(DistributedRecv, recvd_ary))]
+                                            cast("DistributedRecv", recvd_ary))]
                         for recvd_ary in recvd_array_dep_mapper(ary)),
                         default=-1)
                 for ary in mso_arrays
@@ -991,18 +992,18 @@ def find_distributed_partition(
 
     # }}}
 
-    # Don't be tempted to put outputs in _array_names; the mapping from output array
+    # Don't be tempted to put outputs in array_names; the mapping from output array
     # to name may not be unique
-    _array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
-    _array_names: dict[Array, str] = {}
+    array_name_gen = UniqueNameGenerator(forced_prefix="_pt_dist_")
+    array_names: dict[Array, str] = {}
 
     def gen_array_name(ary: Array) -> str:
-        name = _array_names.get(ary)
+        name = array_names.get(ary)
         if name is not None:
             return name
         else:
-            name = _array_name_gen()
-            _array_names[ary] = name
+            name = array_name_gen()
+            array_names[ary] = name
             return name
 
     recvd_ary_to_name: dict[Array, str] = {

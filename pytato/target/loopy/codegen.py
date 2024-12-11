@@ -23,20 +23,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import dataclasses
 import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
-import attrs
 import islpy as isl
 
 import loopy as lp
 import pymbolic.primitives as prim
-import pytools
-from pymbolic import ArithmeticExpressionT, var
-from pymbolic.typing import ExpressionT
-from pytools.tag import Tag
+from pymbolic import ArithmeticExpression, var
 
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
@@ -59,8 +57,6 @@ from pytato.codegen import (
     normalize_outputs,
     preprocess,
 )
-from pytato.function import Call, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.scalar_expr import (
     INT_CLASSES,
     ScalarExpression,
@@ -73,16 +69,26 @@ from pytato.tags import (
     Named,
     PrefixNamed,
 )
-from pytato.target import BoundProgram
 from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    import pyopencl
+    import pytools
+    from pymbolic.typing import Expression
+    from pytools.tag import Tag
+
+    from pytato.function import Call, NamedCallResult
+    from pytato.loopy import LoopyCall
+    from pytato.target import BoundProgram
 
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
-    import pyopencl
+    from pytools.tag import Tag  # noqa: TC001
 
 __doc__ = """
 .. autoclass:: PersistentExpressionContext
@@ -119,9 +125,9 @@ __doc__ = """
 
 
 def loopy_substitute(
-            expression: ExpressionT,
-            variable_assignments: Mapping[str, ExpressionT]
-        ) -> ExpressionT:
+            expression: Expression,
+            variable_assignments: Mapping[str, Expression]
+        ) -> Expression:
     from loopy.symbolic import SubstitutionMapper
     from pymbolic.mapper.substitutor import make_subst_func
 
@@ -144,7 +150,7 @@ ReductionBounds = Mapping[str, tuple[ScalarExpression, ScalarExpression]]
 
 # {{{ LoopyExpressionContexts
 
-@attrs.define(init=True, repr=False, eq=False)
+@dataclasses.dataclass(init=True, repr=False, eq=False)
 class PersistentExpressionContext:
     """
     Mutable state used while generating :mod:`loopy` expressions for a
@@ -168,8 +174,7 @@ class PersistentExpressionContext:
 
     """
     state: CodeGenState
-    _depends_on: frozenset[str] = \
-            attrs.field(factory=frozenset)
+    _depends_on: frozenset[str] = dataclasses.field(default_factory=frozenset)
 
     @property
     def depends_on(self) -> frozenset[str]:
@@ -179,7 +184,7 @@ class PersistentExpressionContext:
         self._depends_on = self._depends_on | other
 
 
-@attrs.define(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class LocalExpressionContext:
     """
     Records context being to be conveyed from a parent expression to its
@@ -238,7 +243,7 @@ class ImplementedResult(ABC):
 
     @abstractmethod
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ExpressionT:
+            expr_context: PersistentExpressionContext) -> Expression:
         """Return a :mod:`loopy` expression for this result.
 
         :param indices: symbolic expressions for the indices of the array
@@ -265,7 +270,7 @@ class StoredResult(ImplementedResult):
         self.depends_on = depends_on
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ExpressionT:
+            expr_context: PersistentExpressionContext) -> Expression:
         assert len(indices) == self.num_indices
         expr_context.update_depends_on(self.depends_on)
         if indices == ():
@@ -292,7 +297,7 @@ class InlinedResult(ImplementedResult):
         self.depends_on = depends_on
 
     def to_loopy_expression(self, indices: SymbolicIndex,
-            expr_context: PersistentExpressionContext) -> ExpressionT:
+            expr_context: PersistentExpressionContext) -> Expression:
         assert len(indices) == self.num_indices
         substitutions = {f"_{d}": i for d, i in enumerate(indices)}
         expr_context.update_depends_on(self.depends_on)
@@ -303,7 +308,7 @@ class InlinedResult(ImplementedResult):
 
 # {{{ SubstitutionRuleResult
 
-@attrs.define(frozen=True, eq=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class SubstitutionRuleResult(ImplementedResult):
     """
     An array expression generated as a
@@ -318,7 +323,7 @@ class SubstitutionRuleResult(ImplementedResult):
     def to_loopy_expression(self,
                             indices: SymbolicIndex,
                             expr_context: PersistentExpressionContext
-                            ) -> ExpressionT:
+                            ) -> Expression:
         assert len(indices) == self.num_args
         expr_context.update_depends_on(self.depends_on)
         return prim.Call(prim.Variable(self.subst_name), indices)
@@ -327,7 +332,7 @@ class SubstitutionRuleResult(ImplementedResult):
 
 # {{{ codegen state
 
-@attrs.define(init=True, repr=False, eq=False)
+@dataclasses.dataclass(init=True, repr=False, eq=False)
 class CodeGenState:
     """A container for data kept by :class:`CodeGenMapper`.
 
@@ -349,10 +354,10 @@ class CodeGenState:
     _t_unit: lp.TranslationUnit
     results: dict[Array, ImplementedResult]
 
-    var_name_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
-    insn_id_gen: pytools.UniqueNameGenerator = attrs.field(init=False)
+    var_name_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
+    insn_id_gen: pytools.UniqueNameGenerator = dataclasses.field(init=False)
 
-    def __attrs_post_init__(self) -> None:
+    def __post_init__(self) -> None:
         self.var_name_gen = self._t_unit.default_entrypoint.get_var_name_generator()
         self.insn_id_gen = (
                 self._t_unit.default_entrypoint.get_instruction_id_generator())
@@ -535,7 +540,7 @@ class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
                                prim.Subscript(var(name), inames_as_vars))
 
         assignees = []
-        params: list[ExpressionT] = []
+        params: list[Expression] = []
         depends_on: set[str] = set()
         new_tvs = {}
         new_insn_id = state.insn_id_gen(f"call_{callee_kernel.name}")
@@ -642,8 +647,8 @@ class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
 
 # {{{ inlined expression gen mapper
 
-ELWISE_INDEX_RE = re.compile("_(0|([1-9][0-9]*))")
-REDUCTION_INDEX_RE = re.compile("_r(0|([1-9][0-9]*))")
+ELWISE_INDEX_RE = re.compile(r"_(0|([1-9][0-9]*))")
+REDUCTION_INDEX_RE = re.compile(r"_r(0|([1-9][0-9]*))")
 
 # Maps Pytato reduction types to the corresponding Loopy reduction types.
 PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] = {
@@ -689,7 +694,7 @@ class InlinedExpressionGenMapper(
     def map_variable(self, expr: prim.Variable,
                      prstnt_ctx: PersistentExpressionContext,
                      local_ctx: LocalExpressionContext,
-                     ) -> ExpressionT:
+                     ) -> Expression:
 
         elw_match = ELWISE_INDEX_RE.fullmatch(expr.name)
         if elw_match:
@@ -708,7 +713,7 @@ class InlinedExpressionGenMapper(
     def map_call(self, expr: prim.Call,
                  prstnt_ctx: PersistentExpressionContext,
                  local_ctx: LocalExpressionContext
-                 ) -> ExpressionT:
+                 ) -> Expression:
         if isinstance(expr.function, prim.Variable) and (
                 expr.function.name.startswith("pytato.c99.")):
             name_in_loopy = expr.function.name[11:]
@@ -786,9 +791,9 @@ class InlinedExpressionGenMapper(
 def shape_to_scalar_expression(shape: ShapeType,
                                cgen_mapper: CodeGenMapper,
                                state: CodeGenState
-                               ) -> tuple[ArithmeticExpressionT, ...]:
+                               ) -> tuple[ArithmeticExpression, ...]:
     shape_context = PersistentExpressionContext(state)
-    result: list[ArithmeticExpressionT] = []
+    result: list[ArithmeticExpression] = []
     for component in shape:
         if isinstance(component, INT_CLASSES):
             result.append(component)
@@ -1012,7 +1017,7 @@ def get_initial_codegen_state(target: LoopyTarget,
             options=options,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION)
 
-    return CodeGenState(t_unit=kernel, results={})
+    return CodeGenState(_t_unit=kernel, results={})
 
 
 # {{{ generate_loopy

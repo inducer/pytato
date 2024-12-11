@@ -38,8 +38,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from immutabledict import immutabledict
 
@@ -57,10 +56,8 @@ from pytato.array import (
     SizeParam,
     make_dict_of_named_arrays,
 )
-from pytato.function import NamedCallResult
 from pytato.loopy import LoopyCall
 from pytato.scalar_expr import IntegralScalarExpression, is_integral_scalar_expression
-from pytato.target import Target
 from pytato.transform import (
     ArrayOrNames,
     CachedWalkMapper,
@@ -68,6 +65,13 @@ from pytato.transform import (
     SubsetDependencyMapper,
 )
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytato.function import NamedCallResult
+    from pytato.target import Target
 
 
 SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
@@ -144,7 +148,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(
+        return SizeParam(  # pylint: disable=missing-kwoa
             name=name,
             tags=expr.tags,
             non_equality_tags=expr.non_equality_tags)

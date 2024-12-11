@@ -26,18 +26,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import dataclasses
 import logging
-from collections.abc import Callable, Hashable, Iterable, Mapping
-from dataclasses import dataclass
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     ParamSpec,
+    TypeAlias,
     TypeVar,
     cast,
 )
 
-import attrs
 import numpy as np
 from immutabledict import immutabledict
 from typing_extensions import Self
@@ -79,7 +79,11 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from pytato.tags import ImplStored
 
 
-ArrayOrNames = Array | AbstractResultWithNamedArrays
+if TYPE_CHECKING:
+    from collections.abc import Callable, Hashable, Iterable, Mapping
+
+
+ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
 TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
@@ -132,6 +136,8 @@ Transforming call sites
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. class:: ArrayOrNames
+
 .. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
@@ -144,6 +150,9 @@ Internal stuff that is only here because the documentation tool wants it
 
     A type variable representing the result type of a :class:`Mapper`.
 
+.. class:: Scalar
+
+    See :data:`pymbolic.Scalar`.
 """
 
 transform_logger = logging.getLogger(__file__)
@@ -212,7 +221,7 @@ class Mapper(Generic[ResultT, P]):
                 return self.map_foreign(expr, *args, **kwargs)
 
         assert method is not None
-        return cast(ResultT, method(expr, *args, **kwargs))
+        return cast("ResultT", method(expr, *args, **kwargs))
 
     def __call__(self,
                  expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
@@ -452,7 +461,7 @@ class CopyMapper(TransformMapper):
         rec_container = self.rec(expr._container)
         assert isinstance(rec_container, LoopyCall)
         return LoopyCallResult(
-                container=rec_container,
+                _container=rec_container,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,
@@ -491,7 +500,7 @@ class CopyMapper(TransformMapper):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return attrs.evolve(expr, returns=immutabledict(new_returns))
+        return dataclasses.replace(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.map_function_definition(expr.function),
@@ -618,7 +627,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_size_param(self,
                        expr: SizeParam, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert expr.name is not None
-        return SizeParam(expr.name, axes=expr.axes, tags=expr.tags)
+        return SizeParam(name=expr.name, axes=expr.axes, tags=expr.tags)
 
     def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> Array:
         return Einsum(expr.access_descriptors,
@@ -665,7 +674,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         rec_loopy_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(rec_loopy_call, LoopyCall)
         return LoopyCallResult(
-                container=rec_loopy_call,
+                _container=rec_loopy_call,
                 name=expr.name,
                 axes=expr.axes,
                 tags=expr.tags,
@@ -1329,7 +1338,7 @@ class CachedMapAndCopyMapper(CopyMapper):
 
 # {{{ MPMS materializer
 
-@dataclass(frozen=True, eq=True)
+@dataclasses.dataclass(frozen=True, eq=True)
 class MPMSMaterializerAccumulator:
     """This class serves as the return value of :class:`MPMSMaterializer`. It
     contains the set of materialized predecessors and the rewritten expression
@@ -1573,7 +1582,7 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast(MappedT, CachedMapAndCopyMapper(map_fn)(expr))
+    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
 
 
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:

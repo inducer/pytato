@@ -22,8 +22,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from collections.abc import Callable, Iterable, Sequence
 from typing import (
+    TYPE_CHECKING,
     Any,
     TypeVar,
     cast,
@@ -34,10 +34,8 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import ScalarT
-from pymbolic.typing import ArithmeticExpressionT, BoolT
+from pymbolic import ArithmeticExpression, Bool, Scalar
 from pytools import UniqueNameGenerator
-from pytools.tag import Tag
 
 from pytato.array import (
     AdvancedIndexInContiguousAxes,
@@ -63,6 +61,12 @@ from pytato.scalar_expr import (
     TypeCast,
 )
 from pytato.transform import CachedMapper
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Sequence
+
+    from pytools.tag import Tag
 
 
 __doc__ = """
@@ -107,7 +111,7 @@ def partition(pred: Callable[[Tpart], bool],
 
 
 def get_shape_after_broadcasting(
-            exprs: Iterable[Array | ScalarT]
+            exprs: Iterable[Array | Scalar]
         ) -> ShapeType:
     """
     Returns the shape after broadcasting *exprs* in an operation.
@@ -148,7 +152,7 @@ def get_indexing_expression(shape: ShapeType,
     """
     assert len(shape) <= len(result_shape)
     i_start = len(result_shape) - len(shape)
-    indices: list[ArithmeticExpressionT] = []
+    indices: list[ArithmeticExpression] = []
     for i, (dim1, dim2) in enumerate(zip(shape, result_shape[i_start:], strict=True)):
         if not are_shape_components_equal(dim1, dim2):
             assert are_shape_components_equal(dim1, 1)
@@ -160,7 +164,7 @@ def get_indexing_expression(shape: ShapeType,
 
 
 def with_indices_for_broadcasted_shape(val: prim.Variable, shape: ShapeType,
-                                       result_shape: ShapeType) -> prim.Expression:
+                                       result_shape: ShapeType) -> ArithmeticExpression:
     if len(shape) == 0:
         # scalar expr => do not index
         return val
@@ -172,7 +176,7 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
                                              bnd_name: str,
                                              bindings: dict[str, Array],
                                              result_shape: ShapeType
-                                             ) -> ScalarExpression | BoolT:
+                                             ) -> ScalarExpression | Bool:
     """
     Returns an instance of :class:`~pytato.scalar_expr.ScalarExpression` to address
     *arr* in a :class:`pytato.array.IndexLambda` of shape *result_shape*.
@@ -226,8 +230,8 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
     def cast_to_result_type(
                 array: ArrayOrScalar,
-                expr: ScalarExpression | BoolT
-            ) -> ScalarExpression | BoolT:
+                expr: ScalarExpression | Bool
+            ) -> ScalarExpression | Bool:
         if ((isinstance(array, Array) or isinstance(array, np.generic))
                 and array.dtype != result_dtype):
             # Loopy's type casts don't like casting to bool
@@ -402,7 +406,7 @@ def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:
     return bset
 
 
-def _is_non_negative(expr: ShapeComponent) -> BoolT:
+def _is_non_negative(expr: ShapeComponent) -> Bool:
     """
     Returns *True* iff it can be proven that ``expr >= 0``.
     """
@@ -420,7 +424,7 @@ def _is_non_negative(expr: ShapeComponent) -> BoolT:
     return (aff.ge_set(aff * 0) >= _get_size_params_assumptions_bset(space))  # type: ignore[no-any-return]
 
 
-def _is_non_positive(expr: ShapeComponent) -> BoolT:
+def _is_non_positive(expr: ShapeComponent) -> Bool:
     """
     Returns *True* iff it can be proven that ``expr <= 0``.
     """
@@ -535,7 +539,7 @@ def _index_into(
                    + (slice(None, None, None),) * (ary.ndim - len(indices) + 1)
                    + indices[ellipsis_pos+1:])
 
-    indices = cast(tuple[int, slice, "Array", None], indices)
+    indices = cast("tuple[int, slice, Array, None]", indices)
 
     # }}}
 
@@ -639,7 +643,7 @@ def _index_into(
 def get_common_dtype_of_ary_or_scalars(ary_or_scalars: Sequence[ArrayOrScalar]
                                        ) -> _dtype_any:
     array_types: list[_dtype_any] = []
-    scalars: list[ScalarT] = []
+    scalars: list[Scalar] = []
 
     for ary_or_scalar in ary_or_scalars:
         if isinstance(ary_or_scalar, Array):

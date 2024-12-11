@@ -38,6 +38,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
@@ -54,6 +55,7 @@ jobs:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
                 build_py_project_in_conda_env

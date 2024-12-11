@@ -26,9 +26,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import memoize_method
 
@@ -46,12 +46,14 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.loopy import LoopyCall
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
@@ -562,6 +564,33 @@ def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
     cscm(outputs)
 
     return cscm.count
+
+# }}}
+
+
+# {{{ PytatoKeyBuilder
+
+class PytatoKeyBuilder(LoopyKeyBuilder):
+    """A custom :class:`pytools.persistent_dict.KeyBuilder` subclass
+    for objects within :mod:`pytato`.
+    """
+    # The types below aren't immutable in general, but in the context of
+    # pytato, they are used as such.
+
+    def update_for_ndarray(self, key_hash: Any, key: Any) -> None:
+        import numpy as np
+        assert isinstance(key, np.ndarray)
+        self.rec(key_hash, key.data.tobytes())
+
+    def update_for_TaggableCLArray(self, key_hash: Any, key: Any) -> None:
+        from arraycontext.impl.pyopencl.taggable_cl_array import TaggableCLArray
+        assert isinstance(key, TaggableCLArray)
+        self.rec(key_hash, key.get())
+
+    def update_for_Array(self, key_hash: Any, key: Any) -> None:
+        from pyopencl.array import Array
+        assert isinstance(key, Array)
+        self.rec(key_hash, key.get())
 
 # }}}
 

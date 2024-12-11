@@ -27,19 +27,16 @@ THE SOFTWARE.
 """
 
 
+import dataclasses
 import html
-from collections.abc import Callable, Mapping
 from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
 )
 
-import attrs
-
 from pytools import UniqueNameGenerator
 from pytools.codegen import remove_common_indentation
-from pytools.tag import Tag
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -61,13 +58,17 @@ from pytato.distributed.partition import (
     PartId,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.tags import FunctionIdentifier
 from pytato.transform import ArrayOrNames, CachedMapper, InputGatherer
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from pytools.tag import Tag
+
     from pytato.distributed.nodes import DistributedSendRefHolder
+    from pytato.loopy import LoopyCall
 
 
 __doc__ = """
@@ -81,7 +82,7 @@ __doc__ = """
 
 # {{{ _DotEmitter
 
-@attrs.define
+@dataclasses.dataclass
 class _SubgraphTree:
     contents: list[str] | None
     subgraphs: dict[str, _SubgraphTree]
@@ -156,7 +157,7 @@ class DotEmitter:
 
 # {{{ array -> dot node converter
 
-@attrs.define
+@dataclasses.dataclass
 class _DotNodeInfo:
     title: str
     fields: dict[str, Any]
@@ -202,7 +203,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
         info = self.get_common_dot_info(expr)
 
         # pylint: disable=not-an-iterable
-        for field in attrs.fields(type(expr)):
+        for field in dataclasses.fields(type(expr)):
             if field.name in info.fields:
                 continue
             attr = getattr(expr, field.name)
@@ -528,7 +529,7 @@ def _gather_partition_node_information(
         # It is important that seen functions are emitted callee-first.
         # (Otherwise function 'entry' nodes will get declared in the wrong
         # cluster.) So use a data type that preserves order.
-        seen_functions: list[FunctionDefinition] = []
+        seen_functions: dict[FunctionDefinition, None] = {}
 
         def gather_function_info(f: FunctionDefinition) -> None:
             key = (part.pid, f)  # noqa: B023
@@ -545,7 +546,7 @@ def _gather_partition_node_information(
                 gather_function_info(subfunc)
 
             if f not in seen_functions:  # noqa: B023
-                seen_functions.append(f)  # noqa: B023
+                seen_functions[f] = None  # noqa: B023
 
         for f in mapper.functions:
             gather_function_info(f)
@@ -683,7 +684,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
         # }}}
 
-        # {{{ emit receives nodes
+        # {{{ emit receive nodes
 
         part_dist_recv_var_name_to_node_id = {}
         for name, recv in (

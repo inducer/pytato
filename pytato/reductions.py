@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pymbolic import ArithmeticExpressionT
-
 
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
@@ -30,17 +28,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
+from pymbolic import ArithmeticExpression
 
 from pytato.array import Array, ReductionDescriptor, ShapeType, make_index_lambda
 from pytato.scalar_expr import INT_CLASSES, Reduce, ScalarExpression
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 # {{{ docs
@@ -190,8 +193,8 @@ def _normalize_reduction_axes(
 def _get_reduction_indices_bounds(shape: ShapeType,
                                   axes: tuple[int, ...],
                                   ) -> tuple[Sequence[prim.Variable],
-                                             Mapping[str, tuple[ArithmeticExpressionT,
-                                                             ArithmeticExpressionT]]]:
+                                             Mapping[str, tuple[ArithmeticExpression,
+                                                             ArithmeticExpression]]]:
     """
     Given *shape* and reduction axes *axes*, produce a list of inames
     ``indices`` named appropriately for reduction inames.
