@@ -43,8 +43,12 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
+    Mapping,
     TypeVar,
+    Iterable,
+    TypeAlias,
     cast,
+    ParamSpec,
 )
 
 from bidict import bidict
@@ -88,8 +92,6 @@ if TYPE_CHECKING:
 GraphNodeT = TypeVar("GraphNodeT")
 
 
-from collections.abc import Iterable
-from typing import ParamSpec, TypeAlias
 
 import pymbolic.primitives as prim
 from pymbolic.typing import Expression
