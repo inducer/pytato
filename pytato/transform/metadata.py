@@ -716,11 +716,17 @@ def unify_axes_tags(
         equations_collector.equations
     )
 
-    for tag, var in equations_collector.known_tag_to_var.items():
-        if isinstance(tag, AxisIgnoredForPropagationTag):
-            continue
+    ignored_vars = set()
+    for (ary, ax), ax_var in equations_collector.axis_to_var.items():
+        tags = ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag)
+        if tags:
+            ignored_vars.add(ax_var)
+            for tag in tags:
+                ignored_vars.add(equations_collector.known_tag_to_var[tag])
 
-        reachable_nodes = get_reachable_nodes(propagation_graph, var)
+    for tag, var in equations_collector.known_tag_to_var.items():
+        reachable_nodes = get_reachable_nodes(propagation_graph, var,
+                                              ignored_vars)
         for reachable_var in (reachable_nodes - known_tag_vars):
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],
