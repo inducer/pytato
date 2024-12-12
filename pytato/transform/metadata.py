@@ -53,7 +53,6 @@ from typing import (
 from bidict import bidict
 
 import pymbolic.primitives as prim
-from pymbolic.typing import Expression
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 
@@ -102,22 +101,23 @@ P = ParamSpec("P")
 
 
 class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
-                                                     set[tuple[Expression, ...]]],
+                                                     set[tuple[prim.Variable, ...]]],
                                                       []]):
     """
     Determine which axes are used in the scalar expressionand which ones just
     flow through the expression.
     """
     def combine(self,
-                values: Iterable[Mapping[BindingName, set[tuple[Expression, ...]]]]) \
-                        -> Mapping[BindingName, set[tuple[Expression, ...]]]:
-        out: dict[BindingName, set[tuple[Expression, ...]]] = {}
+                values: Iterable[Mapping[BindingName,
+                                         set[tuple[prim.Variable, ...]]]]) \
+                        -> Mapping[BindingName, set[tuple[prim.Variable, ...]]]:
+        out: dict[BindingName, set[tuple[prim.Variable, ...]]] = {}
         for val in values:
             out.update(val)
         return out
 
     def map_subscript(self, expr: prim.Subscript) -> Mapping[BindingName,
-                                                    set[tuple[Expression, ...]]]:
+                                                    set[tuple[prim.Variable, ...]]]:
         """
         Record the indexing usage for the variable if we are tracking
         the specific variable.
@@ -125,17 +125,22 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
 
         if isinstance(expr.aggregate, prim.Variable):
             name: BindingName = expr.aggregate.name
-            base = {name: set(expr.index_tuple)}
+
+            index = (val if isinstance(val, prim.Variable)
+                      else prim.Variable(name="IGNORE")
+                      for val in expr.index_tuple)
+            base: Mapping[BindingName, set[tuple[prim.Variable, ...]]] = {name:
+                                                             set([tuple(index)])}
             return self.combine([base, self.rec(expr.index)])
         return {}
 
     def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> Mapping[BindingName,
-                                                      set[tuple[Expression, ...]]]:
+                                                    set[tuple[prim.Variable, ...]]]:
 
         return {}
 
     def map_constant(self, expr: object) -> Mapping[BindingName,
-                                                      set[tuple[Expression, ...]]]:
+                                                    set[tuple[prim.Variable, ...]]]:
         return {}
 
 
@@ -282,22 +287,25 @@ class AxesTagsEquationCollector(Mapper[None, []]):
             out_shape = expr.shape
             assert len(out_shape) == expr.ndim
 
-        for vname, ind_tuple in index_expr_used.items():
-            for axis_ind in range(len(ind_tuple)):
-                var_ind_name = ind_tuple[axis_ind]
-                if isinstance(var_ind_name, prim.Variable):
+        for vname, set_of_ind_tuple in index_expr_used.items():
+            for ind_tuple in set_of_ind_tuple:
+                for axis_ind in range(len(ind_tuple)):
+                    var_ind_name = ind_tuple[axis_ind]
                     if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(var_ind_name.name):
                         # Reduction axis. We can ignore it.
                         pass
                     elif var_ind_name.name[:3] == "_in":
                         # Variable name axis.
                         pass
+                    elif var_ind_name.name == "IGNORE":
+                        # This is not directly represented in output axes. Ignore.
+                        pass
                     elif IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
                         # matched with an iname.
                         inum = int(var_ind_name.name[1:])
-                        val = (self.get_var_for_axis(expr.bindings[vname], axis_ind),
-                               self.get_var_for_axis(expr, inum))
-                        self.equations.append(val)
+                        lhs: str = self.get_var_for_axis(expr.bindings[vname], axis_ind)
+                        rhs: str = self.get_var_for_axis(expr, inum)
+                        self.record_equation(lhs, rhs)
                     else:
                         raise ValueError(f"Unknown index name used in {vname}")
         return
