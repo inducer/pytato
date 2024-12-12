@@ -917,10 +917,10 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     n_in = np.random.randint(2, 20)
 
     def _get_a_shape(_m, _n):
-        return (2*_m+1, 3*_n+7) # noqa: RUF052
+        return (2*_m+1, 3*_n+7)  # noqa: RUF052
 
     def _get_x_shape(_m, _n):
-        return (3*_n+7, ) # noqa: RUF052
+        return (3*_n+7, )  # noqa: RUF052
 
     A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))

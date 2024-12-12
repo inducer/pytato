@@ -61,17 +61,17 @@ from pytato.array import (
 
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
+from pytato.scalar_expr import (
+    IDX_LAMBDA_INAME,
+    IDX_LAMBDA_JUST_REDUCTIONS,
+    CombineMapper,
+)
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
 import pymbolic.primitives as prim
 from pymbolic.typing import Expression
 
-from pytato.scalar_expr import (
-    IDX_LAMBDA_INAME,
-    IDX_LAMBDA_JUST_REDUCTIONS,
-    CombineMapper,
-)
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 
@@ -101,7 +101,7 @@ P = ParamSpec("P")
 
 class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
                                                      set[tuple[Expression, ...]]],
-                                                      P]):
+                                                      []]):
     """
     Determine which axes are used in the scalar expressionand which ones just
     flow through the expression.
@@ -122,9 +122,11 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
         """
 
         name = expr.aggregate.name
-        base = {name: expr.index_tuple}
-
-        return self.combine([base, self.rec(expr.index)])
+        if isinstance(expr.aggregrate, prim.Variable):
+            name = expr.aggregate.name
+            base = {name: set((expr.index_tuple))}
+            return self.combine([base, self.rec(expr.index)])
+        return {}
 
     def map_constant(self, expr: object) -> Mapping[BindingName,
                                                       set[tuple[Expression, ...]]]:
@@ -644,7 +646,8 @@ class AxisTagAttacher(CopyMapper):
                                 if name in expr.var_to_reduction_descr.keys():
                                     assert len(list(expr.bindings.keys())) == 1
                                     my_arr: Array = next(iter(expr.bindings.values()))
-
+                                    
+                                    assert isinstance(expr_copy, IndexLambda)
                                     expr_copy = expr_copy.with_tagged_reduction(
                                             name,
                                             self.axis_to_tags.get((my_arr, iaxis), [])
