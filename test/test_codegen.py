@@ -917,10 +917,10 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     n_in = np.random.randint(2, 20)
 
     def _get_a_shape(_m, _n):
-        return (2*_m+1, 3*_n+7)
+        return (2*_m+1, 3*_n+7) # noqa: RUF052
 
     def _get_x_shape(_m, _n):
-        return (3*_n+7, )
+        return (3*_n+7, ) # noqa: RUF052
 
     A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
@@ -1571,7 +1571,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
     cq = cl.CommandQueue(ctx)
 
     def kernel(usr_np, _pt_data_9):
-        pt_tmp_53 = _pt_data_9 @ _pt_data_9
+        pt_tmp_53 = _pt_data_9 @ _pt_data_9 # NOQA RUF052
         pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
         pt_tmp_27 = usr_np.sum(pt_tmp_42)
         pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
