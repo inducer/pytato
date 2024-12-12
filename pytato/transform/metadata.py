@@ -40,7 +40,23 @@ THE SOFTWARE.
 
 
 import logging
+from collections.abc import Mapping
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ParamSpec,
+    TypeAlias,
+    TypeVar,
+    cast,
+)
+
 from bidict import bidict
+
+import pymbolic.primitives as prim
+from pymbolic.typing import Expression
+from pytools import UniqueNameGenerator
+from pytools.tag import Tag
+
 from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
@@ -58,7 +74,6 @@ from pytato.array import (
     Reshape,
     Stack,
 )
-
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
@@ -69,25 +84,12 @@ from pytato.scalar_expr import (
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
-import pymbolic.primitives as prim
-from pymbolic.typing import Expression
 
-from pytools import UniqueNameGenerator
-from pytools.tag import Tag
-
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    TypeVar,
-    TypeAlias,
-    cast,
-    ParamSpec,
-)
 logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping, Iterable
+    from collections.abc import Collection, Iterable
 
     from pytato.function import NamedCallResult
     from pytato.loopy import LoopyCall
@@ -121,20 +123,19 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
         the specific variable.
         """
 
-        name = expr.aggregate.name
-        if isinstance(expr.aggregrate, prim.Variable):
-            name = expr.aggregate.name
-            base = {name: set((expr.index_tuple))}
+        if isinstance(expr.aggregate, prim.Variable):
+            name: BindingName = expr.aggregate.name
+            base = {name: set(expr.index_tuple)}
             return self.combine([base, self.rec(expr.index)])
-        return {}
-
-    def map_constant(self, expr: object) -> Mapping[BindingName,
-                                                      set[tuple[Expression, ...]]]:
         return {}
 
     def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> Mapping[BindingName,
                                                       set[tuple[Expression, ...]]]:
 
+        return {}
+
+    def map_constant(self, expr: object) -> Mapping[BindingName,
+                                                      set[tuple[Expression, ...]]]:
         return {}
 
 
@@ -646,7 +647,7 @@ class AxisTagAttacher(CopyMapper):
                                 if name in expr.var_to_reduction_descr.keys():
                                     assert len(list(expr.bindings.keys())) == 1
                                     my_arr: Array = next(iter(expr.bindings.values()))
-                                    
+
                                     assert isinstance(expr_copy, IndexLambda)
                                     expr_copy = expr_copy.with_tagged_reduction(
                                             name,
