@@ -40,20 +40,7 @@ THE SOFTWARE.
 
 
 import logging
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    TypeVar,
-    TypeAlias,
-    cast,
-    ParamSpec,
-)
-
 from bidict import bidict
-
-from pytools import UniqueNameGenerator
-from pytools.tag import Tag
-
 from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
@@ -71,6 +58,7 @@ from pytato.array import (
     Reshape,
     Stack,
 )
+
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
@@ -84,7 +72,17 @@ from pytato.scalar_expr import (
     IDX_LAMBDA_JUST_REDUCTIONS,
     CombineMapper,
 )
+from pytools import UniqueNameGenerator
+from pytools.tag import Tag
 
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    TypeVar,
+    TypeAlias,
+    cast,
+    ParamSpec,
+)
 logger = logging.getLogger(__name__)
 
 
