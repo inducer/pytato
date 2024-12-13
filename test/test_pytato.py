@@ -1325,8 +1325,9 @@ def test_unify_axes_tags():
 
 
 def test_ignoring_axes_during_propagation():
-    from pytato.transform.metadata import AxisIgnoredForPropagationTag
     from pytools.tag import UniqueTag
+
+    from pytato.transform.metadata import AxisIgnoredForPropagationTag
 
     class ElementAxisTag(UniqueTag):
         pass
