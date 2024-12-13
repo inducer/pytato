@@ -1324,6 +1324,41 @@ def test_unify_axes_tags():
     # }}}
 
 
+def test_ignoring_axes_during_propagation():
+    from pytools.tag import UniqueTag
+    from pytato.transform.metadata import AxisIgnoredForPropagationTag
+
+    class ElementAxisTag(UniqueTag):
+        pass
+
+    class DOFAxisTagX(UniqueTag):
+        pass
+
+    class DOFAxisTagY(UniqueTag):
+        pass
+
+    a = pt.make_placeholder("a", (4, 4))
+    a = a.with_tagged_axis(0, AxisIgnoredForPropagationTag())
+    a = a.with_tagged_axis(1, AxisIgnoredForPropagationTag())
+
+    u = pt.make_placeholder("u", (128, 4, 4))
+    u = u.with_tagged_axis(0, ElementAxisTag())
+    u = u.with_tagged_axis(1, DOFAxisTagX())
+    u = u.with_tagged_axis(2, DOFAxisTagY())
+
+    u_x = pt.einsum("il,elj->eij", a, u)
+    u_y = pt.einsum("jl,eil->eij", a, u)
+
+    expr = u_x + u_y
+
+    unified = pt.unify_axes_tags(expr)
+    iax_to_tags = {i: unified.axes[i].tags for i in range(len(unified.axes))}
+
+    assert iax_to_tags[0] == frozenset([ElementAxisTag()])
+    assert iax_to_tags[1] == frozenset([DOFAxisTagX()])
+    assert iax_to_tags[2] == frozenset([DOFAxisTagY()])
+
+
 def test_rewrite_einsums_with_no_broadcasts():
     a = pt.make_placeholder("a", (10, 4, 1))
     b = pt.make_placeholder("b", (10, 1, 4))
