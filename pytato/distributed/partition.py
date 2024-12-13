@@ -902,7 +902,7 @@ def find_distributed_partition(
     recvd_ary_to_part_id: dict[Array, int] = {
             recvd_ary: (
                 comm_id_to_part_id[
-                    _recv_to_comm_id(local_rank, cast(DistributedRecv, recvd_ary))])
+                    _recv_to_comm_id(local_rank, cast("DistributedRecv", recvd_ary))])
             for recvd_ary in received_arrays}
 
     # "Materialized" arrays are arrays that are tagged with ImplStored,
