@@ -583,7 +583,9 @@ class PytatoKeyBuilder(LoopyKeyBuilder):
         self.rec(key_hash, key.data.tobytes())
 
     def update_for_TaggableCLArray(self, key_hash: Any, key: Any) -> None:
-        from arraycontext.impl.pyopencl.taggable_cl_array import TaggableCLArray
+        from arraycontext.impl.pyopencl.taggable_cl_array import (
+            TaggableCLArray,  # pylint: disable=import-error
+        )
         assert isinstance(key, TaggableCLArray)
         self.rec(key_hash, key.get())
 
