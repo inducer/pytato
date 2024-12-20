@@ -93,6 +93,8 @@ from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Copy
 
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     import mpi4py.MPI
 
     from pytato.function import FunctionDefinition, NamedCallResult
@@ -283,13 +285,15 @@ class _DistributedInputReplacer(CopyMapper):
     instances for their assigned names. Also gathers names for
     user-supplied inputs needed by the part
     """
+    _FunctionCacheT: TypeAlias = CopyMapper._FunctionCacheT
 
     def __init__(self,
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
+                 _function_cache: _FunctionCacheT | None = None,
                  ) -> None:
-        super().__init__()
+        super().__init__(_function_cache=_function_cache)
 
         self.recvd_ary_to_name = recvd_ary_to_name
         self.sptpo_ary_to_name = sptpo_ary_to_name
@@ -303,7 +307,7 @@ class _DistributedInputReplacer(CopyMapper):
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
         # Function definitions aren't allowed to contain receives,
         # stored arrays promoted to part outputs, or part outputs
-        return type(self)({}, {}, {})
+        return type(self)({}, {}, {}, _function_cache=self._function_cache)
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
@@ -336,9 +340,9 @@ class _DistributedInputReplacer(CopyMapper):
         return new_send
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self.get_cache_key(expr)
+        key = self._cache.get_key(expr)
         try:
-            return self._cache[key]
+            return self._cache_retrieve(expr, key=key)
         except KeyError:
             pass
 
@@ -456,7 +460,7 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[frozenset[CommunicationOpIdentifier]]):
+        CombineMapper[frozenset[CommunicationOpIdentifier], None]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
