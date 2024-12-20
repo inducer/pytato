@@ -384,7 +384,7 @@ class CodeGenState:
 
 # {{{ codegen mapper
 
-class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
+class CodeGenMapper(Mapper[ImplementedResult, None, [CodeGenState]]):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper

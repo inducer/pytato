@@ -28,9 +28,10 @@ THE SOFTWARE.
 
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import Self
+
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
 
 from pytato.array import (
     Array,
@@ -76,7 +77,7 @@ __doc__ = """
 
 # {{{ NUserCollector
 
-class NUserCollector(Mapper[None, []]):
+class NUserCollector(Mapper[None, None, []]):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
     times an array expression is a direct dependency of other nodes.
@@ -317,7 +318,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 # {{{ DirectPredecessorsGetter
 
-class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
+class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], None, []]):
     """
     Mapper to get the
     `direct predecessors
@@ -413,15 +414,30 @@ class NodeCountMapper(CachedWalkMapper[[]]):
        Dictionary mapping node types to number of nodes of that type.
     """
 
-    def __init__(self, count_duplicates: bool = False) -> None:
+    def __init__(
+            self,
+            count_duplicates: bool = False,
+            _visited_functions: set[Any] | None = None,
+            ) -> None:
+        super().__init__(_visited_functions=_visited_functions)
+
         from collections import defaultdict
-        super().__init__()
         self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
         self.count_duplicates = count_duplicates
 
     def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
+
+    def get_function_definition_cache_key(
+            self, expr: FunctionDefinition) -> int | FunctionDefinition:
+        # Returns unique nodes only if count_duplicates is False
+        return id(expr) if self.count_duplicates else expr
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            count_duplicates=self.count_duplicates,
+            _visited_functions=self._visited_functions)
 
     def post_visit(self, expr: Any) -> None:
         if not isinstance(expr, DictOfNamedArrays):
@@ -488,12 +504,17 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
 
     .. autoattribute:: expr_multiplicity_counts
     """
-    def __init__(self) -> None:
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
+
         from collections import defaultdict
-        super().__init__()
         self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
+        # Returns each node, including nodes that are duplicates
+        return id(expr)
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
@@ -530,14 +551,16 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
        The number of nodes.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
         self.count = 0
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    @memoize_method
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
+        return id(expr)
+
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
