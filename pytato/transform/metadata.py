@@ -40,15 +40,19 @@ THE SOFTWARE.
 
 
 import logging
+from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    ParamSpec,
+    TypeAlias,
     TypeVar,
     cast,
 )
 
 from bidict import bidict
 
+import pymbolic.primitives as prim
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 
@@ -56,7 +60,6 @@ from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
     Array,
-    ArrayOrScalar,
     AxisPermutation,
     BasicIndex,
     Concatenate,
@@ -70,18 +73,14 @@ from pytato.array import (
     Reshape,
     Stack,
 )
-from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-from pytato.raising import (
-    BinaryOp,
-    BroadcastOp,
-    C99CallOp,
-    FullOp,
-    ReduceOp,
-    WhereOp,
-    index_lambda_to_high_level_op,
+from pytato.function import NamedCallResult
+from pytato.scalar_expr import (
+    IDX_LAMBDA_INAME,
+    IDX_LAMBDA_JUST_REDUCTIONS,
+    CombineMapper,
+    IdentityMapper as ScalarIdentityMapper,
 )
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
@@ -90,13 +89,99 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping
+    from collections.abc import Collection, Iterable
 
     from pytato.function import NamedCallResult
     from pytato.loopy import LoopyCall
 
 
 GraphNodeT = TypeVar("GraphNodeT")
+
+BindingName: TypeAlias = str
+P = ParamSpec("P")
+
+# {{{ IndexExpressionsUsedInIndexLambda
+
+
+class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
+                                                     set[tuple[prim.Variable, ...]]],
+                                                      []]):
+    """
+    Determine which axes are used in the scalar expressionand which ones just
+    flow through the expression.
+    """
+    def combine(self,
+                values: Iterable[Mapping[BindingName,
+                                         set[tuple[prim.Variable, ...]]]]) \
+                        -> Mapping[BindingName, set[tuple[prim.Variable, ...]]]:
+        out: dict[BindingName, set[tuple[prim.Variable, ...]]] = {}
+        for val in values:
+            out.update(val)
+        return out
+
+    def map_subscript(self, expr: prim.Subscript) -> Mapping[BindingName,
+                                                    set[tuple[prim.Variable, ...]]]:
+        """
+        Record the indexing usage for the variable if we are tracking
+        the specific variable.
+        """
+
+        if isinstance(expr.aggregate, prim.Variable):
+            name: BindingName = expr.aggregate.name
+
+            index = tuple(val if isinstance(val, prim.Variable)
+                      else prim.Variable(name="IGNORE")
+                      for val in expr.index_tuple)
+            base: Mapping[BindingName, set[tuple[prim.Variable, ...]]] = {name:
+                                                                          {index}}
+            return self.combine([base, self.rec(expr.index)])
+        return {}
+
+    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> Mapping[BindingName,
+                                                    set[tuple[prim.Variable, ...]]]:
+
+        return {}
+
+    def map_constant(self, expr: object) -> Mapping[BindingName,
+                                                    set[tuple[prim.Variable, ...]]]:
+        return {}
+# }}}
+
+# {{{ Tag Reduction expressions
+
+
+class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
+
+    def __init__(self,
+                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
+                 array_expr: IndexLambda):
+        self.axis_to_tags = axis_to_tags
+        self.array_expr = array_expr
+
+    def map_subscript(self,
+                      expr: prim.Subscript,
+                      #*args: P.args,
+                      #**kwargs: P.kwargs) -> prim.Expression:
+                      ) -> prim.Expression:
+
+        if isinstance(expr.aggregate, prim.Variable):
+            name: BindingName = expr.aggregate.name
+
+            for iaxis, val in enumerate(expr.index_tuple):
+                if isinstance(val, prim.Variable):
+                    if val.name in self.array_expr.var_to_reduction_descr.keys() and \
+                            name in self.array_expr.bindings.keys():
+                        # We matched the reduction axis.
+                        # Now we need to add the tag to the original expression.
+                        my_key = (self.array_expr.bindings[name], iaxis)
+                        self.array_expr = self.array_expr.with_tagged_reduction(
+                                                name, self.axis_to_tags.get(my_key, [])
+                                            )
+
+                        assert isinstance(self.array_expr, IndexLambda)
+        #return super().map_subscript(expr, *args, **kwargs)
+        return super().map_subscript(expr)
+# }}}
 
 
 # {{{ AxesTagsEquationCollector
@@ -236,66 +321,34 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        try:
-            hlo = index_lambda_to_high_level_op(expr)
-        except UnknownIndexLambdaExpr:
-            from warnings import warn
-            warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.", stacklevel=1)
-            # no propagation semantics implemented for such cases
-            return
+        index_expr_used = IndexExpressionsUsedInIndexLambda()(expr.expr)
 
-        if isinstance(hlo, BinaryOp):
-            subexprs: tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
-        elif isinstance(hlo, WhereOp):
-            subexprs = (hlo.condition, hlo.then, hlo.else_)
-        elif isinstance(hlo, FullOp):
-            # A full-op does not impose any equations
-            subexprs = ()
-        elif isinstance(hlo, BroadcastOp):
-            subexprs = (hlo.x,)
-        elif isinstance(hlo, C99CallOp):
-            subexprs = hlo.args
-        elif isinstance(hlo, ReduceOp):
+        if __debug__:
+            out_shape = expr.shape
+            assert len(out_shape) == expr.ndim
 
-            # {{{ ReduceOp doesn't quite involve broadcasting
-
-            i_out_axis = 0
-            for i_in_axis in range(hlo.x.ndim):
-                if i_in_axis not in hlo.axes:
-                    self.record_equation(
-                        self.get_var_for_axis(hlo.x, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-                    i_out_axis += 1
-
-            assert i_out_axis == expr.ndim
-
-            # }}}
-
-            return
-
-        else:
-            raise NotImplementedError(type(hlo))
-
-        for subexpr in subexprs:
-            if isinstance(subexpr, Array):
-                for i_in_axis, i_out_axis in zip(
-                        range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim),
-                        strict=True):
-                    in_dim = subexpr.shape[i_in_axis]
-                    out_dim = expr.shape[i_out_axis]
-                    if are_shape_components_equal(in_dim, out_dim):
-                        self.record_equation(
-                            self.get_var_for_axis(subexpr, i_in_axis),
-                            self.get_var_for_axis(expr, i_out_axis)
-                        )
+        for vname, set_of_ind_tuple in index_expr_used.items():
+            for ind_tuple in set_of_ind_tuple:
+                for axis_ind in range(len(ind_tuple)):
+                    var_ind_name = ind_tuple[axis_ind]
+                    if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(var_ind_name.name):
+                        # Reduction axis. We can ignore it.
+                        pass
+                    elif var_ind_name.name[:3] == "_in":
+                        # Variable name axis.
+                        pass
+                    elif var_ind_name.name == "IGNORE":
+                        # This is not directly represented in output axes. Ignore.
+                        pass
+                    elif IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
+                        # matched with an iname.
+                        inum = int(var_ind_name.name[1:])
+                        lhs: str = self.get_var_for_axis(expr.bindings[vname], axis_ind)
+                        rhs: str = self.get_var_for_axis(expr, inum)
+                        self.record_equation(lhs, rhs)
                     else:
-                        # i_in_axis is broadcasted => do not propagate
-                        assert are_shape_components_equal(in_dim, 1)
-            else:
-                assert isinstance(subexpr, SCALAR_CLASSES)
+                        raise ValueError(f"Unknown index name used in {vname}")
+        return
 
     def map_stack(self, expr: Stack) -> None:
         """
@@ -632,19 +685,18 @@ class AxisTagAttacher(CopyMapper):
                                         self.axis_to_tags.get((arg, iaxis), [])
                                     )
 
-                    if isinstance(expr, IndexLambda):
-                        assert isinstance(expr_copy, IndexLambda)
-                        try:
-                            hlo = index_lambda_to_high_level_op(expr)
-                        except UnknownIndexLambdaExpr:
-                            pass
-                        else:
-                            if isinstance(hlo, ReduceOp):
-                                for iaxis, redn_var in hlo.axes.items():
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        redn_var,
-                                        self.axis_to_tags.get((hlo.x, iaxis), [])
-                                    )
+                    if isinstance(expr_copy, IndexLambda):
+                        if expr_copy.var_to_reduction_descr:
+                            # This is a reduction operation.
+                            # We need to find the axes that are reduced over
+                            # and update the tag/tag them appropriately.
+                            mymapper: TagReductionAxesMapper = \
+                                                    TagReductionAxesMapper(
+                                                                    self.axis_to_tags,
+                                                                    expr_copy
+                                                                    )
+                            mymapper(expr_copy.expr)  # Tag the axes
+                            expr_copy = mymapper.array_expr  # Recover it.
 
                 # }}}
 

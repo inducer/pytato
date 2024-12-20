@@ -1213,6 +1213,34 @@ def test_lower_to_index_lambda():
     assert isinstance(binding, Reshape)
 
 
+def test_reserved_scalar_iname_patterns():
+    from pytato.scalar_expr import (
+        IDX_LAMBDA_INAME,
+        IDX_LAMBDA_JUST_REDUCTIONS,
+        IDX_LAMBDA_RE,
+    )
+
+    test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101"]
+
+    assert IDX_LAMBDA_RE.fullmatch(test_strings[0])
+    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[0])
+    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[0])
+
+    for pat in [IDX_LAMBDA_INAME, IDX_LAMBDA_RE, IDX_LAMBDA_JUST_REDUCTIONS]:
+        assert not pat.fullmatch(test_strings[1])
+        assert not pat.fullmatch(test_strings[2])
+        assert not pat.fullmatch(test_strings[3])
+
+    assert IDX_LAMBDA_RE.fullmatch(test_strings[4])
+    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[4])
+    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[4])
+
+    for i in range(5, len(test_strings)):
+        assert IDX_LAMBDA_RE.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_INAME.fullmatch(test_strings[i])
+        assert not IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[i])
+
+
 def test_cached_walk_mapper_with_extra_args():
     from testlib import RandomDAGContext, make_random_dag
 
@@ -1322,6 +1350,43 @@ def test_unify_axes_tags():
             == frozenset([QuuxTag()]))
 
     # }}}
+
+
+def test_unify_axes_tags_with_unbroadcastable_expressions():
+
+    a = pt.make_placeholder("a", (512, 10, 8))
+    b = pt.make_placeholder("b", (512, 10))
+    from testlib import BazTag, FooTag, QuuxTag, TestlibTag
+
+    a = a.with_tagged_axis(0, BazTag())
+    a = a.with_tagged_axis(1, QuuxTag())
+    a = a.with_tagged_axis(2, FooTag())
+
+    from immutabledict import immutabledict
+
+    import pymbolic.primitives as prim
+
+    x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0"), prim.Variable("_1"),
+                                              prim.Variable("_2")))
+    y = prim.Subscript(prim.Variable("_in1"),
+                       (prim.Variable("_0"), prim.Variable("_1")))
+
+    z = pt.IndexLambda(expr=x+y, bindings=immutabledict({"_in0": a, "_in1": b}),
+                       shape=(512, 10, 8), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(3),
+                       dtype=float,
+                       var_to_reduction_descr=immutabledict({}))
+
+    z_unified = pt.unify_axes_tags(z)
+
+    assert (z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+    assert (z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
+    assert (z_unified.axes[2].tags_of_type(TestlibTag) == frozenset([FooTag()]))
+
+    for key in z_unified.bindings.keys():
+        term = z_unified.bindings[key]
+        assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+        assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
 
 
 def test_ignoring_axes_during_propagation():
