@@ -79,6 +79,7 @@ from pytato.scalar_expr import (
     IDX_LAMBDA_INAME,
     IDX_LAMBDA_JUST_REDUCTIONS,
     CombineMapper,
+    IdentityMapper as ScalarIdentityMapper,
 )
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
@@ -98,6 +99,8 @@ GraphNodeT = TypeVar("GraphNodeT")
 
 BindingName: TypeAlias = str
 P = ParamSpec("P")
+
+# {{{ IndexExpressionsUsedInIndexLambda
 
 
 class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
@@ -126,11 +129,11 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
         if isinstance(expr.aggregate, prim.Variable):
             name: BindingName = expr.aggregate.name
 
-            index = (val if isinstance(val, prim.Variable)
+            index = tuple(val if isinstance(val, prim.Variable)
                       else prim.Variable(name="IGNORE")
                       for val in expr.index_tuple)
             base: Mapping[BindingName, set[tuple[prim.Variable, ...]]] = {name:
-                                                             set([tuple(index)])}
+                                                                          {index}}
             return self.combine([base, self.rec(expr.index)])
         return {}
 
@@ -142,6 +145,43 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
     def map_constant(self, expr: object) -> Mapping[BindingName,
                                                     set[tuple[prim.Variable, ...]]]:
         return {}
+# }}}
+
+# {{{ Tag Reduction expressions
+
+
+class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
+
+    def __init__(self,
+                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
+                 array_expr: IndexLambda):
+        self.axis_to_tags = axis_to_tags
+        self.array_expr = array_expr
+
+    def map_subscript(self,
+                      expr: prim.Subscript,
+                      #*args: P.args,
+                      #**kwargs: P.kwargs) -> prim.Expression:
+                      ) -> prim.Expression:
+
+        if isinstance(expr.aggregate, prim.Variable):
+            name: BindingName = expr.aggregate.name
+
+            for iaxis, val in enumerate(expr.index_tuple):
+                if isinstance(val, prim.Variable):
+                    if val.name in self.array_expr.var_to_reduction_descr.keys() and \
+                            name in self.array_expr.bindings.keys():
+                        # We matched the reduction axis.
+                        # Now we need to add the tag to the original expression.
+                        my_key = (self.array_expr.bindings[name], iaxis)
+                        self.array_expr = self.array_expr.with_tagged_reduction(
+                                                name, self.axis_to_tags.get(my_key, [])
+                                            )
+
+                        assert isinstance(self.array_expr, IndexLambda)
+        #return super().map_subscript(expr, *args, **kwargs)
+        return super().map_subscript(expr)
+# }}}
 
 
 # {{{ AxesTagsEquationCollector
@@ -645,22 +685,19 @@ class AxisTagAttacher(CopyMapper):
                                         self.axis_to_tags.get((arg, iaxis), [])
                                     )
 
-                    if isinstance(expr, IndexLambda):
-                        if expr.var_to_reduction_descr:
+                    if isinstance(expr_copy, IndexLambda):
+                        if expr_copy.var_to_reduction_descr:
                             # This is a reduction operation.
                             # We need to find the axes that are reduced over
                             # and update the tag/tag them appropriately.
-                            for iaxis in range(len(expr.expr.inner_expr.index_tuple)):
-                                name = expr.expr.inner_expr.index_tuple[iaxis].name
-                                if name in expr.var_to_reduction_descr.keys():
-                                    assert len(list(expr.bindings.keys())) == 1
-                                    my_arr: Array = next(iter(expr.bindings.values()))
+                            mymapper: TagReductionAxesMapper = \
+                                                    TagReductionAxesMapper(
+                                                                    self.axis_to_tags,
+                                                                    expr_copy
+                                                                    )
+                            mymapper(expr_copy.expr)  # Tag the axes
+                            expr_copy = mymapper.array_expr  # Recover it.
 
-                                    assert isinstance(expr_copy, IndexLambda)
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                            name,
-                                            self.axis_to_tags.get((my_arr, iaxis), [])
-                                            )
                 # }}}
 
                 self._cache[key] = expr_copy
