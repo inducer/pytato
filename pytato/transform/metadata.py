@@ -90,9 +90,10 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Hashable, Mapping
+    from collections.abc import Collection, Mapping
+    from typing import TypeAlias
 
-    from pytato.function import FunctionDefinition, NamedCallResult
+    from pytato.function import NamedCallResult
     from pytato.loopy import LoopyCall
 
 
@@ -593,10 +594,12 @@ class AxisTagAttacher(CopyMapper):
     """
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
+    _FunctionCacheT: TypeAlias = CopyMapper._FunctionCacheT
+
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool,
-                 _function_cache: dict[Hashable, FunctionDefinition] | None = None):
+                 _function_cache: _FunctionCacheT | None = None):
         super().__init__(_function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
@@ -644,9 +647,9 @@ class AxisTagAttacher(CopyMapper):
         return result
 
     def rec(self, expr: ArrayOrNames) -> Any:
-        key = self.get_cache_key(expr)
+        key = self._cache.get_key(expr)
         try:
-            return self._cache[key]
+            return self._cache.retrieve(expr, key=key)
         except KeyError:
             result = Mapper.rec(self, expr)
             if not isinstance(
@@ -654,8 +657,7 @@ class AxisTagAttacher(CopyMapper):
                 assert isinstance(expr, Array)
                 # type-ignore reason: passed "ArrayOrNames"; expected "Array"
                 result = self._attach_tags(expr, result)  # type: ignore[arg-type]
-            self._cache[key] = result
-            return result
+            return self._cache.add(expr, result, key=key)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(

@@ -93,6 +93,8 @@ from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Copy
 
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     import mpi4py.MPI
 
     from pytato.function import FunctionDefinition, NamedCallResult
@@ -283,12 +285,13 @@ class _DistributedInputReplacer(CopyMapper):
     instances for their assigned names. Also gathers names for
     user-supplied inputs needed by the part
     """
+    _FunctionCacheT: TypeAlias = CopyMapper._FunctionCacheT
 
     def __init__(self,
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
-                 _function_cache: dict[Hashable, FunctionDefinition] | None = None,
+                 _function_cache: _FunctionCacheT | None = None,
                  ) -> None:
         super().__init__(_function_cache=_function_cache)
 
@@ -337,9 +340,9 @@ class _DistributedInputReplacer(CopyMapper):
         return new_send
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self.get_cache_key(expr)
+        key = self._cache.get_key(expr)
         try:
-            return self._cache[key]
+            return self._cache.retrieve(expr, key=key)
         except KeyError:
             pass
 

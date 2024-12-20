@@ -68,7 +68,7 @@ from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable, Mapping
+    from collections.abc import Mapping
 
     from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.target import Target
@@ -135,12 +135,13 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     :class:`~pytato.array.Stack`            :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
+    _FunctionCacheT: TypeAlias = CopyMapper._FunctionCacheT
 
     def __init__(
             self,
             target: Target,
             kernels_seen: dict[str, lp.LoopKernel] | None = None,
-            _function_cache: dict[Hashable, FunctionDefinition] | None = None
+            _function_cache: _FunctionCacheT | None = None
             ) -> None:
         super().__init__(_function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
