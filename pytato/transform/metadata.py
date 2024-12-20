@@ -82,7 +82,7 @@ from pytato.raising import (
     index_lambda_to_high_level_op,
 )
 from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, CopyMapper, Mapper
+from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
 
@@ -90,7 +90,7 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Hashable, Mapping
+    from collections.abc import Collection, Mapping
 
     from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.loopy import LoopyCall
@@ -596,8 +596,10 @@ class AxisTagAttacher(CopyMapper):
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool,
-                 _function_cache: dict[Hashable, FunctionDefinition] | None = None):
-        super().__init__(_function_cache=_function_cache)
+                 _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+                 _function_cache:
+                    TransformMapperCache[FunctionDefinition, []] | None = None):
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
@@ -644,9 +646,9 @@ class AxisTagAttacher(CopyMapper):
         return result
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self.get_cache_key(expr)
+        key = self._cache.get_key(expr)
         try:
-            return self._cache[key]
+            return self._cache.retrieve(expr, key=key)
         except KeyError:
             result = Mapper.rec(self, expr)
             if not isinstance(
@@ -654,8 +656,7 @@ class AxisTagAttacher(CopyMapper):
                 assert isinstance(expr, Array)
                 # type-ignore reason: passed "ArrayOrNames"; expected "Array"
                 result = self._attach_tags(expr, result)  # type: ignore[arg-type]
-            self._cache[key] = result
-            return result
+            return self._cache.add(expr, result, key=key)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
