@@ -1388,6 +1388,7 @@ def test_unify_axes_tags_with_unbroadcastable_expressions():
         assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
         assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
 
+
 def test_ignoring_axes_during_propagation():
     from pytools.tag import UniqueTag
 
