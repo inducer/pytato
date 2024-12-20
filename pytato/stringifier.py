@@ -72,7 +72,9 @@ class Reprifier(Mapper[str, str, [int]]):
         # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], str] = {}
 
+    # Should expr be ArrayOrNames instead of Any?
     def rec(self, expr: Any, depth: int) -> str:
+        # Why cache by ID?
         cache_key = (id(expr), depth)
         try:
             return self._cache[cache_key]

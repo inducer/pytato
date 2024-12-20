@@ -324,6 +324,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     implement default mapper methods; for that, see :class:`CopyMapper`.
 
     """
+    # FIXME: This inflates recursion depth
     def rec_ary(self, expr: Array) -> Array:
         res = self.rec(expr)
         assert isinstance(res, Array)
@@ -335,6 +336,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
 # {{{ TransformMapperWithExtraArgs
 
 class TransformMapperWithExtraArgs(
+            # Why multiple inheriting?
             CachedMapper[ArrayOrNames, FunctionDefinition, P],
             Mapper[ArrayOrNames, FunctionDefinition, P]
         ):
@@ -345,6 +347,7 @@ class TransformMapperWithExtraArgs(
     The logic in :class:`TransformMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
     """
+    # FIXME: This inflates recursion depth
     def rec_ary(self, expr: Array, *args: P.args, **kwargs: P.kwargs) -> Array:
         res = self.rec(expr, *args, **kwargs)
         assert isinstance(res, Array)
