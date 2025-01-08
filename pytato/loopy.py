@@ -418,6 +418,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     from loopy.kernel.array import ArrayBase
     from loopy.symbolic import get_dependencies as lpy_get_deps
     from pymbolic.mapper.substitutor import make_subst_func
+    from pymbolic.primitives import is_expression
 
     from pytato.transform import SizeParamGatherer
 
@@ -426,8 +427,9 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     lp_size_params: frozenset[str] = reduce(frozenset.union,
                                             (lpy_get_deps(not_none(arg.shape))
                                              for arg in knl.args
-                                             if isinstance(arg, ArrayBase)),
-                                            frozenset())
+                                             if isinstance(arg, ArrayBase)
+                                             and is_expression(arg.shape)
+                                         ), frozenset())
 
     pt_size_params: frozenset[SizeParam] = reduce(frozenset.union,
                                                   (get_size_param_deps(bnd)
