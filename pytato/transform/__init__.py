@@ -265,12 +265,8 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         super().__init__()
         self._cache: dict[Hashable, ResultT] = {}
 
-        if _function_cache is not None:
-            function_cache = _function_cache
-        else:
-            function_cache = {}
-
-        self._function_cache: dict[Hashable, FunctionResultT] = function_cache
+        self._function_cache: dict[Hashable, FunctionResultT] = \
+            _function_cache if _function_cache is not None else {}
 
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
@@ -1303,12 +1299,8 @@ class CachedWalkMapper(WalkMapper[P]):
         super().__init__()
         self._visited_arrays_or_names: set[Any] = set()
 
-        if _visited_functions is not None:
-            visited_functions = _visited_functions
-        else:
-            visited_functions = set()
-
-        self._visited_functions: set[Any] = visited_functions
+        self._visited_functions: set[Any] = \
+            _visited_functions if _visited_functions is not None else set()
 
     def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
