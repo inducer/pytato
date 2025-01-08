@@ -1213,6 +1213,20 @@ def test_lower_to_index_lambda():
     assert isinstance(binding, Reshape)
 
 
+def test_reserved_binding_name_patterns():
+    from pytato.transform.metadata import BINDING_NAME_RESERVED_PATTERN
+
+    fail_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101",
+                    "_in", "_in00", "1_in", "_in01"]
+    pass_strings = ["_in0", "_in1", "_in554", "_in10"]
+
+    for test_str in fail_strings:
+        assert not BINDING_NAME_RESERVED_PATTERN.fullmatch(test_str)
+
+    for test_str in pass_strings:
+        assert BINDING_NAME_RESERVED_PATTERN.fullmatch(test_str)
+
+
 def test_reserved_scalar_iname_patterns():
     from pytato.scalar_expr import (
         IDX_LAMBDA_INAME,

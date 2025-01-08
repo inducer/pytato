@@ -38,9 +38,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import logging
-from collections.abc import Mapping
+import re
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterable
+    from collections.abc import Collection, Iterable, Mapping
 
     from pytato.function import NamedCallResult
     from pytato.loopy import LoopyCall
@@ -100,49 +100,65 @@ GraphNodeT = TypeVar("GraphNodeT")
 BindingName: TypeAlias = str
 P = ParamSpec("P")
 
-# {{{ IndexExpressionsUsedInIndexLambda
+IGNORE_VARIABLE_STR: str = "IGNORE"
+BINDING_NAME_RESERVED_PATTERN = re.compile(r"^(_in?(0|([1-9][0-9]*)))$")
+
+# {{{ BindingSubscriptsUsedInIndexLambda
 
 
-class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
+class BindingSubscriptsUsedInIndexLambda(CombineMapper[dict[BindingName,
                                                      set[tuple[prim.Variable, ...]]],
                                                       []]):
     """
-    Determine which axes are used in the scalar expressionand which ones just
-    flow through the expression.
+    Return all the subscript expressions used by a variable specified by BindingName.
+
+    Ex:
+    _in1[_0,_1] would result in an dictionary entry {"_in1": ("_0", "_1")}.
+
+    In the case that a subscript expression is not a variable, like in
+
+    Ex:
+    _in1[_0, 0]
+
+    that subscript will be replaced with a `Variable` with the name IGNORE.
+
+    So the second example would result in an dictionary entry
+    {"_in1": ("_0","IGNORE")}.
     """
     def combine(self,
-                values: Iterable[Mapping[BindingName,
+                values: Iterable[dict[BindingName,
                                          set[tuple[prim.Variable, ...]]]]) \
-                        -> Mapping[BindingName, set[tuple[prim.Variable, ...]]]:
+                        -> dict[BindingName, set[tuple[prim.Variable, ...]]]:
         out: dict[BindingName, set[tuple[prim.Variable, ...]]] = {}
-        for val in values:
-            out.update(val)
-        return out
+        from functools import reduce
+        return reduce(lambda x, y: x | y, values, out)
 
-    def map_subscript(self, expr: prim.Subscript) -> Mapping[BindingName,
+    def map_subscript(self, expr: prim.Subscript) -> dict[BindingName,
                                                     set[tuple[prim.Variable, ...]]]:
         """
-        Record the indexing usage for the variable if we are tracking
-        the specific variable.
+        Record the indexing expression if the Subscript expression has a prim.Variable
+        as its aggregate. This will record an ignorable variable for each part of the
+        indexing expression that is not already a prim.Variable.
         """
 
         if isinstance(expr.aggregate, prim.Variable):
             name: BindingName = expr.aggregate.name
 
             index = tuple(val if isinstance(val, prim.Variable)
-                      else prim.Variable(name="IGNORE")
+                      else prim.Variable(name=IGNORE_VARIABLE_STR)
                       for val in expr.index_tuple)
-            base: Mapping[BindingName, set[tuple[prim.Variable, ...]]] = {name:
+            base: dict[BindingName, set[tuple[prim.Variable, ...]]] = {name:
                                                                           {index}}
-            return self.combine([base, self.rec(expr.index)])
+            assert base
+            return base
         return {}
 
-    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> Mapping[BindingName,
+    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> dict[BindingName,
                                                     set[tuple[prim.Variable, ...]]]:
 
         return {}
 
-    def map_constant(self, expr: object) -> Mapping[BindingName,
+    def map_constant(self, expr: object) -> dict[BindingName,
                                                     set[tuple[prim.Variable, ...]]]:
         return {}
 # }}}
@@ -150,18 +166,14 @@ class IndexExpressionsUsedInIndexLambda(CombineMapper[Mapping[BindingName,
 # {{{ Tag Reduction expressions
 
 
+@dataclass(init=True, repr=True)
 class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
 
-    def __init__(self,
-                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
-                 array_expr: IndexLambda):
-        self.axis_to_tags = axis_to_tags
-        self.array_expr = array_expr
+    axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]]
+    array_expr: IndexLambda
 
     def map_subscript(self,
                       expr: prim.Subscript,
-                      #*args: P.args,
-                      #**kwargs: P.kwargs) -> prim.Expression:
                       ) -> prim.Expression:
 
         if isinstance(expr.aggregate, prim.Variable):
@@ -179,7 +191,7 @@ class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
                                             )
 
                         assert isinstance(self.array_expr, IndexLambda)
-        #return super().map_subscript(expr, *args, **kwargs)
+
         return super().map_subscript(expr)
 # }}}
 
@@ -321,11 +333,9 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        index_expr_used = IndexExpressionsUsedInIndexLambda()(expr.expr)
+        index_expr_used = BindingSubscriptsUsedInIndexLambda()(expr.expr)
 
-        if __debug__:
-            out_shape = expr.shape
-            assert len(out_shape) == expr.ndim
+        assert len(expr.shape) == expr.ndim
 
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
@@ -334,10 +344,10 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                     if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(var_ind_name.name):
                         # Reduction axis. We can ignore it.
                         pass
-                    elif var_ind_name.name[:3] == "_in":
+                    elif BINDING_NAME_RESERVED_PATTERN.fullmatch(var_ind_name.name):
                         # Variable name axis.
                         pass
-                    elif var_ind_name.name == "IGNORE":
+                    elif var_ind_name.name == IGNORE_VARIABLE_STR:
                         # This is not directly represented in output axes. Ignore.
                         pass
                     elif IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
