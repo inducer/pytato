@@ -332,8 +332,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
 # {{{ TransformMapperWithExtraArgs
 
 class TransformMapperWithExtraArgs(
-            CachedMapper[ArrayOrNames, FunctionDefinition, P],
-            Mapper[ArrayOrNames, FunctionDefinition, P]
+            CachedMapper[ArrayOrNames, FunctionDefinition, P]
         ):
     """
     Similar to :class:`TransformMapper`, but each mapper method takes extra
