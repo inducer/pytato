@@ -43,6 +43,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
+    Never,
     TypeVar,
     cast,
 )
@@ -101,7 +102,7 @@ GraphNodeT = TypeVar("GraphNodeT")
 
 # {{{ AxesTagsEquationCollector
 
-class AxesTagsEquationCollector(Mapper[None, None, []]):
+class AxesTagsEquationCollector(Mapper[None, Never, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
     operation. This mapper implements a default set of propagation rules,

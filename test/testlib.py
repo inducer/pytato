@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import operator
 import random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Never
 
 import numpy as np
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper[Any, None, []]):
+class NumpyBasedEvaluator(Mapper[Any, Never, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.

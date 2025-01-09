@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Never
 
 from typing_extensions import Self
 
@@ -318,7 +318,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 # {{{ DirectPredecessorsGetter
 
-class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], None, []]):
+class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], Never, []]):
     """
     Mapper to get the
     `direct predecessors

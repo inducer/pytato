@@ -32,6 +32,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Generic,
+    Never,
     ParamSpec,
     TypeAlias,
     TypeVar,
@@ -1434,7 +1435,7 @@ def _materialize_if_mpms(expr: Array,
         return MPMSMaterializerAccumulator(materialized_predecessors, expr)
 
 
-class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, None, []]):
+class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
     """
     See :func:`materialize_with_mpms` for an explanation.
 
@@ -1711,7 +1712,7 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 
 # {{{ UsersCollector
 
-class UsersCollector(CachedMapper[None, None, []]):
+class UsersCollector(CachedMapper[None, Never, []]):
     """
     Maps a graph to a dictionary representation mapping a node to its users,
     i.e. all the nodes using its value.
