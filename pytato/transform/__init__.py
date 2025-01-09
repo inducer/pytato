@@ -770,12 +770,14 @@ class CombineMapper(Mapper[ResultT, FunctionResultT, []]):
 
     .. automethod:: combine
     """
-    def __init__(self) -> None:
+    def __init__(
+            self,
+            _function_cache: dict[FunctionDefinition, FunctionResultT] | None = None
+            ) -> None:
         super().__init__()
         self.cache: dict[ArrayOrNames, ResultT] = {}
-        # Don't need to pass function cache as argument here, because unlike
-        # CachedMapper we're not creating a new mapper for each call
-        self.function_cache: dict[FunctionDefinition, FunctionResultT] = {}
+        self.function_cache: dict[FunctionDefinition, FunctionResultT] = \
+            _function_cache if _function_cache is not None else {}
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
                               ) -> tuple[ResultT, ...]:
