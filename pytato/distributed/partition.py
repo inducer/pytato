@@ -90,7 +90,13 @@ from pytato.distributed.nodes import (
     DistributedSendRefHolder,
 )
 from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CombineMapper,
+    CopyMapper,
+    _verify_is_array,
+)
 
 
 if TYPE_CHECKING:
@@ -396,7 +402,7 @@ def _make_distributed_partition(
 
         for name, val in name_to_part_output.items():
             assert name not in name_to_output
-            name_to_output[name] = comm_replacer.rec_ary(val)
+            name_to_output[name] = _verify_is_array(comm_replacer.rec(val))
 
         comm_ids = part_comm_ids[part_id]
 

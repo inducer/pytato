@@ -168,6 +168,11 @@ FunctionResultT = TypeVar("FunctionResultT")
 P = ParamSpec("P")
 
 
+def _verify_is_array(expr: ArrayOrNames) -> Array:
+    assert isinstance(expr, Array)
+    return expr
+
+
 class Mapper(Generic[ResultT, FunctionResultT, P]):
     """A class that when called with a :class:`pytato.Array` recursively
     iterates over the DAG, calling the *_mapper_method* of each node. Users of
@@ -321,10 +326,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     implement default mapper methods; for that, see :class:`CopyMapper`.
 
     """
-    def rec_ary(self, expr: Array) -> Array:
-        res = self.rec(expr)
-        assert isinstance(res, Array)
-        return res
+    pass
 
 # }}}
 
@@ -341,10 +343,7 @@ class TransformMapperWithExtraArgs(
     The logic in :class:`TransformMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
     """
-    def rec_ary(self, expr: Array, *args: P.args, **kwargs: P.kwargs) -> Array:
-        res = self.rec(expr, *args, **kwargs)
-        assert isinstance(res, Array)
-        return res
+    pass
 
 # }}}
 
@@ -390,18 +389,18 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack) -> Array:
-        arrays = tuple(self.rec_ary(arr) for arr in expr.arrays)
+        arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
-        arrays = tuple(self.rec_ary(arr) for arr in expr.arrays)
+        arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
                            axes=expr.axes, tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll) -> Array:
-        return Roll(array=self.rec_ary(expr.array),
+        return Roll(array=_verify_is_array(self.rec(expr.array)),
                 shift=expr.shift,
                 axis=expr.axis,
                 axes=expr.axes,
@@ -409,14 +408,14 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
-        return AxisPermutation(array=self.rec_ary(expr.array),
+        return AxisPermutation(array=_verify_is_array(self.rec(expr.array)),
                 axis_permutation=expr.axis_permutation,
                 axes=expr.axes,
                 tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
-        return type(expr)(self.rec_ary(expr.array),
+        return type(expr)(_verify_is_array(self.rec(expr.array)),
                           indices=self.rec_idx_or_size_tuple(expr.indices),
                           axes=expr.axes,
                           tags=expr.tags,
@@ -453,7 +452,7 @@ class CopyMapper(TransformMapper):
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec_ary(arg) for arg in expr.args),
+                      tuple(_verify_is_array(self.rec(arg)) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       tags=expr.tags,
@@ -470,7 +469,7 @@ class CopyMapper(TransformMapper):
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec_ary(val.expr)
+        return DictOfNamedArrays({key: _verify_is_array(self.rec(val.expr))
                                   for key, val in expr.items()},
                                  tags=expr.tags
                                  )
@@ -498,7 +497,7 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
-        return Reshape(self.rec_ary(expr.array),
+        return Reshape(_verify_is_array(self.rec(expr.array)),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape),
                        order=expr.order,
                        axes=expr.axes,
@@ -509,10 +508,10 @@ class CopyMapper(TransformMapper):
             self, expr: DistributedSendRefHolder) -> Array:
         return DistributedSendRefHolder(
                 send=DistributedSend(
-                    data=self.rec_ary(expr.send.data),
+                    data=_verify_is_array(self.rec(expr.send.data)),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                passthrough_data=self.rec_ary(expr.passthrough_data),
+                passthrough_data=_verify_is_array(self.rec(expr.passthrough_data)),
                 )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
@@ -590,19 +589,21 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                            non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack, *args: P.args, **kwargs: P.kwargs) -> Array:
-        arrays = tuple(self.rec_ary(arr, *args, **kwargs) for arr in expr.arrays)
+        arrays = tuple(
+            _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
                      non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self,
                         expr: Concatenate, *args: P.args, **kwargs: P.kwargs) -> Array:
-        arrays = tuple(self.rec_ary(arr, *args, **kwargs) for arr in expr.arrays)
+        arrays = tuple(
+            _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
                            axes=expr.axes, tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll, *args: P.args, **kwargs: P.kwargs) -> Array:
-        return Roll(array=self.rec_ary(expr.array, *args, **kwargs),
+        return Roll(array=_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                     shift=expr.shift,
                     axis=expr.axis,
                     axes=expr.axes,
@@ -611,7 +612,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_axis_permutation(self, expr: AxisPermutation,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
-        return AxisPermutation(array=self.rec_ary(expr.array, *args, **kwargs),
+        return AxisPermutation(array=_verify_is_array(
+                                   self.rec(expr.array, *args, **kwargs)),
                                axis_permutation=expr.axis_permutation,
                                axes=expr.axes,
                                tags=expr.tags,
@@ -620,7 +622,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def _map_index_base(self,
                         expr: IndexBase, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert isinstance(expr, _SuppliedAxesAndTagsMixin)
-        return type(expr)(self.rec_ary(expr.array, *args, **kwargs),
+        return type(expr)(_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                           indices=self.rec_idx_or_size_tuple(expr.indices,
                                                              *args, **kwargs),
                           axes=expr.axes,
@@ -660,7 +662,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec_ary(arg, *args, **kwargs) for arg in expr.args),
+                      tuple(_verify_is_array(
+                          self.rec(arg, *args, **kwargs)) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       tags=expr.tags,
@@ -679,7 +682,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_dict_of_named_arrays(self,
                 expr: DictOfNamedArrays, *args: P.args, **kwargs: P.kwargs
             ) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec_ary(val.expr, *args, **kwargs)
+        return DictOfNamedArrays({key: _verify_is_array(
+                                      self.rec(val.expr, *args, **kwargs))
                                   for key, val in expr.items()},
                                  tags=expr.tags,
                                  )
@@ -711,7 +715,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_reshape(self, expr: Reshape,
                     *args: P.args, **kwargs: P.kwargs) -> Array:
-        return Reshape(self.rec_ary(expr.array, *args, **kwargs),
+        return Reshape(_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape,
                                                            *args, **kwargs),
                        order=expr.order,
@@ -723,10 +727,11 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                                         *args: P.args, **kwargs: P.kwargs) -> Array:
         return DistributedSendRefHolder(
                 send=DistributedSend(
-                    data=self.rec_ary(expr.send.data, *args, **kwargs),
+                    data=_verify_is_array(self.rec(expr.send.data, *args, **kwargs)),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                passthrough_data=self.rec_ary(expr.passthrough_data, *args, **kwargs))
+                passthrough_data=_verify_is_array(
+                    self.rec(expr.passthrough_data, *args, **kwargs)))
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
@@ -1619,7 +1624,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     if not source_dict:
         data = {}
     else:
-        data = {name: copy_mapper.rec_ary(val.expr)
+        data = {name: _verify_is_array(copy_mapper.rec(val.expr))
                 for name, val in sorted(source_dict.items())}
 
     return DictOfNamedArrays(data, tags=source_dict.tags)

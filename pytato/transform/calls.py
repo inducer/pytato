@@ -40,7 +40,7 @@ from pytato.array import (
 )
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
-from pytato.transform import ArrayOrNames, CopyMapper
+from pytato.transform import ArrayOrNames, CopyMapper, _verify_is_array
 
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ class Inliner(CopyMapper):
             substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
-                {name: substitutor.rec_ary(ret)
+                {name: _verify_is_array(substitutor.rec(ret))
                  for name, ret in new_expr.function.returns.items()},
                 tags=new_expr.tags
             )
