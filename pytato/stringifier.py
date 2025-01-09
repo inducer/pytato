@@ -39,7 +39,7 @@ from pytato.array import (
     IndexLambda,
     ReductionDescriptor,
 )
-from pytato.transform import Mapper
+from pytato.transform import ForeignObjectError, Mapper
 
 
 if TYPE_CHECKING:
@@ -77,7 +77,10 @@ class Reprifier(Mapper[str, str, [int]]):
         try:
             return self._cache[cache_key]
         except KeyError:
-            result = super().rec(expr, depth)
+            try:
+                result = super().rec(expr, depth)
+            except ForeignObjectError:
+                result = self.map_foreign(expr, depth)
             self._cache[cache_key] = result
             return result
 

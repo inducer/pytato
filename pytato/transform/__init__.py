@@ -161,6 +161,10 @@ class UnsupportedArrayError(ValueError):
     pass
 
 
+class ForeignObjectError(ValueError):
+    pass
+
+
 # {{{ mapper base class
 
 ResultT = TypeVar("ResultT")
@@ -185,7 +189,6 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
        if this is not desired.
 
     .. automethod:: handle_unsupported_array
-    .. automethod:: map_foreign
     .. automethod:: rec
     .. automethod:: __call__
     """
@@ -198,13 +201,6 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
         """
         raise UnsupportedArrayError(
                 f"{type(self).__name__} cannot handle expressions of type {type(expr)}")
-
-    def map_foreign(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> Any:
-        """Mapper method that is invoked for an object of class for which a
-        mapper method does not exist in this mapper.
-        """
-        raise ValueError(
-                f"{type(self).__name__} encountered invalid foreign object: {expr!r}")
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         """Call the mapper method of *expr* and return the result."""
@@ -223,7 +219,9 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
                 else:
                     return self.handle_unsupported_array(expr, *args, **kwargs)
             else:
-                return cast("ResultT", self.map_foreign(expr, *args, **kwargs))
+                raise ForeignObjectError(
+                    f"{type(self).__name__} encountered invalid foreign "
+                    f"object: {expr!r}") from None
 
         assert method is not None
         return cast("ResultT", method(expr, *args, **kwargs))
@@ -237,7 +235,8 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
         try:
             method = self.map_function_definition  # type: ignore[attr-defined]
         except AttributeError:
-            return cast("FunctionResultT", self.map_foreign(expr, *args, **kwargs))
+            raise ValueError(
+                f"{type(self).__name__} lacks a mapper method for functions.") from None
 
         assert method is not None
         return cast("FunctionResultT", method(expr, *args, **kwargs))
