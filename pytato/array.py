@@ -719,8 +719,7 @@ class Array(Taggable):
 
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
             # https://github.com/python/mypy/issues/4791
-            # This type-ignore will become necessary with mypy 1.14.
-            return NotImplemented  # not-yet-type: ignore[no-any-return]
+            return NotImplemented  # type: ignore[no-any-return]
 
         # }}}
 
