@@ -58,12 +58,16 @@ class PlaceholderSubstitutor(CopyMapper):
     """
 
     def __init__(self, substitutions: Mapping[str, Array]) -> None:
-        # Ignoring function cache, not needed
+        # Ignoring function cache, since we don't support functions anyway
         super().__init__()
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         return self.substitutions[expr.name]
+
+    def map_named_call_result(self, expr: NamedCallResult) -> NamedCallResult:
+        raise NotImplementedError(
+            "PlaceholderSubstitutor does not support functions.")
 
 
 class Inliner(CopyMapper):
