@@ -30,6 +30,7 @@ import os
 import sys
 from typing import (
     TYPE_CHECKING,
+    Never,
     TypedDict,
     TypeVar,
     cast,
@@ -62,7 +63,6 @@ from pytato.array import (
     SizeParam,
     Stack,
 )
-from pytato.function import FunctionDefinition
 from pytato.raising import BinaryOpType, C99CallOp
 from pytato.reductions import (
     AllReductionOperation,
@@ -172,7 +172,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[str, FunctionDefinition, []]):
+class NumpyCodegenMapper(CachedMapper[str, Never, []]):
     """
     .. note::
 
