@@ -1365,6 +1365,108 @@ def test_unify_axes_tags():
 
     # }}}
 
+    # {{ Reduction Operations with IndexLambda
+    # {{{ Reduce on outside of scalar expression
+
+    from immutabledict import immutabledict
+
+    import pymbolic.primitives as prim
+
+    def setup_test():
+        a = pt.make_placeholder("a", (512))
+        b = pt.make_placeholder("b", (512, 10))
+        c = pt.make_placeholder("c", (512, 10))
+        c = c.with_tagged_axis(1, QuuxTag())
+        b = b.with_tagged_axis(1, FooTag())
+        a = a.with_tagged_axis(0, BazTag())
+
+        x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0")))
+        y = prim.Subscript(prim.Variable("_in1"),
+                           (prim.Variable("_0"), prim.Variable("_r0")))
+        z = prim.Subscript(prim.Variable("_in2"), (prim.Variable("_0"),
+                                                   prim.Variable("_r1")))
+
+        return a, b, c, x, y, z
+
+    def assert_tags_were_propagated_appropriately(arr):
+        assert arr.var_to_reduction_descr["_r0"].tags_of_type(TestlibTag) == \
+                                                        frozenset([FooTag()])
+        assert arr.var_to_reduction_descr["_r1"].tags_of_type(TestlibTag) == \
+                                                        frozenset([QuuxTag()])
+
+        assert arr.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()])
+        for key in ["_in" + str(i) for i in range(2)]:
+            assert arr.bindings[key].axes[0].tags_of_type(TestlibTag) == \
+                                                        frozenset([BazTag()])
+
+    def get_def_reduction_descrs():
+        return immutabledict({"_r0": pt.array.ReductionDescriptor(frozenset([])),
+                              "_r1": pt.array.ReductionDescriptor(frozenset([]))
+                                                            })
+
+    a, b, c, x, y, z = setup_test()
+    # sum((_r0, _r1), a[_0] + b[_0, _r0] + b[_0,_r1]))
+    w = pt.IndexLambda(expr=pt.scalar_expr.Reduce(prim.Sum((x, y, z)),
+                                              pt.reductions.SumReductionOperation,
+                                              immutabledict({"_r0": (0, 10),
+                                                             "_r1": (0, 10)})),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}} Reduction on the outside of the scalar expression.
+
+    # {{{ Side-by-Side reduction.
+
+    a, b, c, x, y, z = setup_test()
+
+    # a[_0] + sum(_r0, b[_0, _r0]) + sum(_r1, b[_0,_r1])
+
+    w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(y,
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r0": (0, 10)})),
+                                      pt.scalar_expr.Reduce(z,
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r1": (0, 10)})))),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}}
+
+    # {{{ Nested Reductions.
+    # a[_0] + sum(_r0, b[_0, _r0] + sum(_r1, b[_0,_r1]))
+    a, b, c, x, y, z = setup_test()
+
+    w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(prim.Sum((y,
+                                                pt.scalar_expr.Reduce(z,
+                                                    pt.reductions.SumReductionOperation,
+                                                    immutabledict({"_r1": (0, 10)})))),
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r0": (0, 10)})))),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}}
+    # }}
+
 
 def test_unify_axes_tags_with_unbroadcastable_expressions():
 
@@ -1401,48 +1503,6 @@ def test_unify_axes_tags_with_unbroadcastable_expressions():
         term = z_unified.bindings[key]
         assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
         assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
-
-
-    # Side-by-Side reduction.
-
-    # a[_0] + sum(_r0, b[_0, _r0] + sum(_r1, b[_0,_r1]))
-    a = pt.make_placeholder("a", (512))
-    b = pt.make_placeholder("b", (512, 10))
-    c = pt.make_placeholder("c", (512, 10))
-    c = c.with_tagged_axis(1, QuuxTag())
-    b = b.with_tagged_axis(1, FooTag())
-    a = a.with_tagged_axis(0, BazTag())
-
-    x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0")))
-    y = prim.Subscript(prim.Variable("_in1"),
-                       (prim.Variable("_0"), prim.Variable("_r0")))
-    z = prim.Subscript(prim.Variable("_in2"), (prim.Variable("_0"),
-                                               prim.Variable("_r1")))
-
-    w = pt.IndexLambda(expr=pt.scalar_expr.Reduce(prim.Sum((x,y,z)),
-                                                  pt.reductions.SumReductionOperation,
-                                                  immutabledict({"_r0": (0,10),
-                                                                 "_r1": (0,10)})),
-                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
-                       shape=(512,), tags=pt.array._get_default_tags(),
-                       axes=pt.array._get_default_axes(1),
-                       dtype=float,
-                       var_to_reduction_descr=immutabledict({"_r0": pt.array.ReductionDescriptor(
-                                                                    frozenset([])
-                                                                    ),
-                                                             "_r1": pt.array.ReductionDescriptor(
-                                                                    frozenset([])
-                                                                 )}))
-
-    w_unified = pt.unify_axes_tags(w)
-
-    assert w_unified.var_to_reduction_descr["_r0"].tags_of_type(TestlibTag) == frozenset([FooTag()])
-    assert w_unified.var_to_reduction_descr["_r1"].tags_of_type(TestlibTag) == frozenset([QuuxTag()])
-
-    assert w_unified.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()])
-    for key in ["_in" + str(i) for i in range(2)]:
-        assert w_unified.bindings[key].axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()])
-
 
 
 def test_ignoring_axes_during_propagation():
