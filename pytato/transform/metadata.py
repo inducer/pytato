@@ -645,18 +645,6 @@ class AxisTagAttacher(CopyMapper):
                                         redn_var,
                                         self.axis_to_tags.get((expr, redn_var), [])
                                     )
-
-                            """
-                            mymapper: TagReductionAxesMapper = \
-                                                    TagReductionAxesMapper(
-                                                                    self.axis_to_tags,
-                                                                    expr_copy,
-                                                                    expr
-                                                                    )
-                            mymapper(expr_copy.expr)  # Tag the axes
-                            expr_copy = mymapper.array_expr  # Recover it.
-                            """
-
                 # }}}
 
                 self._cache[key] = expr_copy
