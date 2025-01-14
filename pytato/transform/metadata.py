@@ -77,7 +77,6 @@ from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
     IDX_LAMBDA_INAME,
-    IDX_LAMBDA_JUST_REDUCTIONS,
     CombineMapper,
     IdentityMapper as ScalarIdentityMapper,
 )
@@ -100,14 +99,14 @@ GraphNodeT = TypeVar("GraphNodeT")
 BindingName: TypeAlias = str
 P = ParamSpec("P")
 
-IGNORE_VARIABLE_STR: str = "IGNORE"
 BINDING_NAME_RESERVED_PATTERN = re.compile(r"^(_in?(0|([1-9][0-9]*)))$")
 
-# {{{ BindingSubscriptsUsedInIndexLambda
+
+# {{{ BindingSubscriptsCollector
 
 
-class BindingSubscriptsUsedInIndexLambda(CombineMapper[dict[BindingName,
-                                                     set[tuple[prim.Variable, ...]]],
+class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
+                                               set[tuple[prim.Expression, ...]]],
                                                       []]):
     """
     Return all the subscript expressions used by a variable specified by BindingName.
@@ -127,39 +126,37 @@ class BindingSubscriptsUsedInIndexLambda(CombineMapper[dict[BindingName,
     """
     def combine(self,
                 values: Iterable[dict[BindingName,
-                                         set[tuple[prim.Variable, ...]]]]) \
-                        -> dict[BindingName, set[tuple[prim.Variable, ...]]]:
-        out: dict[BindingName, set[tuple[prim.Variable, ...]]] = {}
+                                         set[tuple[prim.Expression, ...]]]]) \
+                        -> dict[BindingName, set[tuple[prim.Expression, ...]]]:
+        out: dict[BindingName, set[tuple[prim.Expression, ...]]] = {}
         from functools import reduce
         return reduce(lambda x, y: x | y, values, out)
 
     def map_subscript(self, expr: prim.Subscript) -> dict[BindingName,
-                                                    set[tuple[prim.Variable, ...]]]:
+                                                    set[tuple[prim.Expression, ...]]]:
         """
-        Record the indexing expression if the Subscript expression has a prim.Variable
+        Record the indexing expression if the Subscript expression has a prim.Expression
         as its aggregate. This will record an ignorable variable for each part of the
-        indexing expression that is not already a prim.Variable.
+        indexing expression that is not already a prim.Expression.
         """
 
         if isinstance(expr.aggregate, prim.Variable):
             name: BindingName = expr.aggregate.name
 
-            index = tuple(val if isinstance(val, prim.Variable)
-                      else prim.Variable(name=IGNORE_VARIABLE_STR)
-                      for val in expr.index_tuple)
-            base: dict[BindingName, set[tuple[prim.Variable, ...]]] = {name:
-                                                                          {index}}
-            assert base
+            base: dict[BindingName,
+                       set[tuple[prim.Expression, ...]]] = {name: {expr.index_tuple}}
+            index = self.rec(expr.index)
+            breakpoint()
             return base
         return {}
 
-    def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> dict[BindingName,
-                                                    set[tuple[prim.Variable, ...]]]:
+    def map_algebraic_leaf(self, expr: prim.Expression) -> dict[BindingName,
+                                                    set[tuple[prim.Expression, ...]]]:
 
         return {}
 
     def map_constant(self, expr: object) -> dict[BindingName,
-                                                    set[tuple[prim.Variable, ...]]]:
+                                                    set[tuple[prim.Expression, ...]]]:
         return {}
 # }}}
 
@@ -171,6 +168,7 @@ class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
 
     axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]]
     array_expr: IndexLambda
+    orig_array_expr: IndexLambda
 
     def map_subscript(self,
                       expr: prim.Subscript,
@@ -185,9 +183,11 @@ class TagReductionAxesMapper(ScalarIdentityMapper[[]]):
                             name in self.array_expr.bindings.keys():
                         # We matched the reduction axis.
                         # Now we need to add the tag to the original expression.
-                        my_key = (self.array_expr.bindings[name], iaxis)
+                        redn_name = val.name
+                        breakpoint()
+                        my_key = (self.orig_array_expr.bindings[name], iaxis)
                         self.array_expr = self.array_expr.with_tagged_reduction(
-                                                name, self.axis_to_tags.get(my_key, [])
+                                        redn_name, self.axis_to_tags.get(my_key, [])
                                             )
 
                         assert isinstance(self.array_expr, IndexLambda)
@@ -253,16 +253,17 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
         # axis_to_var: mapping from (array, iaxis) to the variable to be
         # used for unification.
-        self.axis_to_var: bidict[tuple[Array, int], str] = bidict()
+        self.axis_to_var: bidict[tuple[Array, int | str], str] = bidict()
         self.known_tag_to_var: dict[Tag, str] = {}
 
         self.equations: list[tuple[str, str]] = []
 
+        self.reduction_equations: list[tuple[str, str]] = []
         # }}}
 
     # {{{ unification helpers
 
-    def get_var_for_axis(self, ary: Array, iaxis: int) -> str:
+    def get_var_for_axis(self, ary: Array, iaxis: int | str) -> str:
         key = (ary, iaxis)
 
         try:
@@ -287,6 +288,13 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         :attr:`equations`.
         """
         self.equations.append((lhs, rhs))
+    
+    def record_reduction_equation(self, lhs: str, rhs: str) -> None:
+        r"""
+        Adds the equation :math:`\{\text{lhs}\doteq\text{rhs}}` to
+        :attr:`equations`.
+        """
+        self.reduction_equations.append((lhs, rhs))
 
     def record_equations_from_axes_tags(self, ary: Array) -> None:
         """
@@ -324,40 +332,36 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
         """
-        The propagation semantics for a :class:`~pytato.IndexLambda` are
-        implemented only for operations that can be raised to a
-        :class:`~pytato.raising.HighLevelOp`. In such cases, an equality
-        equation is recorded for every non-broadcasted axis of an operand and
-        its corresponding axis of *expr*.
+        Equality conditions are added between an axis of the operands which is indexed
+        by a :class:`~pymbolic.Variable` which has a name that follows the reserved
+        iname format, "_[0-9]+", and the axis of the output specified by the iname.
         """
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        index_expr_used = BindingSubscriptsUsedInIndexLambda()(expr.expr)
+        index_expr_used = BindingSubscriptsCollector()(expr.expr)
 
         assert len(expr.shape) == expr.ndim
 
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
-                for axis_ind in range(len(ind_tuple)):
-                    var_ind_name = ind_tuple[axis_ind]
-                    if IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(var_ind_name.name):
-                        # Reduction axis. We can ignore it.
-                        pass
-                    elif BINDING_NAME_RESERVED_PATTERN.fullmatch(var_ind_name.name):
-                        # Variable name axis.
-                        pass
-                    elif var_ind_name.name == IGNORE_VARIABLE_STR:
-                        # This is not directly represented in output axes. Ignore.
-                        pass
-                    elif IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
-                        # matched with an iname.
-                        inum = int(var_ind_name.name[1:])
-                        lhs: str = self.get_var_for_axis(expr.bindings[vname], axis_ind)
-                        rhs: str = self.get_var_for_axis(expr, inum)
-                        self.record_equation(lhs, rhs)
-                    else:
-                        raise ValueError(f"Unknown index name used in {vname}")
+                for axis_ind, var_ind_name in enumerate(ind_tuple):
+                    if isinstance(var_ind_name, prim.Variable):
+                        if IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
+                            # matched with an iname.
+                            inum = int(var_ind_name.name[1:])
+                            lhs: str = self.get_var_for_axis(expr.bindings[vname],
+                                                             axis_ind)
+                            rhs: str = self.get_var_for_axis(expr, inum)
+                            self.record_equation(lhs, rhs)
+                        elif var_ind_name.name in expr.var_to_reduction_descr.keys():\
+                            # matched with a reduction iname.
+                            breakpoint()
+                            lhs: str = self.get_var_for_axis(expr.bindings[vname],
+                                                             axis_ind)
+                            rhs: str = self.get_var_for_axis(expr, var_ind_name.name)
+                            self.record_reduction_equation(lhs, rhs)
+
         return
 
     def map_stack(self, expr: Stack) -> None:
@@ -695,7 +699,8 @@ class AxisTagAttacher(CopyMapper):
                                         self.axis_to_tags.get((arg, iaxis), [])
                                     )
 
-                    if isinstance(expr_copy, IndexLambda):
+                    if isinstance(expr, IndexLambda):
+                        assert isinstance(expr_copy, IndexLambda)
                         if expr_copy.var_to_reduction_descr:
                             # This is a reduction operation.
                             # We need to find the axes that are reduced over
@@ -703,7 +708,8 @@ class AxisTagAttacher(CopyMapper):
                             mymapper: TagReductionAxesMapper = \
                                                     TagReductionAxesMapper(
                                                                     self.axis_to_tags,
-                                                                    expr_copy
+                                                                    expr_copy,
+                                                                    expr
                                                                     )
                             mymapper(expr_copy.expr)  # Tag the axes
                             expr_copy = mymapper.array_expr  # Recover it.
@@ -775,7 +781,7 @@ def unify_axes_tags(
     axis_to_solved_tags: dict[tuple[Array, int], set[Tag]] = {}
 
     propagation_graph = undirected_graph_from_edges(
-        equations_collector.equations
+        equations_collector.equations + equations_collector.reduction_equations
     )
 
     ignored_vars = set({
@@ -797,6 +803,7 @@ def unify_axes_tags(
                 set()
             ).add(tag)
 
+    breakpoint()
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
                            )(expr)
