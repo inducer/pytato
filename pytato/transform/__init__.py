@@ -204,7 +204,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         """Call the mapper method of *expr* and return the result."""
-        method: Callable[..., Any] | None
+        method: Callable[..., ResultT] | None
 
         try:
             method = getattr(self, expr._mapper_method)
@@ -230,7 +230,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
             self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> FunctionResultT:
         """Call the mapper method of *expr* and return the result."""
-        method: Callable[..., Any] | None
+        method: Callable[..., FunctionResultT] | None
 
         try:
             method = self.map_function_definition  # type: ignore[attr-defined]
@@ -239,7 +239,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
                 f"{type(self).__name__} lacks a mapper method for functions.") from None
 
         assert method is not None
-        return cast("FunctionResultT", method(expr, *args, **kwargs))
+        return method(expr, *args, **kwargs)
 
     def __call__(self,
                  expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
