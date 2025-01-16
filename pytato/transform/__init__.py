@@ -1308,15 +1308,17 @@ class CachedWalkMapper(WalkMapper[P]):
         self._visited_functions: set[Any] = \
             _visited_functions if _visited_functions is not None else set()
 
-    def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+    def get_cache_key(
+            self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
+            ) -> Any:
         raise NotImplementedError
 
     def get_function_definition_cache_key(
-            self, expr: FunctionDefinition, *args: Any, **kwargs: Any) -> Any:
+            self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> Any:
         raise NotImplementedError
 
-    def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any
-            ) -> None:
+    def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> None:
         cache_key = self.get_cache_key(expr, *args, **kwargs)
         if cache_key in self._visited_arrays_or_names:
             return
@@ -1325,7 +1327,7 @@ class CachedWalkMapper(WalkMapper[P]):
         self._visited_arrays_or_names.add(cache_key)
 
     def rec_function_definition(self, expr: FunctionDefinition,
-                                *args: Any, **kwargs: Any) -> None:
+                                *args: P.args, **kwargs: P.kwargs) -> None:
         cache_key = self.get_function_definition_cache_key(expr, *args, **kwargs)
         if cache_key in self._visited_functions:
             return
