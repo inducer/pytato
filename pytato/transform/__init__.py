@@ -194,7 +194,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
     .. automethod:: __call__
     """
 
-    def handle_unsupported_array(self, expr: MappedT,
+    def handle_unsupported_array(self, expr: Array,
                                  *args: P.args, **kwargs: P.kwargs) -> ResultT:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper

@@ -639,7 +639,7 @@ class ToIndexLambdaMixin:
 
 class ToIndexLambdaMapper(Mapper[Array, Never, []], ToIndexLambdaMixin):
 
-    def handle_unsupported_array(self, expr: Any) -> Any:
+    def handle_unsupported_array(self, expr: Array) -> Array:
         raise CannotBeLoweredToIndexLambda(type(expr))
 
     def rec(self, expr: Array) -> Array:  # type: ignore[override]

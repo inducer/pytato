@@ -197,8 +197,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
         return _DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
-    def handle_unsupported_array(self,  # type: ignore[override]
-            expr: Array) -> None:
+    def handle_unsupported_array(self, expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 

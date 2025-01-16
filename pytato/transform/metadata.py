@@ -42,7 +42,6 @@ THE SOFTWARE.
 import logging
 from typing import (
     TYPE_CHECKING,
-    Any,
     Never,
     TypeVar,
     cast,
@@ -602,7 +601,7 @@ class AxisTagAttacher(CopyMapper):
         self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
-    def rec(self, expr: ArrayOrNames) -> Any:
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         if isinstance(expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
             return super().rec(expr)
         else:
