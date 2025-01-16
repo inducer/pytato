@@ -28,6 +28,7 @@ THE SOFTWARE.
 """
 import dataclasses
 import logging
+from collections.abc import Hashable
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -80,7 +81,7 @@ from pytato.tags import ImplStored
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Hashable, Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
@@ -1292,6 +1293,9 @@ class WalkMapper(Mapper[None, None, P]):
 
 # {{{ CachedWalkMapper
 
+VisitKeyT: TypeAlias = Hashable
+
+
 class CachedWalkMapper(WalkMapper[P]):
     """
     WalkMapper that visits each node in the DAG exactly once. This loses some
@@ -1301,21 +1305,22 @@ class CachedWalkMapper(WalkMapper[P]):
 
     def __init__(
             self,
-            _visited_functions: set[Any] | None = None) -> None:
+            _visited_functions: set[VisitKeyT] | None = None
+            ) -> None:
         super().__init__()
-        self._visited_arrays_or_names: set[Any] = set()
+        self._visited_arrays_or_names: set[VisitKeyT] = set()
 
-        self._visited_functions: set[Any] = \
+        self._visited_functions: set[VisitKeyT] = \
             _visited_functions if _visited_functions is not None else set()
 
     def get_cache_key(
             self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
-            ) -> Any:
+            ) -> VisitKeyT:
         raise NotImplementedError
 
     def get_function_definition_cache_key(
             self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
-            ) -> Any:
+            ) -> VisitKeyT:
         raise NotImplementedError
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> None:
@@ -1357,7 +1362,7 @@ class TopoSortMapper(CachedWalkMapper[[]]):
 
     def __init__(
             self,
-            _visited_functions: set[Any] | None = None) -> None:
+            _visited_functions: set[VisitKeyT] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
         self.topological_order: list[Array] = []
 
