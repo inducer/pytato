@@ -451,7 +451,7 @@ class _LocalSendRecvDepGatherer(CombineMapper[
             from pytato.distributed.verify import DuplicateRecvError
             raise DuplicateRecvError(f"Multiple receives found for '{recv_id}'")
 
-        self.local_comm_ids_to_needed_comm_ids[recv_id] = immutabledict()
+        self.local_comm_ids_to_needed_comm_ids[recv_id] = FrozenOrderedSet()
 
         self.local_recv_id_to_recv_node[recv_id] = expr
 
@@ -497,7 +497,8 @@ def _schedule_task_batches_counted(
     task_to_dep_level, visits_in_depend = \
             _calculate_dependency_levels(task_ids_to_needed_task_ids)
     nlevels = 1 + max(task_to_dep_level.values(), default=-1)
-    task_batches = [OrderedSet() for _ in range(nlevels)]
+    task_batches: Sequence[OrderedSet[TaskType]] = \
+        [OrderedSet() for _ in range(nlevels)]
 
     for task_id, dep_level in task_to_dep_level.items():
         task_batches[dep_level].add(task_id)
@@ -895,7 +896,7 @@ def find_distributed_partition(
     recvd_ary_to_part_id: dict[Array, int] = {
             recvd_ary: (
                 comm_id_to_part_id[
-                    _recv_to_comm_id(local_rank, cast("DistributedRecv", recvd_ary))])
+                    _recv_to_comm_id(local_rank, recvd_ary)])
             for recvd_ary in received_arrays}
 
     # "Materialized" arrays are arrays that are tagged with ImplStored,
@@ -918,7 +919,7 @@ def find_distributed_partition(
     direct_preds_getter = DirectPredecessorsGetter()
 
     def get_materialized_predecessors(ary: Array) -> OrderedSet[Array]:
-        materialized_preds = OrderedSet()
+        materialized_preds: OrderedSet[Array] = OrderedSet()
         for pred in direct_preds_getter(ary):
             assert isinstance(pred, Array)
             if pred in materialized_arrays:
