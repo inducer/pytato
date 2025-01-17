@@ -25,6 +25,7 @@ THE SOFTWARE.
 from typing import (
     TYPE_CHECKING,
     Any,
+    Never,
     TypeVar,
     cast,
 )
@@ -269,7 +270,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
 # {{{ dim_to_index_lambda_components
 
-class ShapeExpressionMapper(CachedMapper[ScalarExpression, []]):
+class ShapeExpressionMapper(CachedMapper[ScalarExpression, Never, []]):
     """
     Mapper that takes a shape component and returns it as a scalar expression.
     """
@@ -372,7 +373,7 @@ def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
 
 # {{{ ShapeToISLExpressionMapper
 
-class ShapeToISLExpressionMapper(CachedMapper[isl.Aff, []]):
+class ShapeToISLExpressionMapper(CachedMapper[isl.Aff, Never, []]):
     """
     Mapper that takes a shape component and returns it as :class:`isl.Aff`.
     """

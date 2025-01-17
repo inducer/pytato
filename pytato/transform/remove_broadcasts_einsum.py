@@ -31,7 +31,7 @@ THE SOFTWARE.
 from typing import cast
 
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
-from pytato.transform import CopyMapper, MappedT
+from pytato.transform import CopyMapper, MappedT, _verify_is_array
 from pytato.utils import are_shape_components_equal
 
 
@@ -42,7 +42,7 @@ class EinsumWithNoBroadcastsRewriter(CopyMapper):
         descr_to_axis_len = expr._access_descr_to_axis_len()
 
         for acc_descrs, arg in zip(expr.access_descriptors, expr.args, strict=True):
-            arg = self.rec_ary(arg)
+            arg = _verify_is_array(self.rec(arg))
             axes_to_squeeze: list[int] = []
             for idim, acc_descr in enumerate(acc_descrs):
                 if not are_shape_components_equal(arg.shape[idim],

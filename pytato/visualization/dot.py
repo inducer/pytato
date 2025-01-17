@@ -178,7 +178,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
+class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
     def __init__(self) -> None:
         super().__init__()
         self.node_to_dot: dict[ArrayOrNames, _DotNodeInfo] = {}
@@ -197,8 +197,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
         return _DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
-    def handle_unsupported_array(self,  # type: ignore[override]
-            expr: Array) -> None:
+    def handle_unsupported_array(self, expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 

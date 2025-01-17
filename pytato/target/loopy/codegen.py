@@ -28,7 +28,7 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 import islpy as isl
 
@@ -384,7 +384,7 @@ class CodeGenState:
 
 # {{{ codegen mapper
 
-class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
+class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper

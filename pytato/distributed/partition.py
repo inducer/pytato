@@ -68,6 +68,8 @@ from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
+    Generic,
+    Never,
     TypeVar,
     cast,
 )
@@ -88,7 +90,13 @@ from pytato.distributed.nodes import (
     DistributedSendRefHolder,
 )
 from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, CopyMapper
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CombineMapper,
+    CopyMapper,
+    _verify_is_array,
+)
 
 
 if TYPE_CHECKING:
@@ -232,8 +240,9 @@ class _DistributedInputReplacer(CopyMapper):
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
+                 _function_cache: dict[Hashable, FunctionDefinition] | None = None,
                  ) -> None:
-        super().__init__()
+        super().__init__(_function_cache=_function_cache)
 
         self.recvd_ary_to_name = recvd_ary_to_name
         self.sptpo_ary_to_name = sptpo_ary_to_name
@@ -247,7 +256,7 @@ class _DistributedInputReplacer(CopyMapper):
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
         # Function definitions aren't allowed to contain receives,
         # stored arrays promoted to part outputs, or part outputs
-        return type(self)({}, {}, {})
+        return type(self)({}, {}, {}, _function_cache=self._function_cache)
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
@@ -338,7 +347,7 @@ def _make_distributed_partition(
 
         for name, val in name_to_part_output.items():
             assert name not in name_to_output
-            name_to_output[name] = comm_replacer.rec_ary(val)
+            name_to_output[name] = _verify_is_array(comm_replacer.rec(val))
 
         comm_ids = part_comm_ids[part_id]
 
@@ -399,8 +408,8 @@ def _recv_to_comm_id(
         comm_tag=recv.comm_tag)
 
 
-class _LocalSendRecvDepGatherer(CombineMapper[
-        FrozenOrderedSet[CommunicationOpIdentifier]]):
+class _LocalSendRecvDepGatherer(
+        CombineMapper[FrozenOrderedSet[CommunicationOpIdentifier], Never]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \

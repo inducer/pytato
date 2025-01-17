@@ -30,6 +30,7 @@ import os
 import sys
 from typing import (
     TYPE_CHECKING,
+    Never,
     TypedDict,
     TypeVar,
     cast,
@@ -171,7 +172,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[str, []]):
+class NumpyCodegenMapper(CachedMapper[str, Never, []]):
     """
     .. note::
 
