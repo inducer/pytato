@@ -27,9 +27,9 @@ THE SOFTWARE.
 """
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from immutabledict import immutabledict
+from orderedsets import FrozenOrderedSet
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
@@ -78,9 +78,6 @@ __doc__ = """
 
 
 T = TypeVar("T")
-
-FakeOrderedFrozenSet: TypeAlias = immutabledict[T, None]
-FakeOrderedSet: TypeAlias = dict[T, None]
 
 # {{{ NUserCollector
 
@@ -337,37 +334,37 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
 
         We only consider the predecessors of a nodes in a data-flow sense.
     """
-    def _get_preds_from_shape(self, shape: ShapeType) -> FakeOrderedFrozenSet[Array]:
-        return immutabledict.fromkeys(dim for dim in shape if isinstance(dim, Array))
+    def _get_preds_from_shape(self, shape: ShapeType) -> FrozenOrderedSet[Array]:
+        return FrozenOrderedSet(dim for dim in shape if isinstance(dim, Array))
 
-    def map_index_lambda(self, expr: IndexLambda) -> FakeOrderedFrozenSet[Array]:
-        return (immutabledict.fromkeys(expr.bindings.values())
+    def map_index_lambda(self, expr: IndexLambda) -> FrozenOrderedSet[Array]:
+        return (FrozenOrderedSet(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) ->  FakeOrderedFrozenSet[Array]:
-        return (immutabledict.fromkeys(expr.arrays)
+    def map_stack(self, expr: Stack) ->  FrozenOrderedSet[Array]:
+        return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_concatenate(self, expr: Concatenate) -> FakeOrderedFrozenSet[Array]:
-        return (immutabledict.fromkeys(expr.arrays)
+    def map_concatenate(self, expr: Concatenate) -> FrozenOrderedSet[Array]:
+        return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) ->  FakeOrderedFrozenSet[Array]:
-        return (immutabledict.fromkeys(expr.args)
+    def map_einsum(self, expr: Einsum) ->  FrozenOrderedSet[Array]:
+        return (FrozenOrderedSet(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_loopy_call_result(self, expr: NamedArray) -> FakeOrderedFrozenSet[Array]:
+    def map_loopy_call_result(self, expr: NamedArray) -> FrozenOrderedSet[Array]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
-        return (immutabledict.fromkeys(ary
+        return (FrozenOrderedSet(ary
                           for ary in expr._container.bindings.values()
                           if isinstance(ary, Array))
                 | self._get_preds_from_shape(expr.shape))
 
-    def _map_index_base(self, expr: IndexBase) -> FakeOrderedFrozenSet[Array]:
-        return (immutabledict.fromkeys([expr.array])
-                | immutabledict.fromkeys(idx for idx in expr.indices
+    def _map_index_base(self, expr: IndexBase) -> FrozenOrderedSet[Array]:
+        return (FrozenOrderedSet([expr.array])
+                | FrozenOrderedSet(idx for idx in expr.indices
                             if isinstance(idx, Array))
                 | self._get_preds_from_shape(expr.shape))
 
@@ -376,14 +373,14 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> FakeOrderedFrozenSet[ArrayOrNames]:
-        return immutabledict.fromkeys([expr.array])
+                                  ) -> FrozenOrderedSet[ArrayOrNames]:
+        return FrozenOrderedSet([expr.array])
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
-    def _map_input_base(self, expr: InputArgumentBase) -> FakeOrderedFrozenSet[Array]:
+    def _map_input_base(self, expr: InputArgumentBase) -> FrozenOrderedSet[Array]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
@@ -391,20 +388,20 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], []]):
     map_size_param = _map_input_base
 
     def map_distributed_recv(self,
-                             expr: DistributedRecv) -> FakeOrderedFrozenSet[Array]:
+                             expr: DistributedRecv) -> FrozenOrderedSet[Array]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FakeOrderedFrozenSet[ArrayOrNames]:
-        return immutabledict.fromkeys([expr.passthrough_data])
+                                        ) -> FrozenOrderedSet[ArrayOrNames]:
+        return FrozenOrderedSet([expr.passthrough_data])
 
-    def map_call(self, expr: Call) -> FakeOrderedFrozenSet[ArrayOrNames]:
-        return immutabledict.fromkeys(expr.bindings.values())
+    def map_call(self, expr: Call) -> FrozenOrderedSet[ArrayOrNames]:
+        return FrozenOrderedSet(expr.bindings.values())
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> FakeOrderedFrozenSet[ArrayOrNames]:
-        return immutabledict.fromkeys([expr._container])
+            self, expr: NamedCallResult) -> FrozenOrderedSet[ArrayOrNames]:
+        return FrozenOrderedSet([expr._container])
 
 
 # }}}
