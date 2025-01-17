@@ -427,8 +427,10 @@ class _LocalSendRecvDepGatherer(
             ) -> FrozenOrderedSet[CommunicationOpIdentifier]:
         return reduce(FrozenOrderedSet.union, args, FrozenOrderedSet())
 
-    def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder) \
-            -> FrozenOrderedSet[CommunicationOpIdentifier]:
+    def map_distributed_send_ref_holder(self,
+                                        expr: DistributedSendRefHolder
+                                        ) \
+                                        -> FrozenOrderedSet[CommunicationOpIdentifier]:
         send_id = _send_to_comm_id(self.local_rank, expr.send)
 
         if send_id in self.local_send_id_to_send_node:
@@ -465,8 +467,7 @@ class _LocalSendRecvDepGatherer(
 
         return FrozenOrderedSet({recv_id})
 
-    def map_named_call_result(
-            self, expr: NamedCallResult) \
+    def map_named_call_result(self, expr: NamedCallResult) \
                 -> FrozenOrderedSet[CommunicationOpIdentifier]:
         raise NotImplementedError(
             "LocalSendRecvDepGatherer does not support functions.")
@@ -480,8 +481,8 @@ TaskType = TypeVar("TaskType")
 # {{{ _schedule_task_batches (and related)
 
 def _schedule_task_batches(
-            task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]
-        ) -> Sequence[OrderedSet[TaskType]]:
+        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        -> Sequence[OrderedSet[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
     of tasks consists of tasks which do not depend on each other.
@@ -786,8 +787,8 @@ def find_distributed_partition(
         recv_ids: FrozenOrderedSet[CommunicationOpIdentifier] = FrozenOrderedSet()
         for batch in comm_batches:
             send_ids = FrozenOrderedSet(
-                    comm_id for comm_id in batch
-                    if comm_id.src_rank == local_rank)
+                comm_id for comm_id in batch
+                if comm_id.src_rank == local_rank)
             if recv_ids or send_ids:
                 part_comm_ids.append(
                     _PartCommIDs(
@@ -839,8 +840,7 @@ def find_distributed_partition(
     sent_arrays = FrozenOrderedSet(
         send_node.data for send_node in lsrdg.local_send_id_to_send_node.values())
 
-    received_arrays = FrozenOrderedSet(
-        lsrdg.local_recv_id_to_recv_node.values())
+    received_arrays = FrozenOrderedSet(lsrdg.local_recv_id_to_recv_node.values())
 
     # While receive nodes may be marked as materialized, we shouldn't be
     # including them here because we're using them (along with the send nodes)
@@ -942,7 +942,7 @@ def find_distributed_partition(
                 for stored_pred in get_materialized_predecessors(stored_ary)
                 if (stored_ary_to_part_id[stored_ary]
                     != stored_ary_to_part_id[stored_pred])
-        )
+                )
 
     # }}}
 

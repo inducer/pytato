@@ -338,7 +338,7 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], Never, []]):
         return (FrozenOrderedSet(expr.bindings.values())
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_stack(self, expr: Stack) ->  FrozenOrderedSet[ArrayOrNames]:
+    def map_stack(self, expr: Stack) -> FrozenOrderedSet[ArrayOrNames]:
         return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
@@ -346,7 +346,7 @@ class DirectPredecessorsGetter(Mapper[frozenset[ArrayOrNames], Never, []]):
         return (FrozenOrderedSet(expr.arrays)
                 | self._get_preds_from_shape(expr.shape))
 
-    def map_einsum(self, expr: Einsum) ->  FrozenOrderedSet[ArrayOrNames]:
+    def map_einsum(self, expr: Einsum) -> FrozenOrderedSet[ArrayOrNames]:
         return (FrozenOrderedSet(expr.args)
                 | self._get_preds_from_shape(expr.shape))
 
