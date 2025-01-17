@@ -68,9 +68,9 @@ from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Hashable, Mapping
 
-    from pytato.function import NamedCallResult
+    from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.target import Target
 
 
@@ -136,10 +136,13 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     ======================================  =====================================
     """
 
-    def __init__(self, target: Target,
-                 kernels_seen: dict[str, lp.LoopKernel] | None = None
-                 ) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            target: Target,
+            kernels_seen: dict[str, lp.LoopKernel] | None = None,
+            _function_cache: dict[Hashable, FunctionDefinition] | None = None
+            ) -> None:
+        super().__init__(_function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
@@ -266,11 +269,14 @@ def normalize_outputs(
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper[[]]):
-    def __init__(self) -> None:
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
         self.name_to_input: dict[str, InputArgumentBase] = {}
-        super().__init__()
+        super().__init__(_visited_functions=_visited_functions)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
+        return id(expr)
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
