@@ -68,7 +68,6 @@ from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
-    Generic,
     Never,
     TypeVar,
     cast,

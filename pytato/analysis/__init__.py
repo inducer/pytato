@@ -29,9 +29,8 @@ THE SOFTWARE.
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Never
 
-from typing_extensions import Self
-
 from orderedsets import FrozenOrderedSet
+from typing_extensions import Self
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
