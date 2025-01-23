@@ -249,13 +249,12 @@ def _get_indices_from_input_subscript(subscript: str,
 
         # }}}
 
-    if is_output:
-        if len(normalized_indices) != len(set(normalized_indices)):
-            repeated_idx = next(idx
-                                for idx in normalized_indices
-                                if normalized_indices.count(idx) > 1)
-            raise ValueError(f"Output subscript '{subscript}' contains "
-                             f"'{repeated_idx}' multiple times.")
+    if is_output and len(normalized_indices) != len(set(normalized_indices)):
+        repeated_idx = next(idx
+                            for idx in normalized_indices
+                            if normalized_indices.count(idx) > 1)
+        raise ValueError(f"Output subscript '{subscript}' contains "
+                         f"'{repeated_idx}' multiple times.")
 
     return tuple(normalized_indices)
 

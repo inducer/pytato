@@ -79,10 +79,7 @@ SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
 
 def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
     if isinstance(o, tuple):
-        for i in o:
-            if not is_integral_scalar_expression(i):
-                return False
-        return True
+        return all(is_integral_scalar_expression(i) for i in o)
     else:
         return False
 
@@ -280,18 +277,18 @@ class NamesValidityChecker(CachedWalkMapper[[]]):
         return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, Placeholder | SizeParam | DataWrapper):
-            if expr.name is not None:
-                try:
-                    ary = self.name_to_input[expr.name]
-                except KeyError:
-                    self.name_to_input[expr.name] = expr
-                else:
-                    if ary is not expr:
-                        from pytato.diagnostic import NameClashError
-                        raise NameClashError(
-                                "Received two separate instances of inputs "
-                                f"named '{expr.name}'.")
+        if (isinstance(expr, Placeholder | SizeParam | DataWrapper)
+                    and expr.name is not None):
+            try:
+                ary = self.name_to_input[expr.name]
+            except KeyError:
+                self.name_to_input[expr.name] = expr
+            else:
+                if ary is not expr:
+                    from pytato.diagnostic import NameClashError
+                    raise NameClashError(
+                            "Received two separate instances of inputs "
+                            f"named '{expr.name}'.")
 
 
 def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:

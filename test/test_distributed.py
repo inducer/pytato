@@ -135,7 +135,7 @@ def test_distributed_scheduler_counts():
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
-        for key in needed_ids.keys():
+        for key in needed_ids:
             needed_ids[key] = {key-1} if key > 0 else set()
         _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
@@ -190,7 +190,7 @@ def test_distributed_scheduling_o_n_direct_dependents():
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
-        for key in needed_ids.keys():
+        for key in needed_ids:
             for j in range(key):
                 needed_ids[key].add(j)
         _, count_list[i] = _schedule_task_batches_counted(needed_ids)

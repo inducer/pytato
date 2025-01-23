@@ -220,7 +220,7 @@ class BoundPyOpenCLProgram(BoundProgram):
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
-        if __debug__:
+        if __debug__:  # noqa: SIM102
             if set(kwargs.keys()) & set(self.bound_arguments.keys()):
                 raise ValueError("Got arguments that were previously bound: "
                         f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
@@ -314,7 +314,7 @@ class BoundPyOpenCLExecutable(BoundProgram):
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 
-        if __debug__:
+        if __debug__:  # noqa: SIM102
             if set(kwargs.keys()) & set(self.bound_arguments.keys()):
                 raise ValueError("Got arguments that were previously bound: "
                         f"{set(kwargs.keys()) & set(self.bound_arguments.keys())}.")
