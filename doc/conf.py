@@ -10,8 +10,9 @@ copyright = "2020, Pytato Contributors"
 author = "Pytato Contributors"
 
 ver_dic = {}
-exec(compile(open("../pytato/version.py").read(), "../pytato/version.py",
-    "exec"), ver_dic)
+with open("../pytato/version.py") as vfile:
+    exec(compile(vfile.read(), "../pytato/version.py", "exec"), ver_dic)
+
 version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
