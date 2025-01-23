@@ -768,43 +768,22 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
 # {{{ CombineMapper
 
-class CombineMapper(Mapper[ResultT, FunctionResultT, []]):
+class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
     """
     Abstract mapper that recursively combines the results of user nodes
     of a given expression.
 
     .. automethod:: combine
     """
-    def __init__(
-            self,
-            _function_cache: dict[FunctionDefinition, FunctionResultT] | None = None
-            ) -> None:
-        super().__init__()
-        self.cache: dict[ArrayOrNames, ResultT] = {}
-        self.function_cache: dict[FunctionDefinition, FunctionResultT] = \
-            _function_cache if _function_cache is not None else {}
+    def get_cache_key(self, expr: ArrayOrNames) -> Hashable:
+        return expr
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> Hashable:
+        return expr
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
                               ) -> tuple[ResultT, ...]:
         return tuple(self.rec(s) for s in situp if isinstance(s, Array))
-
-    def rec(self, expr: ArrayOrNames) -> ResultT:
-        if expr in self.cache:
-            return self.cache[expr]
-        result: ResultT = super().rec(expr)
-        self.cache[expr] = result
-        return result
-
-    def rec_function_definition(
-            self, expr: FunctionDefinition) -> FunctionResultT:
-        if expr in self.function_cache:
-            return self.function_cache[expr]
-        result: FunctionResultT = super().rec_function_definition(expr)
-        self.function_cache[expr] = result
-        return result
-
-    def __call__(self, expr: ArrayOrNames) -> ResultT:
-        return self.rec(expr)
 
     def combine(self, *args: ResultT) -> ResultT:
         """Combine the arguments."""
