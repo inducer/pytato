@@ -1229,30 +1229,29 @@ def test_reserved_binding_name_patterns():
 
 def test_reserved_scalar_iname_patterns():
     from pytato.scalar_expr import (
-        IDX_LAMBDA_INAME,
-        IDX_LAMBDA_JUST_REDUCTIONS,
+        IDX_LAMBDA_RESERVED_INDEX_PATTERN,
         IDX_LAMBDA_RE,
     )
 
-    test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101"]
+    test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101", "_r"]
 
     assert IDX_LAMBDA_RE.fullmatch(test_strings[0])
-    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[0])
-    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[0])
+    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[0])
 
-    for pat in [IDX_LAMBDA_INAME, IDX_LAMBDA_RE, IDX_LAMBDA_JUST_REDUCTIONS]:
+    for pat in [IDX_LAMBDA_RESERVED_INDEX_PATTERN, IDX_LAMBDA_RE]:
         assert not pat.fullmatch(test_strings[1])
         assert not pat.fullmatch(test_strings[2])
         assert not pat.fullmatch(test_strings[3])
 
     assert IDX_LAMBDA_RE.fullmatch(test_strings[4])
-    assert not IDX_LAMBDA_INAME.fullmatch(test_strings[4])
-    assert IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[4])
+    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[4])
 
-    for i in range(5, len(test_strings)):
+    for i in range(5, len(test_strings)-1):
         assert IDX_LAMBDA_RE.fullmatch(test_strings[i])
-        assert IDX_LAMBDA_INAME.fullmatch(test_strings[i])
-        assert not IDX_LAMBDA_JUST_REDUCTIONS.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[i])
+
+    assert not IDX_LAMBDA_RE.fullmatch(test_strings[-1])
+    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[-1])
 
 
 def test_cached_walk_mapper_with_extra_args():
@@ -1285,6 +1284,39 @@ def test_cached_walk_mapper_with_extra_args():
         # passing incorrect argument should raise TypeError while calling post_visit
         my_walk_mapper(dag, bad_arg_name=7)
 
+def test_unify_axes_tags_indexlambda():
+    from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
+
+    from pytato.array import EinsumReductionAxis
+    from pymbolic import primitives as prim
+    from immutabledict import immutabledict
+
+    x = pt.make_placeholder("x", (10, 4))
+    x = x.with_tagged_axis(0, FooTag())
+
+    y = pt.make_placeholder("y", (4, 10))
+    y = y.with_tagged_axis(0, BarTag())
+
+    z = pt.IndexLambda(expr=prim.Subscript(prim.Variable("_in0"),
+                                           (prim.Variable("_0"),
+                                            prim.Subscript(prim.Variable("_in1"),
+                                                           (prim.Variable("_1"), 0)))
+                                           ),
+                       bindings=immutabledict({"_in0": x, "_in1": y}),
+                       dtype=float, axes=pt.array._get_default_axes(2),
+                       tags=pt.array._get_default_tags(),
+                       shape=(10,4),
+                       var_to_reduction_descr=immutabledict({}))
+
+    z_unified = pt.unify_axes_tags(z)
+
+    assert z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
+    assert z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([BarTag()])
+
+    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()])
+
+    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
+    assert z_unified.bindings["_in1"].axes[1].tags_of_type(TestlibTag) == frozenset([])
 
 def test_unify_axes_tags():
     from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag

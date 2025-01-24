@@ -75,7 +75,7 @@ from pytato.array import (
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
-    IDX_LAMBDA_INAME,
+    IDX_LAMBDA_RESERVED_INDEX_PATTERN,
     CombineMapper,
 )
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
@@ -116,8 +116,9 @@ class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
                                          set[tuple[prim.Expression, ...]]]]) \
                         -> dict[BindingName, set[tuple[prim.Expression, ...]]]:
         out: dict[BindingName, set[tuple[prim.Expression, ...]]] = {}
+        import operator
         from functools import reduce
-        return reduce(lambda x, y: x | y, values, out)
+        return reduce(operator.or_, values, out)
 
     def map_subscript(self, expr: prim.Subscript) -> dict[BindingName,
                                                     set[tuple[prim.Expression, ...]]]:
@@ -127,7 +128,22 @@ class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
         """
 
         if isinstance(expr.aggregate, prim.Variable):
-            return {expr.aggregate.name: {expr.index_tuple}}
+            name = expr.aggregate.name
+            base: dict[BindingName,
+                       set[tuple[prim.Expression, ...]]] = {name: {expr.index_tuple}}
+
+            """
+            for ind, subexpr in enumerate(expr.index_tuple):
+                sub = self.rec(subexpr)
+                if sub:
+                    # we have nested subscripts.
+                    for key, val in sub.items():
+                        # The new key will be comma separated.
+                        newkey = name + "," + str(ind) + "," + key
+                        base.update({newkey: val})
+            """
+            return self.combine([base] + [self.rec(subexpr) for _, subexpr in enumerate(expr.index_tuple)])
+            #return {expr.aggregate.name: {expr.index_tuple}}
         return {}
 
     def map_algebraic_leaf(self, expr: prim.Expression) -> dict[BindingName,
@@ -278,23 +294,36 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
         index_expr_used = BindingSubscriptsCollector()(expr.expr)
 
-        assert len(expr.shape) == expr.ndim
 
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
                 for axis_ind, var_ind_name in enumerate(ind_tuple):
                     if isinstance(var_ind_name, prim.Variable):
                         lhs: str = self.get_var_for_axis(expr.bindings[vname],
-                                                         axis_ind)
-                        if IDX_LAMBDA_INAME.fullmatch(var_ind_name.name):
-                            # matched with an iname.
-                            inum = int(var_ind_name.name[1:])
-                            rhs: str = self.get_var_for_axis(expr, inum)
-                            self.record_equation(lhs, rhs)
+                                                     axis_ind)
+                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(var_ind_name.name)
+                        if matched_pattern:
+                            # matched with an axis index.
+                            self.record_equation(lhs, self.get_var_for_axis(expr,
+                                                  int(matched_pattern.group("index"))))
                         elif var_ind_name.name in expr.var_to_reduction_descr.keys():
-                            # matched with a reduction iname.
-                            rhs = self.get_var_for_axis(expr, var_ind_name.name)
-                            self.record_equation(lhs, rhs)
+                            # matched with a reduction axis.
+                            # We are assuming that this axis is eliminated from the
+                            # axes of the output array. So, the metadata will only be keep
+                            # in the reduction descriptor object which is indexed by the
+                            # var_ind_name.name
+                            self.record_equation(lhs,
+                                self.get_var_for_axis(expr, var_ind_name.name))
+
+                        elif BINDING_NAME_RESERVED_PATTERN.fullmatch(var_ind_name.name):
+                            # This means that we had an index of index.
+                            # So, the metadata propagation with this index is data
+                            # dependent.
+                            pass
+                        else:
+                            pass
+                            #warning("Variable does not match an index pattern. It will
+                            #be ignored for metadata propagation.")
 
         return
 
@@ -304,6 +333,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         and their corresponding axis in *expr*. No equation is added for the
         newly created axis i.e. :attr:`pytato.array.Stack.axis`.
         """
+        raise NotImplementedError
         for ary in expr.arrays:
             self.rec(ary)
 
@@ -331,6 +361,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         added for the concatenated axis i.e.
         :attr:`pytato.array.Concatenate.axis`.
         """
+        raise NotImplementedError
         for ary in expr.arrays:
             self.rec(ary)
 
@@ -351,6 +382,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         its corresponding axis in *expr* as specified by
         :attr:`pytato.array.AxisPermutation.axis_permutation`.
         """
+        raise NotImplementedError
         self.rec(expr.array)
 
         assert expr.ndim == expr.array.ndim
@@ -369,6 +401,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         sliced axis is one which goes along the entire length of the axis with
         a positive unit stride.
         """
+        raise NotImplementedError
         self.rec(expr.array)
 
         i_out_axis = 0
@@ -401,6 +434,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         indices adds an equality equation for each non-broadcasted axis of an
         indexing array to its corresponding axis in *expr*.
         """
+        raise NotImplementedError
         from pytato.utils import get_shape_after_broadcasting, partition
 
         self.rec(expr.array)
@@ -488,6 +522,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         output and so no constraints are enforced except when the
         :class:`pytato.Reshape` has come from a :func:`pytato.expand_dims`.
         """
+        raise NotImplementedError
         from pytato.tags import ExpandedDimsReshape
 
         self.rec(expr.array)
@@ -514,6 +549,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         :func:`pytato.einsum` thereby having the same the
         :class:`~pytato.array.EinsumAxisDescriptor`.
         """
+        raise NotImplementedError
         from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
         for arg in expr.args:
@@ -535,6 +571,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                     descr_to_var[descr] = in_tag_var
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
+        raise NotImplementedError
         for _, subexpr in sorted(expr._data.items()):
             self.rec(subexpr)
 
@@ -542,6 +579,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         """
         Does not add any equations.
         """
+        raise NotImplementedError
         for _, subexpr in sorted(expr.bindings.items()):
             if isinstance(subexpr, Array):
                 self.rec(subexpr)
@@ -551,6 +589,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         # high level ops, but that's quite involved and probably not worth it.
 
     def map_named_array(self, expr: NamedArray) -> None:
+        raise NotImplementedError
         self.rec(expr._container)
 
     def map_distributed_send_ref_holder(self,
@@ -563,6 +602,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         equations are added between each axis of *expr* and its corresponding
         axis in the pass-through data.
         """
+        raise NotImplementedError
         self.rec(expr.passthrough_data)
         self.rec(expr.send.data)
         for idim in range(expr.ndim):
@@ -577,6 +617,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         :class:`pytato.DistributedRecv` does not have any operands and so no
         more equations are deduced.
         """
+        raise NotImplementedError
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
@@ -696,7 +737,26 @@ def unify_axes_tags(
     """
     equations_collector = equations_collector_t(tag_t)
 
-    equations_collector(expr)
+    # First we will convert the expression to a series of IndexLambda operations.
+
+    from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin, to_index_lambda
+    from pytato.transform import TransformMapper
+    from pytato.diagnostic import CannotBeLoweredToIndexLambda
+    mapped_expr = to_index_lambda(expr)
+
+    class MyIndexMapper(TransformMapper, ToIndexLambdaMixin):
+        def handle_unsupported_array(self, expr: Any) -> Any:
+            raise CannotBeLoweredToIndexLambda(type(expr))
+
+        def map_placeholder(self, expr: Placeholder) -> Placeholder:
+            return expr
+
+
+    mymapper = MyIndexMapper()
+    mapped_expr = mymapper(expr)
+
+    breakpoint()
+    equations_collector(mapped_expr)
 
     # start BFS traversal with the known tags as the sources.
     # From the equations build a Propagation Graph
@@ -709,6 +769,9 @@ def unify_axes_tags(
     )
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
+
+    # Reduction axes are specified by a str but all other axes are specified
+    # by an integer. Note that the axes are still uniquely identified.
     axis_to_solved_tags: dict[tuple[Array, int | str], set[Tag]] = {}
 
     propagation_graph = undirected_graph_from_edges(
@@ -721,6 +784,8 @@ def unify_axes_tags(
     })
 
     for (ary, ax), ax_var in equations_collector.axis_to_var.items():
+        # Reduction axes do not follow AxisIgnoredForPropagation.
+        # They cannot propagate the information to descendant of the array anyway.
         if isinstance(ax, int):
             if ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag):
                 ignored_vars.update({ax_var})
@@ -736,6 +801,6 @@ def unify_axes_tags(
 
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
-                           )(expr)
+                           )(mapped_expr)
 
 # vim: fdm=marker

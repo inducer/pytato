@@ -163,9 +163,8 @@ class SubstitutionMapper(SubstitutionMapperBase):
                            for name, bound in expr.bounds.items()}))
 
 
-IDX_LAMBDA_RE = re.compile(r"^(_r?(0|([1-9][0-9]*)))$")
-IDX_LAMBDA_INAME = re.compile(r"^(_(0|([1-9][0-9]*)))$")
-IDX_LAMBDA_JUST_REDUCTIONS = re.compile(r"^(_r(0|([1-9][0-9]*)))$")
+IDX_LAMBDA_RE = re.compile(r"^(_r?(?P<index>0|[1-9][0-9]*))$")
+IDX_LAMBDA_RESERVED_INDEX_PATTERN = re.compile(r"^(_(?P<index>0|[1-9][0-9]*))$")
 
 
 class DependencyMapper(DependencyMapperBase[P]):
