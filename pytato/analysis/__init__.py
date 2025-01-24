@@ -26,7 +26,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Never
 
 from orderedsets import FrozenOrderedSet
@@ -34,6 +33,7 @@ from typing_extensions import Self
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools.tag import Tag
 
 from pytato.array import (
     Array,
@@ -49,11 +49,11 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
     from pytato.loopy import LoopyCall
@@ -599,12 +599,12 @@ def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
 
 # {{{ TagCountMapper
 
-class TagCountMapper(CombineMapper[int]):
+class TagCountMapper(CombineMapper[int, []]):
     """
     Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
     """
 
-    def __init__(self, tags: Union[Tag, Iterable[Tag]]) -> None:
+    def __init__(self, tags: Tag | Iterable[Tag]) -> None:
         super().__init__()
         if isinstance(tags, Tag):
             tags = frozenset((tags,))
@@ -631,8 +631,8 @@ class TagCountMapper(CombineMapper[int]):
 
 
 def get_num_tags_of_type(
-        outputs: Union[Array, DictOfNamedArrays],
-        tags: Union[Tag, Iterable[Tag]]) -> int:
+        outputs: Array | DictOfNamedArrays,
+        tags: Tag | Iterable[Tag]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tags in *tags*."""
 

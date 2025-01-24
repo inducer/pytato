@@ -1709,7 +1709,7 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
         ======  ========  =======
 
     """
-    from pytato.analysis import get_nusers, get_num_nodes, get_num_tags_of_type
+    from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
     new_data = {}
     for name, ary in expr.items():
@@ -1719,7 +1719,7 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
 
     from pytato import DEBUG_ENABLED
     if DEBUG_ENABLED:
-        logger.info("materialize_with_mpms: materialized "
+        transform_logger.info("materialize_with_mpms: materialized "
             f"{get_num_tags_of_type(res, ImplStored())} out of "
             f"{get_num_nodes(res)} nodes")
 

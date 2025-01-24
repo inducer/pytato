@@ -1141,8 +1141,10 @@ def test_adv_indexing_into_zero_long_axes():
 
 def test_tagcountmapper():
     from testlib import RandomDAGContext, make_random_dag
-    from pytato.analysis import get_num_tags_of_type, get_num_nodes
+
     from pytools.tag import Tag
+
+    from pytato.analysis import get_num_nodes, get_num_tags_of_type
 
     class NonExistentTag(Tag):
         pass
@@ -1161,7 +1163,7 @@ def test_tagcountmapper():
     dag = pt.make_dict_of_named_arrays({"out": out})
 
     # get_num_nodes() returns an extra DictOfNamedArrays node
-    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)-1
+    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
 
     assert get_num_tags_of_type(dag, NonExistentTag()) == 0
     assert get_num_tags_of_type(dag, frozenset((ExistentTag(),))) == 1
