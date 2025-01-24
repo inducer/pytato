@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -55,35 +56,50 @@ __doc__ = """
 
 # }}}
 
+
+from typing import TYPE_CHECKING, cast
+
 import numpy as np
+from immutabledict import immutabledict
+
 import pymbolic.primitives as prim
-from typing import Tuple, Optional
-from pytato.array import (Array, ArrayOrScalar, IndexLambda, _dtype_any,
-                          _get_default_axes, _get_default_tags)
+from pymbolic import Scalar, var
+
+from pytato.array import (
+    Array,
+    ArrayOrScalar,
+    IndexLambda,
+    _dtype_any,
+    _get_created_at_tag,
+    _get_default_axes,
+    _get_default_tags,
+)
 from pytato.scalar_expr import SCALAR_CLASSES
-from pymbolic import var
-from immutables import Map
 
 
-def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
+if TYPE_CHECKING:
+    from pymbolic.typing import Expression
+
+
+def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
                           func_name: str,
-                          ret_dtype: Optional[_dtype_any] = None,
-                          np_func_name: Optional[str] = None
+                          ret_dtype: _dtype_any | None = None,
+                          np_func_name: str | None = None
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         if np_func_name is None:
             np_func_name = func_name
 
         np_func = getattr(np, np_func_name)
-        return np_func(*inputs)  # type: ignore
+        return cast("ArrayOrScalar", np_func(*inputs))
 
     if not inputs:
         raise ValueError("at least one argument must be present")
 
     shape = None
 
-    sym_args = []
-    bindings = {}
+    sym_args: list[Expression] = []
+    bindings: dict[str, Array] = {}
     for index, inp in enumerate(inputs):
         if isinstance(inp, Array):
             if inp.dtype.kind not in ["f", "c"]:
@@ -111,12 +127,13 @@ def _apply_elem_wise_func(inputs: Tuple[ArrayOrScalar, ...],
     assert ret_dtype is not None
 
     return IndexLambda(
-        prim.Call(var(f"pytato.c99.{func_name}"),
+        expr=prim.Call(var(f"pytato.c99.{func_name}"),
                   tuple(sym_args)),
-        shape, ret_dtype, bindings,
+        shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
         tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(stacklevel=2),
         axes=_get_default_axes(len(shape)),
-        var_to_reduction_descr=Map(),
+        var_to_reduction_descr=immutabledict(),
     )
 
 
@@ -219,8 +236,7 @@ def imag(x: ArrayOrScalar) -> ArrayOrScalar:
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
     else:
         if np.isscalar(x):
-            # numpy does specialize it enough.
-            return x_dtype.type(0)  # type: ignore[no-any-return]
+            return cast("Scalar", x_dtype.type(0))
         else:
             assert isinstance(x, Array)
             import pytato as pt

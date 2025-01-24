@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2021 Kaushik Kulkarni"""
 
 __license__ = """
@@ -35,13 +36,18 @@ __doc__ = """
 .. autoclass:: BoundJAXPythonProgram
 """
 
-import numpy as np
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from abc import ABC, abstractmethod, abstractproperty
 from functools import cached_property
-from typing import Any, Mapping, FrozenSet, Callable, Dict, Set
+from typing import TYPE_CHECKING, Any
 
-from pytato.target import Target, BoundProgram
+import numpy as np
+
+from pytato.target import BoundProgram, Target
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 # {{{ abstract types
@@ -56,7 +62,7 @@ class PythonTarget(Target, ABC):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundProgram:
         """
         :arg program: The python code containing the compiled routine.
@@ -74,12 +80,12 @@ class BoundPythonProgram(BoundProgram):
     .. automethod:: copy
     .. automethod:: with_transformed_program
     """
-    expected_arguments: FrozenSet[str]
+    expected_arguments: frozenset[str]
     entrypoint: str
 
     @cached_property
     def _compiled_function(self) -> Callable[..., Any]:
-        variables_after_execution: Dict[str, Any] = {
+        variables_after_execution: dict[str, Any] = {
             "_MODULE_SOURCE_CODE": self.program  # helps pudb
         }
         exec(self.program, variables_after_execution)
@@ -88,16 +94,16 @@ class BoundPythonProgram(BoundProgram):
             self.entrypoint]
 
     @cached_property
-    def _bound_argment_names(self) -> Set[str]:
+    def _bound_argument_names(self) -> set[str]:
         return set(self.bound_arguments.keys())
 
-    def __call__(self,  *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
 
         if args:
             raise ValueError(f"'{type(self).__call__}' does not take positional"
                              " arguments.")
 
-        if set(kwargs.keys()) & self._bound_argment_names:
+        if set(kwargs.keys()) & self._bound_argument_names:
             raise ValueError("Got arguments that were previously bound: "
                     f"'{set(kwargs.keys()) & set(self.bound_arguments.keys())}'.")
 
@@ -123,11 +129,13 @@ class BoundPythonProgram(BoundProgram):
 
 class NumpyLikePythonTarget(Target, ABC):
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def numpy_like_module_name(self) -> str:
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def numpy_like_module_name_shorthand(self) -> str:
         pass
 
@@ -135,7 +143,7 @@ class NumpyLikePythonTarget(Target, ABC):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundPythonProgram:
         pass
 
@@ -155,7 +163,7 @@ def _process_jax_bnd_arg(arg: Any) -> Any:
     elif isinstance(arg, np.ndarray):
         return jax.device_put(arg)
 
-    elif isinstance(arg, jax.numpy.DeviceArray):
+    elif isinstance(arg, jax.Array):
         return arg
     else:
         raise TypeError("Data in a bound argument can be one of"
@@ -179,7 +187,7 @@ class JAXPythonTarget(NumpyLikePythonTarget):
     def bind_program(self,
                      program: str,
                      entrypoint: str,
-                     expected_arguments: FrozenSet[str],
+                     expected_arguments: frozenset[str],
                      bound_arguments: Mapping[str, Any]) -> BoundJAXPythonProgram:
         return BoundJAXPythonProgram(target=self, program=program,
                                      entrypoint=entrypoint,

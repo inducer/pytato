@@ -14,3 +14,4 @@ dependencies:
 - mpi4py
 - jax
 - openmpi  # Force using Open MPI since our pytest infrastructure needs it
+- graphviz  # for visualization tests

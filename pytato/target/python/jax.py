@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
 """
@@ -23,21 +26,26 @@ THE SOFTWARE.
 """
 
 import ast
+from typing import TYPE_CHECKING
 
-from typing import Union, Optional, Mapping
-
-from pytato.array import Array, DictOfNamedArrays
-from pytato.target.python import JAXPythonTarget, BoundJAXPythonProgram
+from pytato.target.python import BoundJAXPythonProgram, JAXPythonTarget
 from pytato.target.python.numpy_like import generate_numpy_like
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytato.array import Array, DictOfNamedArrays
+
 
 __doc__ = """
 .. autofunction:: generate_jax
 """
 
 
-def generate_jax(expr: Union[Array, Mapping[str, Array], DictOfNamedArrays],
+def generate_jax(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                  *,
-                 target: Optional[JAXPythonTarget] = None,
+                 target: JAXPythonTarget | None = None,
                  jit: bool = False,
                  function_name: str = "_pt_kernel",
                  show_code: bool = False,

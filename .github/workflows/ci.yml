@@ -8,32 +8,37 @@ on:
         - cron:  '17 3 * * 0'
 
 jobs:
-    flake8:
-        name: Flake8
+    ruff:
+        name: Ruff
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -
-            uses: actions/setup-python@v1
-            with:
-                # matches compat target in setup.py
-                python-version: '3.8'
+            uses: actions/setup-python@v5
         -   name: "Main Script"
             run: |
-                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-                . ./prepare-and-run-flake8.sh "$(basename $GITHUB_REPOSITORY)" test examples
+                pip install ruff
+                ruff check
+
+    typos:
+        name: Typos
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v4
+        -   uses: crate-ci/typos@master
 
     pylint:
         name: Pylint
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -
-            uses: actions/setup-python@v1
+            uses: actions/setup-python@v5
             with:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
@@ -43,13 +48,14 @@ jobs:
         name: Mypy
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -
-            uses: actions/setup-python@v1
+            uses: actions/setup-python@v5
             with:
                 python-version: '3.x'
         -   name: "Main Script"
             run: |
+                export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
                 build_py_project_in_conda_env
@@ -60,7 +66,7 @@ jobs:
         name: Conda Pytest
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
@@ -70,23 +76,22 @@ jobs:
         name: Conda Examples
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project_in_conda_env
-                run_examples
-
-                mpirun -n 2 --oversubscribe python distributed.py
+                pip install pytest  # for advection.py
+                run_examples --no-require-main
 
     docs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -
-            uses: actions/setup-python@v1
+            uses: actions/setup-python@v5
             with:
                 python-version: '3.x'
         -   name: "Main Script"
@@ -100,11 +105,11 @@ jobs:
     downstream_tests:
         strategy:
             matrix:
-                downstream_project: [meshmode, mirgecom, arraycontext]
+                downstream_project: [meshmode, mirgecom, grudge, arraycontext]
         name: Tests for downstream project ${{ matrix.downstream_project }}
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v2
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             env:
                 DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}
@@ -116,5 +121,9 @@ jobs:
 
                 if [[ "$DOWNSTREAM_PROJECT" = "meshmode" ]]; then
                     python ../examples/simple-dg.py --lazy
+                fi
+
+                if [[ "$DOWNSTREAM_PROJECT" = "grudge" ]]; then
+                    mpirun -n 2 python ../examples/wave/wave-op-mpi.py --lazy
                 fi
 

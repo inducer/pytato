@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
 __license__ = """
@@ -33,7 +34,11 @@ Code Generation Targets
 """
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class Target:

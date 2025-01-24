@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 
 __copyright__ = """Copyright (C) 2020-2021 Andreas Kloeckner
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -26,26 +28,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Union
-
 import itertools
 import operator
 import sys
 
-import loopy as lp
 import numpy as np
+import pytest
+from testlib import assert_allclose_to_numpy, get_random_pt_dag
+
+import loopy as lp
+import pymbolic.primitives as p
 import pyopencl as cl
-import pyopencl.array as cl_array  # noqa
+import pyopencl.array as cl_array
 import pyopencl.cltypes as cltypes  # noqa
 import pyopencl.tools as cl_tools  # noqa
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-import pytest  # noqa
 from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
 
 import pytato as pt
-from testlib import assert_allclose_to_numpy, get_random_pt_dag
-import pymbolic.primitives as p
 
 
 def test_basic_codegen(ctx_factory):
@@ -57,6 +59,19 @@ def test_basic_codegen(ctx_factory):
     x_in = np.array([1, 2, 3, 4, 5])
     _, (out,) = prog(queue, x=x_in)
     assert (out == x_in * x_in).all()
+
+
+def test_ctx_bound_execution(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (5,), np.int64)
+    prog = pt.generate_loopy(
+            x * x, options=lp.Options(no_numpy=True)).bind_to_context(ctx)
+    x_in = np.array([1, 2, 3, 4, 5])
+    x_in_dev = cl_array.to_device(queue, x_in)
+    _, (out,) = prog(queue, x=x_in_dev)
+    assert (out.get() == x_in * x_in).all()
 
 
 def test_named_clash(ctx_factory):
@@ -168,13 +183,13 @@ def test_data_wrapper(ctx_factory):
     # With name/shape
     x_in = np.array([[1, 2], [3, 4], [5, 6]])
     n = pt.make_size_param("n")
-    x = pt.make_data_wrapper(x_in, name="x", shape=(n, 2))
+    x = pt.make_data_wrapper(x_in, shape=(n, 2))
     prog = pt.generate_loopy(x)
     _, (x_out,) = prog(queue)
     assert (x_out == x_in).all()
 
 
-def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
+def test_codegen_with_DictOfNamedArrays(ctx_factory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -183,7 +198,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):  # noqa
     x_in = np.array([1, 2, 3, 4, 5])
     y_in = np.array([6, 7, 8, 9, 10])
 
-    result = pt.DictOfNamedArrays(dict(x_out=x, y_out=y))
+    result = pt.make_dict_of_named_arrays({"x_out": x, "y_out": y})
 
     # With return_dict.
     prog = pt.generate_loopy(result)
@@ -289,7 +304,8 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(
-                    y_orig.astype(dtype), name=f"y{dtype}")
+                    y_orig.astype(dtype),
+                    tags=frozenset([pt.tags.PrefixNamed(f"y{dtype}")]))
             exprs[dtype] = pt_op(x_in, y)
 
         prog = pt.generate_loopy(exprs)
@@ -301,7 +317,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
@@ -311,9 +326,6 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                                    "logical_and"))
 @pytest.mark.parametrize("reverse", (False, True))
 def test_array_array_binary_arith(ctx_factory, which, reverse):
-    if which == "sub":
-        pytest.skip("https://github.com/inducer/loopy/issues/131")
-
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -339,14 +351,15 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             continue
 
         x_in = x_orig.astype(first_dtype)
-        x = pt.make_data_wrapper(x_in, name="x")
+        x = pt.make_data_wrapper(x_in)
 
         exprs = {}
         for dtype in ARITH_DTYPES:
             if dtype in "FDG" and not_valid_in_complex:
                 continue
             y = pt.make_data_wrapper(
-                    y_orig.astype(dtype), name=f"y{dtype}")
+                    y_orig.astype(dtype),
+                    tags=frozenset([pt.tags.PrefixNamed(f"y{dtype}")]))
             exprs[dtype] = pt_op(x, y)
 
         prog = pt.generate_loopy(exprs)
@@ -360,7 +373,6 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
             out_ref = np_op(x_in, y_orig.astype(dtype))
 
             assert out.dtype == out_ref.dtype, (out.dtype, out_ref.dtype)
-            # In some cases ops are done in float32 in loopy but float64 in numpy.
             assert np.allclose(out, out_ref), (out, out_ref)
 
 
@@ -442,11 +454,9 @@ def test_slice(ctx_factory, shape):
     outputs = {}
     ref_outputs = {}
 
-    i = 0
-    for slice_ in generate_test_slices(shape):
+    for i, slice_ in enumerate(generate_test_slices(shape)):
         outputs[f"out_{i}"] = x[slice_]
         ref_outputs[f"out_{i}"] = x_in[slice_]
-        i += 1
 
     prog = pt.generate_loopy(outputs)
 
@@ -494,17 +504,14 @@ def test_concatenate(ctx_factory):
     assert_allclose_to_numpy(pt.concatenate((x0, x1, x2), axis=1), queue)
 
 
-@pytest.mark.parametrize("oldshape", [(36,),
-                                      (3, 3, 4),
-                                      (12, 3),
-                                      (2, 2, 3, 3, 1)])
-@pytest.mark.parametrize("newshape", [(-1,),
-                                      (-1, 6),
-                                      (4, 9),
-                                      (9, -1),
-                                      (36, -1),
-                                      36])
-def test_reshape(ctx_factory, oldshape, newshape):
+_SHAPES = [(36,), (3, 3, 4), (12, 3), (2, 2, 3, 3, 1), (4, 9), (9, 4)]
+
+
+@pytest.mark.parametrize("oldshape", _SHAPES)
+@pytest.mark.parametrize("newshape", [
+            *_SHAPES, (-1,), (-1, 6), (4, 9), (9, -1), (36, -1), 36])
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_reshape(ctx_factory, oldshape, newshape, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -514,10 +521,11 @@ def test_reshape(ctx_factory, oldshape, newshape):
 
     x = pt.make_data_wrapper(x_in)
 
-    assert_allclose_to_numpy(pt.reshape(x, newshape=newshape), queue)
-    assert_allclose_to_numpy(x.reshape(newshape), queue)
+    assert_allclose_to_numpy(pt.reshape(x, newshape=newshape, order=order),
+                             queue)
+    assert_allclose_to_numpy(x.reshape(newshape, order=order), queue)
     if isinstance(newshape, tuple):
-        assert_allclose_to_numpy(x.reshape(*newshape), queue)
+        assert_allclose_to_numpy(x.reshape(*newshape, order=order), queue)
 
 
 def test_dict_of_named_array_codegen_avoids_recomputation():
@@ -525,7 +533,7 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
     y = 2*x
     z = y + 4*x
 
-    yz = pt.DictOfNamedArrays({"y": y, "z": z})
+    yz = pt.make_dict_of_named_arrays({"y": y, "z": z})
 
     knl = pt.generate_loopy(yz).kernel
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
@@ -636,14 +644,14 @@ def test_full_zeros_ones(ctx_factory, dtype):
     assert (t == 2).all()
 
 
-def test_passsing_bound_arguments_raises(ctx_factory):
+def test_passing_bound_arguments_raises(ctx_factory):
     queue = cl.CommandQueue(ctx_factory())
 
-    x = pt.make_data_wrapper(np.ones(10), name="x")
+    x = pt.make_data_wrapper(np.ones(10), tags=frozenset([pt.tags.PrefixNamed("x")]))
     prg = pt.generate_loopy(42*x)
 
     with pytest.raises(ValueError):
-        evt, (out2,) = prg(queue, x=np.random.rand(10))
+        prg(queue, x=np.random.rand(10))
 
 
 @pytest.mark.parametrize("shape1, shape2", (
@@ -657,6 +665,7 @@ def test_passsing_bound_arguments_raises(ctx_factory):
                                            ))
 def test_broadcasting(ctx_factory, shape1, shape2):
     from numpy.random import default_rng
+
     from pymbolic.mapper.evaluator import evaluate
 
     queue = cl.CommandQueue(ctx_factory())
@@ -673,9 +682,9 @@ def test_broadcasting(ctx_factory, shape1, shape2):
     prg = pt.generate_loopy(x+y)
 
     if "n" in prg.kernel.arg_dict:
-        evt, (out,) = prg(queue, n=n)
+        _evt, (out,) = prg(queue, n=n)
     else:
-        evt, (out,) = prg(queue)
+        _evt, (out,) = prg(queue)
 
     np.testing.assert_allclose(out, x_in+y_in)
 
@@ -723,7 +732,7 @@ def test_call_loopy(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
+    _evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
 
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
@@ -750,9 +759,9 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
     cuatro_u = 2*call_loopy(twice, {"x": u}, "callee")["y"]
     nueve_u = 3*call_loopy(thrice, {"x": u}, "callee")["y"]
 
-    out = pt.DictOfNamedArrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
+    out = pt.make_dict_of_named_arrays({"cuatro_u": cuatro_u, "nueve_u": nueve_u})
 
-    evt, out_dict = pt.generate_loopy(out,
+    _evt, out_dict = pt.generate_loopy(out,
                                       options=lp.Options(return_dict=True))(queue)
     np.testing.assert_allclose(out_dict["cuatro_u"], 4*u_in)
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
@@ -764,7 +773,7 @@ def test_exprs_with_named_arrays(ctx_factory):
     x = pt.make_data_wrapper(x_in)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
     res = 21*y1y2["y1"]
-    evt, (out,) = pt.generate_loopy(res)(queue)
+    _evt, (out,) = pt.generate_loopy(res)(queue)
 
     np.testing.assert_allclose(out, 42*x_in)
 
@@ -791,13 +800,15 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     loopyfunc = call_loopy(knl, bindings={"Y": y, "m": m, "n": n})
     z = loopyfunc["Z"]
 
-    evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
+    _evt, (z_out, ) = pt.generate_loopy(2*z)(queue, x=x_in)
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
 def test_call_loopy_with_scalar_array_inputs(ctx_factory):
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
     from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
@@ -814,7 +825,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
     x = pt.make_placeholder(name="x", shape=(), dtype=float)
     y = call_loopy(knl, {"x": 3*x})["y"]
 
-    evt, (out,) = pt.generate_loopy(y)(queue, x=x_in)
+    _evt, (out,) = pt.generate_loopy(y)(queue, x=x_in)
     np.testing.assert_allclose(out, 6*x_in)
 
 
@@ -833,7 +844,7 @@ def test_reductions(ctx_factory, axis, redn, shape):
     pt_func = getattr(pt, redn)
     prg = pt.generate_loopy(pt_func(x, axis=axis))
 
-    evt, (out,) = prg(queue)
+    _evt, (out,) = prg(queue)
 
     assert np.all(abs(1 - out/np_func(x_in, axis)) < 1e-14)
 
@@ -893,7 +904,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_einsum_with_parametrized_shapes(ctx_factory):
+def test_einsum_with_parameterized_shapes(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -939,9 +950,11 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
 
 
 def test_call_loopy_shape_inference1(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -969,9 +982,11 @@ def test_call_loopy_shape_inference1(ctx_factory):
 
 
 def test_call_loopy_shape_inference2(ctx_factory):
-    from pytato.loopy import call_loopy
-    import loopy as lp
     from numpy.random import default_rng
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -1023,6 +1038,8 @@ def test_arange(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
+    # {{{ Integer
+
     from numpy.random import default_rng
     rng = default_rng(seed=0)
     for _ in range(30):
@@ -1037,6 +1054,43 @@ def test_arange(ctx_factory):
         _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
 
         assert np.array_equal(pt_res, np_res)
+
+    # }}}
+
+    # {{{ Real
+
+    # generates '[0. ... 4.]':
+    np_res = np.arange(5, dtype=np.float64)
+    pt_res_sym = pt.arange(5, dtype=np.float64)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # }}}
+
+    # {{{ Complex
+
+    # generates '[]':
+    np_res = np.arange(5j, dtype=np.complex128)
+    pt_res_sym = pt.arange(5j, dtype=np.complex128)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # generates '[0.+0.j ... 4.+0.j]':
+    np_res = np.arange(5, dtype=np.complex128)
+    pt_res_sym = pt.arange(5, dtype=np.complex128)
+
+    _, (pt_res,) = pt.generate_loopy(pt_res_sym)(cq)
+    print(np_res, pt_res)
+
+    assert np.array_equal(pt_res, np_res)
+
+    # }}}
 
 
 @pytest.mark.parametrize("which,num_args", ([("maximum", 2),
@@ -1112,8 +1166,8 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     np_result = np.vdot(a_in, b_in)
     _, (pt_result,) = pt.generate_loopy(pt.vdot(a, b))(cq)
 
-    assert pt_result.shape == np_result.shape
-    assert pt_result.dtype == np_result.dtype
+    assert pt_result.shape == np_result.shape  # pylint: disable=no-member
+    assert pt_result.dtype == np_result.dtype  # pylint: disable=no-member
     np.testing.assert_allclose(np_result, pt_result, rtol=1e-6)
 
 
@@ -1159,7 +1213,7 @@ def test_broadcast_to(ctx_factory):
 
         x_in = rng.random(input_shape, dtype=np.float32)
         x = pt.make_data_wrapper(x_in)
-        evt, (x_brdcst,) = pt.generate_loopy(
+        _evt, (x_brdcst,) = pt.generate_loopy(
                                 pt.broadcast_to(x, broadcasted_shape))(queue)
 
         np.testing.assert_allclose(np.broadcast_to(x_in, broadcasted_shape),
@@ -1182,23 +1236,23 @@ def test_advanced_indexing_with_broadcasting(ctx_factory):
     idx2 = pt.make_data_wrapper(idx2_in)
 
     # Case 1
-    evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[:, ::-1, idx1, idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[:, ::-1, idx1_in, idx2_in])
 
     # Case 2
-    evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[-4:4:-1, idx1, idx2, :])(cq)
     np.testing.assert_allclose(pt_out, x_in[-4:4:-1, idx1_in, idx2_in, :])
 
     # Case 3
-    evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[idx1, idx2, -2::-1, :])(cq)
     np.testing.assert_allclose(pt_out, x_in[idx1_in, idx2_in, -2::-1, :])
 
     # Case 4 (non-contiguous advanced indices)
-    evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[:, idx1, -2::-1, idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[:, idx1_in, -2::-1, idx2_in])
 
     # Case 5 (non-contiguous advanced indices with ellipsis)
-    evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x[idx1, ..., idx2])(cq)
     np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
 
 
@@ -1249,11 +1303,11 @@ def test_advanced_indexing_fuzz(ctx_factory):
             else:
                 raise NotImplementedError
 
-        pt_indices = [idx if isinstance(idx, (int, slice))
+        pt_indices = [idx if isinstance(idx, int | slice)
                       else pt.make_data_wrapper(idx)
                       for idx in np_indices]
 
-        evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
+        _evt, (pt_out,) = pt.generate_loopy(x[tuple(pt_indices)])(cq)
 
         np.testing.assert_allclose(pt_out, x_in[tuple(np_indices)],
                                    err_msg=(f"input_shape={input_shape}, "
@@ -1322,8 +1376,7 @@ def test_named_temporaries(ctx_factory):
                                         })
     dag = pt.transform.materialize_with_mpms(dag)
 
-    def mark_materialized_nodes_as_cse(ary: Union[pt.Array,
-                                                  pt.AbstractResultWithNamedArrays]
+    def mark_materialized_nodes_as_cse(ary: pt.Array | pt.AbstractResultWithNamedArrays
                                        ) -> pt.Array:
         if isinstance(ary, pt.AbstractResultWithNamedArrays):
             return ary
@@ -1376,7 +1429,7 @@ def test_random_dag_against_numpy(ctx_factory):
             ref_result = make_random_dag(rdagc_np)
             dag = make_random_dag(rdagc_pt)
             from pytato.transform import materialize_with_mpms
-            dict_named_arys = pt.DictOfNamedArrays({"result": dag})
+            dict_named_arys = pt.make_dict_of_named_arrays({"result": dag})
             dict_named_arys = materialize_with_mpms(dict_named_arys)
             if 0:
                 pt.show_dot_graph(dict_named_arys)
@@ -1386,75 +1439,9 @@ def test_random_dag_against_numpy(ctx_factory):
             assert np.allclose(pt_result["result"], ref_result)
 
 
-def test_partitioner(ctx_factory):
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
-
-    from testlib import RandomDAGContext, make_random_dag
-
-    axis_len = 5
-
-    ntests = 50
-    ncycles = 0
-    for i in range(ntests):
-        print(i)
-        seed = 120 + i
-        rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=False)
-        rdagc_np = RandomDAGContext(np.random.default_rng(seed=seed),
-                axis_len=axis_len, use_numpy=True)
-
-        ref_result = make_random_dag(rdagc_np)
-
-        from pytato.transform import materialize_with_mpms
-        dict_named_arys = materialize_with_mpms(pt.DictOfNamedArrays(
-                {"result": make_random_dag(rdagc_pt)}))
-
-        from dataclasses import dataclass
-        from pytato.transform import TopoSortMapper
-        from pytato.partition import (find_partition,
-                execute_partition, generate_code_for_partition,
-                PartitionInducedCycleError)
-
-        @dataclass(frozen=True, eq=True)
-        class MyPartitionId():
-            num: int
-
-        def get_partition_id(topo_list, expr) -> MyPartitionId:
-            return topo_list.index(expr) // 3
-
-        tm = TopoSortMapper()
-        tm(dict_named_arys)
-
-        from functools import partial
-        part_func = partial(get_partition_id, tm.topological_order)
-
-        try:
-            partition = find_partition(dict_named_arys, part_func)
-        except PartitionInducedCycleError:
-            print("CYCLE!")
-            # FIXME *shrug* nothing preventing that currently
-            ncycles += 1
-            continue
-
-        from pytato.visualization import get_dot_graph_from_partition
-        get_dot_graph_from_partition(partition)
-
-        # Execute the partitioned code
-        prg_per_part = generate_code_for_partition(partition)
-
-        context = execute_partition(partition, prg_per_part, queue)
-
-        pt_part_res, = [context[k] for k in dict_named_arys]
-
-        np.testing.assert_allclose(pt_part_res, ref_result)
-
-    # Assert that at least 2/3 of our tests did not get skipped because of cycles
-    assert ncycles < ntests // 3
-
-
 def test_assume_non_negative_indirect_address(ctx_factory):
     from numpy.random import default_rng
+
     from pytato.scalar_expr import WalkMapper
 
     ctx = ctx_factory()
@@ -1477,13 +1464,13 @@ def test_assume_non_negative_indirect_address(ctx_factory):
     for insn in pt_prg.program.default_entrypoint.instructions:
         OnRemainderRaiser()(insn.expression)
 
-    evt, (out,) = pt_prg(cq)
+    _evt, (out,) = pt_prg(cq)
 
     np.testing.assert_allclose(out, a_np[b_np])
 
 
 def test_axis_tag_to_loopy_iname_tag_propagate():
-    from testlib import FooInameTag, BarInameTag, BazInameTag
+    from testlib import BarInameTag, BazInameTag, FooInameTag
 
     x = pt.make_placeholder("x", (10, 4), np.float32)
     y = 2 * x
@@ -1539,7 +1526,7 @@ def test_axis_tag_to_loopy_iname_tag_propagate():
 
 
 def test_array_tags_propagated_to_loopy():
-    from testlib import FooTag, BarTag, BazTag
+    from testlib import BarTag, BazTag, FooTag
 
     x1 = pt.make_placeholder("x1", (10, 4), dtype=np.float64)
     x2 = pt.make_placeholder("x2", (10, 4), dtype=np.float64)
@@ -1566,7 +1553,7 @@ def test_scalars_are_typed(ctx_factory):
 
     x_in = np.random.rand(3, 3)
     x = pt.make_data_wrapper(x_in)
-    evt, (pt_out,) = pt.generate_loopy(x * 3.14j)(cq)
+    _evt, (pt_out,) = pt.generate_loopy(x * 3.14j)(cq)
     np_out = x_in * 3.14j
     assert pt_out.dtype == np_out.dtype
     np.testing.assert_allclose(pt_out, np_out)
@@ -1582,11 +1569,11 @@ def test_regression_reduction_in_conditional(ctx_factory):
     cq = cl.CommandQueue(ctx)
 
     def kernel(usr_np, _pt_data_9):
-        _pt_tmp_53 = _pt_data_9 @ _pt_data_9
-        _pt_tmp_42 = usr_np.maximum(_pt_tmp_53, _pt_tmp_53)
-        _pt_tmp_27 = usr_np.sum(_pt_tmp_42)
-        _pt_tmp_0 = usr_np.maximum(_pt_tmp_27, _pt_tmp_53)
-        return _pt_tmp_0
+        pt_tmp_53 = _pt_data_9 @ _pt_data_9
+        pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
+        pt_tmp_27 = usr_np.sum(pt_tmp_42)
+        pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
+        return pt_tmp_0
 
     def get_np_input_args():
         return {
@@ -1598,12 +1585,12 @@ def test_regression_reduction_in_conditional(ctx_factory):
     pt_dag = kernel(pt, **{kw: pt.make_data_wrapper(arg)
                            for kw, arg in np_inputs.items()})
 
-    knl = pt.generate_loopy(pt_dag, options=lp.Options(write_cl=True))
+    knl = pt.generate_loopy(pt_dag, options=lp.Options(write_code=True))
 
     _, (pt_result,) = knl(cq)
 
     from pytato.analysis import get_num_nodes
-    print(get_num_nodes(pt_dag))
+    print(get_num_nodes(pt_dag, count_duplicates=False))
 
     np.testing.assert_allclose(pt_result, np_result)
 
@@ -1629,8 +1616,9 @@ def test_zero_size_cl_array_dedup(ctx_factory):
 
     dedup_dw_out = pt.transform.deduplicate_data_wrappers(out)
 
-    num_nodes_old = pt.analysis.get_num_nodes(out)
-    num_nodes_new = pt.analysis.get_num_nodes(dedup_dw_out)
+    num_nodes_old = pt.analysis.get_num_nodes(out, count_duplicates=True)
+    num_nodes_new = pt.analysis.get_num_nodes(
+        dedup_dw_out, count_duplicates=True)
     # 'x2' would be merged with 'x1' as both of them point to the same data
     # 'x3' would be merged with 'x4' as both of them point to the same data
     assert num_nodes_new == (num_nodes_old - 2)
@@ -1746,10 +1734,333 @@ def test_two_rolls(ctx_factory):
     x = pt.make_placeholder(name="x", shape=(n, n), dtype=np.float64)
 
     x_in = np.arange(1., 10.).reshape(3, 3)
-    evt, (pt_out,) = pt.generate_loopy(pt.roll(x, -2, 0) + pt.roll(x, -1, 0)
+    _evt, (pt_out,) = pt.generate_loopy(pt.roll(x, -2, 0) + pt.roll(x, -1, 0)
                                        )(cq, x=x_in)
     np_out = np.roll(x_in, -2, 0) + np.roll(x_in, -1, 0)
     np.testing.assert_allclose(np_out, pt_out)
+
+
+def test_lp_substitution_result(ctx_factory):
+    from pytato.target.loopy import ImplSubstitution
+
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    rng = np.random.default_rng(0)
+
+    a_np = rng.random((10, 5))
+    x_np = rng.random((5, ))
+
+    a = pt.make_data_wrapper(a_np)
+    x = pt.make_data_wrapper(x_np)
+
+    twice_a = 2*a
+    thrice_x = 3*x
+    twice_a = twice_a.tagged(ImplSubstitution())
+    thrice_x = thrice_x.tagged(ImplSubstitution())
+
+    out = pt.einsum("ij,j->i", twice_a, thrice_x)
+    pt_prg = pt.generate_loopy(out)
+
+    assert len(pt_prg.program.default_entrypoint.substitutions) == 2
+    _, (pt_eval_out,) = pt_prg(cq)
+
+    np.testing.assert_allclose(np.einsum("ij,j->i", 2*a_np, 3*x_np), pt_eval_out)
+
+
+def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng()
+
+    a = pt.make_data_wrapper(rng.random((10, 4, 1)))
+    b = pt.make_data_wrapper(rng.random((10, 1, 4)))
+    c = pt.einsum("ijk,ijk->ijk", a, b)
+    expr = pt.einsum("ijk,ijk,ijk->i", a, b, c)
+
+    new_expr = pt.rewrite_einsums_with_no_broadcasts(expr)
+
+    _, (ref_out,) = pt.generate_loopy(expr)(cq)
+    _, (out,) = pt.generate_loopy(new_expr)(cq)
+
+    np.testing.assert_allclose(ref_out, out)
+
+
+def test_no_redundant_stores_with_impl_stored(ctx_factory):
+    # See <https://github.com/inducer/pytato/issues/415>
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10, 4))
+
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    y = 2*x
+    y = y.tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy(y)
+
+    assert len(prg.program.default_entrypoint.temporary_variables) == 0
+    np.testing.assert_allclose(prg(cq, x=x_np)[1][0], 2*x_np)
+
+
+def test_placeholders_do_not_diverge_after_removing_impl_stored(ctx_factory):
+    # Note: An earlier attempt at fixing
+    # <https://github.com/inducer/pytato/issues/415> would create multiple
+    # instances of placeholders in the graph leading to incoherent codes.
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10,))
+
+    x = pt.make_placeholder("x", 10, np.float64).tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy({"out1": 3*x, "out2": x})
+    _, out = prg(cq, x=x_np)
+    np.testing.assert_allclose(out["out1"], 3*x_np)
+    np.testing.assert_allclose(out["out2"], x_np)
+
+
+def _get_masking_array_for_test_pad(array, pad_widths):
+    from pytato.pad import _normalize_pad_width
+    pad_widths = _normalize_pad_width(array, pad_widths)
+
+    def _get_mask_array_idx(*idxs):
+        return np.where(
+            sum(((idx < pad_width[0])
+                  | (idx >= (pad_width[0]+axis_len))
+                  ).astype(np.int32)
+                 for idx, axis_len, pad_width in zip(idxs,
+                                                     array.shape,
+                                                     pad_widths,
+                                                     strict=True)) > 1,
+            0*idxs[0],
+            0*idxs[0] + 1)
+
+    return np.fromfunction(
+        _get_mask_array_idx,
+        shape=tuple(dim + pad_width[0] + pad_width[1]
+                    for dim, pad_width in zip(array.shape, pad_widths, strict=True)),
+    )
+
+
+def test_pad(ctx_factory):
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+    rng = np.random.default_rng(0)
+
+    for _ in range(10):
+        ndim = rng.integers(1, 8)
+        ary_shape = rng.integers(2, 7, ndim)
+        ary_np = rng.random(tuple(ary_shape), dtype=np.float32)
+        ary = pt.make_data_wrapper(ary_np)
+
+        # test constant pad length - I
+        pad_width = rng.integers(0, 3)
+        np_out = np.pad(ary_np, pad_width)
+        out = pt.pad(ary, pad_width)
+
+        _, (pt_out,) = pt.generate_loopy(out)(cq)
+        mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
+
+        np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+        # testing constant pad length - II
+        pad_width = tuple(rng.integers(0, 3, 2))
+        np_out = np.pad(ary_np, pad_width)
+        out = pt.pad(ary, pad_width)
+
+        _, (pt_out,) = pt.generate_loopy(out)(cq)
+        mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
+
+        np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+        # test unequal padding - I
+        pad_width = [tuple(pad) for pad in rng.integers(0, 3, (ndim, 2))]
+        np_out = np.pad(ary_np, pad_width, constant_values=32)
+        out = pt.pad(ary, pad_width, constant_values=32)
+
+        _, (pt_out,) = pt.generate_loopy(out)(cq)
+        mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
+
+        np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+        # test unequal padding - II
+        pad_width = [tuple(pad) for pad in rng.integers(0, 3, (ndim, 2))]
+        np_out = np.pad(ary_np, pad_width, constant_values=(32, 42))
+        out = pt.pad(ary, pad_width, constant_values=(32, 42))
+
+        _, (pt_out,) = pt.generate_loopy(out)(cq)
+        mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
+
+        np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+        # test unequal padding - III
+        pad_width = [tuple(pad) for pad in rng.integers(0, 3, (ndim, 2))]
+        constant_values = [tuple(val) for val in rng.random((ndim, 2))]
+
+        np_out = np.pad(ary_np, pad_width, constant_values=constant_values)
+        out = pt.pad(ary, pad_width, constant_values=constant_values)
+
+        _, (pt_out,) = pt.generate_loopy(out)(cq)
+        mask_array = _get_masking_array_for_test_pad(ary_np, pad_width)
+
+        np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
+
+
+def test_function_call(ctx_factory, visualize=False):
+    from functools import partial
+    cl_ctx = ctx_factory()
+    cq = cl.CommandQueue(cl_ctx)
+
+    def f(x):
+        return 2*x
+
+    def g(tracer, x):
+        return tracer(f, x), 3*x
+
+    def h(x, y):
+        return {"twice": 2*x+y, "thrice": 3*x+y}
+
+    def build_expression(tracer):
+        x = pt.arange(500, dtype=np.float32)
+        twice_x = tracer(f, x)
+        twice_x_2, _thrice_x_2 = tracer(partial(g, tracer), x)
+
+        result = tracer(h, x, 2*x)
+        twice_x_3 = result["twice"]
+        thrice_x_3 = result["thrice"]
+
+        return {"foo": 3.14 + twice_x_3,
+                "bar": 4 * thrice_x_3,
+                "baz": 65 * twice_x,
+                "quux": 7 * twice_x_2}
+
+    result_with_functions = pt.tag_all_calls_to_be_inlined(
+        pt.make_dict_of_named_arrays(build_expression(pt.trace_call)))
+    result_without_functions = pt.make_dict_of_named_arrays(
+        build_expression(lambda fn, *args: fn(*args)))
+
+    # test that visualizing graphs with functions works
+    dot = pt.get_dot_graph(result_with_functions)
+
+    if visualize:
+        pt.show_dot_graph(dot)
+
+    _, outputs = pt.generate_loopy(result_with_functions)(cq, out_host=True)
+    _, expected = pt.generate_loopy(result_without_functions)(cq, out_host=True)
+
+    assert len(outputs) == len(expected)
+
+    for key in outputs:
+        np.testing.assert_allclose(outputs[key], expected[key])
+
+
+def test_nested_function_calls(ctx_factory):
+    from functools import partial
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    rng = np.random.default_rng(0)
+    x_np = rng.random((10,))
+
+    x = pt.make_placeholder("x", 10, np.float64).tagged(pt.tags.ImplStored())
+    prg = pt.generate_loopy({"out1": 3*x, "out2": x})
+    _, out = prg(cq, x=x_np)
+    np.testing.assert_allclose(out["out1"], 3*x_np)
+    np.testing.assert_allclose(out["out2"], x_np)
+    ref_tracer = lambda f, *args, identifier: f(*args)  # noqa: E731
+
+    def foo(tracer, x, y):
+        return 2*x + 3*y
+
+    def bar(tracer, x, y):
+        foo_x_y = tracer(partial(foo, tracer), x, y, identifier="foo")
+        return foo_x_y * x * y
+
+    def call_bar(tracer, x, y):
+        return tracer(partial(bar, tracer), x, y, identifier="bar")
+
+    x1_np, y1_np = rng.random((2, 13, 29))
+    x2_np, y2_np = rng.random((2, 4, 29))
+    x1, y1 = pt.make_data_wrapper(x1_np), pt.make_data_wrapper(y1_np)
+    x2, y2 = pt.make_data_wrapper(x2_np), pt.make_data_wrapper(y2_np)
+    result = pt.make_dict_of_named_arrays({"out1": call_bar(pt.trace_call, x1, y1),
+                                           "out2": call_bar(pt.trace_call, x2, y2)}
+                                          )
+    result = pt.tag_all_calls_to_be_inlined(result)
+    expect = pt.make_dict_of_named_arrays({"out1": call_bar(ref_tracer, x1, y1),
+                                           "out2": call_bar(ref_tracer, x2, y2)}
+                                          )
+
+    _, result_out = pt.generate_loopy(result)(cq)
+    _, expect_out = pt.generate_loopy(expect)(cq)
+
+    assert result_out.keys() == expect_out.keys()
+    for k in expect_out:
+        np.testing.assert_allclose(result_out[k], expect_out[k])
+
+
+def test_pow_arg_casting(ctx_factory):
+    # Check that pow() arguments are not typecast from int
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    types = (int, np.int32, np.int64, float, np.float32, np.float64)
+
+    for base_scalar in (True, False):
+        for exponent_scalar in (True, False):
+            if base_scalar and exponent_scalar:
+                # Not supported in pytato
+                continue
+
+            for base_tp in types:
+                if base_scalar:
+                    base_np = base_tp(2)
+                    base = base_np
+                else:
+                    base_np = np.array([1, 2, 3], base_tp)
+                    base = pt.make_data_wrapper(base_np)
+
+                for exponent_tp in types:
+                    if exponent_scalar:
+                        exponent_np = exponent_tp(2)
+                        exponent = exponent_np
+                    else:
+                        exponent_np = np.array([1, 2, 3], exponent_tp)
+                        exponent = pt.make_data_wrapper(exponent_np)
+
+                    out = base ** exponent
+
+                    _, (pt_out,) = pt.generate_loopy(out)(cq)
+
+                    np_out = np.power(base_np, exponent_np)
+
+                    assert pt_out.dtype == np_out.dtype
+                    np.testing.assert_allclose(np_out, pt_out)
+
+                    if np.issubdtype(exponent_tp, np.integer):
+                        assert exponent_tp in (int, np.int32, np.int64)
+
+                        if exponent_scalar:
+                            # We do cast between different int types
+                            assert (type(out.expr.exponent) in
+                                    (int, np.int32, np.int64)
+                                    or out.expr.exponent.dtype == np_out.dtype)
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (int, np.int32, np.int64)
+                    else:
+                        assert exponent_tp in (float, np.float32, np.float64)
+                        if exponent_scalar:
+                            assert type(out.expr.exponent) == np_out.dtype \
+                                or out.expr.exponent.dtype == np_out.dtype
+                        else:
+                            assert out.bindings["_in1"].dtype in \
+                                (float, np.float32, np.float64)
 
 
 if __name__ == "__main__":

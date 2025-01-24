@@ -2,9 +2,10 @@
 """Demonstrates graph visualization with Graphviz."""
 
 import logging
-import numpy as np
 import shutil
 import subprocess
+
+import numpy as np
 
 import pytato as pt
 
@@ -17,12 +18,12 @@ GRAPH_SVG = "graph.svg"
 
 
 def main():
+    pt.set_traceback_tag_enabled()
+
     n = pt.make_size_param("n")
     array = pt.make_placeholder(name="array", shape=n, dtype=np.float64)
     stack = pt.stack([array, 2*array, array + 6])
     result = stack @ stack.T
-
-    pt.show_ascii_graph(result)
 
     dot_code = pt.get_dot_graph(result)
 

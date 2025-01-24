@@ -1,5 +1,6 @@
 from urllib.request import urlopen
 
+
 _conf_url = \
         "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
 with urlopen(_conf_url) as _inf:
@@ -9,25 +10,28 @@ copyright = "2020, Pytato Contributors"
 author = "Pytato Contributors"
 
 ver_dic = {}
-exec(compile(open("../pytato/version.py").read(), "../pytato/version.py",
-    "exec"), ver_dic)
+with open("../pytato/version.py") as vfile:
+    exec(compile(vfile.read(), "../pytato/version.py", "exec"), ver_dic)
+
 version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
 intersphinx_mapping = {
-    "https://docs.python.org/3/": None,
-    "https://numpy.org/doc/stable/": None,
-    "https://documen.tician.de/boxtree/": None,
-    "https://documen.tician.de/meshmode/": None,
-    "https://documen.tician.de/modepy/": None,
-    "https://documen.tician.de/pyopencl/": None,
-    "https://documen.tician.de/pytools/": None,
-    "https://documen.tician.de/pymbolic/": None,
-    "https://documen.tician.de/loopy/": None,
-    "https://documen.tician.de/sumpy/": None,
-    "https://documen.tician.de/islpy/": None,
-    "https://pyrsistent.readthedocs.io/en/latest/": None,
-    "https://jax.readthedocs.io/en/latest/": None,
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "meshmode": ("https://documen.tician.de/meshmode/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "sumpy": ("https://documen.tician.de/sumpy/", None),
+    "islpy": ("https://documen.tician.de/islpy/", None),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
+    "immutabledict": ("https://immutabledict.corenting.fr/", None),
+    "orderedsets": ("https://matthiasdiener.github.io/orderedsets", None),
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in
@@ -40,10 +44,17 @@ intersphinx_mapping = {
 # this needs a setting of the same name across all packages involved, that's
 # why this name is as global-sounding as it is.
 import sys
+
+
 sys._BUILDING_SPHINX_DOCS = True
+
 
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
-    ["py:class", r"pyrsistent.typing.(.+)"],
+    ["py:class", r"numpy.bool_"],
     ["py:class", r"typing_extensions(.+)"],
+    ["py:class", r"P\.args"],
+    ["py:class", r"P\.kwargs"],
+    ["py:class", r"lp\.LoopKernel"],
+    ["py:class", r"_dtype_any"],
 ]

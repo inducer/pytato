@@ -1,4 +1,19 @@
+"""
+.. autoclass:: SymbolicIndex
+
+.. autoclass:: CodeGenPreprocessor
+.. autoclass:: PreprocessResult
+
+.. autofunction:: preprocess
+.. autofunction:: normalize_outputs
+"""
+
 from __future__ import annotations
+
+from typing import TypeAlias
+
+from typing_extensions import TypeIs
+
 
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
@@ -23,42 +38,50 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from functools import partialmethod
-from typing import Union, Dict, Tuple, Callable, List, Any
+from typing import TYPE_CHECKING, Any
 
-import pymbolic.primitives as prim
-from pymbolic import var
+from immutabledict import immutabledict
 
-from pytato.array import (Array, DictOfNamedArrays, IndexLambda,
-                          DataWrapper, Roll, AxisPermutation,
-                          IndexRemappingBase, Stack, Placeholder, Reshape,
-                          Concatenate, DataInterface, SizeParam,
-                          InputArgumentBase, Einsum,
-                          AdvancedIndexInContiguousAxes,
-                          AdvancedIndexInNoncontiguousAxes, BasicIndex,
-                          NormalizedSlice)
-
-from pytato.scalar_expr import (ScalarExpression, IntegralScalarExpression,
-                                INT_CLASSES, IntegralT)
-from pytato.transform import CopyMapper, CachedWalkMapper, SubsetDependencyMapper
-from pytato.target import Target
-from pytato.loopy import LoopyCall
-from pytato.tags import AssumeNonNegative
-from pytools import UniqueNameGenerator
-from immutables import Map
 import loopy as lp
-SymbolicIndex = Tuple[IntegralScalarExpression, ...]
+from pymbolic.mapper.optimize import optimize_mapper
+from pytools import UniqueNameGenerator
+
+from pytato.array import (
+    Array,
+    DataInterface,
+    DataWrapper,
+    DictOfNamedArrays,
+    InputArgumentBase,
+    Placeholder,
+    SizeParam,
+    make_dict_of_named_arrays,
+)
+from pytato.loopy import LoopyCall
+from pytato.scalar_expr import IntegralScalarExpression, is_integral_scalar_expression
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CopyMapper,
+    SubsetDependencyMapper,
+)
+from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
-__doc__ = """
-.. currentmodule:: pytato.codegen
+if TYPE_CHECKING:
+    from collections.abc import Hashable, Mapping
 
-.. autoclass:: CodeGenPreprocessor
-.. autoclass:: PreprocessResult
+    from pytato.function import FunctionDefinition, NamedCallResult
+    from pytato.target import Target
 
-.. autofunction:: preprocess
-.. autofunction:: normalize_outputs
-"""
+
+SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
+
+
+def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
+    if isinstance(o, tuple):
+        return all(is_integral_scalar_expression(i) for i in o)
+    else:
+        return False
 
 
 # {{{ _generate_name_for_temp
@@ -66,7 +89,7 @@ __doc__ = """
 def _generate_name_for_temp(
         expr: Array, var_name_gen: UniqueNameGenerator,
         default_prefix: str = "_pt_temp") -> str:
-    from pytato.tags import _BaseNameTag, Named, PrefixNamed
+    from pytato.tags import Named, PrefixNamed, _BaseNameTag
     if expr.tags_of_type(_BaseNameTag):
         if expr.tags_of_type(Named):
             name_tag, = expr.tags_of_type(Named)
@@ -81,7 +104,7 @@ def _generate_name_for_temp(
             prefix_tag, = expr.tags_of_type(PrefixNamed)
             return var_name_gen(prefix_tag.prefix)
         else:
-            raise NotImplementedError(type(list(expr.tags_of_type(_BaseNameTag))[0]))
+            raise NotImplementedError(type(next(iter(expr.tags_of_type(_BaseNameTag)))))
     else:
         return var_name_gen(default_prefix)
 
@@ -90,7 +113,8 @@ def _generate_name_for_temp(
 
 # {{{ preprocessing for codegen
 
-class CodeGenPreprocessor(CopyMapper):
+# type-ignore-reason: incompatible 'rec' types between ToIndexLambdaMixin, CopyMapper
+class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     """A mapper that preprocesses graphs to simplify code generation.
 
     The following node simplifications are performed:
@@ -105,23 +129,29 @@ class CodeGenPreprocessor(CopyMapper):
     :class:`~pytato.array.Reshape`          :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Concatenate`      :class:`~pytato.array.IndexLambda`
     :class:`~pytato.array.Einsum`           :class:`~pytato.array.IndexLambda`
+    :class:`~pytato.array.Stack`            :class:`~pytato.array.IndexLambda`
     ======================================  =====================================
     """
 
-    # TODO:
-    # Stack -> IndexLambda
-
-    def __init__(self, target: Target) -> None:
-        super().__init__()
-        self.bound_arguments: Dict[str, DataInterface] = {}
+    def __init__(
+            self,
+            target: Target,
+            kernels_seen: dict[str, lp.LoopKernel] | None = None,
+            _function_cache: dict[Hashable, FunctionDefinition] | None = None
+            ) -> None:
+        super().__init__(_function_cache=_function_cache)
+        self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
-        self.kernels_seen: Dict[str, lp.LoopKernel] = {}
+        self.kernels_seen: dict[str, lp.LoopKernel] = kernels_seen or {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
         name = expr.name
         assert name is not None
-        return SizeParam(name=name, tags=expr.tags)
+        return SizeParam(  # pylint: disable=missing-kwoa
+            name=name,
+            tags=expr.tags,
+            non_equality_tags=expr.non_equality_tags)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         name = expr.name
@@ -132,7 +162,8 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
@@ -146,7 +177,8 @@ class CodeGenPreprocessor(CopyMapper):
         # {{{ eliminate callable name collision
 
         for name, clbl in translation_unit.callables_table.items():
-            if isinstance(clbl, lp.kernel.function_interface.CallableKernel):
+            if isinstance(clbl, lp.CallableKernel):
+                assert isinstance(name, str)
                 if name in self.kernels_seen and (
                         translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
@@ -173,17 +205,20 @@ class CodeGenPreprocessor(CopyMapper):
                                             translation_unit, name, new_name)
                     name = new_name
 
-                self.kernels_seen[name] = translation_unit[name]
+                self.kernels_seen[name] = clbl.subkernel
 
         # }}}
 
-        bindings = {name: (self.rec(subexpr) if isinstance(subexpr, Array)
+        bindings: Mapping[str, Any] = immutabledict(
+                    {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())}
+                    for name, subexpr in sorted(expr.bindings.items())})
 
         return LoopyCall(translation_unit=translation_unit,
                          bindings=bindings,
-                         entrypoint=entrypoint)
+                         entrypoint=entrypoint,
+                         tags=expr.tags
+                         )
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
@@ -194,435 +229,32 @@ class CodeGenPreprocessor(CopyMapper):
                             for s in expr.shape),
                 dtype=expr.dtype,
                 axes=expr.axes,
-                tags=expr.tags)
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
 
-    def map_stack(self, expr: Stack) -> Array:
+    def map_named_call_result(self, expr: NamedCallResult) -> Array:
+        raise NotImplementedError("CodeGenPreprocessor does not support functions.")
 
-        def get_subscript(array_index: int) -> SymbolicIndex:
-            result = []
-            for i in range(expr.ndim):
-                if i != expr.axis:
-                    result.append(var(f"_{i}"))
-            return tuple(result)
-
-        # I = axis index
-        #
-        # => If(_I == 0,
-        #        _in0[_0, _1, ...],
-        #        If(_I == 1,
-        #            _in1[_0, _1, ...],
-        #            ...
-        #                _inNm1[_0, _1, ...] ...))
-        for i in range(len(expr.arrays) - 1, -1, -1):
-            subarray_expr = var(f"_in{i}")[get_subscript(i)]
-            if i == len(expr.arrays) - 1:
-                stack_expr = subarray_expr
-            else:
-                from pymbolic.primitives import If, Comparison
-                stack_expr = If(Comparison(var(f"_{expr.axis}"), "==", i),
-                        subarray_expr,
-                        stack_expr)
-
-        bindings = {f"_in{i}": self.rec(array)
-                for i, array in enumerate(expr.arrays)}
-
-        return IndexLambda(expr=stack_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                axes=expr.axes,
-                bindings=bindings,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
-
-    def map_concatenate(self, expr: Concatenate) -> Array:
-        from pymbolic.primitives import If, Comparison, Subscript
-
-        def get_subscript(array_index: int, offset: ScalarExpression) -> Subscript:
-            aggregate = var(f"_in{array_index}")
-            index = [var(f"_{i}") if i != expr.axis else (var(f"_{i}") - offset)
-                     for i in range(len(expr.shape))]
-            return Subscript(aggregate, tuple(index))
-
-        lbounds: List[Any] = [0]
-        ubounds: List[Any] = [expr.arrays[0].shape[expr.axis]]
-
-        for i, array in enumerate(expr.arrays[1:], start=1):
-            ubounds.append(ubounds[i-1]+array.shape[expr.axis])
-            lbounds.append(ubounds[i-1])
-
-        # I = axis index
-        #
-        # => If(0<=_I < arrays[0].shape[axis],
-        #        _in0[_0, _1, ..., _I, ...],
-        #        If(arrays[0].shape[axis]<= _I < (arrays[1].shape[axis]
-        #                                         +arrays[0].shape[axis]),
-        #            _in1[_0, _1, ..., _I-arrays[0].shape[axis], ...],
-        #            ...
-        #                _inNm1[_0, _1, ...] ...))
-        for i in range(len(expr.arrays) - 1, -1, -1):
-            lbound, ubound = lbounds[i], ubounds[i]
-            subarray_expr = get_subscript(i, lbound)
-            if i == len(expr.arrays) - 1:
-                stack_expr = subarray_expr
-            else:
-                stack_expr = If(Comparison(var(f"_{expr.axis}"), ">=", lbound)
-                                and Comparison(var(f"_{expr.axis}"), "<", ubound),
-                                subarray_expr,
-                                stack_expr)
-
-        bindings = {f"_in{i}": self.rec(array)
-                for i, array in enumerate(expr.arrays)}
-
-        return IndexLambda(expr=stack_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=bindings,
-                axes=expr.axes,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
-
-    def map_roll(self, expr: Roll) -> Array:
-        from pytato.utils import dim_to_index_lambda_components
-
-        index_expr = var("_in0")
-        indices = [var(f"_{d}") for d in range(expr.ndim)]
-        axis = expr.axis
-        axis_len_expr, bindings = dim_to_index_lambda_components(
-            expr.shape[axis],
-            UniqueNameGenerator({"_in0"}))
-
-        indices[axis] = (indices[axis] - expr.shift) % axis_len_expr
-
-        if indices:
-            index_expr = index_expr[tuple(indices)]
-
-        bindings["_in0"] = expr.array  # type: ignore
-
-        return IndexLambda(expr=index_expr,
-                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                                       for s in expr.shape),
-                           dtype=expr.dtype,
-                           bindings={name: self.rec(bnd)
-                                     for name, bnd in bindings.items()},
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags)
-
-    def map_einsum(self, expr: Einsum) -> Array:
-        import operator
-        from functools import reduce
-        from pytato.scalar_expr import Reduce
-        from pytato.utils import (dim_to_index_lambda_components,
-                                  are_shape_components_equal)
-        from pytato.array import EinsumElementwiseAxis, EinsumReductionAxis
-
-        bindings = {f"in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
-        redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
-        args_as_pym_expr: List[prim.Subscript] = []
-        namegen = UniqueNameGenerator(set(bindings))
-        var_to_redn_descr = {}
-
-        # {{{ add bindings coming from the shape expressions
-
-        for access_descr, (iarg, arg) in zip(expr.access_descriptors,
-                                            enumerate(expr.args)):
-            subscript_indices = []
-            for iaxis, axis in enumerate(access_descr):
-                if not are_shape_components_equal(
-                            arg.shape[iaxis],
-                            expr._access_descr_to_axis_len()[axis]):
-                    # axis is broadcasted
-                    assert are_shape_components_equal(arg.shape[iaxis], 1)
-                    subscript_indices.append(0)
-                    continue
-
-                if isinstance(axis, EinsumElementwiseAxis):
-                    subscript_indices.append(prim.Variable(f"_{axis.dim}"))
-                else:
-                    assert isinstance(axis, EinsumReductionAxis)
-                    redn_idx_name = f"_r{axis.dim}"
-                    if redn_idx_name not in redn_bounds:
-                        # convert the ShapeComponent to a ScalarExpression
-                        redn_bound, redn_bound_bindings = (
-                            dim_to_index_lambda_components(
-                                arg.shape[iaxis], namegen))
-                        redn_bounds[redn_idx_name] = (0, redn_bound)
-
-                        bindings.update({k: self.rec(v)
-                                         for k, v in redn_bound_bindings.items()})
-                        var_to_redn_descr[redn_idx_name] = (
-                            expr.redn_axis_to_redn_descr[axis])
-
-                    subscript_indices.append(prim.Variable(redn_idx_name))
-
-            args_as_pym_expr.append(prim.Subscript(prim.Variable(f"in{iarg}"),
-                                                   tuple(subscript_indices)))
-
-        # }}}
-
-        inner_expr = reduce(operator.mul, args_as_pym_expr[1:],
-                            args_as_pym_expr[0])
-
-        if redn_bounds:
-            from pytato.reductions import SumReductionOperation
-            inner_expr = Reduce(inner_expr,
-                                SumReductionOperation(),
-                                redn_bounds)
-
-        return IndexLambda(expr=inner_expr,
-                           shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                                       for s in expr.shape),
-                           dtype=expr.dtype,
-                           bindings=bindings,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(var_to_redn_descr),
-                           tags=expr.tags)
-
-    # {{{ index remapping (roll, axis permutation, slice)
-
-    def handle_index_remapping(self,
-            indices_getter: Callable[[CodeGenPreprocessor, Array], SymbolicIndex],
-            expr: IndexRemappingBase) -> Array:
-        indices = indices_getter(self, expr)
-
-        index_expr = var("_in0")
-        if indices:
-            index_expr = index_expr[indices]
-
-        array = self.rec(expr.array)
-
-        return IndexLambda(expr=index_expr,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                bindings=dict(_in0=array),
-                axes=expr.axes,
-                var_to_reduction_descr=Map(),
-                tags=expr.tags)
-
-    def _indices_for_axis_permutation(self, expr: AxisPermutation) -> SymbolicIndex:
-        indices = [None] * expr.ndim
-        for from_index, to_index in enumerate(expr.axis_permutation):
-            indices[to_index] = var(f"_{from_index}")
-        return tuple(indices)
-
-    def _indices_for_reshape(self, expr: Reshape) -> SymbolicIndex:
-        if expr.array.shape == ():
-            # RHS must be a scalar i.e. RHS' indices are empty
-            assert expr.size == 1
-            return ()
-
-        newstrides: List[IntegralT] = [1]  # reshaped array strides
-        for new_axis_len in reversed(expr.shape[1:]):
-            assert isinstance(new_axis_len, INT_CLASSES)
-            newstrides.insert(0, newstrides[0]*new_axis_len)
-
-        flattened_idx = sum(prim.Variable(f"_{i}")*stride
-                            for i, stride in enumerate(newstrides))
-
-        oldstrides: List[IntegralT] = [1]  # input array strides
-        for axis_len in reversed(expr.array.shape[1:]):
-            assert isinstance(axis_len, INT_CLASSES)
-            oldstrides.insert(0, oldstrides[0]*axis_len)
-
-        assert isinstance(expr.array.shape[-1], INT_CLASSES)
-        oldsizetills = [expr.array.shape[-1]]  # input array size till for axes idx
-        for old_axis_len in reversed(expr.array.shape[:-1]):
-            assert isinstance(old_axis_len, INT_CLASSES)
-            oldsizetills.insert(0, oldsizetills[0]*old_axis_len)
-
-        return tuple(((flattened_idx % sizetill) // stride)
-                     for stride, sizetill in zip(oldstrides, oldsizetills))
-
-    # https://github.com/python/mypy/issues/8619
-    map_axis_permutation = (
-            partialmethod(handle_index_remapping, _indices_for_axis_permutation))  # type: ignore  # noqa
-    map_reshape = partialmethod(handle_index_remapping, _indices_for_reshape) #type: ignore # noqa
-
-    # }}}
-
-    def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-        islice_idx = 0
-
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = axis_len
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            else:
-                raise NotImplementedError
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
-
-    def map_contiguous_advanced_index(self,
-                                      expr: AdvancedIndexInContiguousAxes
-                                      ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
-
-        i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
-
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-        islice_idx = 0
-
-        for i_idx, (idx, axis_len) in enumerate(zip(expr.indices, expr.array.shape)):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            elif isinstance(idx, Array):
-                if isinstance(axis_len, INT_CLASSES):
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
-                    indirect_idx_expr = prim.Subscript(
-                        prim.Variable(bnd_name),
-                        get_indexing_expression(
-                            idx.shape,
-                            (1,)*i_adv_indices[0]+adv_idx_shape))
-
-                    if not idx.tags_of_type(AssumeNonNegative):
-                        # We define "upper" out-of bounds access to be undefined
-                        # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
-
-                    indices.append(indirect_idx_expr)
-                else:
-                    raise NotImplementedError("Advanced indexing over"
-                                              " parametric axis lengths.")
-            else:
-                raise NotImplementedError(f"Indices of type {type(idx)}.")
-
-            if i_idx == i_adv_indices[-1]:
-                islice_idx += len(adv_idx_shape)
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
-
-    def map_non_contiguous_advanced_index(self,
-                                          expr: AdvancedIndexInNoncontiguousAxes
-                                          ) -> IndexLambda:
-        from pytato.utils import (get_shape_after_broadcasting,
-                                  get_indexing_expression)
-        i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
-                              if isinstance(idx_expr, (Array, INT_CLASSES)))
-        adv_idx_shape = get_shape_after_broadcasting([expr.indices[i_idx]
-                                                      for i_idx in i_adv_indices])
-
-        vng = UniqueNameGenerator()
-        indices = []
-
-        in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
-
-        islice_idx = len(adv_idx_shape)
-
-        for idx, axis_len in zip(expr.indices, expr.array.shape):
-            if isinstance(idx, INT_CLASSES):
-                if isinstance(axis_len, INT_CLASSES):
-                    indices.append(idx % axis_len)
-                else:
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
-                    indices.append(idx % prim.Variable(bnd_name))
-            elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
-                               + idx.step * prim.Variable(f"_{islice_idx}"))
-                islice_idx += 1
-            elif isinstance(idx, Array):
-                if isinstance(axis_len, INT_CLASSES):
-                    bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
-
-                    indirect_idx_expr = prim.Subscript(prim.Variable(bnd_name),
-                                                       get_indexing_expression(
-                                                           idx.shape,
-                                                           adv_idx_shape))
-
-                    if not idx.tags_of_type(AssumeNonNegative):
-                        # We define "upper" out-of bounds access to be undefined
-                        # behavior.  (numpy raises an exception, too)
-                        indirect_idx_expr = indirect_idx_expr % axis_len
-
-                    indices.append(indirect_idx_expr)
-                else:
-                    raise NotImplementedError("Advanced indexing over"
-                                              " parametric axis lengths.")
-            else:
-                raise NotImplementedError(f"Indices of type {type(idx)}.")
-
-        return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
-                                               tuple(indices)),
-                           bindings=bindings,
-                           shape=expr.shape,
-                           dtype=expr.dtype,
-                           axes=expr.axes,
-                           var_to_reduction_descr=Map(),
-                           tags=expr.tags,
-                           )
 # }}}
 
 
-def normalize_outputs(result: Union[Array, DictOfNamedArrays,
-                                    Dict[str, Array]]) -> DictOfNamedArrays:
+def normalize_outputs(
+            result: Array | DictOfNamedArrays | dict[str, Array]
+        ) -> DictOfNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
     Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
 
     :param result: Outputs of the computation.
     """
-    if not isinstance(result, (Array, DictOfNamedArrays, dict)):
+    if not isinstance(result, Array | DictOfNamedArrays | dict):
         raise TypeError("outputs of the computation should be "
                 "either an Array or a DictOfNamedArrays")
 
     if isinstance(result, Array):
-        outputs = DictOfNamedArrays({"_pt_out": result})
+        outputs = make_dict_of_named_arrays({"_pt_out": result})
     elif isinstance(result, dict):
-        outputs = DictOfNamedArrays(result)
+        outputs = make_dict_of_named_arrays(result)
     else:
         assert isinstance(result, DictOfNamedArrays)
         outputs = result
@@ -632,24 +264,31 @@ def normalize_outputs(result: Union[Array, DictOfNamedArrays,
 
 # {{{ input naming check
 
-class NamesValidityChecker(CachedWalkMapper):
-    def __init__(self) -> None:
-        self.name_to_input: Dict[str, InputArgumentBase] = {}
-        super().__init__()
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class NamesValidityChecker(CachedWalkMapper[[]]):
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+        self.name_to_input: dict[str, InputArgumentBase] = {}
+        super().__init__(_visited_functions=_visited_functions)
+
+    def get_cache_key(self, expr: ArrayOrNames) -> int:
+        return id(expr)
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
+        return id(expr)
 
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, (Placeholder, SizeParam, DataWrapper)):
-            if expr.name is not None:
-                try:
-                    ary = self.name_to_input[expr.name]
-                except KeyError:
-                    self.name_to_input[expr.name] = expr
-                else:
-                    if ary is not expr:
-                        from pytato.diagnostic import NameClashError
-                        raise NameClashError(
-                                "Received two separate instances of inputs "
-                                f"named '{expr.name}'.")
+        if (isinstance(expr, Placeholder | SizeParam | DataWrapper)
+                    and expr.name is not None):
+            try:
+                ary = self.name_to_input[expr.name]
+            except KeyError:
+                self.name_to_input[expr.name] = expr
+            else:
+                if ary is not expr:
+                    from pytato.diagnostic import NameClashError
+                    raise NameClashError(
+                            "Received two separate instances of inputs "
+                            f"named '{expr.name}'.")
 
 
 def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
@@ -664,13 +303,14 @@ def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:
 @dataclasses.dataclass(init=True, repr=False, eq=False)
 class PreprocessResult:
     outputs: DictOfNamedArrays
-    compute_order: Tuple[str, ...]
-    bound_arguments: Dict[str, DataInterface]
+    compute_order: tuple[str, ...]
+    bound_arguments: dict[str, DataInterface]
 
 
 def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
     """Preprocess a computation for code generation."""
     from pytato.transform import copy_dict_of_named_arrays
+    from pytato.transform.calls import inline_calls
 
     check_validity_of_outputs(outputs)
 
@@ -685,8 +325,8 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps = {name: get_deps(output.expr)
-            for name, output in outputs.items()}
+    deps: Mapping[str, Any] = immutabledict({name: get_deps(output.expr)
+            for name, output in outputs.items()})
 
     # represent deps in terms of output names
     output_expr_to_name = {output.expr: name for name, output in outputs.items()}
@@ -694,16 +334,18 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                   - frozenset([name]))
            for name, val in deps.items()}
 
-    output_order: List[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
+    output_order: list[str] = compute_topological_order(dag, key=lambda x: x)[::-1]
 
     # }}}
 
-    mapper = CodeGenPreprocessor(target)
+    new_outputs = inline_calls(outputs)
+    assert isinstance(new_outputs, DictOfNamedArrays)
 
-    new_outputs = copy_dict_of_named_arrays(outputs, mapper)
+    mapper = CodeGenPreprocessor(target)
+    new_outputs = copy_dict_of_named_arrays(new_outputs, mapper)
 
     return PreprocessResult(outputs=new_outputs,
-            compute_order=tuple(output_order),
-            bound_arguments=mapper.bound_arguments)
+                            compute_order=tuple(output_order),
+                            bound_arguments=mapper.bound_arguments)
 
 # vim: fdm=marker

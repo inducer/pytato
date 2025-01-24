@@ -154,11 +154,6 @@ Reserved Identifiers
         names of :class:`~pytato.array.DataWrapper` arguments that are
         not supplied by the user.
 
-    -   ``_pt_part_ph``: Used to automatically generate identifiers for
-        names of :class:`~pytato.array.Placeholder` that represent data
-        transport across parts of a partitioned DAG
-        (cf. :func:`~pytato.partition.find_partition`).
-
     -   ``_pt_dist``: Used to automatically generate identifiers for
         placeholders at distributed communication boundaries.
 
@@ -173,6 +168,13 @@ Reserved Identifiers
     -   Identifiers matching the regular expression ``_in[0-9]+``. They are used
         as automatically generated names (if required) in
         :attr:`pytato.array.IndexLambda.bindings`.
+
+
+.. note::
+
+    Other than the iname names (``_[0-9]+``), these naming conventions are not
+    compulsory. The above is merely intended to set aside parts of the namespace
+    for this purpose that are guaranteed not to be trampled on by the user.
 
 Tags
 ----
@@ -230,6 +232,17 @@ Memory layout
 that relies on memory layout information to do its job is undefined in :mod:`pytato`.
 At the most basic level, the attribute :attr:`numpy.ndarray.strides` is not available
 on subclasses of :class:`pytato.Array`.
+
+Dataclasses
+-----------
+
+:mod:`dataclasses` helps us reduce most of the boilerplate involved in
+instantiating a new type.
+We have checks in place to avoid developer errors that could happen by using
+the defaults of this library. For example, :mod:`dataclasses` overrides the
+implementation of ``__eq__`` for the class being implemented, which could
+potentially lead to an `exponentially complex
+operation <https://github.com/inducer/pytato/issues/163>`_.
 
 Lessons learned
 ===============

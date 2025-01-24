@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2021 Kaushik Kulkarni
 """
@@ -24,14 +25,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import dataclasses
+from typing import TYPE_CHECKING, Any, cast
 
-from typing import Any, Dict, Tuple
-from pytato.transform import Mapper
-from pytato.array import (Array, DataWrapper, DictOfNamedArrays, Axis,
-                          IndexLambda, ReductionDescriptor)
-from pytato.loopy import LoopyCall
-from pyrsistent import PMap
+import numpy as np
+from immutabledict import immutabledict
+
+from pytato.array import (
+    Array,
+    Axis,
+    DataWrapper,
+    DictOfNamedArrays,
+    IndexLambda,
+    ReductionDescriptor,
+)
+from pytato.transform import ForeignObjectError, Mapper
+
+
+if TYPE_CHECKING:
+    from pytato.function import Call, FunctionDefinition
+    from pytato.loopy import LoopyCall
 
 
 __doc__ = """
@@ -43,7 +56,7 @@ __doc__ = """
 
 # {{{ Reprifier
 
-class Reprifier(Mapper):
+class Reprifier(Mapper[str, str, [int]]):
     """
     Stringifies :mod:`pytato`-types to closely resemble CPython's implementation
     of :func:`repr` for its builtin datatypes.
@@ -56,33 +69,44 @@ class Reprifier(Mapper):
         self.truncation_depth = truncation_depth
         self.truncation_string = truncation_string
 
-        self._cache: Dict[Tuple[int, int], str] = {}
+        # Uses the same cache for both arrays and functions
+        self._cache: dict[tuple[int, int], str] = {}
 
-    # type-ignore-reason: incompatible with super class
-    def rec(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def rec(self, expr: Any, depth: int) -> str:
         cache_key = (id(expr), depth)
         try:
             return self._cache[cache_key]
         except KeyError:
-            result = super().rec(expr, depth)
+            try:
+                result = super().rec(expr, depth)
+            except ForeignObjectError:
+                result = self.map_foreign(expr, depth)
             self._cache[cache_key] = result
-            return result  # type: ignore[no-any-return]
+            return result
 
-    # type-ignore-reason: incompatible with super class
-    def __call__(self, expr: Any, depth: int = 0) -> str:  # type: ignore[override]
+    def rec_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
+        cache_key = (id(expr), depth)
+        try:
+            return self._cache[cache_key]
+        except KeyError:
+            result = super().rec_function_definition(expr, depth)
+            self._cache[cache_key] = result
+            return result
+
+    def __call__(self, expr: Any, depth: int = 0) -> str:
         return self.rec(expr, depth)
 
-    # type-ignore-reason: incompatible with super class
-    def map_foreign(self, expr: Any, depth: int) -> str:  # type: ignore[override]
+    def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (dict, PMap)):
+        elif isinstance(expr, dict | immutabledict):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
-                                for key, val in expr.items())
+                                for key, val
+                                in sorted(expr.items(),
+                                          key=lambda k_x_v: cast("str", k_x_v[0])))
                     + "}")
-            return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, (frozenset, set)):
+        elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
             return f"'{expr.name}'"
@@ -93,7 +117,10 @@ class Reprifier(Mapper):
         if depth > self.truncation_depth:
             return self.truncation_string
 
-        fields = expr._fields
+        # pylint: disable=not-an-iterable
+        fields = tuple(field.name for field in dataclasses.fields(type(expr)))
+
+        fields = tuple(field for field in fields if field != "non_equality_tags")
 
         if expr.ndim <= 1:
             # prettify: if ndim <=1 'expr.axes' would be trivial,
@@ -145,13 +172,46 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "data":
-                return object.__repr__(expr.data)
+                return repr(expr.data)
+            else:
+                return self.rec(getattr(expr, field), depth+1)
+
+        # pylint: disable=not-an-iterable
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                        for field in dataclasses.fields(type(expr)))
+                + ")")
+
+    def map_function_definition(self, expr: FunctionDefinition, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "returns":
+                return self.rec(getattr(expr, field), depth+1)
+            else:
+                return repr(getattr(expr, field))
+
+        # pylint: disable=not-an-iterable
+        return (f"{type(expr).__name__}("
+                + ", ".join(f"{field.name}={_get_field_val(field.name)}"
+                        for field in dataclasses.fields(type(expr)))
+                + ")")
+
+    def map_call(self, expr: Call, depth: int) -> str:
+        if depth > self.truncation_depth:
+            return self.truncation_string
+
+        def _get_field_val(field: str) -> str:
+            if field == "function":
+                return self.rec_function_definition(expr.function, depth+1)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 
         return (f"{type(expr).__name__}("
                 + ", ".join(f"{field}={_get_field_val(field)}"
-                            for field in expr._fields)
+                            for field in ["function",
+                                          "bindings"])
                 + ")")
 
     def map_loopy_call(self, expr: LoopyCall, depth: int) -> str:
@@ -160,7 +220,7 @@ class Reprifier(Mapper):
 
         def _get_field_val(field: str) -> str:
             if field == "translation_unit":
-                return object.__repr__(expr.translation_unit)
+                return repr(expr.translation_unit)
             else:
                 return self.rec(getattr(expr, field), depth+1)
 

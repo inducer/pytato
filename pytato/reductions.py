@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2020 Matt Wala
@@ -27,15 +28,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Optional, Tuple, Union, Sequence, Dict, List, Mapping
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from immutabledict import immutabledict
 
-from pytato.array import ShapeType, Array, make_index_lambda, ReductionDescriptor
-from pytato.scalar_expr import ScalarExpression, Reduce, INT_CLASSES
-from immutables import Map
 import pymbolic.primitives as prim
+from pymbolic import ArithmeticExpression
+
+from pytato.array import Array, ReductionDescriptor, ShapeType, make_index_lambda
+from pytato.scalar_expr import INT_CLASSES, Reduce, ScalarExpression
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
 
 # {{{ docs
 
@@ -90,6 +99,9 @@ class ReductionOperation(ABC):
 
 
 class _StatelessReductionOperation(ReductionOperation):
+    def update_persistent_hash(self, key_hash: Any, key_builder: Any) -> None:
+        key_builder.rec(key_hash, type(self))
+
     def __hash__(self) -> int:
         return hash(type(self))
 
@@ -143,8 +155,8 @@ class AnyReductionOperation(_StatelessReductionOperation):
 
 def _normalize_reduction_axes(
         shape: ShapeType,
-        reduction_axes: Optional[Union[int, Tuple[int, ...]]]
-        ) -> Tuple[ShapeType, Tuple[int, ...]]:
+        reduction_axes: int | tuple[int, ...] | None
+        ) -> tuple[ShapeType, tuple[int, ...]]:
     """
     Returns a :class:`tuple` of ``(new_shape, normalized_redn_axes)``, where
     *new_shape* is the shape of the ndarray after the axes corresponding to
@@ -172,17 +184,17 @@ def _normalize_reduction_axes(
             raise ValueError(f"{axis} is out of bounds for array of dimension"
                     f" {len(shape)}.")
 
-    new_shape = tuple([axis_len
+    new_shape = tuple(axis_len
         for i, axis_len in enumerate(shape)
-        if i not in reduction_axes])
+        if i not in reduction_axes)
     return new_shape, reduction_axes
 
 
 def _get_reduction_indices_bounds(shape: ShapeType,
-                                  axes: Tuple[int, ...],
-                                  ) -> Tuple[Sequence[prim.Variable],
-                                             Mapping[str, Tuple[ScalarExpression,
-                                                             ScalarExpression]]]:
+                                  axes: tuple[int, ...],
+                                  ) -> tuple[Sequence[prim.Variable],
+                                             Mapping[str, tuple[ArithmeticExpression,
+                                                             ArithmeticExpression]]]:
     """
     Given *shape* and reduction axes *axes*, produce a list of inames
     ``indices`` named appropriately for reduction inames.
@@ -192,8 +204,8 @@ def _get_reduction_indices_bounds(shape: ShapeType,
 
     :returns: ``indices, redn_bounds, var_to_redn_descr``
     """
-    indices: List[prim.Variable] = []
-    redn_bounds: Dict[str, Tuple[ScalarExpression, ScalarExpression]] = {}
+    indices: list[prim.Variable] = []
+    redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
 
     n_out_dims = 0
     n_redn_dims = 0
@@ -213,15 +225,14 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, Map(redn_bounds)
+    return indices, immutabledict(redn_bounds)
 
 
-def _get_var_to_redn_descr(shape: ShapeType,
-                           axes: Tuple[int, ...],
-                           axis_to_reduction_descr: Optional[
-                               Mapping[int,
-                                       ReductionDescriptor]]
-                           ) -> Mapping[str, ReductionDescriptor]:
+def _get_var_to_redn_descr(
+        shape: ShapeType,
+        axes: tuple[int, ...],
+        axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None
+    ) -> Mapping[str, ReductionDescriptor]:
     """
     :arg axis_to_reduction_descr: Mapping from a reduction axis to
         its instance of :class:`~pytato.ReductionDescriptor`. This mapping
@@ -258,13 +269,13 @@ def _get_var_to_redn_descr(shape: ShapeType,
             var_to_redn_descr[idx] = redn_descr
             n_redn_dims += 1
 
-    return Map(var_to_redn_descr)
+    return immutabledict(var_to_redn_descr)
 
 
 def _make_reduction_lambda(
         op: ReductionOperation, a: Array,
-        axis: Optional[Union[int, Tuple[int, ...]]] = None,
-        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None,
+        axis: int | tuple[int, ...] | None = None,
+        axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None,
         initial: Any = _NoValue) -> Array:
     """
     Return a :class:`IndexLambda` that performs reduction over the *axis* axes
@@ -317,9 +328,9 @@ def _make_reduction_lambda(
 
 
 def sum(a: Array,
-        axis: Optional[Union[int, Tuple[int, ...]]] = None,
+        axis: int | tuple[int, ...] | None = None,
         initial: Any = 0,
-        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
         ) -> Array:
     """
     Sums array *a*'s elements along the *axis* axes.
@@ -340,9 +351,9 @@ def sum(a: Array,
                                   axis_to_reduction_descr, initial)
 
 
-def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None, *,
+def amax(a: Array, axis: int | tuple[int] | None = None, *,
          initial: Any = _NoValue,
-         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
          ) -> Array:
     """
     Returns the max of array *a*'s elements along the *axis* axes.
@@ -367,9 +378,9 @@ def amax(a: Array, axis: Optional[Union[int, Tuple[int]]] = None, *,
 
 
 def amin(a: Array,
-         axis: Optional[Union[int, Tuple[int, ...]]] = None,
+         axis: int | tuple[int, ...] | None = None,
          initial: Any = _NoValue,
-         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
          ) -> Array:
     """
     Returns the min of array *a*'s elements along the *axis* axes.
@@ -393,9 +404,9 @@ def amin(a: Array,
 
 
 def prod(a: Array,
-         axis: Optional[Union[int, Tuple[int, ...]]] = None,
+         axis: int | tuple[int, ...] | None = None,
          initial: Any = 1,
-         axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+         axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
          ) -> Array:
     """
     Returns the product of array *a*'s elements along the *axis* axes.
@@ -416,8 +427,8 @@ def prod(a: Array,
 
 
 def all(a: Array,
-        axis: Optional[Union[int, Tuple[int, ...]]] = None,
-        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        axis: int | tuple[int, ...] | None = None,
+        axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
         ) -> Array:
     """
     Returns the logical-and array *a*'s elements along the *axis* axes.
@@ -436,8 +447,8 @@ def all(a: Array,
 
 
 def any(a: Array,
-        axis: Optional[Union[int, Tuple[int, ...]]] = None,
-        axis_to_reduction_descr: Optional[Mapping[int, ReductionDescriptor]] = None
+        axis: int | tuple[int, ...] | None = None,
+        axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
         ) -> Array:
     """
     Returns the logical-or of array *a*'s elements along the *axis* axes.
