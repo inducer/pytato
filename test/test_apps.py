@@ -110,9 +110,8 @@ class FFTRealizationMapper(CopyMapper):
 
     def map_index_lambda(self, expr):
         tags = expr.tags_of_type(FFTIntermediate)
-        if tags:
-            if self.finalized or expr in self.old_array_to_new_array:
-                return self.old_array_to_new_array[expr]
+        if tags and (self.finalized or expr in self.old_array_to_new_array):
+            return self.old_array_to_new_array[expr]
 
         return super().map_index_lambda(
                 expr.copy(expr=ConstantSizer()(expr.expr)))

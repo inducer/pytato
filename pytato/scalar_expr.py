@@ -92,7 +92,7 @@ ScalarExpression = ArithmeticExpression | Bool
 
 
 def is_integral_scalar_expression(expr: object) -> TypeIs[IntegralScalarExpression]:
-    return isinstance(expr, int | np.integer) or isinstance(expr, prim.ExpressionNode)
+    return isinstance(expr, int | np.integer | prim.ExpressionNode)
 
 
 def parse(s: str) -> ScalarExpression:
