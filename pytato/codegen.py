@@ -138,8 +138,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             self,
             target: Target,
             kernels_seen: dict[str, lp.LoopKernel] | None = None,
-            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}

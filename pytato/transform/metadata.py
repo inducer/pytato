@@ -596,9 +596,9 @@ class AxisTagAttacher(CopyMapper):
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
                  tag_corresponding_redn_descr: bool,
-                 _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+                 _cache: TransformMapperCache[ArrayOrNames] | None = None,
                  _function_cache:
-                    TransformMapperCache[FunctionDefinition, []] | None = None):
+                    TransformMapperCache[FunctionDefinition] | None = None):
         super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr

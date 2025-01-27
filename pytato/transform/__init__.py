@@ -277,7 +277,7 @@ CacheResultT = TypeVar("CacheResultT")
 CacheKeyT: TypeAlias = Hashable
 
 
-class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
+class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
     """
     Cache for mappers.
 
@@ -355,18 +355,18 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     def __init__(
             self,
             _cache:
-                CachedMapperCache[ArrayOrNames, ResultT, P] | None = None,
+                CachedMapperCache[ArrayOrNames, ResultT] | None = None,
             _function_cache:
-                CachedMapperCache[FunctionDefinition, FunctionResultT, P] | None = None
+                CachedMapperCache[FunctionDefinition, FunctionResultT] | None = None
             ) -> None:
         super().__init__()
 
-        self._cache: CachedMapperCache[ArrayOrNames, ResultT, P] = (
+        self._cache: CachedMapperCache[ArrayOrNames, ResultT] = (
             _cache if _cache is not None
             else CachedMapperCache(self.get_cache_key))
 
         self._function_cache: CachedMapperCache[
-                FunctionDefinition, FunctionResultT, P] = (
+                FunctionDefinition, FunctionResultT] = (
             _function_cache if _function_cache is not None
             else CachedMapperCache(self.get_function_definition_cache_key))
 
@@ -416,7 +416,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
 
 # {{{ TransformMapper
 
-class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
+class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
     pass
 
 
@@ -430,8 +430,8 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
 
@@ -452,9 +452,9 @@ class TransformMapperWithExtraArgs(
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
             _function_cache:
-                TransformMapperCache[FunctionDefinition, P] | None = None
+                TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
 
@@ -1482,8 +1482,8 @@ class CachedMapAndCopyMapper(CopyMapper):
     def __init__(
             self,
             map_fn: Callable[[ArrayOrNames], ArrayOrNames],
-            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
@@ -1493,7 +1493,7 @@ class CachedMapAndCopyMapper(CopyMapper):
         return type(self)(
             self.map_fn,
             _function_cache=cast(
-                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+                "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         key = self._cache.get_key(expr)
