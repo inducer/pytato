@@ -77,6 +77,7 @@ from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
     IDX_LAMBDA_RESERVED_INDEX_PATTERN,
     CombineMapper,
+    get_dependencies as get_dependencies_scalar
 )
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper
 from pytato.utils import are_shape_components_equal, are_shapes_equal
@@ -290,14 +291,19 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         iname format, "_[0-9]+", and the axis of the output specified by the iname.
         """
         for bnd in expr.bindings.values():
+            breakpoint()
             self.rec(bnd)
 
         index_expr_used = BindingSubscriptsCollector()(expr.expr)
 
+        
 
+        breakpoint()
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
                 for axis_ind, var_ind_name in enumerate(ind_tuple):
+
+                    variables_used = get_dependencies_scalar(var_ind_name)
                     if isinstance(var_ind_name, prim.Variable):
                         lhs: str = self.get_var_for_axis(expr.bindings[vname],
                                                      axis_ind)
@@ -324,6 +330,27 @@ class AxesTagsEquationCollector(Mapper[None, []]):
                             pass
                             #warning("Variable does not match an index pattern. It will
                             #be ignored for metadata propagation.")
+
+                    # We need to add an equation if the index name is the only variable
+                    # for that axis. This includes if there is scaled indexing.
+                    for ind_name in variables_used:
+                        breakpoint()
+                        lhs: str = self.get_var_for_axis(expr.bindings[vname],
+                                                         axis_ind)
+                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(ind_name)
+                        if matched_pattern:
+                            # matched with an axis index of the output.
+                            self.record_equation(lhs, self.get_var_for_axis(expr,
+                                                  int(matched_pattern.group("index"))))
+                        elif ind_name in expr.var_to_reduction_descr.keys():
+                            # matched with a reduction axis.
+                            # We are assuming that this axis is eliminated from the
+                            # axes of the output array. So, the metadata will only be keep
+                            # in the reduction descriptor object which is indexed by the
+                            # var_ind_name.name
+                            self.record_equation(lhs,
+                                self.get_var_for_axis(expr, ind_name))
+
 
         return
 
