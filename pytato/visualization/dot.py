@@ -178,7 +178,7 @@ def stringify_shape(shape: ShapeType) -> str:
     return "(" + ", ".join(components) + ")"
 
 
-class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
+class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
     def __init__(self) -> None:
         super().__init__()
         self.node_to_dot: dict[ArrayOrNames, _DotNodeInfo] = {}
@@ -197,8 +197,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
         return _DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
-    def handle_unsupported_array(self,  # type: ignore[override]
-            expr: Array) -> None:
+    def handle_unsupported_array(self, expr: Array) -> None:
         # Default handler, does its best to guess how to handle fields.
         info = self.get_common_dot_info(expr)
 
@@ -208,11 +207,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[ArrayOrNames, []]):
                 continue
             attr = getattr(expr, field.name)
 
-            if isinstance(attr, Array):
-                self.rec(attr)
-                info.edges[field.name] = attr
-
-            elif isinstance(attr, AbstractResultWithNamedArrays):
+            if isinstance(attr, Array | AbstractResultWithNamedArrays):
                 self.rec(attr)
                 info.edges[field.name] = attr
 
@@ -633,7 +628,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
 
     for part in partition.parts.values():
         array_to_id = {}
-        for array in part_id_func_to_node_info[part.pid, None].keys():
+        for array in part_id_func_to_node_info[part.pid, None]:
             if isinstance(array, Placeholder):
                 # Placeholders are only emitted once
                 if array in placeholder_to_id:
@@ -705,7 +700,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
         input_arrays: list[Array] = []
         internal_arrays: list[ArrayOrNames] = []
 
-        for array in part_node_to_info.keys():
+        for array in part_node_to_info:
             if isinstance(array, InputArgumentBase):
                 input_arrays.append(array)
             else:
@@ -812,7 +807,7 @@ def get_dot_graph_from_partition(partition: DistributedGraphPartition) -> str:
     # {{{ draw overall outputs
 
     combined_array_to_id: dict[ArrayOrNames, str] = {}
-    for part_id in partition.parts.keys():
+    for part_id in partition.parts:
         combined_array_to_id.update(part_id_to_array_to_id[part_id])
 
     _emit_name_cluster(

@@ -28,7 +28,7 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 import islpy as isl
 
@@ -384,7 +384,7 @@ class CodeGenState:
 
 # {{{ codegen mapper
 
-class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
+class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
@@ -904,10 +904,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
     # Make the instruction
     from loopy.kernel.instruction import make_assignment
-    if indices:
-        assignee = prim.Variable(name)[indices]
-    else:
-        assignee = prim.Variable(name)
+    assignee = prim.Variable(name)[indices] if indices else prim.Variable(name)
     insn_id = state.insn_id_gen(f"{name}_store")
     insn = make_assignment((assignee,),
             loopy_expr,

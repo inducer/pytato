@@ -29,7 +29,7 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Never, TypeVar, cast
 
 from immutabledict import immutabledict
 
@@ -682,9 +682,9 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
 
-class ToIndexLambdaMapper(Mapper[Array, []], ToIndexLambdaMixin):
+class ToIndexLambdaMapper(Mapper[Array, Never, []], ToIndexLambdaMixin):
 
-    def handle_unsupported_array(self, expr: Any) -> Any:
+    def handle_unsupported_array(self, expr: Array) -> Array:
         raise CannotBeLoweredToIndexLambda(type(expr))
 
     def rec(self, expr: Array) -> Array:  # type: ignore[override]
