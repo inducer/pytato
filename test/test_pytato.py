@@ -1212,6 +1212,16 @@ def test_lower_to_index_lambda():
     # test that it didn't recurse further
     assert isinstance(binding, Reshape)
 
+    # Simple reshapes get simple index expressions.
+    x = pt.make_placeholder(name="x", dtype=float, shape=(10, 4))
+
+    expr = pt.expand_dims(x, [2, 3])
+    idx_lambda = pt.to_index_lambda(expr)
+    from pymbolic.primitives import Variable
+    assert isinstance(idx_lambda, IndexLambda)
+    assert idx_lambda.expr.index_tuple[0] == Variable("_0")
+    assert idx_lambda.expr.index_tuple[1] == Variable("_1")
+
 
 def test_cached_walk_mapper_with_extra_args():
     from testlib import RandomDAGContext, make_random_dag
