@@ -110,18 +110,55 @@ def _generate_index_expressions(
         index_var*new_stride
         for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
-    start_simple_index_expn = tuple(var for var, oshape, nshape in zip(index_vars,
-                                                                       old_shape,
-                                                                       new_shape,
-                                                                       strict=False)
-                                    if oshape == nshape)
+    start_simple_index_expn = ()
+
+    nind = 0
+    oind = 0
+    while nind < len(new_shape) and oind < len(old_shape):
+        if old_shape[oind] == new_shape[nind]:
+            start_simple_index_expn = (*start_simple_index_expn, index_vars[nind])
+            nind += 1
+            oind += 1
+        elif new_shape[nind] == 1:
+            # Then, there may be simple expressions after this still.
+            nind += 1
+        else:
+            # We are no longer in the simple expressions domain.
+            break
 
     num_simple = len(start_simple_index_expn)
     flattened_expr = tuple(
             # Mypy has a point: complex numbers don't support '//'.
         (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
         for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
-    return (*start_simple_index_expn, *(flattened_expr[num_simple:]))
+
+    nbackind = len(new_shape) - 1
+    obackind = len(old_shape) - 1
+    end_simple_index_expn = ()
+    while nbackind > nind and obackind > oind:
+        if old_shape[obackind] == new_shape[nbackind]:
+            end_simple_index_expn = (index_vars[nbackind], *end_simple_index_expn)
+            nbackind -= 1
+            obackind -= 1
+        elif new_shape[nbackind] == 1:
+            # There may be some simple expressions later.
+            nbackind -= 1
+        else:
+            break
+
+    num_end_simple = len(end_simple_index_expn)
+
+    if num_end_simple == 0 and num_simple == 0:
+        return flattened_expr
+    elif num_end_simple > 0 and num_simple == 0:
+        return (*(flattened_expr[:-1*num_end_simple]), *end_simple_index_expn)
+    elif num_simple > 0 and num_end_simple == 0:
+        return (*start_simple_index_expn,
+                *(flattened_expr[num_simple:]))
+    else:
+        return (*start_simple_index_expn,
+            *(flattened_expr[num_simple:-1*num_end_simple]),
+            *end_simple_index_expn)
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
