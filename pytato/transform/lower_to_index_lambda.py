@@ -110,10 +110,18 @@ def _generate_index_expressions(
         index_var*new_stride
         for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
-    return tuple(
-        # Mypy has a point: complex numbers don't support '//'.
+    start_simple_index_expn = tuple(var for var, oshape, nshape in zip(index_vars,
+                                                                       old_shape,
+                                                                       new_shape,
+                                                                       strict=False)
+                                    if oshape == nshape)
+
+    num_simple = len(start_simple_index_expn)
+    flattened_expr = tuple(
+            # Mypy has a point: complex numbers don't support '//'.
         (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
         for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
+    return (*start_simple_index_expn, *(flattened_expr[num_simple:]))
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
