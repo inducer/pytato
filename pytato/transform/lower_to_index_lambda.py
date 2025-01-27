@@ -110,7 +110,7 @@ def _generate_index_expressions(
         index_var*new_stride
         for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
-    start_simple_index_expn = ()
+    start_simple_index_expn: tuple[ScalarExpression, ...] = ()
 
     nind = 0
     oind = 0
@@ -134,7 +134,7 @@ def _generate_index_expressions(
 
     nbackind = len(new_shape) - 1
     obackind = len(old_shape) - 1
-    end_simple_index_expn = ()
+    end_simple_index_expn: tuple[ScalarExpression, ...] = ()
     while nbackind > nind and obackind > oind:
         if old_shape[obackind] == new_shape[nbackind]:
             end_simple_index_expn = (index_vars[nbackind], *end_simple_index_expn)
