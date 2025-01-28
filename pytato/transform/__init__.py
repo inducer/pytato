@@ -92,7 +92,9 @@ R = frozenset[Array]
 
 __doc__ = """
 .. autoclass:: Mapper
+.. autoclass:: CachedMapperCache
 .. autoclass:: CachedMapper
+.. autoclass:: TransformMapperCache
 .. autoclass:: TransformMapper
 .. autoclass:: TransformMapperWithExtraArgs
 .. autoclass:: CopyMapper
@@ -150,9 +152,27 @@ Internal stuff that is only here because the documentation tool wants it
     A type variable representing the result type of a :class:`Mapper` when mapping
     a :class:`pytato.function.FunctionDefinition`.
 
+.. class:: CacheExprT
+
+    A type variable representing an input from which to compute a cache key in order
+    to cache a result.
+
+.. class:: CacheKeyT
+
+    A type variable representing a key computed from an input expression.
+
+.. class:: CacheResultT
+
+    A type variable representing a result to be cached.
+
 .. class:: Scalar
 
     See :data:`pymbolic.Scalar`.
+
+.. class:: P
+
+    A :class:`typing.ParamSpec` used to annotate `*args` and `**kwargs`.
+
 """
 
 transform_logger = logging.getLogger(__file__)
@@ -252,6 +272,81 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
 # {{{ CachedMapper
 
+CacheExprT = TypeVar("CacheExprT")
+CacheResultT = TypeVar("CacheResultT")
+CacheKeyT: TypeAlias = Hashable
+
+
+class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
+    """
+    Cache for mappers.
+
+    .. automethod:: __init__
+    .. method:: get_key
+
+        Compute the key for an input expression.
+
+    .. automethod:: add
+    .. automethod:: retrieve
+    .. automethod:: clear
+    """
+    def __init__(
+            self,
+            key_func: Callable[..., CacheKeyT]) -> None:
+        """
+        Initialize the cache.
+
+        :arg key_func: Function to compute a hashable cache key from an input
+            expression and any extra arguments.
+        """
+        self.get_key = key_func
+
+        self._expr_key_to_result: dict[CacheKeyT, CacheResultT] = {}
+
+    def add(
+            self,
+            key_inputs:
+                CacheExprT
+                # Currently, Python's type system doesn't have a way to annotate
+                # containers of args/kwargs (ParamSpec won't work here). So we have
+                # to fall back to using Any. More details here:
+                # https://github.com/python/typing/issues/1252
+                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
+            result: CacheResultT,
+            key: CacheKeyT | None = None) -> CacheResultT:
+        """Cache a mapping result."""
+        if key is None:
+            if isinstance(key_inputs, tuple):
+                expr, key_args, key_kwargs = key_inputs
+                key = self.get_key(expr, *key_args, **key_kwargs)
+            else:
+                key = self.get_key(key_inputs)
+
+        self._expr_key_to_result[key] = result
+
+        return result
+
+    def retrieve(
+            self,
+            key_inputs:
+                CacheExprT
+                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
+            key: CacheKeyT | None = None) -> CacheResultT:
+        """Retrieve the cached mapping result."""
+        if key is None:
+            if isinstance(key_inputs, tuple):
+                expr, key_args, key_kwargs = key_inputs
+                key = self.get_key(expr, *key_args, **key_kwargs)
+            else:
+                key = self.get_key(key_inputs)
+
+        return self._expr_key_to_result[key]
+
+    def clear(self) -> None:
+        """Reset the cache."""
+        self._expr_key_to_result = {}
+
+
 class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """Mapper class that maps each node in the DAG exactly once. This loses some
     information compared to :class:`Mapper` as a node is visited only from
@@ -261,18 +356,23 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     .. automethod:: get_function_definition_cache_key
     .. automethod:: clone_for_callee
     """
-
     def __init__(
             self,
-            # Arrays are cached separately for each call stack frame, but
-            # functions are cached globally
-            _function_cache: dict[Hashable, FunctionResultT] | None = None
+            _cache:
+                CachedMapperCache[ArrayOrNames, ResultT] | None = None,
+            _function_cache:
+                CachedMapperCache[FunctionDefinition, FunctionResultT] | None = None
             ) -> None:
         super().__init__()
-        self._cache: dict[Hashable, ResultT] = {}
 
-        self._function_cache: dict[Hashable, FunctionResultT] = \
-            _function_cache if _function_cache is not None else {}
+        self._cache: CachedMapperCache[ArrayOrNames, ResultT] = (
+            _cache if _cache is not None
+            else CachedMapperCache(self.get_cache_key))
+
+        self._function_cache: CachedMapperCache[
+                FunctionDefinition, FunctionResultT] = (
+            _function_cache if _function_cache is not None
+            else CachedMapperCache(self.get_function_definition_cache_key))
 
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
@@ -285,24 +385,26 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         return (expr, *args, tuple(sorted(kwargs.items())))
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
-        key = self.get_cache_key(expr, *args, **kwargs)
+        key = self._cache.get_key(expr, *args, **kwargs)
         try:
-            return self._cache[key]
+            return self._cache.retrieve((expr, args, kwargs), key=key)
         except KeyError:
-            result = super().rec(expr, *args, **kwargs)
-            self._cache[key] = result
-            return result
+            return self._cache.add(
+                (expr, args, kwargs),
+                super().rec(expr, *args, **kwargs),
+                key=key)
 
     def rec_function_definition(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> FunctionResultT:
-        key = self.get_function_definition_cache_key(expr, *args, **kwargs)
+        key = self._function_cache.get_key(expr, *args, **kwargs)
         try:
-            return self._function_cache[key]
+            return self._function_cache.retrieve((expr, args, kwargs), key=key)
         except KeyError:
-            result = super().rec_function_definition(expr, *args, **kwargs)
-            self._function_cache[key] = result
-            return result
+            return self._function_cache.add(
+                (expr, args, kwargs),
+                super().rec_function_definition(expr, *args, **kwargs),
+                key=key)
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
@@ -310,6 +412,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
+        # Functions are cached globally, but arrays aren't
         return type(self)(_function_cache=self._function_cache)
 
 # }}}
@@ -317,16 +420,24 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
 
 # {{{ TransformMapper
 
+class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
+    pass
+
+
 class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
     other :class:`pytato.array.Array`\\ s.
 
     Enables certain operations that can only be done if the mapping results are also
-    arrays (e.g., calling :meth:`~CachedMapper.get_cache_key` on them). Does not
-    implement default mapper methods; for that, see :class:`CopyMapper`.
-
+    arrays (e.g., computing a cache key from them). Does not implement default
+    mapper methods; for that, see :class:`CopyMapper`.
     """
-    pass
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            ) -> None:
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
 
 # }}}
 
@@ -343,7 +454,13 @@ class TransformMapperWithExtraArgs(
     The logic in :class:`TransformMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
     """
-    pass
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache:
+                TransformMapperCache[FunctionDefinition] | None = None
+            ) -> None:
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
 
 # }}}
 
@@ -768,43 +885,22 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
 # {{{ CombineMapper
 
-class CombineMapper(Mapper[ResultT, FunctionResultT, []]):
+class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
     """
     Abstract mapper that recursively combines the results of user nodes
     of a given expression.
 
     .. automethod:: combine
     """
-    def __init__(
-            self,
-            _function_cache: dict[FunctionDefinition, FunctionResultT] | None = None
-            ) -> None:
-        super().__init__()
-        self.cache: dict[ArrayOrNames, ResultT] = {}
-        self.function_cache: dict[FunctionDefinition, FunctionResultT] = \
-            _function_cache if _function_cache is not None else {}
+    def get_cache_key(self, expr: ArrayOrNames) -> CacheKeyT:
+        return expr
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> CacheKeyT:
+        return expr
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
                               ) -> tuple[ResultT, ...]:
         return tuple(self.rec(s) for s in situp if isinstance(s, Array))
-
-    def rec(self, expr: ArrayOrNames) -> ResultT:
-        if expr in self.cache:
-            return self.cache[expr]
-        result: ResultT = super().rec(expr)
-        self.cache[expr] = result
-        return result
-
-    def rec_function_definition(
-            self, expr: FunctionDefinition) -> FunctionResultT:
-        if expr in self.function_cache:
-            return self.function_cache[expr]
-        result: FunctionResultT = super().rec_function_definition(expr)
-        self.function_cache[expr] = result
-        return result
-
-    def __call__(self, expr: ArrayOrNames) -> ResultT:
-        return self.rec(expr)
 
     def combine(self, *args: ResultT) -> ResultT:
         """Combine the arguments."""
@@ -1390,22 +1486,26 @@ class CachedMapAndCopyMapper(CopyMapper):
     def __init__(
             self,
             map_fn: Callable[[ArrayOrNames], ArrayOrNames],
-            _function_cache: dict[Hashable, FunctionDefinition] | None = None
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_function_cache=_function_cache)
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
-        return type(self)(self.map_fn, _function_cache=self._function_cache)
+        return type(self)(
+            self.map_fn,
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        if expr in self._cache:
-            return self._cache[expr]
-
-        result = super().rec(self.map_fn(expr))
-        self._cache[expr] = result
-        return result
+        key = self._cache.get_key(expr)
+        try:
+            return self._cache.retrieve(expr, key=key)
+        except KeyError:
+            return self._cache.add(
+                expr, super().rec(self.map_fn(expr)), key=key)
 
 # }}}
 
@@ -1915,7 +2015,7 @@ def rec_get_user_nodes(expr: ArrayOrNames,
 
 # {{{ deduplicate_data_wrappers
 
-def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
+def _get_data_dedup_cache_key(ary: DataInterface) -> CacheKeyT:
     import sys
     if "pyopencl" in sys.modules:
         from pyopencl import MemoryObjectHolder
@@ -1974,7 +2074,7 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
         job of deduplication.
     """
 
-    data_wrapper_cache: dict[Hashable, DataWrapper] = {}
+    data_wrapper_cache: dict[CacheKeyT, DataWrapper] = {}
     data_wrappers_encountered = 0
 
     def cached_data_wrapper_if_present(ary: ArrayOrNames) -> ArrayOrNames:

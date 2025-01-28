@@ -94,6 +94,7 @@ from pytato.transform import (
     CachedWalkMapper,
     CombineMapper,
     CopyMapper,
+    TransformMapperCache,
     _verify_is_array,
 )
 
@@ -239,9 +240,11 @@ class _DistributedInputReplacer(CopyMapper):
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
-                 _function_cache: dict[Hashable, FunctionDefinition] | None = None,
+                 _cache: TransformMapperCache[ArrayOrNames] | None = None,
+                 _function_cache:
+                    TransformMapperCache[FunctionDefinition] | None = None,
                  ) -> None:
-        super().__init__(_function_cache=_function_cache)
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
 
         self.recvd_ary_to_name = recvd_ary_to_name
         self.sptpo_ary_to_name = sptpo_ary_to_name
@@ -255,7 +258,10 @@ class _DistributedInputReplacer(CopyMapper):
             self, function: FunctionDefinition) -> _DistributedInputReplacer:
         # Function definitions aren't allowed to contain receives,
         # stored arrays promoted to part outputs, or part outputs
-        return type(self)({}, {}, {}, _function_cache=self._function_cache)
+        return type(self)(
+            {}, {}, {},
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
@@ -288,9 +294,9 @@ class _DistributedInputReplacer(CopyMapper):
         return new_send
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self.get_cache_key(expr)
+        key = self._cache.get_key(expr)
         try:
-            return self._cache[key]
+            return self._cache.retrieve(expr, key=key)
         except KeyError:
             pass
 

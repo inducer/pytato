@@ -63,12 +63,13 @@ from pytato.transform import (
     CachedWalkMapper,
     CopyMapper,
     SubsetDependencyMapper,
+    TransformMapperCache,
 )
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
 
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable, Mapping
+    from collections.abc import Mapping
 
     from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.target import Target
@@ -137,9 +138,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             self,
             target: Target,
             kernels_seen: dict[str, lp.LoopKernel] | None = None,
-            _function_cache: dict[Hashable, FunctionDefinition] | None = None
+            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_function_cache=_function_cache)
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
