@@ -307,6 +307,10 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
             self,
             key_inputs:
                 CacheExprT
+                # Currently, Python's type system doesn't have a way to annotate
+                # containers of args/kwargs (ParamSpec won't work here). So we have
+                # to fall back to using Any. More details here:
+                # https://github.com/python/typing/issues/1252
                 | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
             result: CacheResultT,
             key: CacheKeyT | None = None) -> CacheResultT:
