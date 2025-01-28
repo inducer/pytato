@@ -1231,12 +1231,25 @@ def test_lower_to_index_lambda():
     assert idx_lambda.expr.index_tuple[0] == Variable("_2")
     assert idx_lambda.expr.index_tuple[1] == Variable("_3")
 
+    # Expand in the middle
     expr = x.reshape(10, 1, 1, 1, 1, 4)
     idx_lambda = pt.to_index_lambda(expr)
     from pymbolic.primitives import Variable
     assert isinstance(idx_lambda, IndexLambda)
     assert idx_lambda.expr.index_tuple[0] == Variable("_0")
     assert idx_lambda.expr.index_tuple[1] == Variable("_5")
+
+    # Simple reshapes get simple index expressions.
+    x = pt.make_placeholder(name="x", dtype=float, shape=(1, 10, 1, 1, 4, 1))
+
+    # Contract
+    expr = x.reshape(10, 4)
+    idx_lambda = pt.to_index_lambda(expr)
+    from pymbolic.primitives import Variable
+    assert isinstance(idx_lambda, IndexLambda)
+    assert len(x.shape) == len(idx_lambda.expr.index_tuple)
+    assert idx_lambda.expr.index_tuple[1] == Variable("_0")
+    assert idx_lambda.expr.index_tuple[4] == Variable("_1")
 
 
 def test_cached_walk_mapper_with_extra_args():

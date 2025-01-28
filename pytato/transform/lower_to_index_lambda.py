@@ -110,55 +110,12 @@ def _generate_index_expressions(
         index_var*new_stride
         for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
-    start_simple_index_expn: tuple[ScalarExpression, ...] = ()
-
-    nind = 0
-    oind = 0
-    while nind < len(new_shape) and oind < len(old_shape):
-        if old_shape[oind] == new_shape[nind]:
-            start_simple_index_expn = (*start_simple_index_expn, index_vars[nind])
-            nind += 1
-            oind += 1
-        elif new_shape[nind] == 1:
-            # Then, there may be simple expressions after this still.
-            nind += 1
-        else:
-            # We are no longer in the simple expressions domain.
-            break
-
-    num_simple = len(start_simple_index_expn)
-    flattened_expr = tuple(
+    return tuple(
             # Mypy has a point: complex numbers don't support '//'.
-        (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
-        for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
-
-    nbackind = len(new_shape) - 1
-    obackind = len(old_shape) - 1
-    end_simple_index_expn: tuple[ScalarExpression, ...] = ()
-    while nbackind > nind and obackind > oind:
-        if old_shape[obackind] == new_shape[nbackind]:
-            end_simple_index_expn = (index_vars[nbackind], *end_simple_index_expn)
-            nbackind -= 1
-            obackind -= 1
-        elif new_shape[nbackind] == 1:
-            # There may be some simple expressions later.
-            nbackind -= 1
-        else:
-            break
-
-    num_end_simple = len(end_simple_index_expn)
-
-    if num_end_simple == 0 and num_simple == 0:
-        return flattened_expr
-    elif num_end_simple > 0 and num_simple == 0:
-        return (*(flattened_expr[:-1*num_end_simple]), *end_simple_index_expn)
-    elif num_simple > 0 and num_end_simple == 0:
-        return (*start_simple_index_expn,
-                *(flattened_expr[num_simple:]))
-    else:
-        return (*start_simple_index_expn,
-            *(flattened_expr[num_simple:-1*num_end_simple]),
-            *end_simple_index_expn)
+            (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
+            for old_size_till, old_stride in zip(old_size_tills,
+                                                 old_strides,
+                                                 strict=True))
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
@@ -258,8 +215,33 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
         sub_index_vars = index_vars[index_vars_begin:index_vars_end]
         index_vars_begin = index_vars_end
 
-        index_expressions.append(_generate_index_expressions(
-            sub_old_shape, sub_new_shape, order, sub_index_vars))
+        sub_exprs: tuple[ScalarExpression, ...] = ()
+        nind = 0
+        oind = 0
+        while nind < len(sub_new_shape) and oind < len(sub_old_shape):
+            if sub_new_shape[nind] == sub_old_shape[oind]:
+                sub_exprs = (*sub_exprs, sub_index_vars[nind])
+                nind += 1
+                oind += 1
+            elif sub_new_shape[nind] == 1:
+                nind += 1
+            elif sub_old_shape[oind] == 1:
+                sub_exprs = (*sub_exprs, 0) # Only one element.
+                oind += 1
+            else:
+                # Generate the rest of the expressions.
+                sub_exprs = (*sub_exprs,
+                             *_generate_index_expressions(sub_old_shape[oind:],
+                                                  sub_new_shape[nind:], order,
+                                                  sub_index_vars[nind:]))
+                break
+        if len(sub_exprs) < len(sub_old_shape):
+            tmp = _generate_index_expressions(sub_old_shape[oind:],
+                                              sub_new_shape[nind-1:], order,
+                                              sub_index_vars[nind-1:])
+
+            sub_exprs = (*sub_exprs, *tmp)
+        index_expressions.append(sub_exprs)
 
     # }}}
 
