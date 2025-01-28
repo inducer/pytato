@@ -226,7 +226,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
             elif sub_new_shape[nind] == 1:
                 nind += 1
             elif sub_old_shape[oind] == 1:
-                sub_exprs = (*sub_exprs, 0) # Only one element.
+                sub_exprs = (*sub_exprs, 0)  # Only one element.
                 oind += 1
             else:
                 # Generate the rest of the expressions.
