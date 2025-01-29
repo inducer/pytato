@@ -106,16 +106,34 @@ def _generate_index_expressions(
         new_strides = new_strides[::-1]
         old_size_tills = old_size_tills[::-1]
 
+    ordered_old_shape = old_shape if order == "C" else old_shape[::-1]
+    ordered_new_shape = new_shape if order == "C" else new_shape[::-1]
+
     flattened_index_expn = sum(
         index_var*new_stride
         for index_var, new_stride in zip(index_vars, new_strides, strict=True))
 
-    return tuple(
+    output: tuple[ScalarExpression, ...] = ()
+
+    # Use the information we have to make a reasonably simple indexing expression.
+    nind = 0
+    zipped_struct = zip(old_size_tills, old_strides, ordered_old_shape, strict=True)
+    for old_size_till, old_stride, ord_old_shape in zipped_struct:
+        matched = False
+        if ord_old_shape == 1:
+            output = (*output, 0)
+            matched = True
+        # Check if we have an axis which stays constant.
+        while nind < len(ordered_new_shape) and not matched:
+            if ord_old_shape == ordered_new_shape[nind]:
+                output = (*output, index_vars[nind])
+                matched = True
+            nind += 1
+        if not matched:
             # Mypy has a point: complex numbers don't support '//'.
-            (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
-            for old_size_till, old_stride in zip(old_size_tills,
-                                                 old_strides,
-                                                 strict=True))
+            output = (*output, (flattened_index_expn % old_size_till) // old_stride)  # type: ignore[operator]
+
+    return output
 
 
 def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
@@ -215,34 +233,8 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
         sub_index_vars = index_vars[index_vars_begin:index_vars_end]
         index_vars_begin = index_vars_end
 
-        sub_exprs: tuple[ScalarExpression, ...] = ()
-        nind = 0
-        oind = 0
-        while nind < len(sub_new_shape) and oind < len(sub_old_shape):
-            if sub_new_shape[nind] == sub_old_shape[oind]:
-                sub_exprs = (*sub_exprs, sub_index_vars[nind])
-                nind += 1
-                oind += 1
-            elif sub_new_shape[nind] == 1:
-                nind += 1
-            elif sub_old_shape[oind] == 1:
-                sub_exprs = (*sub_exprs, 0)  # Only one element.
-                oind += 1
-            else:
-                # Generate the rest of the expressions.
-                sub_exprs = (*sub_exprs,
-                             *_generate_index_expressions(sub_old_shape[oind:],
-                                                  sub_new_shape[nind:], order,
-                                                  sub_index_vars[nind:]))
-                break
-        if len(sub_exprs) < len(sub_old_shape):
-            tmp = _generate_index_expressions(sub_old_shape[oind:],
-                                              sub_new_shape[nind-1:], order,
-                                              sub_index_vars[nind-1:])
-
-            sub_exprs = (*sub_exprs, *tmp)
-        index_expressions.append(sub_exprs)
-
+        index_expressions.append(_generate_index_expressions(
+            sub_old_shape, sub_new_shape, order, sub_index_vars))
     # }}}
 
     return sum(index_expressions, ())
