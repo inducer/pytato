@@ -358,20 +358,20 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """
     def __init__(
             self,
-            _cache:
+            cache:
                 CachedMapperCache[ArrayOrNames, ResultT] | None = None,
-            _function_cache:
+            function_cache:
                 CachedMapperCache[FunctionDefinition, FunctionResultT] | None = None
             ) -> None:
         super().__init__()
 
         self._cache: CachedMapperCache[ArrayOrNames, ResultT] = (
-            _cache if _cache is not None
+            cache if cache is not None
             else CachedMapperCache(self.get_cache_key))
 
         self._function_cache: CachedMapperCache[
                 FunctionDefinition, FunctionResultT] = (
-            _function_cache if _function_cache is not None
+            function_cache if function_cache is not None
             else CachedMapperCache(self.get_function_definition_cache_key))
 
     def get_cache_key(
@@ -413,7 +413,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         :class:`pytato.function.FunctionDefinition`.
         """
         # Functions are cached globally, but arrays aren't
-        return type(self)(_function_cache=self._function_cache)
+        return type(self)(function_cache=self._function_cache)
 
 # }}}
 
@@ -434,10 +434,10 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            cache: TransformMapperCache[ArrayOrNames] | None = None,
+            function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(cache=cache, function_cache=function_cache)
 
 # }}}
 
@@ -456,11 +456,11 @@ class TransformMapperWithExtraArgs(
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache:
+            cache: TransformMapperCache[ArrayOrNames] | None = None,
+            function_cache:
                 TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(cache=cache, function_cache=function_cache)
 
 # }}}
 
@@ -1401,13 +1401,13 @@ class CachedWalkMapper(WalkMapper[P]):
 
     def __init__(
             self,
-            _visited_functions: set[VisitKeyT] | None = None
+            visited_functions: set[VisitKeyT] | None = None
             ) -> None:
         super().__init__()
         self._visited_arrays_or_names: set[VisitKeyT] = set()
 
         self._visited_functions: set[VisitKeyT] = \
-            _visited_functions if _visited_functions is not None else set()
+            visited_functions if visited_functions is not None else set()
 
     def get_cache_key(
             self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
@@ -1437,7 +1437,7 @@ class CachedWalkMapper(WalkMapper[P]):
         self._visited_functions.add(cache_key)
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
-        return type(self)(_visited_functions=self._visited_functions)
+        return type(self)(visited_functions=self._visited_functions)
 
 # }}}
 
@@ -1458,8 +1458,8 @@ class TopoSortMapper(CachedWalkMapper[[]]):
 
     def __init__(
             self,
-            _visited_functions: set[VisitKeyT] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+            visited_functions: set[VisitKeyT] | None = None) -> None:
+        super().__init__(visited_functions=visited_functions)
         self.topological_order: list[Array] = []
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
@@ -1486,17 +1486,17 @@ class CachedMapAndCopyMapper(CopyMapper):
     def __init__(
             self,
             map_fn: Callable[[ArrayOrNames], ArrayOrNames],
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            cache: TransformMapperCache[ArrayOrNames] | None = None,
+            function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(cache=cache, function_cache=function_cache)
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
         return type(self)(
             self.map_fn,
-            _function_cache=cast(
+            function_cache=cast(
                 "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:

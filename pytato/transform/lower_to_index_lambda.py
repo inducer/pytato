@@ -108,6 +108,7 @@ def _generate_index_expressions(
 
     ordered_old_shape = old_shape if order == "C" else old_shape[::-1]
     ordered_new_shape = new_shape if order == "C" else new_shape[::-1]
+    ordered_index_vars = index_vars if order == "C" else index_vars[::-1]
 
     flattened_index_expn = sum(
         index_var*new_stride
@@ -120,15 +121,17 @@ def _generate_index_expressions(
     zipped_struct = zip(old_size_tills, old_strides, ordered_old_shape, strict=True)
     for old_size_till, old_stride, ord_old_shape in zipped_struct:
         matched = False
-        if ord_old_shape == 1:
-            output = (*output, 0)
-            matched = True
         # Check if we have an axis which stays constant.
         while nind < len(ordered_new_shape) and not matched:
-            if ord_old_shape == ordered_new_shape[nind]:
-                output = (*output, index_vars[nind])
+            if ordered_new_shape[nind] == 1:
+                nind += 1
+            elif ord_old_shape == ordered_new_shape[nind]:
+                output = (*output, ordered_index_vars[nind])
                 matched = True
-            nind += 1
+                nind += 1
+            else:
+                # We can never match.
+                nind = len(ordered_new_shape)
         if not matched:
             # Mypy has a point: complex numbers don't support '//'.
             output = (*output, (flattened_index_expn % old_size_till) // old_stride)  # type: ignore[operator]
