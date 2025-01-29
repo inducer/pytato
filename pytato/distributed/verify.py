@@ -144,8 +144,8 @@ class MissingRecvError(DistributedPartitionVerificationError):
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+    def __init__(self, visited_functions: set[Any] | None = None) -> None:
+        super().__init__(visited_functions=visited_functions)
         self.seen_nodes: set[ArrayOrNames] = set()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:

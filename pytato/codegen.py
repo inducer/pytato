@@ -138,10 +138,10 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             self,
             target: Target,
             kernels_seen: dict[str, lp.LoopKernel] | None = None,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            cache: TransformMapperCache[ArrayOrNames] | None = None,
+            function_cache: TransformMapperCache[FunctionDefinition] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(cache=cache, function_cache=function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
@@ -268,9 +268,9 @@ def normalize_outputs(
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper[[]]):
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+    def __init__(self, visited_functions: set[Any] | None = None) -> None:
         self.name_to_input: dict[str, InputArgumentBase] = {}
-        super().__init__(_visited_functions=_visited_functions)
+        super().__init__(visited_functions=visited_functions)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)

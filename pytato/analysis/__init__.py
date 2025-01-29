@@ -420,9 +420,9 @@ class NodeCountMapper(CachedWalkMapper[[]]):
     def __init__(
             self,
             count_duplicates: bool = False,
-            _visited_functions: set[Any] | None = None,
+            visited_functions: set[Any] | None = None,
             ) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+        super().__init__(visited_functions=visited_functions)
 
         from collections import defaultdict
         self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
@@ -440,7 +440,7 @@ class NodeCountMapper(CachedWalkMapper[[]]):
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
             count_duplicates=self.count_duplicates,
-            _visited_functions=self._visited_functions)
+            visited_functions=self._visited_functions)
 
     def post_visit(self, expr: Any) -> None:
         if not isinstance(expr, DictOfNamedArrays):
@@ -507,8 +507,8 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
 
     .. autoattribute:: expr_multiplicity_counts
     """
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+    def __init__(self, visited_functions: set[Any] | None = None) -> None:
+        super().__init__(visited_functions=visited_functions)
 
         from collections import defaultdict
         self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
@@ -554,8 +554,8 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
        The number of nodes.
     """
 
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+    def __init__(self, visited_functions: set[Any] | None = None) -> None:
+        super().__init__(visited_functions=visited_functions)
         self.count = 0
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:

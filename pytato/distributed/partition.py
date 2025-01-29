@@ -240,11 +240,11 @@ class _DistributedInputReplacer(CopyMapper):
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
-                 _cache: TransformMapperCache[ArrayOrNames] | None = None,
-                 _function_cache:
+                 cache: TransformMapperCache[ArrayOrNames] | None = None,
+                 function_cache:
                     TransformMapperCache[FunctionDefinition] | None = None,
                  ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(cache=cache, function_cache=function_cache)
 
         self.recvd_ary_to_name = recvd_ary_to_name
         self.sptpo_ary_to_name = sptpo_ary_to_name
@@ -260,7 +260,7 @@ class _DistributedInputReplacer(CopyMapper):
         # stored arrays promoted to part outputs, or part outputs
         return type(self)(
             {}, {}, {},
-            _function_cache=cast(
+            function_cache=cast(
                 "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
