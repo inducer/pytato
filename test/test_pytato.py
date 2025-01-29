@@ -1204,6 +1204,8 @@ def test_derived_class_uses_correct_array_eq():
 
 
 def test_lower_to_index_lambda():
+    from pymbolic.primitives import Variable
+
     from pytato.array import IndexLambda, Reshape
     expr = pt.ones(12).reshape(6, 2).reshape(3, 4)
     idx_lambda = pt.to_index_lambda(expr)
@@ -1218,7 +1220,6 @@ def test_lower_to_index_lambda():
     # Expand at the end.
     expr = pt.expand_dims(x, [2, 3])
     idx_lambda = pt.to_index_lambda(expr)
-    from pymbolic.primitives import Variable
     assert isinstance(idx_lambda, IndexLambda)
     assert idx_lambda.expr.index_tuple[0] == Variable("_0")
     assert idx_lambda.expr.index_tuple[1] == Variable("_1")
@@ -1226,7 +1227,6 @@ def test_lower_to_index_lambda():
     # Expand to front
     expr = pt.expand_dims(x, [0, 1])
     idx_lambda = pt.to_index_lambda(expr)
-    from pymbolic.primitives import Variable
     assert isinstance(idx_lambda, IndexLambda)
     assert idx_lambda.expr.index_tuple[0] == Variable("_2")
     assert idx_lambda.expr.index_tuple[1] == Variable("_3")
@@ -1234,7 +1234,6 @@ def test_lower_to_index_lambda():
     # Expand in the middle
     expr = x.reshape(10, 1, 1, 1, 1, 4)
     idx_lambda = pt.to_index_lambda(expr)
-    from pymbolic.primitives import Variable
     assert isinstance(idx_lambda, IndexLambda)
     assert idx_lambda.expr.index_tuple[0] == Variable("_0")
     assert idx_lambda.expr.index_tuple[1] == Variable("_5")
@@ -1245,7 +1244,6 @@ def test_lower_to_index_lambda():
     # Contract
     expr = x.reshape(10, 4)
     idx_lambda = pt.to_index_lambda(expr)
-    from pymbolic.primitives import Variable
     assert isinstance(idx_lambda, IndexLambda)
     assert len(x.shape) == len(idx_lambda.expr.index_tuple)
     assert idx_lambda.expr.index_tuple[1] == Variable("_0")

@@ -1577,7 +1577,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
 
     def get_np_input_args():
         return {
-            "_pt_data_9": np.ones((2, 2)),
+            "pt_data_9": np.ones((2, 2)),
         }
 
     np_inputs = get_np_input_args()
