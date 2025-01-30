@@ -121,7 +121,7 @@ def _generate_index_expressions(
     zipped_struct = zip(old_size_tills, old_strides, ordered_old_shape, strict=True)
     for old_size_till, old_stride, ord_old_shape in zipped_struct:
         matched = False
-        if ord_old_shape == 1 and order == "C":
+        if old_size_till == old_stride:
             output = (*output, 0)
             matched = True
         # Check if we have an axis which stays constant.
