@@ -49,7 +49,7 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper, P
 
 
 if TYPE_CHECKING:
@@ -599,7 +599,7 @@ def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
 
 # {{{ TagCountMapper
 
-class TagCountMapper(CombineMapper[int, []]):
+class TagCountMapper(CombineMapper[int, Never]):
     """
     Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
     """
@@ -615,18 +615,20 @@ class TagCountMapper(CombineMapper[int, []]):
     def combine(self, *args: int) -> int:
         return sum(args)
 
-    # type-ignore reason: incompatible return type with super class
-    def rec(self, expr: ArrayOrNames) -> int:  # type: ignore
+    def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> int:
+        key = self._cache.get_key(expr, *args, **kwargs)
         try:
-            return self.cache[expr]
+            return self._cache.retrieve((expr, args, kwargs), key=key)
         except KeyError:
-            s = super().rec(expr)
+            s = super().rec(expr, *args, **kwargs)
             if isinstance(expr, Array) and self._tags <= expr.tags:
                 result = 1 + s
             else:
                 result = 0 + s
 
-            self.cache[expr] = 0
+            self._cache.add((expr, args, kwargs),
+                0,
+                key=key)
             return result
 
 
