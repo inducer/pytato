@@ -26,12 +26,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Never
 
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Self
 
+import pytools
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -49,11 +49,11 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, Mapper
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper, P
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
     from pytato.loopy import LoopyCall
@@ -74,6 +74,9 @@ __doc__ = """
 .. autofunction:: get_num_call_sites
 
 .. autoclass:: DirectPredecessorsGetter
+
+.. autoclass:: TagCountMapper
+.. autofunction:: get_num_tags_of_type
 """
 
 
@@ -590,6 +593,54 @@ def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
     cscm(outputs)
 
     return cscm.count
+
+# }}}
+
+
+# {{{ TagCountMapper
+
+class TagCountMapper(CombineMapper[int, Never]):
+    """
+    Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
+    """
+
+    def __init__(self, tags: pytools.tag.Tag | Iterable[pytools.tag.Tag]) -> None:
+        super().__init__()
+        if isinstance(tags, pytools.tag.Tag):
+            tags = frozenset((tags,))
+        elif not isinstance(tags, frozenset):
+            tags = frozenset(tags)
+        self._tags = tags
+
+    def combine(self, *args: int) -> int:
+        return sum(args)
+
+    def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> int:
+        key = self._cache.get_key(expr, *args, **kwargs)
+        try:
+            return self._cache.retrieve((expr, args, kwargs), key=key)
+        except KeyError:
+            s = super().rec(expr, *args, **kwargs)
+            if isinstance(expr, Array) and self._tags <= expr.tags:
+                result = 1 + s
+            else:
+                result = 0 + s
+
+            self._cache.add((expr, args, kwargs),
+                0,
+                key=key)
+            return result
+
+
+def get_num_tags_of_type(
+        outputs: Array | DictOfNamedArrays,
+        tags: pytools.tag.Tag | Iterable[pytools.tag.Tag]) -> int:
+    """Returns the number of nodes in DAG *outputs* that are tagged with
+    all the tags in *tags*."""
+
+    tcm = TagCountMapper(tags)
+
+    return tcm(outputs)
 
 # }}}
 
