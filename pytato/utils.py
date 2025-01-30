@@ -25,6 +25,7 @@ THE SOFTWARE.
 from typing import (
     TYPE_CHECKING,
     Any,
+    Never,
     TypeVar,
     cast,
 )
@@ -128,9 +129,8 @@ def get_shape_after_broadcasting(
                                 ) -> ShapeComponent:
         result_axis_len = axis_lengths[0]
         for axis_len in axis_lengths[1:]:
-            if are_shape_components_equal(axis_len, result_axis_len):
-                pass
-            elif are_shape_components_equal(axis_len, 1):
+            if (are_shape_components_equal(axis_len, result_axis_len)
+                    or are_shape_components_equal(axis_len, 1)):
                 pass
             elif are_shape_components_equal(result_axis_len, 1):
                 result_axis_len = axis_len
@@ -232,7 +232,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                 array: ArrayOrScalar,
                 expr: ScalarExpression | Bool
             ) -> ScalarExpression | Bool:
-        if ((isinstance(array, Array) or isinstance(array, np.generic))
+        if ((isinstance(array, Array | np.generic))
                 and array.dtype != result_dtype):
             # Loopy's type casts don't like casting to bool
             assert result_dtype != np.bool_
@@ -269,7 +269,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
 
 # {{{ dim_to_index_lambda_components
 
-class ShapeExpressionMapper(CachedMapper[ScalarExpression, []]):
+class ShapeExpressionMapper(CachedMapper[ScalarExpression, Never, []]):
     """
     Mapper that takes a shape component and returns it as a scalar expression.
     """
@@ -372,7 +372,7 @@ def are_shapes_equal(shape1: ShapeType, shape2: ShapeType) -> bool:
 
 # {{{ ShapeToISLExpressionMapper
 
-class ShapeToISLExpressionMapper(CachedMapper[isl.Aff, []]):
+class ShapeToISLExpressionMapper(CachedMapper[isl.Aff, Never, []]):
     """
     Mapper that takes a shape component and returns it as :class:`isl.Aff`.
     """
@@ -459,15 +459,9 @@ def _normalize_slice(slice_: slice,
             if -axis_len <= start < axis_len:
                 start = start % axis_len
             elif start >= axis_len:
-                if step > 0:
-                    start = axis_len
-                else:
-                    start = axis_len - 1
+                start = axis_len if step > 0 else axis_len - 1
             else:
-                if step > 0:
-                    start = 0
-                else:
-                    start = -1
+                start = 0 if step > 0 else -1
         else:
             raise NotImplementedError
 
@@ -478,15 +472,9 @@ def _normalize_slice(slice_: slice,
             if -axis_len <= stop < axis_len:
                 stop = stop % axis_len
             elif stop >= axis_len:
-                if step > 0:
-                    stop = axis_len
-                else:
-                    stop = axis_len - 1
+                stop = axis_len if step > 0 else axis_len - 1
             else:
-                if step > 0:
-                    stop = 0
-                else:
-                    stop = -1
+                stop = 0 if step > 0 else -1
         else:
             raise NotImplementedError
 

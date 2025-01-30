@@ -38,6 +38,7 @@ dependencies = [
     "pytools>=2024.1.21",
     "pymbolic>=2024.2",
     "typing_extensions>=4",
+    "orderedsets",
 ]
 
 [project.urls]
@@ -63,6 +64,7 @@ extend-select = [
     "RUF",
     "UP",
     "TC",
+    "SIM",
 ]
 extend-ignore = [
   "E226",

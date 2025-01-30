@@ -169,6 +169,13 @@ Reserved Identifiers
         as automatically generated names (if required) in
         :attr:`pytato.array.IndexLambda.bindings`.
 
+
+.. note::
+
+    Other than the iname names (``_[0-9]+``), these naming conventions are not
+    compulsory. The above is merely intended to set aside parts of the namespace
+    for this purpose that are guaranteed not to be trampled on by the user.
+
 Tags
 ----
 

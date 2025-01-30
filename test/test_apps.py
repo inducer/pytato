@@ -94,7 +94,7 @@ class FFTRealizationMapper(CopyMapper):
             arrays = fft_vec_gatherer.level_to_arrays[lev]
             rec_arrays = [self.rec(ary) for ary in arrays]
             # reset cache so that the partial subs are not stored
-            self._cache = {}
+            self._cache.clear()
             lev_array = pt.concatenate(rec_arrays, axis=0)
             assert lev_array.shape == (fft_vec_gatherer.n,)
 
@@ -110,9 +110,8 @@ class FFTRealizationMapper(CopyMapper):
 
     def map_index_lambda(self, expr):
         tags = expr.tags_of_type(FFTIntermediate)
-        if tags:
-            if self.finalized or expr in self.old_array_to_new_array:
-                return self.old_array_to_new_array[expr]
+        if tags and (self.finalized or expr in self.old_array_to_new_array):
+            return self.old_array_to_new_array[expr]
 
         return super().map_index_lambda(
                 expr.copy(expr=ConstantSizer()(expr.expr)))

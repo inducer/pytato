@@ -135,7 +135,7 @@ def test_distributed_scheduler_counts():
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
-        for key in needed_ids.keys():
+        for key in needed_ids:
             needed_ids[key] = {key-1} if key > 0 else set()
         _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
@@ -190,7 +190,7 @@ def test_distributed_scheduling_o_n_direct_dependents():
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
-        for key in needed_ids.keys():
+        for key in needed_ids:
             for j in range(key):
                 needed_ids[key].add(j)
         _, count_list[i] = _schedule_task_batches_counted(needed_ids)
@@ -899,13 +899,11 @@ def test_number_symbolic_tags_bare_classes(ctx_factory):
     outputs = pt.make_dict_of_named_arrays({"out": res})
     partition = pt.find_distributed_partition(comm, outputs)
 
-    (_distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
+    (distp, next_tag) = pt.number_distributed_tags(comm, partition, base_tag=4242)
 
     assert next_tag == 4244
 
-    # FIXME: For the next assertion, find_distributed_partition needs to be
-    # deterministic too (https://github.com/inducer/pytato/pull/465).
-    # assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242  # noqa: E501
+    assert next(iter(distp.parts[0].name_to_send_nodes.values()))[0].comm_tag == 4242
 
 # }}}
 

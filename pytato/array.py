@@ -355,10 +355,7 @@ def _augment_array_dataclass(
         attr_tuple_hash = ", ".join(f"self.{fld.name}"
                             for fld in fields(cls) if fld.name != "non_equality_tags")
 
-        if attr_tuple_hash:
-            attr_tuple_hash = f"({attr_tuple_hash},)"
-        else:
-            attr_tuple_hash = "()"
+        attr_tuple_hash = f"({attr_tuple_hash},)" if attr_tuple_hash else "()"
 
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
@@ -414,11 +411,10 @@ def _augment_array_dataclass(
     # place, or it inherits a value but does not set it itself.
     sets_mapper_method = "_mapper_method" in mm_cls.__dict__
 
-    if sets_mapper_method:
-        if default_mapper_method_name == mm_cls._mapper_method:
-            warn(f"Explicit _mapper_method on {mm_cls} not needed, default matches "
-                 "explicit assignment. Just delete the explicit assignment.",
-                 stacklevel=3)
+    if sets_mapper_method and default_mapper_method_name == mm_cls._mapper_method:
+        warn(f"Explicit _mapper_method on {mm_cls} not needed, default matches "
+             "explicit assignment. Just delete the explicit assignment.",
+             stacklevel=3)
 
     if not sets_mapper_method:
         mm_cls._mapper_method = intern(default_mapper_method_name)
@@ -1500,9 +1496,9 @@ def einsum(subscripts: str, *operands: Array,
             raise ValueError(f"'{idx}' is not a reduction dim.")
 
     for descr in index_to_descr.values():
-        if isinstance(descr, EinsumReductionAxis):
-            if descr not in redn_axis_to_redn_descr:
-                redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+        if (isinstance(descr, EinsumReductionAxis)
+                and descr not in redn_axis_to_redn_descr):
+            redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
 
     # }}}
 
@@ -2356,10 +2352,7 @@ def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
     if order != "C":
         raise ValueError("Only C-ordered arrays supported for now.")
 
-    if dtype is None:
-        conv_dtype = np.array(fill_value).dtype
-    else:
-        conv_dtype = np.dtype(dtype)
+    conv_dtype = np.array(fill_value).dtype if dtype is None else np.dtype(dtype)
 
     shape = normalize_shape(shape)
 
