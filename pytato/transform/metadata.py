@@ -301,7 +301,8 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         by a :class:`~pymbolic.Variable` which has a name that follows the reserved
         iname format, "_[0-9]+", and the axis of the output specified by the iname.
         """
-        idx_lambda = to_index_lambda(expr)
+        idx_lambda = expr if isinstance(expr, IndexLambda) else to_index_lambda(expr)
+
         index_expr_used = BindingSubscriptsCollector()(idx_lambda.expr)
 
         for vname, set_of_ind_tuple in index_expr_used.items():
@@ -314,7 +315,7 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                         matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(ind_name)  # noqa
                         if matched_pattern:
                             # matched with an axis index.
-                            self.record_equation(lhs, self.get_var_for_axis(idx_lambda,
+                            self.record_equation(lhs, self.get_var_for_axis(expr,
                                                   int(matched_pattern.group("index"))))
                         elif ind_name in idx_lambda.var_to_reduction_descr:
                             # matched with a reduction axis.
@@ -322,8 +323,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                             # axes of the output array. Thus, the metadata can only
                             # be propagated to and from the reduction descriptor
                             # which is indexed by the string ind_name.
-                            if isinstance(expr, Einsum):
-                                breakpoint()
                             self.record_equation(lhs,
                                 self.get_var_for_axis(expr, ind_name))
 
@@ -774,11 +773,7 @@ def unify_axes_tags(
     """
     equations_collector = equations_collector_t(tag_t)
 
-    # First we will convert the expression to a series of IndexLambda operations.
-
-    mapped_expr = expr
-
-    equations_collector(mapped_expr)
+    equations_collector(expr)
 
     # start BFS traversal with the known tags as the sources.
     # From the equations build a Propagation Graph
@@ -822,6 +817,6 @@ def unify_axes_tags(
 
     return AxisTagAttacher(axis_to_solved_tags,
                            tag_corresponding_redn_descr=unify_redn_descrs,
-                           )(mapped_expr)
+                           )(expr)
 
 # vim: fdm=marker
