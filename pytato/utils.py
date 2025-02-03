@@ -505,6 +505,15 @@ def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
                                       f"{start-stop} while computing the axis"
                                       " length.")
 
+
+def normalized_slice_does_not_change_axis(slice_: NormalizedSlice,
+                                           shape_to_compare_to: ShapeComponent) -> bool:
+
+    return (are_shape_components_equal(
+                    slice_.stop, shape_to_compare_to)
+        and are_shape_components_equal(slice_.step, 1)
+        and are_shape_components_equal(slice_.start, 0))
+
 # }}}
 
 
