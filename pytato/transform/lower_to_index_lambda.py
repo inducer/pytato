@@ -58,6 +58,7 @@ from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
+from pytato.utils import normalized_slice_does_not_change_axis
 
 
 if TYPE_CHECKING:
@@ -498,7 +499,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
@@ -567,7 +571,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
@@ -623,7 +630,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             else:
