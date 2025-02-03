@@ -1301,8 +1301,8 @@ def test_reserved_binding_name_patterns():
 
 def test_reserved_scalar_iname_patterns():
     from pytato.scalar_expr import (
-        IDX_LAMBDA_RESERVED_INDEX_PATTERN,
         IDX_LAMBDA_RE,
+        IDX_LAMBDA_RESERVED_INDEX_PATTERN,
     )
 
     test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101", "_r"]
@@ -1356,13 +1356,12 @@ def test_cached_walk_mapper_with_extra_args():
         # passing incorrect argument should raise TypeError while calling post_visit
         my_walk_mapper(dag, bad_arg_name=7)
 
-"""
-def test_unify_axes_tags_indexlambda():
-    from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
 
-    from pytato.array import EinsumReductionAxis
-    from pymbolic import primitives as prim
+def test_unify_axes_tags_indexlambda():
     from immutabledict import immutabledict
+    from testlib import BarTag, FooTag, TestlibTag
+
+    from pymbolic import primitives as prim
 
     x = pt.make_placeholder("x", (10, 4))
     x = x.with_tagged_axis(0, FooTag())
@@ -1378,7 +1377,7 @@ def test_unify_axes_tags_indexlambda():
                        bindings=immutabledict({"_in0": x, "_in1": y}),
                        dtype=float, axes=pt.array._get_default_axes(2),
                        tags=pt.array._get_default_tags(),
-                       shape=(10,4),
+                       shape=(10, 4),
                        var_to_reduction_descr=immutabledict({}))
 
     z_unified = pt.unify_axes_tags(z)
@@ -1386,16 +1385,14 @@ def test_unify_axes_tags_indexlambda():
     assert z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
     assert z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([BarTag()])
 
-    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()])
+    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()]) # noqa
 
-    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
+    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()]) # noqa
     assert z_unified.bindings["_in1"].axes[1].tags_of_type(TestlibTag) == frozenset([])
-"""
+
 
 def test_unify_axes_tags():
     from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
-
-    from pytato.array import EinsumReductionAxis
 
     # {{{ 1. broadcasting + expand_dims
 
@@ -1438,7 +1435,7 @@ def test_unify_axes_tags():
     assert (z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag)
             == frozenset([FooTag()]))
 
-    keys = list(z_unified.var_to_reduction_descr.keys())
+    keys = list(z_unified.var_to_reduction_descr)
     assert len(keys) == 1
     assert (z_unified.var_to_reduction_descr[keys[0]]
             .tags_of_type(TestlibTag)
@@ -1474,7 +1471,7 @@ def test_unify_axes_tags():
             == frozenset([BarTag(), QuuxTag()]))
     assert (y_unified.axes[4].tags_of_type(TestlibTag)
             == frozenset([QuuxTag()]))
-    
+
     # }}}
 
     # {{ Reduction Operations with IndexLambda
@@ -1579,7 +1576,7 @@ def test_unify_axes_tags():
     # }}}
     # }}
 
-"""
+
 def test_unify_axes_tags_with_unbroadcastable_expressions():
 
     a = pt.make_placeholder("a", (512, 10, 8))
@@ -1611,11 +1608,11 @@ def test_unify_axes_tags_with_unbroadcastable_expressions():
     assert (z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
     assert (z_unified.axes[2].tags_of_type(TestlibTag) == frozenset([FooTag()]))
 
-    for key in z_unified.bindings.keys():
+    for key in z_unified.bindings:
         term = z_unified.bindings[key]
         assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
         assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
-"""
+
 
 def test_ignoring_axes_during_propagation():
     from pytools.tag import UniqueTag

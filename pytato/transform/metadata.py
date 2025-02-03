@@ -42,10 +42,9 @@ import logging
 import re
 from typing import (
     TYPE_CHECKING,
-    Any,
+    Never,
     ParamSpec,
     TypeAlias,
-    Never,
     TypeVar,
     cast,
 )
@@ -78,10 +77,9 @@ from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
     IDX_LAMBDA_RESERVED_INDEX_PATTERN,
     CombineMapper,
-    get_dependencies as get_dependencies_scalar
 )
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
+from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.utils import are_shape_components_equal, are_shapes_equal
 
 
@@ -145,8 +143,8 @@ class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
                         newkey = name + "," + str(ind) + "," + key
                         base.update({newkey: val})
             """
-            return self.combine([base] + [self.rec(subexpr) for _, subexpr in enumerate(expr.index_tuple)])
-            #return {expr.aggregate.name: {expr.index_tuple}}
+            return self.combine([base] + [self.rec(subexpr) for
+                                          subexpr in expr.index_tuple])
         return {}
 
     def map_algebraic_leaf(self, expr: prim.Expression) -> dict[BindingName,
@@ -160,6 +158,7 @@ class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
 # }}}
 
 # {{{ AxesTagsEquationCollector
+
 
 class AxesTagsEquationCollector(Mapper[None, Never, []]):
     r"""
@@ -292,37 +291,43 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         iname format, "_[0-9]+", and the axis of the output specified by the iname.
         """
         for bnd in expr.bindings.values():
-            breakpoint()
             self.rec(bnd)
 
-        index_expr_used = BindingSubscriptsCollector()(expr.expr)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
-        
+    def add_equations_using_index_lambda_version_of_expr(self, expr: Array) -> None:
+        """
+        Equality conditions are added between an axis of the operands which is indexed
+        by a :class:`~pymbolic.Variable` which has a name that follows the reserved
+        iname format, "_[0-9]+", and the axis of the output specified by the iname.
+        """
+        idx_lambda = to_index_lambda(expr)
+        index_expr_used = BindingSubscriptsCollector()(idx_lambda.expr)
 
-        breakpoint()
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
                 for axis_ind, var_ind_name in enumerate(ind_tuple):
-
-                    variables_used = get_dependencies_scalar(var_ind_name)
                     if isinstance(var_ind_name, prim.Variable):
-                        lhs: str = self.get_var_for_axis(expr.bindings[vname],
+                        lhs: str = self.get_var_for_axis(idx_lambda.bindings[vname],
                                                      axis_ind)
-                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(var_ind_name.name)
+                        ind_name: str = var_ind_name.name
+                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(ind_name)  # noqa
                         if matched_pattern:
                             # matched with an axis index.
-                            self.record_equation(lhs, self.get_var_for_axis(expr,
+                            self.record_equation(lhs, self.get_var_for_axis(idx_lambda,
                                                   int(matched_pattern.group("index"))))
-                        elif var_ind_name.name in expr.var_to_reduction_descr.keys():
+                        elif ind_name in idx_lambda.var_to_reduction_descr:
                             # matched with a reduction axis.
                             # We are assuming that this axis is eliminated from the
-                            # axes of the output array. So, the metadata will only be keep
-                            # in the reduction descriptor object which is indexed by the
-                            # var_ind_name.name
+                            # axes of the output array. Thus, the metadata can only
+                            # be propagated to and from the reduction descriptor
+                            # which is indexed by the string ind_name.
+                            if isinstance(expr, Einsum):
+                                breakpoint()
                             self.record_equation(lhs,
-                                self.get_var_for_axis(expr, var_ind_name.name))
+                                self.get_var_for_axis(expr, ind_name))
 
-                        elif BINDING_NAME_RESERVED_PATTERN.fullmatch(var_ind_name.name):
+                        elif BINDING_NAME_RESERVED_PATTERN.fullmatch(ind_name):
                             # This means that we had an index of index.
                             # So, the metadata propagation with this index is data
                             # dependent.
@@ -331,28 +336,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                             pass
                             #warning("Variable does not match an index pattern. It will
                             #be ignored for metadata propagation.")
-
-                    # We need to add an equation if the index name is the only variable
-                    # for that axis. This includes if there is scaled indexing.
-                    for ind_name in variables_used:
-                        breakpoint()
-                        lhs: str = self.get_var_for_axis(expr.bindings[vname],
-                                                         axis_ind)
-                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(ind_name)
-                        if matched_pattern:
-                            # matched with an axis index of the output.
-                            self.record_equation(lhs, self.get_var_for_axis(expr,
-                                                  int(matched_pattern.group("index"))))
-                        elif ind_name in expr.var_to_reduction_descr.keys():
-                            # matched with a reduction axis.
-                            # We are assuming that this axis is eliminated from the
-                            # axes of the output array. So, the metadata will only be keep
-                            # in the reduction descriptor object which is indexed by the
-                            # var_ind_name.name
-                            self.record_equation(lhs,
-                                self.get_var_for_axis(expr, ind_name))
-
-
         return
 
     def map_stack(self, expr: Stack) -> None:
@@ -361,6 +344,11 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         and their corresponding axis in *expr*. No equation is added for the
         newly created axis i.e. :attr:`pytato.array.Stack.axis`.
         """
+        for ary in expr.arrays:
+            self.rec(ary)
+
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
         raise NotImplementedError
         for ary in expr.arrays:
             self.rec(ary)
@@ -389,9 +377,11 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         added for the concatenated axis i.e.
         :attr:`pytato.array.Concatenate.axis`.
         """
-        raise NotImplementedError
         for ary in expr.arrays:
             self.rec(ary)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
+        raise NotImplementedError
 
         for ary in expr.arrays:
             assert ary.ndim == expr.ndim
@@ -410,8 +400,11 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         its corresponding axis in *expr* as specified by
         :attr:`pytato.array.AxisPermutation.axis_permutation`.
         """
-        raise NotImplementedError
+
         self.rec(expr.array)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
+        raise NotImplementedError
 
         assert expr.ndim == expr.array.ndim
 
@@ -429,8 +422,10 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         sliced axis is one which goes along the entire length of the axis with
         a positive unit stride.
         """
-        raise NotImplementedError
         self.rec(expr.array)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
+        raise NotImplementedError
 
         i_out_axis = 0
 
@@ -462,6 +457,9 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         indices adds an equality equation for each non-broadcasted axis of an
         indexing array to its corresponding axis in *expr*.
         """
+        self.rec(expr.array)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
         raise NotImplementedError
         from pytato.utils import get_shape_after_broadcasting, partition
 
@@ -550,6 +548,9 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         output and so no constraints are enforced except when the
         :class:`pytato.Reshape` has come from a :func:`pytato.expand_dims`.
         """
+        self.rec(expr.array)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
         raise NotImplementedError
         from pytato.tags import ExpandedDimsReshape
 
@@ -577,6 +578,10 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         :func:`pytato.einsum` thereby having the same the
         :class:`~pytato.array.EinsumAxisDescriptor`.
         """
+        for arg in expr.args:
+            self.rec(arg)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+        return
         raise NotImplementedError
         from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
 
@@ -599,7 +604,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                     descr_to_var[descr] = in_tag_var
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        raise NotImplementedError
         for _, subexpr in sorted(expr._data.items()):
             self.rec(subexpr)
 
@@ -607,7 +611,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         """
         Does not add any equations.
         """
-        raise NotImplementedError
         for _, subexpr in sorted(expr.bindings.items()):
             if isinstance(subexpr, Array):
                 self.rec(subexpr)
@@ -617,7 +620,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         # high level ops, but that's quite involved and probably not worth it.
 
     def map_named_array(self, expr: NamedArray) -> None:
-        raise NotImplementedError
         self.rec(expr._container)
 
     def map_distributed_send_ref_holder(self,
@@ -630,7 +632,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         equations are added between each axis of *expr* and its corresponding
         axis in the pass-through data.
         """
-        raise NotImplementedError
         self.rec(expr.passthrough_data)
         self.rec(expr.send.data)
         for idim in range(expr.ndim):
@@ -670,7 +671,8 @@ class AxisTagAttacher(CopyMapper):
                  _function_cache:
                     TransformMapperCache[FunctionDefinition] | None = None):
         super().__init__(_cache=_cache, _function_cache=_function_cache)
-        self.axis_to_tags: Mapping[tuple[Array, int | str], Collection[Tag]] = axis_to_tags
+        self.axis_to_tags: Mapping[tuple[Array, int | str],
+                                   Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
     def _attach_tags(self, expr: Array, rec_expr: Array) -> Array:
@@ -699,11 +701,11 @@ class AxisTagAttacher(CopyMapper):
 
             if isinstance(expr, IndexLambda):
                 assert isinstance(result, IndexLambda)
-                if expr_copy.var_to_reduction_descr:
+                if result.var_to_reduction_descr:
                     # This is a reduction operation.
                     # We need to find the axes that are reduced over
                     # and update the tag/tag them appropriately.
-                    for redn_var in expr.var_to_reduction_descr.keys():
+                    for redn_var in expr.var_to_reduction_descr:
                         result = result.with_tagged_reduction(
                             redn_var,
                             self.axis_to_tags.get((expr, redn_var), [])
@@ -774,23 +776,8 @@ def unify_axes_tags(
 
     # First we will convert the expression to a series of IndexLambda operations.
 
-    from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin, to_index_lambda
-    from pytato.transform import TransformMapper
-    from pytato.diagnostic import CannotBeLoweredToIndexLambda
-    mapped_expr = to_index_lambda(expr)
+    mapped_expr = expr
 
-    class MyIndexMapper(TransformMapper, ToIndexLambdaMixin):
-        def handle_unsupported_array(self, expr: Any) -> Any:
-            raise CannotBeLoweredToIndexLambda(type(expr))
-
-        def map_placeholder(self, expr: Placeholder) -> Placeholder:
-            return expr
-
-
-    mymapper = MyIndexMapper()
-    mapped_expr = mymapper(expr)
-
-    breakpoint()
     equations_collector(mapped_expr)
 
     # start BFS traversal with the known tags as the sources.
@@ -821,9 +808,8 @@ def unify_axes_tags(
     for (ary, ax), ax_var in equations_collector.axis_to_var.items():
         # Reduction axes do not follow AxisIgnoredForPropagation.
         # They cannot propagate the information to descendant of the array anyway.
-        if isinstance(ax, int):
-            if ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag):
-                ignored_vars.update({ax_var})
+        if isinstance(ax, int) and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag):  # noqa
+            ignored_vars.update({ax_var})
 
     for tag, var in equations_collector.known_tag_to_var.items():
         reachable_nodes = get_reachable_nodes(propagation_graph, var,
