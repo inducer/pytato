@@ -46,7 +46,6 @@ from typing import (
     ParamSpec,
     TypeAlias,
     TypeVar,
-    cast,
 )
 
 from bidict import bidict
@@ -68,7 +67,6 @@ from pytato.array import (
     IndexLambda,
     InputArgumentBase,
     NamedArray,
-    NormalizedSlice,
     Reshape,
     Stack,
 )
@@ -80,7 +78,6 @@ from pytato.scalar_expr import (
 )
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
 from pytato.transform.lower_to_index_lambda import to_index_lambda
-from pytato.utils import are_shape_components_equal, are_shapes_equal
 
 
 logger = logging.getLogger(__name__)
@@ -347,27 +344,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
             self.rec(ary)
 
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-        for ary in expr.arrays:
-            self.rec(ary)
-
-        for iaxis in range(expr.ndim):
-            for ary in expr.arrays:
-                if iaxis < expr.axis:
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
-                elif iaxis == expr.axis:
-                    pass
-                elif iaxis > expr.axis:
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis-1),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
-                else:
-                    raise AssertionError
 
     def map_concatenate(self, expr: Concatenate) -> None:
         """
@@ -379,18 +355,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         for ary in expr.arrays:
             self.rec(ary)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-
-        for ary in expr.arrays:
-            assert ary.ndim == expr.ndim
-            for iaxis in range(expr.ndim):
-                if iaxis != expr.axis:
-                    # non-concatenated axes share the dimensions.
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> None:
@@ -402,17 +366,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
 
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-
-        assert expr.ndim == expr.array.ndim
-
-        for out_axis in range(expr.ndim):
-            in_axis = expr.axis_permutation[out_axis]
-            self.record_equation(
-                self.get_var_for_axis(expr, out_axis),
-                self.get_var_for_axis(expr.array, in_axis)
-            )
 
     def map_basic_index(self, expr: BasicIndex) -> None:
         """
@@ -423,29 +376,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         """
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-
-        i_out_axis = 0
-
-        assert len(expr.indices) == expr.array.ndim
-
-        for i_in_axis, idx in enumerate(expr.indices):
-            if isinstance(idx, int):
-                pass
-            else:
-                assert isinstance(idx, NormalizedSlice)
-                if (idx.step == 1
-                        and are_shape_components_equal(idx.start, 0)
-                        and are_shape_components_equal(idx.stop,
-                                                       expr.array.shape[i_in_axis])):
-
-                    self.record_equation(
-                        self.get_var_for_axis(expr.array, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-
-                i_out_axis += 1
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
@@ -459,87 +389,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
         return
-        raise NotImplementedError
-        from pytato.utils import get_shape_after_broadcasting, partition
-
-        self.rec(expr.array)
-        for idx in expr.indices:
-            if isinstance(idx, Array):
-                self.rec(idx)
-
-        i_adv_indices, i_basic_indices = partition(
-            lambda idx: isinstance(expr.indices[idx], NormalizedSlice),
-            range(len(expr.indices)))
-        npre_advanced_basic_indices = len([i_idx
-                                           for i_idx in i_basic_indices
-                                           if i_idx < i_adv_indices[0]])
-        npost_advanced_basic_indices = len([i_idx
-                                            for i_idx in i_basic_indices
-                                            if i_idx > i_adv_indices[-1]])
-
-        indirection_arrays: list[Array] = cast("list[Array]",
-                                               [expr.indices[i_idx]
-                                                for i_idx in i_adv_indices
-                                                if isinstance(expr.indices[i_idx],
-                                                           Array)
-                                                ])
-
-        assert are_shapes_equal(
-            get_shape_after_broadcasting(indirection_arrays),
-            expr.shape[
-                npre_advanced_basic_indices:expr.ndim-npost_advanced_basic_indices])
-
-        # {{{ add equations from indirection arrays with the output
-
-        for subexpr in indirection_arrays:
-            for i_in_axis, i_out_axis in zip(
-                    range(subexpr.ndim),
-                    range(expr.ndim
-                          - npost_advanced_basic_indices
-                          - subexpr.ndim,
-                          expr.ndim-npost_advanced_basic_indices),
-                    strict=True):
-                in_dim = subexpr.shape[i_in_axis]
-                out_dim = expr.shape[i_out_axis]
-                if are_shape_components_equal(in_dim, out_dim):
-                    self.record_equation(
-                        self.get_var_for_axis(subexpr, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis))
-                else:
-                    # broadcasted axes, cannot belong to the same
-                    # discretization entity.
-                    assert are_shape_components_equal(in_dim, 1)
-        # }}}
-
-        # {{{ add equations from slices in indexed array's axes to output axes
-
-        for i_in_axis, idx in enumerate(expr.indices[:npre_advanced_basic_indices]):
-            assert isinstance(idx, NormalizedSlice)
-            if (idx.step == 1
-                    and are_shape_components_equal(idx.start, 0)
-                    and are_shape_components_equal(idx.stop,
-                                                   expr.array.shape[i_in_axis])):
-                assert are_shape_components_equal(expr.shape[i_in_axis],
-                                                  expr.array.shape[i_in_axis])
-                self.record_equation(
-                    self.get_var_for_axis(expr.array, i_in_axis),
-                    self.get_var_for_axis(expr, i_in_axis))
-
-        for i, idx in enumerate(
-                expr.indices[expr.array.ndim-npost_advanced_basic_indices:]):
-            i_in_axis = i + (expr.array.ndim - npost_advanced_basic_indices)
-            i_out_axis = i + (expr.ndim - npost_advanced_basic_indices)
-            assert isinstance(idx, NormalizedSlice)
-            if (idx.step == 1
-                    and are_shape_components_equal(idx.start, 0)
-                    and are_shape_components_equal(idx.stop,
-                                                   expr.array.shape[i_in_axis])):
-                assert are_shape_components_equal(expr.shape[i_out_axis],
-                                                  expr.array.shape[i_in_axis])
-                self.record_equation(
-                    self.get_var_for_axis(expr.array, i_in_axis),
-                    self.get_var_for_axis(expr, i_out_axis))
-        # }}}
 
     def map_reshape(self, expr: Reshape) -> None:
         """
@@ -549,26 +398,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         """
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-        from pytato.tags import ExpandedDimsReshape
-
-        self.rec(expr.array)
-
-        expand_dims_tags = expr.tags_of_type(ExpandedDimsReshape)
-
-        if expand_dims_tags:
-            expand_dims_tag, = expand_dims_tags
-            i_in_axis = 0
-            for i_out_axis in range(expr.ndim):
-                if i_out_axis not in expand_dims_tag.new_dims:
-                    self.record_equation(
-                        self.get_var_for_axis(expr.array, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-                    i_in_axis += 1
-
-            assert i_in_axis == expr.array.ndim
 
     def map_einsum(self, expr: Einsum) -> None:
         """
@@ -580,27 +409,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         for arg in expr.args:
             self.rec(arg)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
-        raise NotImplementedError
-        from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
-
-        for arg in expr.args:
-            self.rec(arg)
-
-        descr_to_var: dict[EinsumAxisDescriptor, str] = {}
-        for iaxis in range(expr.ndim):
-            descr_to_var[EinsumElementwiseAxis(iaxis)] = self.get_var_for_axis(expr,
-                                                                               iaxis)
-
-        for access_descrs, arg in zip(expr.access_descriptors,
-                                      expr.args, strict=True):
-            for iarg_axis, descr in enumerate(access_descrs):
-                in_tag_var = self.get_var_for_axis(arg, iarg_axis)
-
-                if descr in descr_to_var:
-                    self.record_equation(descr_to_var[descr], in_tag_var)
-                else:
-                    descr_to_var[descr] = in_tag_var
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for _, subexpr in sorted(expr._data.items()):
@@ -645,7 +453,7 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         :class:`pytato.DistributedRecv` does not have any operands and so no
         more equations are deduced.
         """
-        raise NotImplementedError
+        pass
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
