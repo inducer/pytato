@@ -211,7 +211,8 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         self.var_name_gen.add_names(["c", ""])
 
         # axis_to_var: mapping from (array, iaxis) to the variable to be
-        # used for unification.
+        # used for unification. If isinstance(iaxis, str) then we are dealing
+        # with a reduction axis and so that string will be uniquely defined.
         self.axis_to_var: bidict[tuple[Array, int | str], str] = bidict()
         self.known_tag_to_var: dict[Tag, str] = {}
 
@@ -282,11 +283,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
     map_size_param = _map_input_base
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
-        """
-        Equality conditions are added between an axis of the operands which is indexed
-        by a :class:`~pymbolic.Variable` which has a name that follows the reserved
-        iname format, "_[0-9]+", and the axis of the output specified by the iname.
-        """
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
@@ -324,88 +320,44 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                                 self.get_var_for_axis(expr, ind_name))
 
                         elif BINDING_NAME_RESERVED_PATTERN.fullmatch(ind_name):
-                            # This means that we had an index of index.
-                            # So, the metadata propagation with this index is data
-                            # dependent.
-                            pass
+                            raise AssertionError(f"Expression: {idx_lambda.expr}" +
+                            "indexes into an array using a binding name.")
                         else:
-                            pass
-                            #warning("Variable does not match an index pattern. It will
-                            #be ignored for metadata propagation.")
+                            raise AssertionError(f"Expression: {idx_lambda.expr}" +
+                            "indexes into an array with an unknown variable name.")
         return
 
     def map_stack(self, expr: Stack) -> None:
-        """
-        Records an equality equation between the axes of arrays being stacked
-        and their corresponding axis in *expr*. No equation is added for the
-        newly created axis i.e. :attr:`pytato.array.Stack.axis`.
-        """
         for ary in expr.arrays:
             self.rec(ary)
 
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_concatenate(self, expr: Concatenate) -> None:
-        """
-        Records an equality equation between the axes of arrays being
-        concatenated and their corresponding axis in *expr*. No equation is
-        added for the concatenated axis i.e.
-        :attr:`pytato.array.Concatenate.axis`.
-        """
         for ary in expr.arrays:
             self.rec(ary)
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> None:
-        """
-        Records an equality equation for every axis of *expr*\'s operand and
-        its corresponding axis in *expr* as specified by
-        :attr:`pytato.array.AxisPermutation.axis_permutation`.
-        """
-
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_basic_index(self, expr: BasicIndex) -> None:
-        """
-        Records an equality equation for each trivially sliced axis of the
-        array being indexed and its corresponding axis in *expr*. A trivially
-        sliced axis is one which goes along the entire length of the axis with
-        a positive unit stride.
-        """
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
                                       ) -> None:
-        """
-        For sliced indices adds all the equations as prescribed by
-        :meth:`AxesTagsEquationCollector.map_basic_index`. For the advanced
-        indices adds an equality equation for each non-broadcasted axis of an
-        indexing array to its corresponding axis in *expr*.
-        """
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
-        return
 
     def map_reshape(self, expr: Reshape) -> None:
-        """
-        Reshaping generally does not preserve the axis between its input and
-        output and so no constraints are enforced except when the
-        :class:`pytato.Reshape` has come from a :func:`pytato.expand_dims`.
-        """
         self.rec(expr.array)
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_einsum(self, expr: Einsum) -> None:
-        """
-        Equality conditions are added between axes of the operands and outputs
-        that have the same index when instantiated through
-        :func:`pytato.einsum` thereby having the same the
-        :class:`~pytato.array.EinsumAxisDescriptor`.
-        """
         for arg in expr.args:
             self.rec(arg)
         self.add_equations_using_index_lambda_version_of_expr(expr)
