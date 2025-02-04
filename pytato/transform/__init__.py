@@ -38,6 +38,7 @@ from typing import (
     TypeAlias,
     TypeVar,
     cast,
+    overload,
 )
 
 import numpy as np
@@ -262,10 +263,36 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
         assert method is not None
         return method(expr, *args, **kwargs)
 
-    def __call__(self,
-                 expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+    @overload
+    def __call__(
+            self,
+            expr: ArrayOrNames,
+            *args: P.args,
+            **kwargs: P.kwargs) -> ResultT:
+        ...
+
+    @overload
+    def __call__(
+            self,
+            expr: FunctionDefinition,
+            *args: P.args,
+            **kwargs: P.kwargs) -> FunctionResultT:
+        ...
+
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            *args: P.args,
+            **kwargs: P.kwargs) -> ResultT | FunctionResultT:
         """Handle the mapping of *expr*."""
-        return self.rec(expr, *args, **kwargs)
+        if isinstance(expr, ArrayOrNames):
+            return self.rec(expr, *args, **kwargs)
+        elif isinstance(expr, FunctionDefinition):
+            return self.rec_function_definition(expr, *args, **kwargs)
+        else:
+            raise ForeignObjectError(
+                f"{type(self).__name__} encountered invalid foreign "
+                f"object: {expr!r}") from None
 
 # }}}
 
@@ -1847,7 +1874,7 @@ class UsersCollector(CachedMapper[None, Never, []]):
         self.node_to_users: dict[ArrayOrNames,
                 set[DistributedSend | ArrayOrNames]] = {}
 
-    def __call__(self, expr: ArrayOrNames) -> None:
+    def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
         # Root node has no predecessor
         self.node_to_users[expr] = set()
         self.rec(expr)
