@@ -443,7 +443,7 @@ class ToIndexLambdaMixin:
     def map_roll(self, expr: Roll) -> IndexLambda:
         from pytato.utils import dim_to_index_lambda_components
 
-        index_expr: prim.Expression = prim.Variable("_in0")
+        index_expr: prim.ExpressionNode = prim.Variable("_in0")
         indices: list[ArithmeticExpression] = [
             prim.Variable(f"_{d}") for d in range(expr.ndim)]
         axis = expr.axis

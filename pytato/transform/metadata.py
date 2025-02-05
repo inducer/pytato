@@ -13,6 +13,8 @@
 """
 from __future__ import annotations
 
+from pytato.utils import are_shape_components_equal
+
 
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
@@ -51,6 +53,7 @@ from typing import (
 from bidict import bidict
 
 import pymbolic.primitives as prim
+from pymbolic.typing import Expression
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 
@@ -73,7 +76,7 @@ from pytato.array import (
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
 from pytato.scalar_expr import (
-    IDX_LAMBDA_RESERVED_INDEX_PATTERN,
+    IDX_LAMBDA_AXIS_INDEX,
     CombineMapper,
 )
 from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
@@ -102,55 +105,41 @@ BINDING_NAME_RESERVED_PATTERN = re.compile(r"^(_in?(0|([1-9][0-9]*)))$")
 
 
 class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
-                                               set[tuple[prim.Expression, ...]]],
+                                               set[tuple[Expression, ...]]],
                                                       []]):
     """
     Return all the subscript expressions used by a variable specified by BindingName.
     Ex:
-    _in1[_0,_1] would result in an dictionary entry {"_in1": ("_0", "_1")}.
+    ``_in1[_0,_1]`` would result in an dictionary entry ``{"_in1": ("_0", "_1")}``.
     """
     def combine(self,
                 values: Iterable[dict[BindingName,
-                                         set[tuple[prim.Expression, ...]]]]) \
-                        -> dict[BindingName, set[tuple[prim.Expression, ...]]]:
-        out: dict[BindingName, set[tuple[prim.Expression, ...]]] = {}
+                                         set[tuple[Expression, ...]]]]) \
+                        -> dict[BindingName, set[tuple[Expression, ...]]]:
+        out: dict[BindingName, set[tuple[Expression, ...]]] = {}
         import operator
         from functools import reduce
         return reduce(operator.or_, values, out)
 
     def map_subscript(self, expr: prim.Subscript) -> dict[BindingName,
-                                                    set[tuple[prim.Expression, ...]]]:
+                                                    set[tuple[Expression, ...]]]:
         """
         Record the indexing expression if the Subscript expression has a prim.Variable
         as its aggregate.
         """
 
+        base_result = super().map_subscript(expr)
         if isinstance(expr.aggregate, prim.Variable):
-            name = expr.aggregate.name
-            base: dict[BindingName,
-                       set[tuple[prim.Expression, ...]]] = {name: {expr.index_tuple}}
+            return {expr.aggregate.name: {expr.index_tuple}, **base_result}
+        return base_result
 
-            """
-            for ind, subexpr in enumerate(expr.index_tuple):
-                sub = self.rec(subexpr)
-                if sub:
-                    # we have nested subscripts.
-                    for key, val in sub.items():
-                        # The new key will be comma separated.
-                        newkey = name + "," + str(ind) + "," + key
-                        base.update({newkey: val})
-            """
-            return self.combine([base] + [self.rec(subexpr) for
-                                          subexpr in expr.index_tuple])
-        return {}
-
-    def map_algebraic_leaf(self, expr: prim.Expression) -> dict[BindingName,
-                                                    set[tuple[prim.Expression, ...]]]:
+    def map_algebraic_leaf(self, expr: Expression) -> dict[BindingName,
+                                                    set[tuple[Expression, ...]]]:
 
         return {}
 
     def map_constant(self, expr: object) -> dict[BindingName,
-                                                    set[tuple[prim.Expression, ...]]]:
+                                                    set[tuple[Expression, ...]]]:
         return {}
 # }}}
 
@@ -160,8 +149,8 @@ class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
 class AxesTagsEquationCollector(Mapper[None, Never, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
-    operation. This mapper implements a default set of propagation rules,
-    refer to documentation of mapper methods for their propagation semantics.
+    operation. An equation is recorded for "straight-through" axes in expressions,
+    i.e. ones that pass through an operation unmodified.
 
     .. attribute:: tag_t
 
@@ -196,7 +185,7 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
 
     .. note::
 
-        Users are encouraged to derive this mapper to implement domain-specific
+        Users may subclass this mapper to implement domain-specific
         axis tags propagation semantics.
     """
     def __init__(self, tag_t: type[Tag]) -> None:
@@ -211,7 +200,7 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         self.var_name_gen.add_names(["c", ""])
 
         # axis_to_var: mapping from (array, iaxis) to the variable to be
-        # used for unification. If isinstance(iaxis, str) then we are dealing
+        # used for unification. If isinstance(iaxis, str), then we are dealing
         # with a reduction axis and so that string will be uniquely defined.
         self.axis_to_var: bidict[tuple[Array, int | str], str] = bidict()
         self.known_tag_to_var: dict[Tag, str] = {}
@@ -290,9 +279,10 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
 
     def add_equations_using_index_lambda_version_of_expr(self, expr: Array) -> None:
         """
-        Equality conditions are added between an axis of the operands which is indexed
-        by a :class:`~pymbolic.Variable` which has a name that follows the reserved
-        iname format, "_[0-9]+", and the axis of the output specified by the iname.
+        Equations are added between an axis of the bindings of *expr* and an axis of
+        *expr* if the binding's axis is indexed by by a :class:`~pymbolic.Variable`
+        which has a name that follows the reserved iname format, "_[0-9]+", and the axis
+        of the output specified by the iname.
         """
         idx_lambda = expr if isinstance(expr, IndexLambda) else to_index_lambda(expr)
 
@@ -300,18 +290,23 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
 
         for vname, set_of_ind_tuple in index_expr_used.items():
             for ind_tuple in set_of_ind_tuple:
-                for axis_ind, var_ind_name in enumerate(ind_tuple):
+                for iaxis, var_ind_name in enumerate(ind_tuple):
                     if isinstance(var_ind_name, prim.Variable):
                         lhs: str = self.get_var_for_axis(idx_lambda.bindings[vname],
-                                                     axis_ind)
+                                                     iaxis)
                         ind_name: str = var_ind_name.name
-                        matched_pattern = IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(ind_name)  # noqa
+                        matched_pattern = IDX_LAMBDA_AXIS_INDEX.fullmatch(ind_name)
                         if matched_pattern:
-                            # matched with an axis index.
-                            self.record_equation(lhs, self.get_var_for_axis(expr,
-                                                  int(matched_pattern.group("index"))))
+                            idx_lambda_axis_index = int(matched_pattern.group("index"))
+                            if are_shape_components_equal(
+                                    idx_lambda.shape[idx_lambda_axis_index],
+                                    idx_lambda.bindings[vname].shape[iaxis]):
+                                self.record_equation(
+                                    lhs,
+                                    self.get_var_for_axis(expr, idx_lambda_axis_index))
+
                         elif ind_name in idx_lambda.var_to_reduction_descr:
-                            # matched with a reduction axis.
+                            # Matched with a reduction axis.
                             # We are assuming that this axis is eliminated from the
                             # axes of the output array. Thus, the metadata can only
                             # be propagated to and from the reduction descriptor
@@ -319,13 +314,8 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
                             self.record_equation(lhs,
                                 self.get_var_for_axis(expr, ind_name))
 
-                        elif BINDING_NAME_RESERVED_PATTERN.fullmatch(ind_name):
-                            raise AssertionError(f"Expression: {idx_lambda.expr}" +
-                            "indexes into an array using a binding name.")
-                        else:
-                            raise AssertionError(f"Expression: {idx_lambda.expr}" +
-                            "indexes into an array with an unknown variable name.")
-        return
+                        # Other cases are considered "complicated" and we won't
+                        # handle them here.
 
     def map_stack(self, expr: Stack) -> None:
         for ary in expr.arrays:
@@ -555,16 +545,19 @@ def unify_axes_tags(
         equations_collector.equations
     )
 
-    ignored_vars = set({
+    ignored_vars = {
         tag_var for tag, tag_var in equations_collector.known_tag_to_var.items()
         if isinstance(tag, AxisIgnoredForPropagationTag)
-    })
+    } | {
+        ax_var
+        for (ary, ax), ax_var in equations_collector.axis_to_var.items()
 
-    for (ary, ax), ax_var in equations_collector.axis_to_var.items():
-        # Reduction axes do not follow AxisIgnoredForPropagation.
+        # FIXME? Reduction axes ignore AxisIgnoredForPropagation.
         # They cannot propagate the information to descendant of the array anyway.
-        if isinstance(ax, int) and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag):  # noqa
-            ignored_vars.update({ax_var})
+        if isinstance(ax, int)
+
+        and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag)
+    }
 
     for tag, var in equations_collector.known_tag_to_var.items():
         reachable_nodes = get_reachable_nodes(propagation_graph, var,

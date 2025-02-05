@@ -1301,29 +1301,29 @@ def test_reserved_binding_name_patterns():
 
 def test_reserved_scalar_iname_patterns():
     from pytato.scalar_expr import (
-        IDX_LAMBDA_RE,
-        IDX_LAMBDA_RESERVED_INDEX_PATTERN,
+        IDX_LAMBDA_AXIS_INDEX,
+        IDX_LAMBDA_REDUCTION_AXIS_INDEX,
     )
 
     test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101", "_r"]
 
-    assert IDX_LAMBDA_RE.fullmatch(test_strings[0])
-    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[0])
+    assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[0])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[0])
 
-    for pat in [IDX_LAMBDA_RESERVED_INDEX_PATTERN, IDX_LAMBDA_RE]:
+    for pat in [IDX_LAMBDA_AXIS_INDEX, IDX_LAMBDA_REDUCTION_AXIS_INDEX]:
         assert not pat.fullmatch(test_strings[1])
         assert not pat.fullmatch(test_strings[2])
         assert not pat.fullmatch(test_strings[3])
 
-    assert IDX_LAMBDA_RE.fullmatch(test_strings[4])
-    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[4])
+    assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[4])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[4])
 
     for i in range(5, len(test_strings)-1):
-        assert IDX_LAMBDA_RE.fullmatch(test_strings[i])
-        assert IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[i])
 
-    assert not IDX_LAMBDA_RE.fullmatch(test_strings[-1])
-    assert not IDX_LAMBDA_RESERVED_INDEX_PATTERN.fullmatch(test_strings[-1])
+    assert not IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[-1])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[-1])
 
 
 def test_cached_walk_mapper_with_extra_args():
