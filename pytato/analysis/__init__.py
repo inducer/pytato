@@ -49,7 +49,7 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper, P
+from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper
 
 
 if TYPE_CHECKING:
@@ -615,20 +615,18 @@ class TagCountMapper(CombineMapper[int, Never]):
     def combine(self, *args: int) -> int:
         return sum(args)
 
-    def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> int:
-        key = self._cache.get_key(expr, *args, **kwargs)
+    def rec(self, expr: ArrayOrNames) -> int:
+        key = self._cache.get_key(expr)
         try:
-            return self._cache.retrieve((expr, args, kwargs), key=key)
+            return self._cache.retrieve(expr, key=key)
         except KeyError:
-            s = super().rec(expr, *args, **kwargs)
+            s = super().rec(expr)
             if isinstance(expr, Array) and self._tags <= expr.tags:
                 result = 1 + s
             else:
                 result = 0 + s
 
-            self._cache.add((expr, args, kwargs),
-                0,
-                key=key)
+            self._cache.add(expr, 0, key=key)
             return result
 
 
