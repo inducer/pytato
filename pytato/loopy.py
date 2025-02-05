@@ -159,9 +159,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
 
 @array_dataclass()
-# https://github.com/python/mypy/issues/18115
-# https://github.com/python/mypy/issues/17623
-class LoopyCallResult(NamedArray):   # type: ignore[override]
+class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
