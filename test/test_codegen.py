@@ -914,11 +914,11 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     m_in = np.random.randint(2, 20)
     n_in = np.random.randint(2, 20)
 
-    def _get_a_shape(_m, _n):
-        return (2*_m+1, 3*_n+7)
+    def _get_a_shape(m_, n_):
+        return (2*m_+1, 3*n_+7)
 
-    def _get_x_shape(_m, _n):
-        return (3*_n+7, )
+    def _get_x_shape(_m, n_):
+        return (3*n_+7, )
 
     A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
@@ -1568,8 +1568,8 @@ def test_regression_reduction_in_conditional(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    def kernel(usr_np, _pt_data_9):
-        pt_tmp_53 = _pt_data_9 @ _pt_data_9
+    def kernel(usr_np, pt_data_9):
+        pt_tmp_53 = pt_data_9 @ pt_data_9
         pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
         pt_tmp_27 = usr_np.sum(pt_tmp_42)
         pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
@@ -1577,7 +1577,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
 
     def get_np_input_args():
         return {
-            "_pt_data_9": np.ones((2, 2)),
+            "pt_data_9": np.ones((2, 2)),
         }
 
     np_inputs = get_np_input_args()

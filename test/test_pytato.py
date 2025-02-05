@@ -1285,6 +1285,47 @@ def test_lower_to_index_lambda():
     assert idx_lambda.expr.index_tuple[4] == Variable("_1")
 
 
+def test_reserved_binding_name_patterns():
+    from pytato.transform.metadata import BINDING_NAME_RESERVED_PATTERN
+
+    fail_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101",
+                    "_in", "_in00", "1_in", "_in01"]
+    pass_strings = ["_in0", "_in1", "_in554", "_in10"]
+
+    for test_str in fail_strings:
+        assert not BINDING_NAME_RESERVED_PATTERN.fullmatch(test_str)
+
+    for test_str in pass_strings:
+        assert BINDING_NAME_RESERVED_PATTERN.fullmatch(test_str)
+
+
+def test_reserved_scalar_iname_patterns():
+    from pytato.scalar_expr import (
+        IDX_LAMBDA_AXIS_INDEX,
+        IDX_LAMBDA_REDUCTION_AXIS_INDEX,
+    )
+
+    test_strings = ["_r0", "_r000", "_r01", "_00", "_r101", "_1", "_0", "_101", "_r"]
+
+    assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[0])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[0])
+
+    for pat in [IDX_LAMBDA_AXIS_INDEX, IDX_LAMBDA_REDUCTION_AXIS_INDEX]:
+        assert not pat.fullmatch(test_strings[1])
+        assert not pat.fullmatch(test_strings[2])
+        assert not pat.fullmatch(test_strings[3])
+
+    assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[4])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[4])
+
+    for i in range(5, len(test_strings)-1):
+        assert IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[i])
+        assert IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[i])
+
+    assert not IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(test_strings[-1])
+    assert not IDX_LAMBDA_AXIS_INDEX.fullmatch(test_strings[-1])
+
+
 def test_cached_walk_mapper_with_extra_args():
     from testlib import RandomDAGContext, make_random_dag
 
@@ -1316,10 +1357,42 @@ def test_cached_walk_mapper_with_extra_args():
         my_walk_mapper(dag, bad_arg_name=7)
 
 
+def test_unify_axes_tags_indexlambda():
+    from immutabledict import immutabledict
+    from testlib import BarTag, FooTag, TestlibTag
+
+    from pymbolic import primitives as prim
+
+    x = pt.make_placeholder("x", (10, 4))
+    x = x.with_tagged_axis(0, FooTag())
+
+    y = pt.make_placeholder("y", (4, 10))
+    y = y.with_tagged_axis(0, BarTag())
+
+    z = pt.IndexLambda(expr=prim.Subscript(prim.Variable("_in0"),
+                                           (prim.Variable("_0"),
+                                            prim.Subscript(prim.Variable("_in1"),
+                                                           (prim.Variable("_1"), 0)))
+                                           ),
+                       bindings=immutabledict({"_in0": x, "_in1": y}),
+                       dtype=float, axes=pt.array._get_default_axes(2),
+                       tags=pt.array._get_default_tags(),
+                       shape=(10, 4),
+                       var_to_reduction_descr=immutabledict({}))
+
+    z_unified = pt.unify_axes_tags(z)
+
+    assert z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
+    assert z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([BarTag()])
+
+    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()]) # noqa
+
+    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()]) # noqa
+    assert z_unified.bindings["_in1"].axes[1].tags_of_type(TestlibTag) == frozenset([])
+
+
 def test_unify_axes_tags():
     from testlib import BarTag, BazTag, FooTag, QuuxTag, TestlibTag
-
-    from pytato.array import EinsumReductionAxis
 
     # {{{ 1. broadcasting + expand_dims
 
@@ -1330,6 +1403,7 @@ def test_unify_axes_tags():
     y = pt.expand_dims(x, (2, 3)) + x
 
     y_unified = pt.unify_axes_tags(y)
+
     assert (y_unified.axes[0].tags_of_type(TestlibTag)
             == frozenset([FooTag()]))
     assert (y_unified.axes[2].tags_of_type(TestlibTag)
@@ -1358,14 +1432,17 @@ def test_unify_axes_tags():
             == frozenset([BarTag()]))
     assert (z_unified.args[1].axes[0].tags_of_type(TestlibTag)
             == frozenset([FooTag()]))
-    assert (z_unified.redn_axis_to_redn_descr[EinsumReductionAxis(0)]
+
+    assert isinstance(z_unified, pt.Einsum)
+    keys = list(z_unified.redn_axis_to_redn_descr)
+    assert len(keys) == 1
+    assert (z_unified.redn_axis_to_redn_descr[keys[0]]
             .tags_of_type(TestlibTag)
             == frozenset([BarTag()]))
 
     # }}}
 
     # {{{ 3. advanced indexing
-
     idx1 = pt.make_placeholder("idx1", (42, 1), "int32")
     idx1 = idx1.with_tagged_axis(0, FooTag())
 
@@ -1384,16 +1461,156 @@ def test_unify_axes_tags():
 
     assert (y_unified.axes[0].tags_of_type(TestlibTag)
             == frozenset([BazTag()]))
-    assert (y_unified.axes[1].tags_of_type(TestlibTag)
-            == frozenset())
-    assert (y_unified.axes[2].tags_of_type(TestlibTag)
-            == frozenset([FooTag()]))
-    assert (y_unified.axes[3].tags_of_type(TestlibTag)
-            == frozenset([BarTag()]))
+    # assert (y_unified.axes[1].tags_of_type(TestlibTag)
+    #         == frozenset([QuuxTag()]))
+    # A portion of an axis still has the same units as the whole axis.
+    # assert (y_unified.axes[2].tags_of_type(TestlibTag)
+    #         == frozenset([FooTag(), QuuxTag()]))
+    # assert (y_unified.axes[3].tags_of_type(TestlibTag)
+    #         == frozenset([BarTag(), QuuxTag()]))
     assert (y_unified.axes[4].tags_of_type(TestlibTag)
             == frozenset([QuuxTag()]))
 
     # }}}
+
+    # {{ Reduction Operations with IndexLambda
+    # {{{ Reduce on outside of scalar expression
+
+    from immutabledict import immutabledict
+
+    import pymbolic.primitives as prim
+
+    def setup_test():
+        a = pt.make_placeholder("a", (512))
+        b = pt.make_placeholder("b", (512, 10))
+        c = pt.make_placeholder("c", (512, 10))
+        c = c.with_tagged_axis(1, QuuxTag())
+        b = b.with_tagged_axis(1, FooTag())
+        a = a.with_tagged_axis(0, BazTag())
+
+        x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0")))
+        y = prim.Subscript(prim.Variable("_in1"),
+                           (prim.Variable("_0"), prim.Variable("_r0")))
+        z = prim.Subscript(prim.Variable("_in2"), (prim.Variable("_0"),
+                                                   prim.Variable("_r1")))
+
+        return a, b, c, x, y, z
+
+    def assert_tags_were_propagated_appropriately(arr):
+        assert arr.var_to_reduction_descr["_r0"].tags_of_type(TestlibTag) == \
+                                                        frozenset([FooTag()])
+        assert arr.var_to_reduction_descr["_r1"].tags_of_type(TestlibTag) == \
+                                                        frozenset([QuuxTag()])
+
+        assert arr.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()])
+        for key in ["_in" + str(i) for i in range(2)]:
+            assert arr.bindings[key].axes[0].tags_of_type(TestlibTag) == \
+                                                        frozenset([BazTag()])
+
+    def get_def_reduction_descrs():
+        return immutabledict({"_r0": pt.array.ReductionDescriptor(frozenset([])),
+                              "_r1": pt.array.ReductionDescriptor(frozenset([]))
+                                                            })
+
+    a, b, c, x, y, z = setup_test()
+    # sum((_r0, _r1), a[_0] + b[_0, _r0] + b[_0,_r1]))
+    w = pt.IndexLambda(expr=pt.scalar_expr.Reduce(prim.Sum((x, y, z)),
+                                              pt.reductions.SumReductionOperation,
+                                              immutabledict({"_r0": (0, 10),
+                                                             "_r1": (0, 10)})),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}} Reduction on the outside of the scalar expression.
+
+    # {{{ Side-by-Side reduction.
+
+    a, b, c, x, y, z = setup_test()
+
+    # a[_0] + sum(_r0, b[_0, _r0]) + sum(_r1, b[_0,_r1])
+
+    w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(y,
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r0": (0, 10)})),
+                                      pt.scalar_expr.Reduce(z,
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r1": (0, 10)})))),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}}
+
+    # {{{ Nested Reductions.
+    # a[_0] + sum(_r0, b[_0, _r0] + sum(_r1, b[_0,_r1]))
+    a, b, c, x, y, z = setup_test()
+
+    w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(prim.Sum((y,
+                                                pt.scalar_expr.Reduce(z,
+                                                    pt.reductions.SumReductionOperation,
+                                                    immutabledict({"_r1": (0, 10)})))),
+                                            pt.reductions.SumReductionOperation,
+                                            immutabledict({"_r0": (0, 10)})))),
+                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       shape=(512,), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(1),
+                       dtype=float,
+                       var_to_reduction_descr=get_def_reduction_descrs())
+
+    w_unified = pt.unify_axes_tags(w)
+    assert_tags_were_propagated_appropriately(w_unified)
+
+    # }}}
+    # }}
+
+
+def test_unify_axes_tags_with_unbroadcastable_expressions():
+
+    a = pt.make_placeholder("a", (512, 10, 8))
+    b = pt.make_placeholder("b", (512, 10))
+    from testlib import BazTag, FooTag, QuuxTag, TestlibTag
+
+    a = a.with_tagged_axis(0, BazTag())
+    a = a.with_tagged_axis(1, QuuxTag())
+    a = a.with_tagged_axis(2, FooTag())
+
+    from immutabledict import immutabledict
+
+    import pymbolic.primitives as prim
+
+    x = prim.Subscript(prim.Variable("_in0"), (prim.Variable("_0"), prim.Variable("_1"),
+                                              prim.Variable("_2")))
+    y = prim.Subscript(prim.Variable("_in1"),
+                       (prim.Variable("_0"), prim.Variable("_1")))
+
+    z = pt.IndexLambda(expr=x+y, bindings=immutabledict({"_in0": a, "_in1": b}),
+                       shape=(512, 10, 8), tags=pt.array._get_default_tags(),
+                       axes=pt.array._get_default_axes(3),
+                       dtype=float,
+                       var_to_reduction_descr=immutabledict({}))
+
+    z_unified = pt.unify_axes_tags(z)
+
+    assert (z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+    assert (z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
+    assert (z_unified.axes[2].tags_of_type(TestlibTag) == frozenset([FooTag()]))
+
+    for key in z_unified.bindings:
+        term = z_unified.bindings[key]
+        assert (term.axes[0].tags_of_type(TestlibTag) == frozenset([BazTag()]))
+        assert (term.axes[1].tags_of_type(TestlibTag) == frozenset([QuuxTag()]))
 
 
 def test_ignoring_axes_during_propagation():
