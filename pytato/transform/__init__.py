@@ -2035,6 +2035,8 @@ class MPMSMaterializerCache(
     """
     def __init__(
             self,
+            key_func: Callable[[ArrayOrNames], CacheKeyT],
+            result_key_func: Callable[[MPMSMaterializerAccumulator], CacheKeyT],
             err_on_collision: bool,
             err_on_no_op_duplication: bool) -> None:
         """
@@ -2045,18 +2047,11 @@ class MPMSMaterializerCache(
         :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
-        def key_func(expr: ArrayOrNames) -> ArrayOrNames:
-            return expr
-
         super().__init__(
             key_func,
             err_on_collision=err_on_collision)
 
         self.err_on_no_op_duplication = err_on_no_op_duplication
-
-        def result_key_func(result: MPMSMaterializerAccumulator) -> ArrayOrNames:
-            return result.expr
-
         self.get_result_key = result_key_func
 
         self._result_key_to_result: dict[
@@ -2156,6 +2151,8 @@ class MPMSMaterializer(CachedMapper[MPMSMaterializerAccumulator, Never, []]):
 
         if _cache is None:
             _cache = MPMSMaterializerCache(
+                key_func=self.get_cache_key,
+                result_key_func=self.get_result_cache_key,
                 err_on_collision=err_on_collision,
                 err_on_no_op_duplication=err_on_no_op_duplication)
 
@@ -2163,6 +2160,12 @@ class MPMSMaterializer(CachedMapper[MPMSMaterializerAccumulator, Never, []]):
         super().__init__(err_on_collision=err_on_collision, _cache=_cache)
 
         self.nsuccessors = nsuccessors
+
+    def get_cache_key(self, expr: ArrayOrNames) -> CacheKeyT:
+        return expr
+
+    def get_result_cache_key(self, result: MPMSMaterializerAccumulator) -> CacheKeyT:
+        return result.expr
 
     def _cache_add(
             self,
