@@ -407,12 +407,14 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
             ) -> CacheKeyT:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+        return \
+            (expr, *args, tuple(sorted(kwargs.items()))) if args or kwargs else expr
 
     def get_function_definition_cache_key(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> CacheKeyT:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+        return \
+            (expr, *args, tuple(sorted(kwargs.items()))) if args or kwargs else expr
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         inputs = self._cache.make_inputs(expr, *args, **kwargs)
