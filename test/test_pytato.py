@@ -1165,10 +1165,10 @@ def test_tagcountmapper():
     # get_num_nodes() returns an extra DictOfNamedArrays node
     assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
 
-    assert get_num_tags_of_type(dag, NonExistentTag()) == 0
-    assert get_num_tags_of_type(dag, frozenset((ExistentTag(),))) == 1
+    assert get_num_tags_of_type(dag, NonExistentTag) == 0
+    assert get_num_tags_of_type(dag, frozenset((ExistentTag,))) == 1
     assert get_num_tags_of_type(dag,
-        frozenset((ExistentTag(), NonExistentTag()))) == 0
+        frozenset((ExistentTag, NonExistentTag))) == 0
 
     a = pt.make_data_wrapper(np.arange(27))
     dag = a+a+a+a+a+a+a+a
