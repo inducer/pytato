@@ -31,7 +31,6 @@ from typing import TYPE_CHECKING, Any, Never
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Self
 
-import pytools
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -54,6 +53,8 @@ from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapp
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
+
+    import pytools
 
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
     from pytato.loopy import LoopyCall
@@ -601,16 +602,21 @@ def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
 
 class TagCountMapper(CombineMapper[int, Never]):
     """
-    Returns the number of nodes in a DAG that are tagged with all the tags in *tags*.
+    Returns the number of nodes in a DAG that are tagged with all the tag types in
+    *tag_types*.
     """
 
-    def __init__(self, tags: pytools.tag.Tag | Iterable[pytools.tag.Tag]) -> None:
+    def __init__(
+            self,
+            tag_types:
+                type[pytools.tag.Tag]
+                | Iterable[type[pytools.tag.Tag]]) -> None:
         super().__init__()
-        if isinstance(tags, pytools.tag.Tag):
-            tags = frozenset((tags,))
-        elif not isinstance(tags, frozenset):
-            tags = frozenset(tags)
-        self._tags = tags
+        if isinstance(tag_types, type):
+            tag_types = frozenset((tag_types,))
+        elif not isinstance(tag_types, frozenset):
+            tag_types = frozenset(tag_types)
+        self._tag_types = tag_types
 
     def combine(self, *args: int) -> int:
         return sum(args)
@@ -621,7 +627,11 @@ class TagCountMapper(CombineMapper[int, Never]):
             return self._cache.retrieve(expr, key=key)
         except KeyError:
             s = super().rec(expr)
-            if isinstance(expr, Array) and self._tags <= expr.tags:
+            if (
+                    isinstance(expr, Array)
+                    and (
+                        self._tag_types
+                        <= frozenset(type(tag) for tag in expr.tags))):
                 result = 1 + s
             else:
                 result = 0 + s
@@ -632,11 +642,11 @@ class TagCountMapper(CombineMapper[int, Never]):
 
 def get_num_tags_of_type(
         outputs: Array | DictOfNamedArrays,
-        tags: pytools.tag.Tag | Iterable[pytools.tag.Tag]) -> int:
+        tag_types: type[pytools.tag.Tag] | Iterable[type[pytools.tag.Tag]]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
-    all the tags in *tags*."""
+    all the tag types in *tag_types*."""
 
-    tcm = TagCountMapper(tags)
+    tcm = TagCountMapper(tag_types)
 
     return tcm(outputs)
 
