@@ -1531,7 +1531,7 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 
 # {{{ DependencyMapper
 
-class DependencyMapper(CombineMapper[R, R]):
+class DependencyMapper(CombineMapper[R, Never]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
@@ -1593,14 +1593,10 @@ class DependencyMapper(CombineMapper[R, R]):
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
-    def map_function_definition(self, expr: FunctionDefinition) -> R:
+    def map_call(self, expr: Call) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
-        return frozenset()
-
-    def map_call(self, expr: Call) -> R:
-        return self.combine(self.rec_function_definition(expr.function),
-                            *[self.rec(bnd) for bnd in expr.bindings.values()])
+        return self.combine(*[self.rec(bnd) for bnd in expr.bindings.values()])
 
     def map_named_call_result(self, expr: NamedCallResult) -> R:
         return self.rec(expr._container)
