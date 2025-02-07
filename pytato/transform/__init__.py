@@ -354,7 +354,7 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
     """
     def __init__(self) -> None:
         """Initialize the cache."""
-        self._expr_key_to_result: dict[CacheKeyT, CacheResultT] = {}
+        self._input_key_to_result: dict[CacheKeyT, CacheResultT] = {}
 
     def add(
             self,
@@ -363,21 +363,20 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
         """Cache a mapping result."""
         key = inputs.key
 
-        assert key not in self._expr_key_to_result, \
+        assert key not in self._input_key_to_result, \
             f"Cache entry is already present for key '{key}'."
 
-        self._expr_key_to_result[key] = result
-
+        self._input_key_to_result[key] = result
         return result
 
     def retrieve(self, inputs: CacheInputs[CacheExprT, P]) -> CacheResultT:
         """Retrieve the cached mapping result."""
         key = inputs.key
-        return self._expr_key_to_result[key]
+        return self._input_key_to_result[key]
 
     def clear(self) -> None:
         """Reset the cache."""
-        self._expr_key_to_result = {}
+        self._input_key_to_result = {}
 
 
 class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
