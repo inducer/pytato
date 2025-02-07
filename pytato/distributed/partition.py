@@ -240,9 +240,9 @@ class _DistributedInputReplacer(CopyMapper):
                  recvd_ary_to_name: Mapping[Array, str],
                  sptpo_ary_to_name: Mapping[Array, str],
                  name_to_output: Mapping[str, Array],
-                 _cache: TransformMapperCache[ArrayOrNames] | None = None,
+                 _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
                  _function_cache:
-                    TransformMapperCache[FunctionDefinition] | None = None,
+                    TransformMapperCache[FunctionDefinition, []] | None = None,
                  ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
 
@@ -261,7 +261,7 @@ class _DistributedInputReplacer(CopyMapper):
         return type(self)(
             {}, {}, {},
             _function_cache=cast(
-                "TransformMapperCache[FunctionDefinition]", self._function_cache))
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
     def map_placeholder(self, expr: Placeholder) -> Placeholder:
         self.user_input_names.add(expr.name)
@@ -294,9 +294,9 @@ class _DistributedInputReplacer(CopyMapper):
         return new_send
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self._cache.get_key(expr)
+        inputs = self._make_cache_inputs(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache.retrieve(inputs)
         except KeyError:
             pass
 
