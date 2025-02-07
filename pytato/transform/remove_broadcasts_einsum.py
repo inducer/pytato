@@ -28,46 +28,117 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
-from pytato.transform import CopyMapper, MappedT, _verify_is_array
+from pytato.transform import (
+    ArrayOrNames,
+    CacheKeyT,
+    CopyMapperWithExtraArgs,
+    MappedT,
+    Mapper,
+    _verify_is_array,
+)
 from pytato.utils import are_shape_components_equal
 
 
-class EinsumWithNoBroadcastsRewriter(CopyMapper):
-    def map_einsum(self, expr: Einsum) -> Array:
+if TYPE_CHECKING:
+    from pytato.function import FunctionDefinition
+
+
+class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]]):
+    def get_cache_key(
+                self,
+                expr: ArrayOrNames,
+                axes_to_squeeze: tuple[int, ...]
+            ) -> CacheKeyT:
+        return (expr, axes_to_squeeze)
+
+    def get_function_definition_cache_key(
+                self,
+                expr: FunctionDefinition,
+                axes_to_squeeze: tuple[int, ...]
+            ) -> CacheKeyT:
+        assert not axes_to_squeeze
+        return expr
+
+    def _squeeze_axes(
+            self,
+            expr: Array,
+            axes_to_squeeze: tuple[int, ...]) -> Array:
+        return (
+            expr[
+                tuple(
+                    slice(None) if idim not in axes_to_squeeze else 0
+                    for idim in range(expr.ndim))]
+            if axes_to_squeeze else expr)
+
+    def rec(
+            self,
+            expr: ArrayOrNames,
+            axes_to_squeeze: tuple[int, ...]) -> ArrayOrNames:
+        inputs = self._make_cache_inputs(expr, axes_to_squeeze)
+        try:
+            return self._cache_retrieve(inputs)
+        except KeyError:
+            rec_result: ArrayOrNames = Mapper.rec(self, expr, ())
+            result: ArrayOrNames
+            if isinstance(expr, Array):
+                result = self._squeeze_axes(
+                    _verify_is_array(rec_result),
+                    axes_to_squeeze)
+            else:
+                result = rec_result
+            return self._cache_add(inputs, result)
+
+    def map_einsum(
+            self, expr: Einsum, axes_to_squeeze: tuple[int, ...]) -> Array:
         new_args: list[Array] = []
         new_access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
         descr_to_axis_len = expr._access_descr_to_axis_len()
 
-        for acc_descrs, arg in zip(expr.access_descriptors, expr.args, strict=True):
-            arg = _verify_is_array(self.rec(arg))
-            axes_to_squeeze: list[int] = []
+        for arg, acc_descrs in zip(expr.args, expr.access_descriptors, strict=True):
+            axes_to_squeeze_list: list[int] = []
             for idim, acc_descr in enumerate(acc_descrs):
                 if not are_shape_components_equal(arg.shape[idim],
                                                   descr_to_axis_len[acc_descr]):
                     assert are_shape_components_equal(arg.shape[idim], 1)
-                    axes_to_squeeze.append(idim)
+                    axes_to_squeeze_list.append(idim)
+            axes_to_squeeze = tuple(axes_to_squeeze_list)
 
             if axes_to_squeeze:
-                arg = arg[tuple(slice(None) if idim not in axes_to_squeeze else 0
-                                for idim in range(arg.ndim))]
-                acc_descrs = tuple(acc_descr
+                new_arg = _verify_is_array(self.rec(arg, axes_to_squeeze))
+                new_acc_descrs = tuple(acc_descr
                                    for idim, acc_descr in enumerate(acc_descrs)
                                    if idim not in axes_to_squeeze)
+            else:
+                new_arg = _verify_is_array(self.rec(arg, ()))
+                new_acc_descrs = acc_descrs
 
-            new_args.append(arg)
-            new_access_descriptors.append(acc_descrs)
+            new_args.append(new_arg)
+            new_access_descriptors.append(new_acc_descrs)
 
         assert len(new_args) == len(expr.args)
         assert len(new_access_descriptors) == len(expr.access_descriptors)
 
-        return Einsum(tuple(new_access_descriptors),
-                      tuple(new_args),
-                      expr.redn_axis_to_redn_descr,
-                      tags=expr.tags,
-                      axes=expr.axes,)
+        if (
+            all(
+                new_arg is arg
+                for arg, new_arg in zip(expr.args, new_args, strict=True))
+            and all(
+                new_acc_descr is acc_descr
+                for acc_descr, new_acc_descr in zip(
+                    expr.access_descriptors,
+                    new_access_descriptors,
+                    strict=True))):
+            return expr
+        else:
+            return Einsum(tuple(new_access_descriptors),
+                          tuple(new_args),
+                          axes=expr.axes,
+                          redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
+                          tags=expr.tags,
+                          non_equality_tags=expr.non_equality_tags)
 
 
 def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
@@ -97,6 +168,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return cast("MappedT", mapper(expr))
+    return cast("MappedT", mapper(expr, ()))
 
 # vim:fdm=marker
