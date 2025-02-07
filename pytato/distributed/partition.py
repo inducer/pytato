@@ -294,9 +294,9 @@ class _DistributedInputReplacer(CopyMapper):
         return new_send
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self._cache.get_key(expr)
+        inputs = self._cache.make_inputs(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache.retrieve(inputs)
         except KeyError:
             pass
 

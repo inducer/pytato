@@ -46,6 +46,7 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -93,6 +94,7 @@ R = frozenset[Array]
 
 __doc__ = """
 .. autoclass:: Mapper
+.. autoclass:: CacheInputs
 .. autoclass:: CachedMapperCache
 .. autoclass:: CachedMapper
 .. autoclass:: TransformMapperCache
@@ -304,12 +306,33 @@ CacheResultT = TypeVar("CacheResultT")
 CacheKeyT: TypeAlias = Hashable
 
 
+class CacheInputs(Generic[CacheExprT]):
+    """Data structure for inputs to :class:`CachedMapperCache`."""
+    def __init__(
+            self,
+            expr: CacheExprT,
+            key_func: Callable[..., CacheKeyT],
+            *args: Any,
+            **kwargs: Any):
+        self.expr: CacheExprT = expr
+        self.args: tuple[Any, ...] = args
+        self.kwargs: dict[str, Any] = kwargs
+        self._key_func = key_func
+
+    @memoize_method
+    def _get_key(self) -> CacheKeyT:
+        return self._key_func(self.expr, *self.args, **self.kwargs)
+
+    @property
+    def key(self) -> CacheKeyT:
+        return self._get_key()
+
+
 class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
     """
     Cache for mappers.
 
     .. automethod:: __init__
-    .. method:: get_key
 
         Compute the key for an input expression.
 
@@ -326,47 +349,27 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
         :arg key_func: Function to compute a hashable cache key from an input
             expression and any extra arguments.
         """
-        self.get_key = key_func
+        self._key_func = key_func
 
         self._expr_key_to_result: dict[CacheKeyT, CacheResultT] = {}
 
+    def make_inputs(
+            self, expr: CacheExprT, *args: Any, **kwargs: Any
+            ) -> CacheInputs[CacheExprT]:
+        return CacheInputs(expr, self._key_func, *args, **kwargs)
+
     def add(
             self,
-            key_inputs:
-                CacheExprT
-                # Currently, Python's type system doesn't have a way to annotate
-                # containers of args/kwargs (ParamSpec won't work here). So we have
-                # to fall back to using Any. More details here:
-                # https://github.com/python/typing/issues/1252
-                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
-            result: CacheResultT,
-            key: CacheKeyT | None = None) -> CacheResultT:
+            inputs: CacheInputs[CacheExprT],
+            result: CacheResultT) -> CacheResultT:
         """Cache a mapping result."""
-        if key is None:
-            if isinstance(key_inputs, tuple):
-                expr, key_args, key_kwargs = key_inputs
-                key = self.get_key(expr, *key_args, **key_kwargs)
-            else:
-                key = self.get_key(key_inputs)
-
+        key = inputs.key
         self._expr_key_to_result[key] = result
-
         return result
 
-    def retrieve(
-            self,
-            key_inputs:
-                CacheExprT
-                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
-            key: CacheKeyT | None = None) -> CacheResultT:
+    def retrieve(self, inputs: CacheInputs[CacheExprT]) -> CacheResultT:
         """Retrieve the cached mapping result."""
-        if key is None:
-            if isinstance(key_inputs, tuple):
-                expr, key_args, key_kwargs = key_inputs
-                key = self.get_key(expr, *key_args, **key_kwargs)
-            else:
-                key = self.get_key(key_inputs)
-
+        key = inputs.key
         return self._expr_key_to_result[key]
 
     def clear(self) -> None:
@@ -412,26 +415,21 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         return (expr, *args, tuple(sorted(kwargs.items())))
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
-        key = self._cache.get_key(expr, *args, **kwargs)
+        inputs = self._cache.make_inputs(expr, *args, **kwargs)
         try:
-            return self._cache.retrieve((expr, args, kwargs), key=key)
+            return self._cache.retrieve(inputs)
         except KeyError:
-            return self._cache.add(
-                (expr, args, kwargs),
-                super().rec(expr, *args, **kwargs),
-                key=key)
+            return self._cache.add(inputs, super().rec(expr, *args, **kwargs))
 
     def rec_function_definition(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> FunctionResultT:
-        key = self._function_cache.get_key(expr, *args, **kwargs)
+        inputs = self._function_cache.make_inputs(expr, *args, **kwargs)
         try:
-            return self._function_cache.retrieve((expr, args, kwargs), key=key)
+            return self._function_cache.retrieve(inputs)
         except KeyError:
             return self._function_cache.add(
-                (expr, args, kwargs),
-                super().rec_function_definition(expr, *args, **kwargs),
-                key=key)
+                inputs, super().rec_function_definition(expr, *args, **kwargs))
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
@@ -1527,12 +1525,11 @@ class CachedMapAndCopyMapper(CopyMapper):
                 "TransformMapperCache[FunctionDefinition]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self._cache.get_key(expr)
+        inputs = self._cache.make_inputs(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache.retrieve(inputs)
         except KeyError:
-            return self._cache.add(
-                expr, super().rec(self.map_fn(expr)), key=key)
+            return self._cache.add(inputs, super().rec(self.map_fn(expr)))
 
 # }}}
 
