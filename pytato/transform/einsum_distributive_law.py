@@ -57,6 +57,8 @@ from pytato.array import (
     Stack,
 )
 from pytato.transform import (
+    ArrayOrNames,
+    CacheKeyT,
     MappedT,
     TransformMapperWithExtraArgs,
     _verify_is_array,
@@ -159,6 +161,13 @@ class EinsumDistributiveLawMapper(
                  ) -> None:
         super().__init__()
         self.how_to_distribute = how_to_distribute
+
+    def get_cache_key(
+                self,
+                expr: ArrayOrNames,
+                ctx: _EinsumDistributiveLawMapperContext | None
+            ) -> CacheKeyT:
+        return (expr, ctx)
 
     def _map_input_base(self,
                         expr: InputArgumentBase,
