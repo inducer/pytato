@@ -416,9 +416,9 @@ class AxisTagAttacher(CopyMapper):
     def __init__(self,
                  axis_to_tags: Mapping[tuple[Array, int | str], Collection[Tag]],
                  tag_corresponding_redn_descr: bool,
-                 _cache: TransformMapperCache[ArrayOrNames] | None = None,
+                 _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
                  _function_cache:
-                    TransformMapperCache[FunctionDefinition] | None = None):
+                    TransformMapperCache[FunctionDefinition, []] | None = None):
         super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.axis_to_tags: Mapping[tuple[Array, int | str],
                                    Collection[Tag]] = axis_to_tags
@@ -465,9 +465,9 @@ class AxisTagAttacher(CopyMapper):
         return result
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self._cache.get_key(expr)
+        inputs = self._make_cache_inputs(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache.retrieve(inputs)
         except KeyError:
             # Intentionally going to Mapper instead of super() to avoid
             # double caching when subclasses of CachedMapper override rec,
@@ -478,7 +478,7 @@ class AxisTagAttacher(CopyMapper):
                 assert isinstance(expr, Array)
                 # type-ignore reason: passed "ArrayOrNames"; expected "Array"
                 result = self._attach_tags(expr, result)  # type: ignore[arg-type]
-            return self._cache.add(expr, result, key=key)
+            return self._cache.add(inputs, result)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
