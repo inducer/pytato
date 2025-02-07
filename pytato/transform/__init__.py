@@ -406,13 +406,20 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
 
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
-            ) -> Hashable:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+            ) -> CacheKeyT:
+        if args or kwargs:
+            raise NotImplementedError(
+                "Derived classes must override get_cache_key if using extra inputs.")
+        return expr
 
     def get_function_definition_cache_key(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
-            ) -> Hashable:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+            ) -> CacheKeyT:
+        if args or kwargs:
+            raise NotImplementedError(
+                "Derived classes must override get_function_definition_cache_key if "
+                "using extra inputs.")
+        return expr
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         key = self._cache.get_key(expr, *args, **kwargs)
