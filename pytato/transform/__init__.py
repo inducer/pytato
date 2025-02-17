@@ -46,6 +46,7 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -93,6 +94,7 @@ R = frozenset[Array]
 
 __doc__ = """
 .. autoclass:: Mapper
+.. autoclass:: CacheInputs
 .. autoclass:: CachedMapperCache
 .. autoclass:: CachedMapper
 .. autoclass:: TransformMapperCache
@@ -184,6 +186,14 @@ class UnsupportedArrayError(ValueError):
 
 
 class ForeignObjectError(ValueError):
+    pass
+
+
+class CacheCollisionError(ValueError):
+    pass
+
+
+class CacheNoOpDuplicationError(ValueError):
     pass
 
 
@@ -299,17 +309,50 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
 # {{{ CachedMapper
 
-CacheExprT = TypeVar("CacheExprT")
+CacheExprT = TypeVar("CacheExprT", ArrayOrNames, FunctionDefinition)
 CacheResultT = TypeVar("CacheResultT")
 CacheKeyT: TypeAlias = Hashable
 
 
-class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
+class CacheInputs(Generic[CacheExprT, P]):
+    """
+    Data structure for inputs to :class:`CachedMapperCache`.
+
+    .. attribute:: expr
+
+        The input expression being mapped.
+
+    .. attribute:: key
+
+        The cache key corresponding to *expr* and any additional inputs that were
+        passed.
+
+    """
+    def __init__(
+            self,
+            expr: CacheExprT,
+            key_func: Callable[..., CacheKeyT],
+            *args: P.args,
+            **kwargs: P.kwargs):
+        self.expr: CacheExprT = expr
+        self._args: tuple[Any, ...] = args
+        self._kwargs: dict[str, Any] = kwargs
+        self._key_func = key_func
+
+    @memoize_method
+    def _get_key(self) -> CacheKeyT:
+        return self._key_func(self.expr, *self._args, **self._kwargs)
+
+    @property
+    def key(self) -> CacheKeyT:
+        return self._get_key()
+
+
+class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
     """
     Cache for mappers.
 
     .. automethod:: __init__
-    .. method:: get_key
 
         Compute the key for an input expression.
 
@@ -317,61 +360,48 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT]):
     .. automethod:: retrieve
     .. automethod:: clear
     """
-    def __init__(
-            self,
-            key_func: Callable[..., CacheKeyT]) -> None:
+    def __init__(self, err_on_collision: bool) -> None:
         """
         Initialize the cache.
 
-        :arg key_func: Function to compute a hashable cache key from an input
-            expression and any extra arguments.
+        :arg err_on_collision: Raise an exception if two distinct input expression
+            instances have the same key.
         """
-        self.get_key = key_func
+        self.err_on_collision = err_on_collision
 
-        self._expr_key_to_result: dict[CacheKeyT, CacheResultT] = {}
+        self._input_key_to_result: dict[CacheKeyT, CacheResultT] = {}
+        if self.err_on_collision:
+            self._input_key_to_expr: dict[CacheKeyT, CacheExprT] = {}
 
     def add(
             self,
-            key_inputs:
-                CacheExprT
-                # Currently, Python's type system doesn't have a way to annotate
-                # containers of args/kwargs (ParamSpec won't work here). So we have
-                # to fall back to using Any. More details here:
-                # https://github.com/python/typing/issues/1252
-                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
-            result: CacheResultT,
-            key: CacheKeyT | None = None) -> CacheResultT:
+            inputs: CacheInputs[CacheExprT, P],
+            result: CacheResultT) -> CacheResultT:
         """Cache a mapping result."""
-        if key is None:
-            if isinstance(key_inputs, tuple):
-                expr, key_args, key_kwargs = key_inputs
-                key = self.get_key(expr, *key_args, **key_kwargs)
-            else:
-                key = self.get_key(key_inputs)
+        key = inputs.key
 
-        self._expr_key_to_result[key] = result
+        self._input_key_to_result[key] = result
+        if self.err_on_collision:
+            self._input_key_to_expr[key] = inputs.expr
 
         return result
 
-    def retrieve(
-            self,
-            key_inputs:
-                CacheExprT
-                | tuple[CacheExprT, tuple[Any, ...], dict[str, Any]],
-            key: CacheKeyT | None = None) -> CacheResultT:
+    def retrieve(self, inputs: CacheInputs[CacheExprT, P]) -> CacheResultT:
         """Retrieve the cached mapping result."""
-        if key is None:
-            if isinstance(key_inputs, tuple):
-                expr, key_args, key_kwargs = key_inputs
-                key = self.get_key(expr, *key_args, **key_kwargs)
-            else:
-                key = self.get_key(key_inputs)
+        key = inputs.key
 
-        return self._expr_key_to_result[key]
+        result = self._input_key_to_result[key]
+
+        if self.err_on_collision and inputs.expr is not self._input_key_to_expr[key]:
+            raise CacheCollisionError
+
+        return result
 
     def clear(self) -> None:
         """Reset the cache."""
-        self._expr_key_to_result = {}
+        self._input_key_to_result = {}
+        if self.err_on_collision:
+            self._input_key_to_expr = {}
 
 
 class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
@@ -385,53 +415,96 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """
     def __init__(
             self,
+            err_on_collision: bool = False,
             _cache:
-                CachedMapperCache[ArrayOrNames, ResultT] | None = None,
+                CachedMapperCache[ArrayOrNames, ResultT, P] | None = None,
             _function_cache:
-                CachedMapperCache[FunctionDefinition, FunctionResultT] | None = None
+                CachedMapperCache[FunctionDefinition, FunctionResultT, P] | None = None
             ) -> None:
         super().__init__()
 
-        self._cache: CachedMapperCache[ArrayOrNames, ResultT] = (
+        self._cache: CachedMapperCache[ArrayOrNames, ResultT, P] = (
             _cache if _cache is not None
-            else CachedMapperCache(self.get_cache_key))
+            else CachedMapperCache(err_on_collision=err_on_collision))
 
         self._function_cache: CachedMapperCache[
-                FunctionDefinition, FunctionResultT] = (
+                FunctionDefinition, FunctionResultT, P] = (
             _function_cache if _function_cache is not None
-            else CachedMapperCache(self.get_function_definition_cache_key))
+            else CachedMapperCache(err_on_collision=err_on_collision))
 
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
-            ) -> Hashable:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+            ) -> CacheKeyT:
+        if args or kwargs:
+            raise NotImplementedError(
+                "Derived classes must override get_cache_key if using extra inputs.")
+        return expr
 
     def get_function_definition_cache_key(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
-            ) -> Hashable:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+            ) -> CacheKeyT:
+        if args or kwargs:
+            raise NotImplementedError(
+                "Derived classes must override get_function_definition_cache_key if "
+                "using extra inputs.")
+        return expr
+
+    def _make_cache_inputs(
+            self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
+            ) -> CacheInputs[ArrayOrNames, P]:
+        return CacheInputs(expr, self.get_cache_key, *args, **kwargs)
+
+    def _make_function_definition_cache_inputs(
+            self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> CacheInputs[FunctionDefinition, P]:
+        return CacheInputs(
+            expr, self.get_function_definition_cache_key, *args, **kwargs)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputs[ArrayOrNames, P],
+            result: ResultT) -> ResultT:
+        return self._cache.add(inputs, result)
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputs[FunctionDefinition, P],
+            result: FunctionResultT) -> FunctionResultT:
+        return self._function_cache.add(inputs, result)
+
+    def _cache_retrieve(self, inputs: CacheInputs[ArrayOrNames, P]) -> ResultT:
+        try:
+            return self._cache.retrieve(inputs)
+        except CacheCollisionError as e:
+            raise ValueError(
+                f"cache collision detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_retrieve(
+            self, inputs: CacheInputs[FunctionDefinition, P]) -> FunctionResultT:
+        try:
+            return self._function_cache.retrieve(inputs)
+        except CacheCollisionError as e:
+            raise ValueError(
+                f"cache collision detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
-        key = self._cache.get_key(expr, *args, **kwargs)
+        inputs = self._make_cache_inputs(expr, *args, **kwargs)
         try:
-            return self._cache.retrieve((expr, args, kwargs), key=key)
+            return self._cache_retrieve(inputs)
         except KeyError:
-            return self._cache.add(
-                (expr, args, kwargs),
-                super().rec(expr, *args, **kwargs),
-                key=key)
+            return self._cache_add(inputs, super().rec(expr, *args, **kwargs))
 
     def rec_function_definition(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> FunctionResultT:
-        key = self._function_cache.get_key(expr, *args, **kwargs)
+        inputs = self._make_function_definition_cache_inputs(expr, *args, **kwargs)
         try:
-            return self._function_cache.retrieve((expr, args, kwargs), key=key)
+            return self._function_cache_retrieve(inputs)
         except KeyError:
-            return self._function_cache.add(
-                (expr, args, kwargs),
-                super().rec_function_definition(expr, *args, **kwargs),
-                key=key)
+            return self._function_cache_add(
+                inputs, super().rec_function_definition(expr, *args, **kwargs))
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
@@ -439,16 +512,75 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        # Functions are cached globally, but arrays aren't
-        return type(self)(_function_cache=self._function_cache)
+        return type(self)(
+            err_on_collision=self._cache.err_on_collision,
+            # Functions are cached globally, but arrays aren't
+            _function_cache=self._function_cache)
 
 # }}}
 
 
 # {{{ TransformMapper
 
-class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT]):
-    pass
+class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
+    """
+    Cache for :class:`TransformMapper` and :class:`TransformMapperWithExtraArgs`.
+
+    .. automethod:: __init__
+    .. automethod:: add
+    """
+    def __init__(
+            self,
+            err_on_collision: bool,
+            err_on_no_op_duplication: bool) -> None:
+        """
+        Initialize the cache.
+
+        :arg err_on_collision: Raise an exception if two distinct input expression
+            instances have the same key.
+        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        super().__init__(err_on_collision=err_on_collision)
+
+        self.err_on_no_op_duplication = err_on_no_op_duplication
+
+    def add(
+            self,
+            inputs: CacheInputs[CacheExprT, P],
+            result: CacheExprT) -> CacheExprT:
+        """
+        Cache a mapping result.
+
+        Returns the cached result (which may not be identical to *result* if a
+        result was already cached with the same result key).
+        """
+        key = inputs.key
+
+        if self.err_on_no_op_duplication:
+            from pytato.analysis import DirectPredecessorsGetter
+            pred_getter = DirectPredecessorsGetter(include_functions=True)
+            if (
+                    hash(result) == hash(inputs.expr)
+                    and result == inputs.expr
+                    and result is not inputs.expr
+                    # Need this check in order to handle input DAGs that have existing
+                    # duplicates. Deduplication will potentially replace predecessors
+                    # of `expr` with cached versions, producing a new `result` that has
+                    # the same cache key as `expr`.
+                    and all(
+                        result_pred is pred
+                        for pred, result_pred in zip(
+                            pred_getter(inputs.expr),
+                            pred_getter(result),
+                            strict=True))):
+                raise CacheNoOpDuplicationError from None
+
+        self._input_key_to_result[key] = result
+        if self.err_on_collision:
+            self._input_key_to_expr[key] = inputs.expr
+
+        return result
 
 
 class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
@@ -458,13 +590,71 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     Enables certain operations that can only be done if the mapping results are also
     arrays (e.g., computing a cache key from them). Does not implement default
     mapper methods; for that, see :class:`CopyMapper`.
+
+    .. automethod:: __init__
+    .. automethod:: clone_for_callee
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            err_on_collision: bool = False,
+            err_on_no_op_duplication: bool = False,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        if _cache is None:
+            _cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_no_op_duplication=err_on_no_op_duplication)
+
+        if _function_cache is None:
+            _function_cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_no_op_duplication=err_on_no_op_duplication)
+
+        super().__init__(
+            err_on_collision=err_on_collision,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputs[ArrayOrNames, []],
+            result: ArrayOrNames) -> ArrayOrNames:
+        try:
+            return self._cache.add(inputs, result)
+        except CacheNoOpDuplicationError as e:
+            raise ValueError(
+                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputs[FunctionDefinition, []],
+            result: FunctionDefinition) -> FunctionDefinition:
+        try:
+            return self._function_cache.add(inputs, result)
+        except CacheNoOpDuplicationError as e:
+            raise ValueError(
+                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        function_cache = cast(
+            "TransformMapperCache[FunctionDefinition, []]", self._function_cache)
+        return type(self)(
+            err_on_collision=function_cache.err_on_collision,
+            err_on_no_op_duplication=function_cache.err_on_no_op_duplication,
+            _function_cache=function_cache)
 
 # }}}
 
@@ -480,14 +670,72 @@ class TransformMapperWithExtraArgs(
 
     The logic in :class:`TransformMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
+
+    .. automethod:: __init__
+    .. automethod:: clone_for_callee
     """
     def __init__(
             self,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
+            err_on_collision: bool = False,
+            err_on_no_op_duplication: bool = False,
+            _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
             _function_cache:
-                TransformMapperCache[FunctionDefinition] | None = None
+                TransformMapperCache[FunctionDefinition, P] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        if _cache is None:
+            _cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_no_op_duplication=err_on_no_op_duplication)
+
+        if _function_cache is None:
+            _function_cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_no_op_duplication=err_on_no_op_duplication)
+
+        super().__init__(
+            err_on_collision=err_on_collision,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputs[ArrayOrNames, P],
+            result: ArrayOrNames) -> ArrayOrNames:
+        try:
+            return self._cache.add(inputs, result)
+        except CacheNoOpDuplicationError as e:
+            raise ValueError(
+                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputs[FunctionDefinition, P],
+            result: FunctionDefinition) -> FunctionDefinition:
+        try:
+            return self._function_cache.add(inputs, result)
+        except CacheNoOpDuplicationError as e:
+            raise ValueError(
+                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        function_cache = cast(
+            "TransformMapperCache[FunctionDefinition, P]", self._function_cache)
+        return type(self)(
+            err_on_collision=function_cache.err_on_collision,
+            err_on_no_op_duplication=function_cache.err_on_no_op_duplication,
+            _function_cache=function_cache)
 
 # }}}
 
@@ -1513,8 +1761,8 @@ class CachedMapAndCopyMapper(CopyMapper):
     def __init__(
             self,
             map_fn: Callable[[ArrayOrNames], ArrayOrNames],
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
         super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
@@ -1524,15 +1772,14 @@ class CachedMapAndCopyMapper(CopyMapper):
         return type(self)(
             self.map_fn,
             _function_cache=cast(
-                "TransformMapperCache[FunctionDefinition]", self._function_cache))
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        key = self._cache.get_key(expr)
+        inputs = self._make_cache_inputs(expr)
         try:
-            return self._cache.retrieve(expr, key=key)
+            return self._cache_retrieve(inputs)
         except KeyError:
-            return self._cache.add(
-                expr, super().rec(self.map_fn(expr)), key=key)
+            return self._cache_add(inputs, super().rec(self.map_fn(expr)))
 
 # }}}
 
