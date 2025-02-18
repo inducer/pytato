@@ -568,8 +568,7 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
         """
         Cache a mapping result.
 
-        Returns the cached result (which may not be identical to *result* if a
-        result was already cached with the same result key).
+        Returns *result*.
         """
         key = inputs.key
 
