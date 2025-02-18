@@ -192,7 +192,7 @@ class CacheCollisionError(ValueError):
     pass
 
 
-class CacheNoOpDuplicationError(ValueError):
+class MapperCreatedDuplicateError(ValueError):
     pass
 
 
@@ -548,18 +548,18 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
     def __init__(
             self,
             err_on_collision: bool,
-            err_on_no_op_duplication: bool) -> None:
+            err_on_created_duplicate: bool) -> None:
         """
         Initialize the cache.
 
         :arg err_on_collision: Raise an exception if two distinct input expression
             instances have the same key.
-        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
         super().__init__(err_on_collision=err_on_collision)
 
-        self.err_on_no_op_duplication = err_on_no_op_duplication
+        self.err_on_created_duplicate = err_on_created_duplicate
 
     def add(
             self,
@@ -575,7 +575,7 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
         assert key not in self._input_key_to_result, \
             f"Cache entry is already present for key '{key}'."
 
-        if self.err_on_no_op_duplication:
+        if self.err_on_created_duplicate:
             from pytato.analysis import DirectPredecessorsGetter
             pred_getter = DirectPredecessorsGetter(include_functions=True)
             if (
@@ -592,7 +592,7 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
                             pred_getter(inputs.expr),
                             pred_getter(result),
                             strict=True))):
-                raise CacheNoOpDuplicationError from None
+                raise MapperCreatedDuplicateError from None
 
         self._input_key_to_result[key] = result
         if self.err_on_collision:
@@ -615,25 +615,25 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     def __init__(
             self,
             err_on_collision: bool = False,
-            err_on_no_op_duplication: bool = False,
+            err_on_created_duplicate: bool = False,
             _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
             _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
         """
         :arg err_on_collision: Raise an exception if two distinct input array
             instances have the same key.
-        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
         if _cache is None:
             _cache = TransformMapperCache(
                 err_on_collision=err_on_collision,
-                err_on_no_op_duplication=err_on_no_op_duplication)
+                err_on_created_duplicate=err_on_created_duplicate)
 
         if _function_cache is None:
             _function_cache = TransformMapperCache(
                 err_on_collision=err_on_collision,
-                err_on_no_op_duplication=err_on_no_op_duplication)
+                err_on_created_duplicate=err_on_created_duplicate)
 
         super().__init__(
             err_on_collision=err_on_collision,
@@ -646,9 +646,9 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             result: ArrayOrNames) -> ArrayOrNames:
         try:
             return self._cache.add(inputs, result)
-        except CacheNoOpDuplicationError as e:
+        except MapperCreatedDuplicateError as e:
             raise ValueError(
-                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
                 f"{type(self)}.") from e
 
     def _function_cache_add(
@@ -657,9 +657,9 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             result: FunctionDefinition) -> FunctionDefinition:
         try:
             return self._function_cache.add(inputs, result)
-        except CacheNoOpDuplicationError as e:
+        except MapperCreatedDuplicateError as e:
             raise ValueError(
-                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
                 f"{type(self)}.") from e
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
@@ -671,7 +671,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             "TransformMapperCache[FunctionDefinition, []]", self._function_cache)
         return type(self)(
             err_on_collision=function_cache.err_on_collision,
-            err_on_no_op_duplication=function_cache.err_on_no_op_duplication,
+            err_on_created_duplicate=function_cache.err_on_created_duplicate,
             _function_cache=function_cache)
 
 # }}}
@@ -695,7 +695,7 @@ class TransformMapperWithExtraArgs(
     def __init__(
             self,
             err_on_collision: bool = False,
-            err_on_no_op_duplication: bool = False,
+            err_on_created_duplicate: bool = False,
             _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
             _function_cache:
                 TransformMapperCache[FunctionDefinition, P] | None = None
@@ -703,18 +703,18 @@ class TransformMapperWithExtraArgs(
         """
         :arg err_on_collision: Raise an exception if two distinct input array
             instances have the same key.
-        :arg err_on_no_op_duplication: Raise an exception if mapping produces a new
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
             array instance that has the same key as the input array.
         """
         if _cache is None:
             _cache = TransformMapperCache(
                 err_on_collision=err_on_collision,
-                err_on_no_op_duplication=err_on_no_op_duplication)
+                err_on_created_duplicate=err_on_created_duplicate)
 
         if _function_cache is None:
             _function_cache = TransformMapperCache(
                 err_on_collision=err_on_collision,
-                err_on_no_op_duplication=err_on_no_op_duplication)
+                err_on_created_duplicate=err_on_created_duplicate)
 
         super().__init__(
             err_on_collision=err_on_collision,
@@ -727,9 +727,9 @@ class TransformMapperWithExtraArgs(
             result: ArrayOrNames) -> ArrayOrNames:
         try:
             return self._cache.add(inputs, result)
-        except CacheNoOpDuplicationError as e:
+        except MapperCreatedDuplicateError as e:
             raise ValueError(
-                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
                 f"{type(self)}.") from e
 
     def _function_cache_add(
@@ -738,9 +738,9 @@ class TransformMapperWithExtraArgs(
             result: FunctionDefinition) -> FunctionDefinition:
         try:
             return self._function_cache.add(inputs, result)
-        except CacheNoOpDuplicationError as e:
+        except MapperCreatedDuplicateError as e:
             raise ValueError(
-                f"no-op duplication detected on {type(inputs.expr)} in "
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
                 f"{type(self)}.") from e
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
@@ -752,7 +752,7 @@ class TransformMapperWithExtraArgs(
             "TransformMapperCache[FunctionDefinition, P]", self._function_cache)
         return type(self)(
             err_on_collision=function_cache.err_on_collision,
-            err_on_no_op_duplication=function_cache.err_on_no_op_duplication,
+            err_on_created_duplicate=function_cache.err_on_created_duplicate,
             _function_cache=function_cache)
 
 # }}}
