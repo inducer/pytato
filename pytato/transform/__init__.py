@@ -46,7 +46,6 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -94,7 +93,7 @@ R = frozenset[Array]
 
 __doc__ = """
 .. autoclass:: Mapper
-.. autoclass:: CacheInputs
+.. autoclass:: CacheInputsWithKey
 .. autoclass:: CachedMapperCache
 .. autoclass:: CachedMapper
 .. autoclass:: TransformMapperCache
@@ -306,13 +305,21 @@ CacheResultT = TypeVar("CacheResultT")
 CacheKeyT: TypeAlias = Hashable
 
 
-class CacheInputs(Generic[CacheExprT, P]):
+class CacheInputsWithKey(Generic[CacheExprT, P]):
     """
     Data structure for inputs to :class:`CachedMapperCache`.
 
     .. attribute:: expr
 
         The input expression being mapped.
+
+    .. attribute:: args
+
+        A :class:`tuple` of extra positional arguments.
+
+    .. attribute:: kwargs
+
+        A :class:`dict` of extra keyword arguments.
 
     .. attribute:: key
 
@@ -323,21 +330,13 @@ class CacheInputs(Generic[CacheExprT, P]):
     def __init__(
             self,
             expr: CacheExprT,
-            key_func: Callable[..., CacheKeyT],
+            key: CacheKeyT,
             *args: P.args,
             **kwargs: P.kwargs):
         self.expr: CacheExprT = expr
-        self._args: tuple[Any, ...] = args
-        self._kwargs: dict[str, Any] = kwargs
-        self._key_func = key_func
-
-    @memoize_method
-    def _get_key(self) -> CacheKeyT:
-        return self._key_func(self.expr, *self._args, **self._kwargs)
-
-    @property
-    def key(self) -> CacheKeyT:
-        return self._get_key()
+        self.args: tuple[Any, ...] = args
+        self.kwargs: dict[str, Any] = kwargs
+        self.key: CacheKeyT = key
 
 
 class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
@@ -358,7 +357,7 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
 
     def add(
             self,
-            inputs: CacheInputs[CacheExprT, P],
+            inputs: CacheInputsWithKey[CacheExprT, P],
             result: CacheResultT) -> CacheResultT:
         """Cache a mapping result."""
         key = inputs.key
@@ -369,7 +368,7 @@ class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
         self._input_key_to_result[key] = result
         return result
 
-    def retrieve(self, inputs: CacheInputs[CacheExprT, P]) -> CacheResultT:
+    def retrieve(self, inputs: CacheInputsWithKey[CacheExprT, P]) -> CacheResultT:
         """Retrieve the cached mapping result."""
         key = inputs.key
         return self._input_key_to_result[key]
@@ -425,14 +424,16 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
 
     def _make_cache_inputs(
             self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
-            ) -> CacheInputs[ArrayOrNames, P]:
-        return CacheInputs(expr, self.get_cache_key, *args, **kwargs)
+            ) -> CacheInputsWithKey[ArrayOrNames, P]:
+        return CacheInputsWithKey(
+            expr, self.get_cache_key(expr, *args, **kwargs), *args, **kwargs)
 
     def _make_function_definition_cache_inputs(
             self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
-            ) -> CacheInputs[FunctionDefinition, P]:
-        return CacheInputs(
-            expr, self.get_function_definition_cache_key, *args, **kwargs)
+            ) -> CacheInputsWithKey[FunctionDefinition, P]:
+        return CacheInputsWithKey(
+            expr, self.get_function_definition_cache_key(expr, *args, **kwargs),
+            *args, **kwargs)
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         inputs = self._make_cache_inputs(expr, *args, **kwargs)
