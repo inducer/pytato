@@ -582,10 +582,14 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
                     hash(result) == hash(inputs.expr)
                     and result == inputs.expr
                     and result is not inputs.expr
-                    # Need this check in order to handle input DAGs that have existing
-                    # duplicates. Deduplication will potentially replace predecessors
-                    # of `expr` with cached versions, producing a new `result` that has
-                    # the same cache key as `expr`.
+                    # Only consider "direct" duplication, not duplication resulting
+                    # from equality-preserving changes to predecessors. Assume that
+                    # such changes are OK, otherwise they would have been detected
+                    # at the point at which they originated. (For example, consider
+                    # a DAG containing pre-existing duplicates. If a subexpression
+                    # of *expr* is a duplicate and is replaced with a previously
+                    # encountered version from the cache, a new instance of *expr*
+                    # must be created. This should not trigger an error.)
                     and all(
                         result_pred is pred
                         for pred, result_pred in zip(
