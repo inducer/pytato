@@ -1532,7 +1532,7 @@ class CachedMapAndCopyMapper(CopyMapper):
             return self._cache.retrieve(expr, key=key)
         except KeyError:
             return self._cache.add(
-                expr, super().rec(self.map_fn(expr)), key=key)
+                expr, Mapper.rec(self, self.map_fn(expr)), key=key)
 
 # }}}
 
