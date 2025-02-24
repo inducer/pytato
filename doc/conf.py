@@ -57,4 +57,7 @@ nitpick_ignore_regex = [
     ["py:class", r"P\.kwargs"],
     ["py:class", r"lp\.LoopKernel"],
     ["py:class", r"_dtype_any"],
+
+    # It's :data:, not :class:, but we can't tell autodoc that.
+    ["py:class", r"types\.EllipsisType"],
 ]
