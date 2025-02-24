@@ -188,6 +188,7 @@ from collections.abc import (
 )
 from functools import cached_property, partialmethod
 from sys import intern
+from types import EllipsisType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -217,22 +218,6 @@ from pytato.scalar_expr import (
     ScalarExpression,
     get_reduction_induction_variables,
 )
-
-
-# {{{ get a type variable that represents the type of '...'
-
-# https://github.com/python/typing/issues/684#issuecomment-548203158
-if TYPE_CHECKING:
-    from enum import Enum
-
-    class EllipsisType(Enum):
-        Ellipsis = "..."
-
-    Ellipsis = EllipsisType.Ellipsis
-else:
-    EllipsisType = type(Ellipsis)
-
-# }}}
 
 
 if TYPE_CHECKING:
