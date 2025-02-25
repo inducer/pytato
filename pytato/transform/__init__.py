@@ -418,7 +418,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         except KeyError:
             return self._cache.add(
                 (expr, args, kwargs),
-                super().rec(expr, *args, **kwargs),
+                Mapper.rec(self, expr, *args, **kwargs),
                 key=key)
 
     def rec_function_definition(
@@ -430,7 +430,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         except KeyError:
             return self._function_cache.add(
                 (expr, args, kwargs),
-                super().rec_function_definition(expr, *args, **kwargs),
+                Mapper.rec_function_definition(self, expr, *args, **kwargs),
                 key=key)
 
     def clone_for_callee(
