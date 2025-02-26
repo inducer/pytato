@@ -308,7 +308,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
 # {{{ CachedMapper
 
-CacheExprT = TypeVar("CacheExprT", ArrayOrNames, FunctionDefinition)
+CacheExprT = TypeVar("CacheExprT", bound=ArrayOrNames | FunctionDefinition)
 CacheResultT = TypeVar("CacheResultT")
 CacheKeyT: TypeAlias = Hashable
 
@@ -593,8 +593,10 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
                     and all(
                         result_pred is pred
                         for pred, result_pred in zip(
-                            pred_getter(inputs.expr),
-                            pred_getter(result),
+                            # type-ignore-reason: mypy doesn't seem to recognize
+                            # overloaded Mapper.__call__ here
+                            pred_getter(inputs.expr),  # type: ignore[arg-type]
+                            pred_getter(result),  # type: ignore[arg-type]
                             strict=True))):
                 raise MapperCreatedDuplicateError from None
 
