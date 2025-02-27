@@ -309,6 +309,8 @@ class _DistributedInputReplacer(CopyMapper):
             if name is not None:
                 return self._get_placeholder_for(name, expr)
 
+        # Calling super().rec instead of Mapper.rec is OK here, because we're not
+        # implementing cache insertion and thus are not double caching
         return cast("ArrayOrNames", super().rec(expr))
 
     def _get_placeholder_for(self, name: str, expr: Array) -> Placeholder:
