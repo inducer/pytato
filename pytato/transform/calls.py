@@ -30,7 +30,9 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from typing_extensions import Self
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -38,9 +40,14 @@ from pytato.array import (
     DictOfNamedArrays,
     Placeholder,
 )
-from pytato.function import Call, NamedCallResult
+from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.tags import InlineCallTag
-from pytato.transform import ArrayOrNames, CopyMapper, _verify_is_array
+from pytato.transform import (
+    ArrayOrNames,
+    CopyMapper,
+    TransformMapperCache,
+    _verify_is_array,
+)
 
 
 if TYPE_CHECKING:
@@ -55,6 +62,12 @@ class PlaceholderSubstitutor(CopyMapper):
 
         A mapping from the placeholder name to the array that it is to be
         substituted with.
+
+    .. note::
+
+        This mapper does not deduplicate subexpressions that occur in both the mapped
+        expression and the substitutions. Must follow up with a
+        :class:`pytato.transform.Deduplicator` if duplicates need to be removed.
     """
 
     def __init__(self, substitutions: Mapping[str, Array]) -> None:
@@ -63,32 +76,51 @@ class PlaceholderSubstitutor(CopyMapper):
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
+        # Can't call rec() to remove duplicates here, because the substituted-in
+        # expression may potentially contain unrelated placeholders whose names
+        # collide with the ones being replaced
         return self.substitutions[expr.name]
 
-    def map_named_call_result(self, expr: NamedCallResult) -> NamedCallResult:
-        raise NotImplementedError(
-            "PlaceholderSubstitutor does not support functions.")
+    def map_function_definition(
+            self, expr: FunctionDefinition) -> FunctionDefinition:
+        # Only operates within the current stack frame
+        return expr
 
 
 class Inliner(CopyMapper):
     """
     Primary mapper for :func:`inline_calls`.
     """
-    def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        # inline call sites within the callee.
-        new_expr = super().map_call(expr)
-        assert isinstance(new_expr, Call)
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        # Must disable collision/duplication checking because we're combining
+        # expressions that were previously in two different call stack frames
+        # (and were thus cached separately)
+        super().__init__(
+            err_on_collision=False,
+            err_on_created_duplicate=False,
+            _cache=_cache,
+            _function_cache=_function_cache)
 
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+
+    def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         if expr.tags_of_type(InlineCallTag):
-            substitutor = PlaceholderSubstitutor(new_expr.bindings)
+            substitutor = PlaceholderSubstitutor(expr.bindings)
 
             return DictOfNamedArrays(
-                {name: _verify_is_array(substitutor.rec(ret))
-                 for name, ret in new_expr.function.returns.items()},
-                tags=new_expr.tags
+                {name: _verify_is_array(self.rec(substitutor(ret)))
+                 for name, ret in expr.function.returns.items()},
+                tags=expr.tags
             )
         else:
-            return new_expr
+            return super().map_call(expr)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         new_call_or_inlined_expr = self.rec(expr._container)
@@ -104,7 +136,11 @@ class InlineMarker(CopyMapper):
     Primary mapper for :func:`tag_all_calls_to_be_inlined`.
     """
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        return super().map_call(expr).tagged(InlineCallTag())
+        rec_expr = super().map_call(expr)
+        if rec_expr.tags_of_type(InlineCallTag):
+            return rec_expr
+        else:
+            return rec_expr.tagged(InlineCallTag())
 
 
 def inline_calls(expr: ArrayOrNames) -> ArrayOrNames:

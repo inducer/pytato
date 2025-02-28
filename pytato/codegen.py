@@ -138,57 +138,75 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             self,
             target: Target,
             kernels_seen: dict[str, lp.LoopKernel] | None = None,
-            _cache: TransformMapperCache[ArrayOrNames] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition] | None = None
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        super().__init__(
+            # ToIndexLambdaMixin operates on certain array types for which `shape`
+            # is a derived property (e.g. BasicIndex). For these types, `shape`
+            # is an expression that may contain duplicate nodes. Mappers do not
+            # traverse properties, so these expressions are not subject to any prior
+            # deduplication. Once transformed into an IndexLambda, however, `shape`
+            # becomes a field and is subject to traversal and duplication checks.
+            # Without `err_on_collision=False`, these duplicates would lead to
+            # collision errors.
+            err_on_collision=False,
+            _cache=_cache, _function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
         self.kernels_seen: dict[str, lp.LoopKernel] = kernels_seen or {}
 
     def map_size_param(self, expr: SizeParam) -> Array:
-        name = expr.name
-        assert name is not None
-        return SizeParam(  # pylint: disable=missing-kwoa
-            name=name,
-            tags=expr.tags,
-            non_equality_tags=expr.non_equality_tags)
+        assert expr.name is not None
+        return expr
 
     def map_placeholder(self, expr: Placeholder) -> Array:
-        name = expr.name
-        if name is None:
-            name = self.var_name_gen("_pt_in")
-        return Placeholder(name=name,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
-                dtype=expr.dtype,
-                axes=expr.axes,
-                tags=expr.tags,
-                non_equality_tags=expr.non_equality_tags)
+        new_name = expr.name
+        if new_name is None:
+            new_name = self.var_name_gen("_pt_in")
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        if (
+                new_name is expr.name
+                and new_shape is expr.shape):
+            return expr
+        else:
+            return Placeholder(name=new_name,
+                    shape=new_shape,
+                    dtype=expr.dtype,
+                    axes=expr.axes,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget
         if not isinstance(self.target, LoopyTarget):
             raise ValueError("Got a LoopyCall for a non-loopy target.")
-        translation_unit = expr.translation_unit.copy(
-                                        target=self.target.get_loopy_target())
+        new_target = self.target.get_loopy_target()
+
+        # FIXME: Can't use "is" here because targets aren't unique. Is it OK to
+        # use the existing target if it's equal to self.target.get_loopy_target()?
+        # If not, may have to set err_on_created_duplicate=False
+        if new_target == expr.translation_unit.target:
+            new_translation_unit = expr.translation_unit
+        else:
+            new_translation_unit = expr.translation_unit.copy(target=new_target)
         namegen = UniqueNameGenerator(set(self.kernels_seen))
-        entrypoint = expr.entrypoint
+        new_entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
 
-        for name, clbl in translation_unit.callables_table.items():
+        for name, clbl in new_translation_unit.callables_table.items():
             if isinstance(clbl, lp.CallableKernel):
                 assert isinstance(name, str)
                 if name in self.kernels_seen and (
-                        translation_unit[name] != self.kernels_seen[name]):
+                        new_translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
 
                     # {{{ see if it's one of the other kernels
 
                     for other_knl in self.kernels_seen.values():
-                        if other_knl.copy(name=name) == translation_unit[name]:
+                        if other_knl.copy(name=name) == new_translation_unit[name]:
                             new_name = other_knl.name
                             break
                     else:
@@ -198,37 +216,55 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
                     # }}}
 
-                    if name == entrypoint:
+                    if name == new_entrypoint:
                         # if the colliding name is the entrypoint, then rename the
                         # entrypoint as well.
-                        entrypoint = new_name
+                        new_entrypoint = new_name
 
-                    translation_unit = lp.rename_callable(
-                                            translation_unit, name, new_name)
+                    new_translation_unit = lp.rename_callable(
+                                            new_translation_unit, name, new_name)
                     name = new_name
 
                 self.kernels_seen[name] = clbl.subkernel
 
         # }}}
 
-        bindings: Mapping[str, Any] = immutabledict(
+        new_bindings: Mapping[str, Any] = immutabledict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
 
-        return LoopyCall(translation_unit=translation_unit,
-                         bindings=bindings,
-                         entrypoint=entrypoint,
-                         tags=expr.tags
-                         )
+        assert (
+            new_entrypoint is expr.entrypoint
+            or new_entrypoint != expr.entrypoint)
+        for bnd, new_bnd in zip(
+                expr.bindings.values(), new_bindings.values(), strict=True):
+            assert new_bnd is bnd or new_bnd != bnd
+
+        if (
+                new_translation_unit == expr.translation_unit
+                and (
+                    frozenset(new_bindings.keys())
+                    == frozenset(expr.bindings.keys()))
+                and all(
+                    new_bindings[name] is expr.bindings[name]
+                    for name in expr.bindings)
+                and new_entrypoint is expr.entrypoint):
+            return expr
+        else:
+            return LoopyCall(translation_unit=new_translation_unit,
+                             bindings=new_bindings,
+                             entrypoint=new_entrypoint,
+                             tags=expr.tags
+                             )
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
+        shape = self.rec_idx_or_size_tuple(expr.shape)
 
         self.bound_arguments[name] = expr.data
         return Placeholder(name=name,
-                shape=tuple(self.rec(s) if isinstance(s, Array) else s
-                            for s in expr.shape),
+                shape=shape,
                 dtype=expr.dtype,
                 axes=expr.axes,
                 tags=expr.tags,
