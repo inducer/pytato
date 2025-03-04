@@ -239,7 +239,8 @@ class InlineCallTag(CallImplementationTag):
 @tag_dataclass
 class ForceValueArgTag(UniqueTag):
     r"""
-    A :class:`UniqueTag` that causes a :class:`Placeholder` to become a :class:`loopy.ValueArg`. This is specific to code generation via
+    A tag that causes a :class:`Placeholder` to become a :class:`loopy.ValueArg`.
+    This is specific to code generation via
     :class:`pytato.target.loopy`. It is an error to apply this to a
-    :class:`Placeholder` that does not have empty shape.
+    :class:`Placeholder` that does not have an empty shape.
     """

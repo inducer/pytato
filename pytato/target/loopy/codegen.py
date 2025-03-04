@@ -426,6 +426,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
         shape = shape_to_scalar_expression(expr.shape, self, state)
 
         if expr.tags_of_type(ForceValueArgTag):
+            assert expr.shape == ()
             arg: lp.ArrayArg | lp.ValueArg = lp.ValueArg(expr.name,
                               dtype=expr.dtype,
                               tags=_filter_tags_not_of_type(expr,
