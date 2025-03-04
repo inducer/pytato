@@ -239,5 +239,5 @@ class InlineCallTag(CallImplementationTag):
 @tag_dataclass
 class ForceValueArgTag(UniqueTag):
     r"""
-    A :class:`Unique` that causes a Placeholder to become a ValueArg.
+    A :class:`UniqueTag` that causes a Placeholder to become a ValueArg.
     """
