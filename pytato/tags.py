@@ -17,6 +17,7 @@ Pre-Defined Tags
 .. autoclass:: FunctionIdentifier
 .. autoclass:: CallImplementationTag
 .. autoclass:: InlineCallTag
+.. autoclass:: ForceValueArgTag
 """
 
 from dataclasses import dataclass
@@ -232,4 +233,11 @@ class InlineCallTag(CallImplementationTag):
     r"""
     A :class:`CallImplementationTag` that directs the
     :class:`pytato.target.Target` to inline the call site.
+    """
+
+
+@tag_dataclass
+class ForceValueArgTag(UniqueTag):
+    r"""
+    A :class:`Unique` that causes a Placeholder to become a ValueArg.
     """

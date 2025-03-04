@@ -63,6 +63,7 @@ from pytato.scalar_expr import (
     TypeCast,
 )
 from pytato.tags import (
+    ForceValueArgTag,
     ImplementationStrategy,
     ImplInlined,
     ImplStored,
@@ -424,7 +425,15 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
 
         shape = shape_to_scalar_expression(expr.shape, self, state)
 
-        arg = lp.GlobalArg(expr.name,
+        if expr.tags_of_type(ForceValueArgTag):
+            arg = lp.ValueArg(expr.name,
+                              dtype=expr.dtype,
+                              tags=_filter_tags_not_of_type(expr,
+                                                            self
+                                                            .array_tag_t_to_not_propagate))
+        else:
+
+            arg = lp.GlobalArg(expr.name,
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
@@ -434,6 +443,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                 tags=_filter_tags_not_of_type(expr,
                                               self
                                               .array_tag_t_to_not_propagate))
+
         kernel = state.kernel.copy(args=[*state.kernel.args, arg])
         state.update_kernel(kernel)
         assert expr.name is not None
