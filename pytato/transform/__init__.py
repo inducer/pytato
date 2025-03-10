@@ -421,6 +421,9 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         except KeyError:
             return self._cache.add(
                 (expr, args, kwargs),
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
                 Mapper.rec(self, expr, *args, **kwargs),
                 key=key)
 
@@ -433,6 +436,9 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         except KeyError:
             return self._function_cache.add(
                 (expr, args, kwargs),
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
                 Mapper.rec_function_definition(self, expr, *args, **kwargs),
                 key=key)
 
@@ -1535,6 +1541,9 @@ class CachedMapAndCopyMapper(CopyMapper):
             return self._cache.retrieve(expr, key=key)
         except KeyError:
             return self._cache.add(
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
                 expr, Mapper.rec(self, self.map_fn(expr)), key=key)
 
 # }}}
