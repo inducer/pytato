@@ -409,6 +409,9 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
             ) -> CacheKeyT:
         if args or kwargs:
+            # Depending on whether extra arguments are passed by position or by
+            # keyword, they can end up in either args or kwargs; hence key is not
+            # uniquely defined in the general case
             raise NotImplementedError(
                 "Derived classes must override get_cache_key if using extra inputs.")
         return expr
@@ -417,6 +420,9 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> CacheKeyT:
         if args or kwargs:
+            # Depending on whether extra arguments are passed by position or by
+            # keyword, they can end up in either args or kwargs; hence key is not
+            # uniquely defined in the general case
             raise NotImplementedError(
                 "Derived classes must override get_function_definition_cache_key if "
                 "using extra inputs.")
