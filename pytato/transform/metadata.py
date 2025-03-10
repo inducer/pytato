@@ -469,6 +469,9 @@ class AxisTagAttacher(CopyMapper):
         try:
             return self._cache.retrieve(expr, key=key)
         except KeyError:
+            # Intentionally going to Mapper instead of super() to avoid
+            # double caching when subclasses of CachedMapper override rec,
+            # see https://github.com/inducer/pytato/pull/585
             result = Mapper.rec(self, expr)
             if not isinstance(
                     expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
