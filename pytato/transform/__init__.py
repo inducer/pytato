@@ -1371,6 +1371,9 @@ class DependencyMapper(CombineMapper[R, R]):
     def map_named_call_result(self, expr: NamedCallResult) -> R:
         return self.rec(expr._container)
 
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        raise AssertionError("Control shouldn't reach this point.")
+
 # }}}
 
 
@@ -2383,6 +2386,11 @@ class DataWrapperDeduplicator(CopyMapper):
         except KeyError:
             self.data_wrapper_cache[cache_key] = expr
             return expr
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
 
 def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
