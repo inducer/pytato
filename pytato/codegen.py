@@ -151,6 +151,8 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
             # Without `err_on_collision=False`, these duplicates would lead to
             # collision errors.
             err_on_collision=False,
+            # map_loopy_call potentially still duplicates
+            err_on_created_duplicate=False,
             _cache=_cache, _function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
@@ -182,31 +184,25 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         from pytato.target.loopy import LoopyTarget
         if not isinstance(self.target, LoopyTarget):
             raise ValueError("Got a LoopyCall for a non-loopy target.")
-        new_target = self.target.get_loopy_target()
+        assert expr.translation_unit.target == self.target.get_loopy_target()
 
-        # FIXME: Can't use "is" here because targets aren't unique. Is it OK to
-        # use the existing target if it's equal to self.target.get_loopy_target()?
-        # If not, may have to set err_on_created_duplicate=False
-        if new_target == expr.translation_unit.target:
-            new_translation_unit = expr.translation_unit
-        else:
-            new_translation_unit = expr.translation_unit.copy(target=new_target)
         namegen = UniqueNameGenerator(set(self.kernels_seen))
+        new_translation_unit = expr.translation_unit
         new_entrypoint = expr.entrypoint
 
         # {{{ eliminate callable name collision
 
-        for name, clbl in new_translation_unit.callables_table.items():
+        for name, clbl in expr.translation_unit.callables_table.items():
             if isinstance(clbl, lp.CallableKernel):
                 assert isinstance(name, str)
                 if name in self.kernels_seen and (
-                        new_translation_unit[name] != self.kernels_seen[name]):
+                        expr.translation_unit[name] != self.kernels_seen[name]):
                     # callee name collision => must rename
 
                     # {{{ see if it's one of the other kernels
 
                     for other_knl in self.kernels_seen.values():
-                        if other_knl.copy(name=name) == new_translation_unit[name]:
+                        if other_knl.copy(name=name) == expr.translation_unit[name]:
                             new_name = other_knl.name
                             break
                     else:
@@ -216,7 +212,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
                     # }}}
 
-                    if name == new_entrypoint:
+                    if name == expr.entrypoint:
                         # if the colliding name is the entrypoint, then rename the
                         # entrypoint as well.
                         new_entrypoint = new_name
@@ -234,29 +230,11 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
 
-        assert (
-            new_entrypoint is expr.entrypoint
-            or new_entrypoint != expr.entrypoint)
-        for bnd, new_bnd in zip(
-                expr.bindings.values(), new_bindings.values(), strict=True):
-            assert new_bnd is bnd or new_bnd != bnd
-
-        if (
-                new_translation_unit == expr.translation_unit
-                and (
-                    frozenset(new_bindings.keys())
-                    == frozenset(expr.bindings.keys()))
-                and all(
-                    new_bindings[name] is expr.bindings[name]
-                    for name in expr.bindings)
-                and new_entrypoint is expr.entrypoint):
-            return expr
-        else:
-            return LoopyCall(translation_unit=new_translation_unit,
-                             bindings=new_bindings,
-                             entrypoint=new_entrypoint,
-                             tags=expr.tags
-                             )
+        return LoopyCall(translation_unit=new_translation_unit,
+                         bindings=new_bindings,
+                         entrypoint=new_entrypoint,
+                         tags=expr.tags
+                         )
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
