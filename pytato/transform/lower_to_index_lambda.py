@@ -53,15 +53,18 @@ from pytato.array import (
     ShapeComponent,
     ShapeType,
     Stack,
+    _get_einsum_access_descr_to_axis_len,
 )
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
-from pytato.transform import Mapper
+from pytato.transform import IndexOrShapeExpr, Mapper
 from pytato.utils import normalized_slice_does_not_change_axis
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import numpy as np
 
 
@@ -126,16 +129,14 @@ def _generate_index_expressions(
         for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
 
 
-def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
+def _get_reshaped_indices(
+        order: str, old_shape: ShapeType, new_shape: ShapeType
+    ) -> tuple[ScalarExpression, ...]:
 
-    if expr.order.upper() not in ["C", "F"]:
+    if order.upper() not in ["C", "F"]:
         raise NotImplementedError("Order expected to be 'C' or 'F'",
                                   " (case insensitive). Found order = ",
-                                  f"{expr.order}")
-
-    order = expr.order
-    old_shape = expr.array.shape
-    new_shape = expr.shape
+                                  f"{order}")
 
     # index variables need to be unique and depend on the new shape length
     index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
@@ -143,7 +144,8 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     # {{{ check for scalars
 
     if old_shape == ():
-        assert expr.size == 1
+        from pytools import product
+        assert product(new_shape) == 1
         return ()
 
     if new_shape == ():
@@ -256,10 +258,17 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
 
 class ToIndexLambdaMixin:
-    def _rec_shape(self, shape: ShapeType) -> ShapeType:
-        return tuple(self.rec(s) if isinstance(s, Array)
-                     else s
-                     for s in shape)
+    def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
+                              ) -> tuple[IndexOrShapeExpr, ...]:
+        # type-ignore-reason: apparently mypy cannot substitute typevars
+        # here.
+        new_situp = tuple(
+            self.rec(s) if isinstance(s, Array) else s
+            for s in situp)
+        if all(new_s is s for s, new_s in zip(situp, new_situp, strict=True)):
+            return situp
+        else:
+            return new_situp  # type: ignore[return-value]
 
     if TYPE_CHECKING:
         def rec(
@@ -270,17 +279,27 @@ class ToIndexLambdaMixin:
             return super().rec(  # type: ignore[no-any-return,misc]
                 expr, *args, **kwargs)
 
-    def map_index_lambda(self, expr: IndexLambda) -> IndexLambda:
-        return IndexLambda(expr=expr.expr,
-                           shape=self._rec_shape(expr.shape),
-                           dtype=expr.dtype,
-                           bindings=immutabledict({name: self.rec(bnd)
-                                         for name, bnd
-                                         in sorted(expr.bindings.items())}),
-                           axes=expr.axes,
-                           var_to_reduction_descr=expr.var_to_reduction_descr,
-                           tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
+    def map_index_lambda(self, expr: IndexLambda) -> Array:
+        new_shape = self.rec_idx_or_size_tuple(expr.shape)
+        new_bindings: Mapping[str, Array] = immutabledict({
+                name: self.rec(subexpr)
+                for name, subexpr in sorted(expr.bindings.items())})
+        if (
+                new_shape is expr.shape
+                and frozenset(new_bindings.keys()) == frozenset(expr.bindings.keys())
+                and all(
+                    new_bindings[name] is expr.bindings[name]
+                    for name in expr.bindings)):
+            return expr
+        else:
+            return IndexLambda(expr=expr.expr,
+                    shape=new_shape,
+                    dtype=expr.dtype,
+                    bindings=new_bindings,
+                    axes=expr.axes,
+                    var_to_reduction_descr=expr.var_to_reduction_descr,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack) -> IndexLambda:
         subscript = tuple(prim.Variable(f"_{i}")
@@ -309,7 +328,7 @@ class ToIndexLambdaMixin:
                     for i, array in enumerate(expr.arrays)}
 
         return IndexLambda(expr=stack_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
                            bindings=immutabledict(bindings),
@@ -328,10 +347,12 @@ class ToIndexLambdaMixin:
                      for i in range(len(expr.shape))]
             return Subscript(aggregate, tuple(index))
 
-        lbounds: list[Any] = [0]
-        ubounds: list[Any] = [expr.arrays[0].shape[expr.axis]]
+        rec_arrays: tuple[Array, ...] = tuple(self.rec(ary) for ary in expr.arrays)
 
-        for i, array in enumerate(expr.arrays[1:], start=1):
+        lbounds: list[Any] = [0]
+        ubounds: list[Any] = [rec_arrays[0].shape[expr.axis]]
+
+        for i, array in enumerate(rec_arrays[1:], start=1):
             ubounds.append(ubounds[i-1]+array.shape[expr.axis])
             lbounds.append(ubounds[i-1])
 
@@ -354,11 +375,11 @@ class ToIndexLambdaMixin:
                                  subarray_expr,
                                  concat_expr)
 
-        bindings = {f"_in{i}": self.rec(array)
-                    for i, array in enumerate(expr.arrays)}
+        bindings = {f"_in{i}": array
+                    for i, array in enumerate(rec_arrays)}
 
         return IndexLambda(expr=concat_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            bindings=immutabledict(bindings),
                            axes=expr.axes,
@@ -377,7 +398,9 @@ class ToIndexLambdaMixin:
             dim_to_index_lambda_components,
         )
 
-        bindings = {f"_in{k}": self.rec(arg) for k, arg in enumerate(expr.args)}
+        rec_args: tuple[Array, ...] = tuple(self.rec(arg) for arg in expr.args)
+
+        bindings = {f"_in{k}": arg for k, arg in enumerate(rec_args)}
         redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
         args_as_pym_expr: list[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
@@ -385,13 +408,16 @@ class ToIndexLambdaMixin:
 
         # {{{ add bindings coming from the shape expressions
 
+        access_descr_to_axis_len = _get_einsum_access_descr_to_axis_len(
+            expr.access_descriptors, rec_args)
+
         for access_descr, (iarg, arg) in zip(expr.access_descriptors,
-                                            enumerate(expr.args), strict=True):
+                                            enumerate(rec_args), strict=True):
             subscript_indices: list[ArithmeticExpression] = []
             for iaxis, axis in enumerate(access_descr):
                 if not are_shape_components_equal(
                             arg.shape[iaxis],
-                            expr._access_descr_to_axis_len()[axis]):
+                            access_descr_to_axis_len[axis]):
                     # axis is broadcasted
                     assert are_shape_components_equal(arg.shape[iaxis], 1)
                     subscript_indices.append(0)
@@ -432,7 +458,7 @@ class ToIndexLambdaMixin:
                                 immutabledict(redn_bounds))
 
         return IndexLambda(expr=inner_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            bindings=immutabledict(bindings),
                            axes=expr.axes,
@@ -443,12 +469,14 @@ class ToIndexLambdaMixin:
     def map_roll(self, expr: Roll) -> IndexLambda:
         from pytato.utils import dim_to_index_lambda_components
 
+        rec_array = self.rec(expr.array)
+
         index_expr: prim.ExpressionNode = prim.Variable("_in0")
         indices: list[ArithmeticExpression] = [
             prim.Variable(f"_{d}") for d in range(expr.ndim)]
         axis = expr.axis
         axis_len_expr, bindings = dim_to_index_lambda_components(
-            expr.shape[axis],
+            rec_array.shape[axis],
             UniqueNameGenerator({"_in0"}))
 
         # Mypy has a point: the type system does not prove that the operands are
@@ -459,13 +487,12 @@ class ToIndexLambdaMixin:
             index_expr = index_expr[tuple(indices)]
 
         # type-ignore-reason: `bindings` was returned as Dict[str, SizeParam]
-        bindings["_in0"] = expr.array  # type: ignore[assignment]
+        bindings["_in0"] = rec_array  # type: ignore[assignment]
 
         return IndexLambda(expr=index_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({name: self.rec(bnd)
-                                     for name, bnd in bindings.items()}),
+                           bindings=immutabledict(bindings),
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
@@ -476,27 +503,30 @@ class ToIndexLambdaMixin:
                                       ) -> IndexLambda:
         from pytato.utils import get_indexing_expression, get_shape_after_broadcasting
 
+        rec_array = self.rec(expr.array)
+        rec_indices = self.rec_idx_or_size_tuple(expr.indices)
+
         i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
+                              for i, idx_expr in enumerate(rec_indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-                    cast("Array | int | np.integer[Any]", expr.indices[i_idx])
+                    cast("Array | int | np.integer[Any]", rec_indices[i_idx])
                     for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
         indices: list[ArithmeticExpression] = []
         in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
+        bindings = {in_ary: rec_array}
         islice_idx = 0
 
         for i_idx, (idx, axis_len) in enumerate(
-                        zip(expr.indices, expr.array.shape, strict=True)):
+                        zip(rec_indices, rec_array.shape, strict=True)):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
+                    bindings[bnd_name] = axis_len
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
                 if normalized_slice_does_not_change_axis(idx, axis_len):
@@ -508,7 +538,7 @@ class ToIndexLambdaMixin:
             elif isinstance(idx, Array):
                 if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
+                    bindings[bnd_name] = idx
                     indirect_idx_expr: ArithmeticExpression = prim.Subscript(
                         prim.Variable(bnd_name),
                         get_indexing_expression(
@@ -536,7 +566,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
                            bindings=immutabledict(bindings),
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
@@ -547,28 +577,32 @@ class ToIndexLambdaMixin:
     def map_non_contiguous_advanced_index(
             self, expr: AdvancedIndexInNoncontiguousAxes) -> IndexLambda:
         from pytato.utils import get_indexing_expression, get_shape_after_broadcasting
+
+        rec_array = self.rec(expr.array)
+        rec_indices = self.rec_idx_or_size_tuple(expr.indices)
+
         i_adv_indices = tuple(i
-                              for i, idx_expr in enumerate(expr.indices)
+                              for i, idx_expr in enumerate(rec_indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-            cast("Array | int | np.integer[Any]", expr.indices[i_idx])
+            cast("Array | int | np.integer[Any]", rec_indices[i_idx])
             for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
         indices: list[ArithmeticExpression] = []
 
         in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
+        bindings = {in_ary: rec_array}
 
         islice_idx = len(adv_idx_shape)
 
-        for idx, axis_len in zip(expr.indices, expr.array.shape, strict=True):
+        for idx, axis_len in zip(rec_indices, rec_array.shape, strict=True):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
+                    bindings[bnd_name] = axis_len
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
                 if normalized_slice_does_not_change_axis(idx, axis_len):
@@ -580,7 +614,7 @@ class ToIndexLambdaMixin:
             elif isinstance(idx, Array):
                 if isinstance(axis_len, INT_CLASSES):
                     bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(idx)
+                    bindings[bnd_name] = idx
 
                     indirect_idx_expr: ArithmeticExpression = prim.Subscript(
                                                         prim.Variable(bnd_name),
@@ -605,7 +639,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
                            bindings=immutabledict(bindings),
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
@@ -614,20 +648,23 @@ class ToIndexLambdaMixin:
                            )
 
     def map_basic_index(self, expr: BasicIndex) -> IndexLambda:
+        rec_array = self.rec(expr.array)
+        rec_indices = self.rec_idx_or_size_tuple(expr.indices)
+
         vng = UniqueNameGenerator()
         indices: list[ArithmeticExpression] = []
 
         in_ary = vng("in")
-        bindings = {in_ary: self.rec(expr.array)}
+        bindings = {in_ary: rec_array}
         islice_idx = 0
 
-        for idx, axis_len in zip(expr.indices, expr.array.shape, strict=True):
+        for idx, axis_len in zip(rec_indices, rec_array.shape, strict=True):
             if isinstance(idx, INT_CLASSES):
                 if isinstance(axis_len, INT_CLASSES):
                     indices.append(idx % axis_len)
                 else:
                     bnd_name = vng("in")
-                    bindings[bnd_name] = self.rec(axis_len)
+                    bindings[bnd_name] = axis_len
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
                 if normalized_slice_does_not_change_axis(idx, axis_len):
@@ -642,7 +679,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
                            bindings=immutabledict(bindings),
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
@@ -651,18 +688,22 @@ class ToIndexLambdaMixin:
                            )
 
     def map_reshape(self, expr: Reshape) -> IndexLambda:
-        indices = _get_reshaped_indices(expr)
+        rec_array = self.rec(expr.array)
+        rec_newshape = self.rec_idx_or_size_tuple(expr.shape)
+        indices = _get_reshaped_indices(expr.order, rec_array.shape, rec_newshape)
         index_expr = prim.Variable("_in0")[tuple(indices)]
         return IndexLambda(expr=index_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=rec_newshape,
                            dtype=expr.dtype,
-                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
+                           bindings=immutabledict({"_in0": rec_array}),
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> IndexLambda:
+        rec_array = self.rec(expr.array)
+
         indices: list[ArithmeticExpression | None] = [None] * expr.ndim
         for from_index, to_index in enumerate(expr.axis_permutation):
             indices[to_index] = prim.Variable(f"_{from_index}")
@@ -671,9 +712,9 @@ class ToIndexLambdaMixin:
             cast("tuple[ArithmeticExpression]", tuple(indices))]
 
         return IndexLambda(expr=index_expr,
-                           shape=self._rec_shape(expr.shape),
+                           shape=self.rec_idx_or_size_tuple(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
+                           bindings=immutabledict({"_in0": rec_array}),
                            axes=expr.axes,
                            var_to_reduction_descr=immutabledict(),
                            tags=expr.tags,
