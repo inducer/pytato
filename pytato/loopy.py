@@ -39,7 +39,7 @@ from immutabledict import immutabledict
 
 import loopy as lp
 import pymbolic.primitives as prim
-from pymbolic.typing import ArithmeticExpression, Expression, Integer, not_none
+from loopy.typing import assert_tuple
 from pytools import memoize_method
 
 from pytato.array import (
@@ -60,6 +60,8 @@ from pytato.scalar_expr import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping, Sequence
+
+    from pymbolic.typing import ArithmeticExpression, Expression, Integer
 
 
 __doc__ = r"""
@@ -423,7 +425,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     get_size_param_deps = SizeParamGatherer()
 
     lp_size_params: frozenset[str] = reduce(frozenset.union,
-                                            (lpy_get_deps(not_none(arg.shape))
+                                            (lpy_get_deps(assert_tuple(arg.shape))
                                              for arg in knl.args
                                              if isinstance(arg, ArrayBase)
                                              and is_expression(arg.shape)
