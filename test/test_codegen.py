@@ -2074,11 +2074,15 @@ def test_forcevalueargtag(ctx_factory):
 
     out = x + y
 
-    print(pt.generate_loopy(x).program)
+    # print(pt.generate_loopy(x).program)
 
-    _, (pt_out,) = pt.generate_loopy(out)(cq, x=4, y=42)
+    t_unit = pt.generate_loopy(out).program
+    _, (pt_out,) = t_unit(cq, x=4, y=42)
 
-    np.testing.assert_allclose(pt_out, 4+42)
+    assert isinstance(t_unit.default_entrypoint.arg_dict["x"], lp.ValueArg)
+    assert isinstance(t_unit.default_entrypoint.arg_dict["y"], lp.ValueArg)
+
+    np.testing.assert_allclose(pt_out.get(), 4+42)
 
 
 if __name__ == "__main__":
