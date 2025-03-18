@@ -2063,6 +2063,28 @@ def test_pow_arg_casting(ctx_factory):
                                 (float, np.float32, np.float64)
 
 
+def test_forcevalueargtag(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (), np.float64,
+                            tags=frozenset({pt.tags.ForceValueArgTag()}))
+    y = pt.make_placeholder("y", (), np.float64,
+                            tags=frozenset({pt.tags.ForceValueArgTag()}))
+
+    out = x + y
+
+    # print(pt.generate_loopy(x).program)
+
+    t_unit = pt.generate_loopy(out).program
+    _, (pt_out,) = t_unit(cq, x=4, y=42)
+
+    assert isinstance(t_unit.default_entrypoint.arg_dict["x"], lp.ValueArg)
+    assert isinstance(t_unit.default_entrypoint.arg_dict["y"], lp.ValueArg)
+
+    np.testing.assert_allclose(pt_out.get(), 4+42)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
