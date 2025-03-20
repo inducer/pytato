@@ -142,11 +142,7 @@ class InlineMarker(CopyMapper):
     Primary mapper for :func:`tag_all_calls_to_be_inlined`.
     """
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        rec_expr = super().map_call(expr)
-        if rec_expr.tags_of_type(InlineCallTag):
-            return rec_expr
-        else:
-            return rec_expr.tagged(InlineCallTag())
+        return super().map_call(expr).tagged(InlineCallTag())
 
 
 def inline_calls(expr: ArrayOrNames) -> ArrayOrNames:
