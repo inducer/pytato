@@ -791,6 +791,7 @@ def find_distributed_partition(
     # {{{ create (local) parts out of batch ids
 
     part_comm_ids: list[_PartCommIDs] = []
+
     if comm_batches:
         recv_ids: FrozenOrderedSet[CommunicationOpIdentifier] = FrozenOrderedSet()
         for batch in comm_batches:
@@ -811,7 +812,8 @@ def find_distributed_partition(
                 _PartCommIDs(
                     recv_ids=recv_ids,
                     send_ids=FrozenOrderedSet()))
-    else:
+
+    if not part_comm_ids:
         part_comm_ids.append(
             _PartCommIDs(
                 recv_ids=FrozenOrderedSet(),
