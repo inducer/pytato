@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 import dataclasses
 import sys
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -40,6 +41,10 @@ from pyopencl.tools import (  # noqa
 
 import pytato as pt
 from pytato.array import _SuppliedAxesAndTagsMixin
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 def test_matmul_input_validation():
@@ -1047,6 +1052,101 @@ def test_created_at():
     assert len(created_tag) == 0
 
     # }}}
+
+
+# {{{ test_mapper_duplication_check
+
+class NonDuplicatingMapper(pt.transform.TransformMapper):
+    def __init__(self) -> None:
+        super().__init__(err_on_collision=False, err_on_created_duplicate=True)
+
+    def map_index_lambda(self, expr: pt.IndexLambda) -> pt.Array:
+        assert not any(isinstance(s, pt.Array) for s in expr.shape)
+        from immutabledict import immutabledict
+        new_bindings: Mapping[str, pt.Array] = immutabledict({
+                name: self.rec(subexpr)
+                for name, subexpr in sorted(expr.bindings.items())})
+        if (
+                frozenset(new_bindings.keys()) == frozenset(expr.bindings.keys())
+                and all(
+                    new_bindings[name] is expr.bindings[name]
+                    for name in expr.bindings)):
+            return expr
+        else:
+            return pt.IndexLambda(expr=expr.expr,
+                    shape=expr.shape,
+                    dtype=expr.dtype,
+                    bindings=new_bindings,
+                    axes=expr.axes,
+                    var_to_reduction_descr=expr.var_to_reduction_descr,
+                    tags=expr.tags,
+                    non_equality_tags=expr.non_equality_tags)
+
+    def map_placeholder(self, expr: pt.Placeholder) -> pt.Array:
+        assert not any(isinstance(s, pt.Array) for s in expr.shape)
+        return expr
+
+
+class DuplicatingMapper(pt.transform.TransformMapper):
+    def __init__(self) -> None:
+        super().__init__(err_on_collision=False, err_on_created_duplicate=True)
+
+    def map_index_lambda(self, expr: pt.IndexLambda) -> pt.Array:
+        assert not any(isinstance(s, pt.Array) for s in expr.shape)
+        from immutabledict import immutabledict
+        new_bindings: Mapping[str, pt.Array] = immutabledict({
+                name: self.rec(subexpr)
+                for name, subexpr in sorted(expr.bindings.items())})
+        return pt.IndexLambda(expr=expr.expr,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                bindings=new_bindings,
+                axes=expr.axes,
+                var_to_reduction_descr=expr.var_to_reduction_descr,
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
+
+    def map_placeholder(self, expr: pt.Placeholder) -> pt.Array:
+        assert not any(isinstance(s, pt.Array) for s in expr.shape)
+        return pt.Placeholder(name=expr.name,
+                shape=expr.shape,
+                dtype=expr.dtype,
+                axes=expr.axes,
+                tags=expr.tags,
+                non_equality_tags=expr.non_equality_tags)
+
+
+def test_mapper_duplication_check():
+    x1 = pt.make_placeholder("x", (10, 10), "float64")
+    x2 = pt.make_placeholder("x", (10, 10), "float64")
+    dag = x1 + x2
+
+    node_type_to_count = pt.analysis.get_node_type_counts(
+        dag, count_duplicates=True)
+    assert node_type_to_count[pt.Placeholder] == 2
+    assert node_type_to_count[pt.IndexLambda] == 1
+
+    deduped_dag = pt.transform.CopyMapper(
+        err_on_collision=False, err_on_created_duplicate=False)(dag)
+
+    node_type_to_count = pt.analysis.get_node_type_counts(
+        deduped_dag, count_duplicates=True)
+    assert node_type_to_count[pt.Placeholder] == 1
+    assert node_type_to_count[pt.IndexLambda] == 1
+
+    # Should not raise
+    NonDuplicatingMapper()(deduped_dag)
+
+    # Should not raise
+    NonDuplicatingMapper()(dag)
+
+    with pytest.raises(ValueError):
+        DuplicatingMapper()(deduped_dag)
+
+    with pytest.raises(ValueError):
+        DuplicatingMapper()(dag)
+
+# }}}
 
 
 def test_pickling_and_unpickling_is_equal():
