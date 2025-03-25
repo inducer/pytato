@@ -2,32 +2,37 @@ from __future__ import annotations
 
 import operator
 import random
-import types
-from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any, Never
 
 import numpy as np
 
-import pyopencl as cl
 from pytools.tag import Tag
 
 import pytato as pt
-from pytato.array import (
-    Array,
-    AxisPermutation,
-    Concatenate,
-    DataWrapper,
-    Placeholder,
-    Reshape,
-    Roll,
-    Stack,
-)
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    import types
+    from collections.abc import Callable, Sequence
+
+    import pyopencl as cl
+
+    from pytato.array import (
+        Array,
+        AxisPermutation,
+        Concatenate,
+        DataWrapper,
+        Placeholder,
+        Reshape,
+        Roll,
+        Stack,
+    )
 
 
 # {{{ tools for comparison to numpy
 
-class NumpyBasedEvaluator(Mapper[Any, []]):
+class NumpyBasedEvaluator(Mapper[Any, Never, []]):
     """
     Mapper to return the result according to an eager evaluation array package
     *np*.
@@ -296,7 +301,7 @@ def get_random_pt_dag(seed: int,
             else:
                 return expr
 
-        dag = cast(pt.DictOfNamedArrays,
+        dag = cast("pt.DictOfNamedArrays",
                    pt.transform.map_and_copy(dag, make_dws_placeholder))
 
     return dag

@@ -28,13 +28,17 @@ THE SOFTWARE.
 """
 import dataclasses
 import logging
-from collections.abc import Callable, Hashable, Iterable, Mapping
+from collections.abc import Hashable
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
+    Never,
     ParamSpec,
+    TypeAlias,
     TypeVar,
     cast,
+    overload,
 )
 
 import numpy as np
@@ -42,7 +46,6 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
-from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -78,18 +81,22 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from pytato.tags import ImplStored
 
 
-ArrayOrNames = Array | AbstractResultWithNamedArrays
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping
+
+
+ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
-TransformMapperResultT = TypeVar("TransformMapperResultT",  # used in TransformMapper
-                            Array, AbstractResultWithNamedArrays, ArrayOrNames)
-CachedMapperT = TypeVar("CachedMapperT")  # used in CachedMapper
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = frozenset[Array]
 
 __doc__ = """
 .. autoclass:: Mapper
+.. autoclass:: CacheInputsWithKey
+.. autoclass:: CachedMapperCache
 .. autoclass:: CachedMapper
+.. autoclass:: TransformMapperCache
 .. autoclass:: TransformMapper
 .. autoclass:: TransformMapperWithExtraArgs
 .. autoclass:: CopyMapper
@@ -131,17 +138,42 @@ Transforming call sites
 Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. class:: ArrayOrNames
+
 .. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
 
-.. class:: CombineT
-
-    A type variable representing the type of a :class:`CombineMapper`.
-
 .. class:: ResultT
 
-    A type variable representing the result type of a :class:`Mapper`.
+    A type variable representing the result type of a :class:`Mapper` when mapping
+    a :class:`pytato.Array` or :class:`pytato.AbstractResultWithNamedArrays`.
+
+.. class:: FunctionResultT
+
+    A type variable representing the result type of a :class:`Mapper` when mapping
+    a :class:`pytato.function.FunctionDefinition`.
+
+.. class:: CacheExprT
+
+    A type variable representing an input from which to compute a cache key in order
+    to cache a result.
+
+.. class:: CacheKeyT
+
+    A type variable representing a key computed from an input expression.
+
+.. class:: CacheResultT
+
+    A type variable representing a result to be cached.
+
+.. class:: Scalar
+
+    See :data:`pymbolic.Scalar`.
+
+.. class:: P
+
+    A :class:`typing.ParamSpec` used to annotate `*args` and `**kwargs`.
 
 """
 
@@ -152,13 +184,31 @@ class UnsupportedArrayError(ValueError):
     pass
 
 
+class ForeignObjectError(ValueError):
+    pass
+
+
+class CacheCollisionError(ValueError):
+    pass
+
+
+class MapperCreatedDuplicateError(ValueError):
+    pass
+
+
 # {{{ mapper base class
 
 ResultT = TypeVar("ResultT")
+FunctionResultT = TypeVar("FunctionResultT")
 P = ParamSpec("P")
 
 
-class Mapper(Generic[ResultT, P]):
+def _verify_is_array(expr: ArrayOrNames) -> Array:
+    assert isinstance(expr, Array)
+    return expr
+
+
+class Mapper(Generic[ResultT, FunctionResultT, P]):
     """A class that when called with a :class:`pytato.Array` recursively
     iterates over the DAG, calling the *_mapper_method* of each node. Users of
     this class are expected to override the methods of this class or create a
@@ -170,12 +220,11 @@ class Mapper(Generic[ResultT, P]):
        if this is not desired.
 
     .. automethod:: handle_unsupported_array
-    .. automethod:: map_foreign
     .. automethod:: rec
     .. automethod:: __call__
     """
 
-    def handle_unsupported_array(self, expr: MappedT,
+    def handle_unsupported_array(self, expr: Array,
                                  *args: P.args, **kwargs: P.kwargs) -> ResultT:
         """Mapper method that is invoked for
         :class:`pytato.Array` subclasses for which a mapper
@@ -184,16 +233,9 @@ class Mapper(Generic[ResultT, P]):
         raise UnsupportedArrayError(
                 f"{type(self).__name__} cannot handle expressions of type {type(expr)}")
 
-    def map_foreign(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> ResultT:
-        """Mapper method that is invoked for an object of class for which a
-        mapper method does not exist in this mapper.
-        """
-        raise ValueError(
-                f"{type(self).__name__} encountered invalid foreign object: {expr!r}")
-
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
         """Call the mapper method of *expr* and return the result."""
-        method: Callable[..., Array] | None
+        method: Callable[..., ResultT] | None
 
         try:
             method = getattr(self, expr._mapper_method)
@@ -208,73 +250,433 @@ class Mapper(Generic[ResultT, P]):
                 else:
                     return self.handle_unsupported_array(expr, *args, **kwargs)
             else:
-                return self.map_foreign(expr, *args, **kwargs)
+                raise ForeignObjectError(
+                    f"{type(self).__name__} encountered invalid foreign "
+                    f"object: {expr!r}") from None
 
         assert method is not None
-        return cast(ResultT, method(expr, *args, **kwargs))
+        return cast("ResultT", method(expr, *args, **kwargs))
 
-    def __call__(self,
-                 expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+    def rec_function_definition(
+            self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> FunctionResultT:
+        """Call the mapper method of *expr* and return the result."""
+        method: Callable[..., FunctionResultT] | None
+
+        try:
+            method = self.map_function_definition  # type: ignore[attr-defined]
+        except AttributeError:
+            raise ValueError(
+                f"{type(self).__name__} lacks a mapper method for functions.") from None
+
+        assert method is not None
+        return method(expr, *args, **kwargs)
+
+    @overload
+    def __call__(
+            self,
+            expr: ArrayOrNames,
+            *args: P.args,
+            **kwargs: P.kwargs) -> ResultT:
+        ...
+
+    @overload
+    def __call__(
+            self,
+            expr: FunctionDefinition,
+            *args: P.args,
+            **kwargs: P.kwargs) -> FunctionResultT:
+        ...
+
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            *args: P.args,
+            **kwargs: P.kwargs) -> ResultT | FunctionResultT:
         """Handle the mapping of *expr*."""
-        return self.rec(expr, *args, **kwargs)
+        if isinstance(expr, ArrayOrNames):
+            return self.rec(expr, *args, **kwargs)
+        elif isinstance(expr, FunctionDefinition):
+            return self.rec_function_definition(expr, *args, **kwargs)
+        else:
+            raise ForeignObjectError(
+                f"{type(self).__name__} encountered invalid foreign "
+                f"object: {expr!r}") from None
 
 # }}}
 
 
 # {{{ CachedMapper
 
-class CachedMapper(Mapper[ResultT, P]):
+CacheExprT = TypeVar("CacheExprT", ArrayOrNames, FunctionDefinition)
+CacheResultT = TypeVar("CacheResultT")
+CacheKeyT: TypeAlias = Hashable
+
+
+class CacheInputsWithKey(Generic[CacheExprT, P]):
+    """
+    Data structure for inputs to :class:`CachedMapperCache`.
+
+    .. attribute:: expr
+
+        The input expression being mapped.
+
+    .. attribute:: args
+
+        A :class:`tuple` of extra positional arguments.
+
+    .. attribute:: kwargs
+
+        A :class:`dict` of extra keyword arguments.
+
+    .. attribute:: key
+
+        The cache key corresponding to *expr* and any additional inputs that were
+        passed.
+
+    """
+    def __init__(
+            self,
+            expr: CacheExprT,
+            key: CacheKeyT,
+            *args: P.args,
+            **kwargs: P.kwargs):
+        self.expr: CacheExprT = expr
+        self.args: tuple[Any, ...] = args
+        self.kwargs: dict[str, Any] = kwargs
+        self.key: CacheKeyT = key
+
+
+class CachedMapperCache(Generic[CacheExprT, CacheResultT, P]):
+    """
+    Cache for mappers.
+
+    .. automethod:: __init__
+
+        Compute the key for an input expression.
+
+    .. automethod:: add
+    .. automethod:: retrieve
+    .. automethod:: clear
+    """
+    def __init__(self, err_on_collision: bool) -> None:
+        """
+        Initialize the cache.
+
+        :arg err_on_collision: Raise an exception if two distinct input expression
+            instances have the same key.
+        """
+        self.err_on_collision = err_on_collision
+
+        self._input_key_to_result: dict[CacheKeyT, CacheResultT] = {}
+        if self.err_on_collision:
+            self._input_key_to_expr: dict[CacheKeyT, CacheExprT] = {}
+
+    def add(
+            self,
+            inputs: CacheInputsWithKey[CacheExprT, P],
+            result: CacheResultT) -> CacheResultT:
+        """Cache a mapping result."""
+        key = inputs.key
+
+        assert key not in self._input_key_to_result, \
+            f"Cache entry is already present for key '{key}'."
+
+        self._input_key_to_result[key] = result
+        if self.err_on_collision:
+            self._input_key_to_expr[key] = inputs.expr
+
+        return result
+
+    def retrieve(self, inputs: CacheInputsWithKey[CacheExprT, P]) -> CacheResultT:
+        """Retrieve the cached mapping result."""
+        key = inputs.key
+
+        result = self._input_key_to_result[key]
+
+        if self.err_on_collision and inputs.expr is not self._input_key_to_expr[key]:
+            raise CacheCollisionError
+
+        return result
+
+    def clear(self) -> None:
+        """Reset the cache."""
+        self._input_key_to_result = {}
+        if self.err_on_collision:
+            self._input_key_to_expr = {}
+
+
+class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """Mapper class that maps each node in the DAG exactly once. This loses some
     information compared to :class:`Mapper` as a node is visited only from
     one of its predecessors.
 
     .. automethod:: get_cache_key
+    .. automethod:: get_function_definition_cache_key
+    .. automethod:: clone_for_callee
     """
-
-    def __init__(self) -> None:
+    def __init__(
+            self,
+            err_on_collision: bool = False,
+            _cache:
+                CachedMapperCache[ArrayOrNames, ResultT, P] | None = None,
+            _function_cache:
+                CachedMapperCache[FunctionDefinition, FunctionResultT, P] | None = None
+            ) -> None:
         super().__init__()
-        self._cache: dict[Hashable, ResultT] = {}
+
+        self._cache: CachedMapperCache[ArrayOrNames, ResultT, P] = (
+            _cache if _cache is not None
+            else CachedMapperCache(err_on_collision=err_on_collision))
+
+        self._function_cache: CachedMapperCache[
+                FunctionDefinition, FunctionResultT, P] = (
+            _function_cache if _function_cache is not None
+            else CachedMapperCache(err_on_collision=err_on_collision))
 
     def get_cache_key(
                 self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
-            ) -> Hashable:
-        return (expr, *args, tuple(sorted(kwargs.items())))
+            ) -> CacheKeyT:
+        if args or kwargs:
+            # Depending on whether extra arguments are passed by position or by
+            # keyword, they can end up in either args or kwargs; hence key is not
+            # uniquely defined in the general case
+            raise NotImplementedError(
+                "Derived classes must override get_cache_key if using extra inputs.")
+        return expr
+
+    def get_function_definition_cache_key(
+                self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> CacheKeyT:
+        if args or kwargs:
+            # Depending on whether extra arguments are passed by position or by
+            # keyword, they can end up in either args or kwargs; hence key is not
+            # uniquely defined in the general case
+            raise NotImplementedError(
+                "Derived classes must override get_function_definition_cache_key if "
+                "using extra inputs.")
+        return expr
+
+    def _make_cache_inputs(
+            self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
+            ) -> CacheInputsWithKey[ArrayOrNames, P]:
+        return CacheInputsWithKey(
+            expr, self.get_cache_key(expr, *args, **kwargs), *args, **kwargs)
+
+    def _make_function_definition_cache_inputs(
+            self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> CacheInputsWithKey[FunctionDefinition, P]:
+        return CacheInputsWithKey(
+            expr, self.get_function_definition_cache_key(expr, *args, **kwargs),
+            *args, **kwargs)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputsWithKey[ArrayOrNames, P],
+            result: ResultT) -> ResultT:
+        return self._cache.add(inputs, result)
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputsWithKey[FunctionDefinition, P],
+            result: FunctionResultT) -> FunctionResultT:
+        return self._function_cache.add(inputs, result)
+
+    def _cache_retrieve(self, inputs: CacheInputsWithKey[ArrayOrNames, P]) -> ResultT:
+        try:
+            return self._cache.retrieve(inputs)
+        except CacheCollisionError as e:
+            raise ValueError(
+                f"cache collision detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_retrieve(
+            self, inputs: CacheInputsWithKey[FunctionDefinition, P]) -> FunctionResultT:
+        try:
+            return self._function_cache.retrieve(inputs)
+        except CacheCollisionError as e:
+            raise ValueError(
+                f"cache collision detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
 
     def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> ResultT:
-        key = self.get_cache_key(expr, *args, **kwargs)
+        inputs = self._make_cache_inputs(expr, *args, **kwargs)
         try:
-            return self._cache[key]
+            return self._cache_retrieve(inputs)
         except KeyError:
-            result = super().rec(expr, *args, **kwargs)
-            self._cache[key] = result
-            return result
+            # Intentionally going to Mapper instead of super() to avoid
+            # double caching when subclasses of CachedMapper override rec,
+            # see https://github.com/inducer/pytato/pull/585
+            return self._cache_add(inputs, Mapper.rec(self, expr, *args, **kwargs))
+
+    def rec_function_definition(
+                self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> FunctionResultT:
+        inputs = self._make_function_definition_cache_inputs(expr, *args, **kwargs)
+        try:
+            return self._function_cache_retrieve(inputs)
+        except KeyError:
+            return self._function_cache_add(
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
+                inputs, Mapper.rec_function_definition(self, expr, *args, **kwargs))
+
+    def clone_for_callee(
+            self, function: FunctionDefinition) -> Self:
+        """
+        Called to clone *self* before starting traversal of a
+        :class:`pytato.function.FunctionDefinition`.
+        """
+        return type(self)(
+            err_on_collision=self._cache.err_on_collision,
+            # Functions are cached globally, but arrays aren't
+            _function_cache=self._function_cache)
 
 # }}}
 
 
 # {{{ TransformMapper
 
-class TransformMapper(CachedMapper[ArrayOrNames, []]):
+class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
+    """
+    Cache for :class:`TransformMapper` and :class:`TransformMapperWithExtraArgs`.
+
+    .. automethod:: __init__
+    .. automethod:: add
+    """
+    def __init__(
+            self,
+            err_on_collision: bool,
+            err_on_created_duplicate: bool) -> None:
+        """
+        Initialize the cache.
+
+        :arg err_on_collision: Raise an exception if two distinct input expression
+            instances have the same key.
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        super().__init__(err_on_collision=err_on_collision)
+
+        self.err_on_created_duplicate = err_on_created_duplicate
+
+    def add(
+            self,
+            inputs: CacheInputsWithKey[CacheExprT, P],
+            result: CacheExprT) -> CacheExprT:
+        """
+        Cache a mapping result.
+
+        Returns *result*.
+        """
+        key = inputs.key
+
+        assert key not in self._input_key_to_result, \
+            f"Cache entry is already present for key '{key}'."
+
+        if self.err_on_created_duplicate:
+            from pytato.analysis import DirectPredecessorsGetter
+            pred_getter = DirectPredecessorsGetter(include_functions=True)
+            if (
+                    hash(result) == hash(inputs.expr)
+                    and result == inputs.expr
+                    and result is not inputs.expr
+                    # Only consider "direct" duplication, not duplication resulting
+                    # from equality-preserving changes to predecessors. Assume that
+                    # such changes are OK, otherwise they would have been detected
+                    # at the point at which they originated. (For example, consider
+                    # a DAG containing pre-existing duplicates. If a subexpression
+                    # of *expr* is a duplicate and is replaced with a previously
+                    # encountered version from the cache, a new instance of *expr*
+                    # must be created. This should not trigger an error.)
+                    and all(
+                        result_pred is pred
+                        for pred, result_pred in zip(
+                            pred_getter(inputs.expr),
+                            pred_getter(result),
+                            strict=True))):
+                raise MapperCreatedDuplicateError from None
+
+        self._input_key_to_result[key] = result
+        if self.err_on_collision:
+            self._input_key_to_expr[key] = inputs.expr
+
+        return result
+
+
+class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
     other :class:`pytato.array.Array`\\ s.
 
     Enables certain operations that can only be done if the mapping results are also
-    arrays (e.g., calling :meth:`~CachedMapper.get_cache_key` on them). Does not
-    implement default mapper methods; for that, see :class:`CopyMapper`.
+    arrays (e.g., computing a cache key from them). Does not implement default
+    mapper methods; for that, see :class:`CopyMapper`.
 
+    .. automethod:: __init__
     .. automethod:: clone_for_callee
     """
-    def rec_ary(self, expr: Array) -> Array:
-        res = self.rec(expr)
-        assert isinstance(res, Array)
-        return res
+    def __init__(
+            self,
+            err_on_collision: bool = False,
+            err_on_created_duplicate: bool = False,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        if _cache is None:
+            _cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_created_duplicate=err_on_created_duplicate)
+
+        if _function_cache is None:
+            _function_cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_created_duplicate=err_on_created_duplicate)
+
+        super().__init__(
+            err_on_collision=err_on_collision,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputsWithKey[ArrayOrNames, []],
+            result: ArrayOrNames) -> ArrayOrNames:
+        try:
+            return self._cache.add(inputs, result)
+        except MapperCreatedDuplicateError as e:
+            raise ValueError(
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputsWithKey[FunctionDefinition, []],
+            result: FunctionDefinition) -> FunctionDefinition:
+        try:
+            return self._function_cache.add(inputs, result)
+        except MapperCreatedDuplicateError as e:
+            raise ValueError(
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        return type(self)()
+        function_cache = cast(
+            "TransformMapperCache[FunctionDefinition, []]", self._function_cache)
+        return type(self)(
+            err_on_collision=function_cache.err_on_collision,
+            err_on_created_duplicate=function_cache.err_on_created_duplicate,
+            _function_cache=function_cache)
 
 # }}}
 
@@ -282,8 +684,7 @@ class TransformMapper(CachedMapper[ArrayOrNames, []]):
 # {{{ TransformMapperWithExtraArgs
 
 class TransformMapperWithExtraArgs(
-            CachedMapper[ArrayOrNames, P],
-            Mapper[ArrayOrNames, P]
+            CachedMapper[ArrayOrNames, FunctionDefinition, P]
         ):
     """
     Similar to :class:`TransformMapper`, but each mapper method takes extra
@@ -292,19 +693,71 @@ class TransformMapperWithExtraArgs(
     The logic in :class:`TransformMapper` purposely does not take the extra
     arguments to keep the cost of its each call frame low.
 
+    .. automethod:: __init__
     .. automethod:: clone_for_callee
     """
-    def rec_ary(self, expr: Array, *args: P.args, **kwargs: P.kwargs) -> Array:
-        res = self.rec(expr, *args, **kwargs)
-        assert isinstance(res, Array)
-        return res
+    def __init__(
+            self,
+            err_on_collision: bool = False,
+            err_on_created_duplicate: bool = False,
+            _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
+            _function_cache:
+                TransformMapperCache[FunctionDefinition, P] | None = None
+            ) -> None:
+        """
+        :arg err_on_collision: Raise an exception if two distinct input array
+            instances have the same key.
+        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
+            array instance that has the same key as the input array.
+        """
+        if _cache is None:
+            _cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_created_duplicate=err_on_created_duplicate)
+
+        if _function_cache is None:
+            _function_cache = TransformMapperCache(
+                err_on_collision=err_on_collision,
+                err_on_created_duplicate=err_on_created_duplicate)
+
+        super().__init__(
+            err_on_collision=err_on_collision,
+            _cache=_cache,
+            _function_cache=_function_cache)
+
+    def _cache_add(
+            self,
+            inputs: CacheInputsWithKey[ArrayOrNames, P],
+            result: ArrayOrNames) -> ArrayOrNames:
+        try:
+            return self._cache.add(inputs, result)
+        except MapperCreatedDuplicateError as e:
+            raise ValueError(
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
+
+    def _function_cache_add(
+            self,
+            inputs: CacheInputsWithKey[FunctionDefinition, P],
+            result: FunctionDefinition) -> FunctionDefinition:
+        try:
+            return self._function_cache.add(inputs, result)
+        except MapperCreatedDuplicateError as e:
+            raise ValueError(
+                f"mapper-created duplicate detected on {type(inputs.expr)} in "
+                f"{type(self)}.") from e
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         """
         Called to clone *self* before starting traversal of a
         :class:`pytato.function.FunctionDefinition`.
         """
-        return type(self)()
+        function_cache = cast(
+            "TransformMapperCache[FunctionDefinition, P]", self._function_cache)
+        return type(self)(
+            err_on_collision=function_cache.err_on_collision,
+            err_on_created_duplicate=function_cache.err_on_created_duplicate,
+            _function_cache=function_cache)
 
 # }}}
 
@@ -350,18 +803,18 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack) -> Array:
-        arrays = tuple(self.rec_ary(arr) for arr in expr.arrays)
+        arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
-        arrays = tuple(self.rec_ary(arr) for arr in expr.arrays)
+        arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
                            axes=expr.axes, tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll) -> Array:
-        return Roll(array=self.rec_ary(expr.array),
+        return Roll(array=_verify_is_array(self.rec(expr.array)),
                 shift=expr.shift,
                 axis=expr.axis,
                 axes=expr.axes,
@@ -369,14 +822,14 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
-        return AxisPermutation(array=self.rec_ary(expr.array),
+        return AxisPermutation(array=_verify_is_array(self.rec(expr.array)),
                 axis_permutation=expr.axis_permutation,
                 axes=expr.axes,
                 tags=expr.tags,
                 non_equality_tags=expr.non_equality_tags)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
-        return type(expr)(self.rec_ary(expr.array),
+        return type(expr)(_verify_is_array(self.rec(expr.array)),
                           indices=self.rec_idx_or_size_tuple(expr.indices),
                           axes=expr.axes,
                           tags=expr.tags,
@@ -413,7 +866,7 @@ class CopyMapper(TransformMapper):
 
     def map_einsum(self, expr: Einsum) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec_ary(arg) for arg in expr.args),
+                      tuple(_verify_is_array(self.rec(arg)) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       tags=expr.tags,
@@ -430,7 +883,7 @@ class CopyMapper(TransformMapper):
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec_ary(val.expr)
+        return DictOfNamedArrays({key: _verify_is_array(self.rec(val.expr))
                                   for key, val in expr.items()},
                                  tags=expr.tags
                                  )
@@ -458,7 +911,7 @@ class CopyMapper(TransformMapper):
                 non_equality_tags=expr.non_equality_tags)
 
     def map_reshape(self, expr: Reshape) -> Array:
-        return Reshape(self.rec_ary(expr.array),
+        return Reshape(_verify_is_array(self.rec(expr.array)),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape),
                        order=expr.order,
                        axes=expr.axes,
@@ -469,10 +922,10 @@ class CopyMapper(TransformMapper):
             self, expr: DistributedSendRefHolder) -> Array:
         return DistributedSendRefHolder(
                 send=DistributedSend(
-                    data=self.rec_ary(expr.send.data),
+                    data=_verify_is_array(self.rec(expr.send.data)),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                passthrough_data=self.rec_ary(expr.passthrough_data),
+                passthrough_data=_verify_is_array(self.rec(expr.passthrough_data)),
                 )
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
@@ -482,7 +935,6 @@ class CopyMapper(TransformMapper):
                dtype=expr.dtype, tags=expr.tags, axes=expr.axes,
                non_equality_tags=expr.non_equality_tags)
 
-    @memoize_method
     def map_function_definition(self,
                                 expr: FunctionDefinition) -> FunctionDefinition:
         # spawn a new mapper to avoid unsound cache hits, since the namespace of the
@@ -493,7 +945,7 @@ class CopyMapper(TransformMapper):
         return dataclasses.replace(expr, returns=immutabledict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
-        return Call(self.map_function_definition(expr.function),
+        return Call(self.rec_function_definition(expr.function),
                     immutabledict({name: self.rec(bnd)
                          for name, bnd in expr.bindings.items()}),
                     tags=expr.tags,
@@ -551,19 +1003,21 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                            non_equality_tags=expr.non_equality_tags)
 
     def map_stack(self, expr: Stack, *args: P.args, **kwargs: P.kwargs) -> Array:
-        arrays = tuple(self.rec_ary(arr, *args, **kwargs) for arr in expr.arrays)
+        arrays = tuple(
+            _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
         return Stack(arrays=arrays, axis=expr.axis, axes=expr.axes, tags=expr.tags,
                      non_equality_tags=expr.non_equality_tags)
 
     def map_concatenate(self,
                         expr: Concatenate, *args: P.args, **kwargs: P.kwargs) -> Array:
-        arrays = tuple(self.rec_ary(arr, *args, **kwargs) for arr in expr.arrays)
+        arrays = tuple(
+            _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
         return Concatenate(arrays=arrays, axis=expr.axis,
                            axes=expr.axes, tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
     def map_roll(self, expr: Roll, *args: P.args, **kwargs: P.kwargs) -> Array:
-        return Roll(array=self.rec_ary(expr.array, *args, **kwargs),
+        return Roll(array=_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                     shift=expr.shift,
                     axis=expr.axis,
                     axes=expr.axes,
@@ -572,7 +1026,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_axis_permutation(self, expr: AxisPermutation,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
-        return AxisPermutation(array=self.rec_ary(expr.array, *args, **kwargs),
+        return AxisPermutation(array=_verify_is_array(
+                                   self.rec(expr.array, *args, **kwargs)),
                                axis_permutation=expr.axis_permutation,
                                axes=expr.axes,
                                tags=expr.tags,
@@ -581,7 +1036,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def _map_index_base(self,
                         expr: IndexBase, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert isinstance(expr, _SuppliedAxesAndTagsMixin)
-        return type(expr)(self.rec_ary(expr.array, *args, **kwargs),
+        return type(expr)(_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                           indices=self.rec_idx_or_size_tuple(expr.indices,
                                                              *args, **kwargs),
                           axes=expr.axes,
@@ -621,7 +1076,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> Array:
         return Einsum(expr.access_descriptors,
-                      tuple(self.rec_ary(arg, *args, **kwargs) for arg in expr.args),
+                      tuple(_verify_is_array(
+                          self.rec(arg, *args, **kwargs)) for arg in expr.args),
                       axes=expr.axes,
                       redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                       tags=expr.tags,
@@ -640,7 +1096,8 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_dict_of_named_arrays(self,
                 expr: DictOfNamedArrays, *args: P.args, **kwargs: P.kwargs
             ) -> DictOfNamedArrays:
-        return DictOfNamedArrays({key: self.rec_ary(val.expr, *args, **kwargs)
+        return DictOfNamedArrays({key: _verify_is_array(
+                                      self.rec(val.expr, *args, **kwargs))
                                   for key, val in expr.items()},
                                  tags=expr.tags,
                                  )
@@ -672,7 +1129,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_reshape(self, expr: Reshape,
                     *args: P.args, **kwargs: P.kwargs) -> Array:
-        return Reshape(self.rec_ary(expr.array, *args, **kwargs),
+        return Reshape(_verify_is_array(self.rec(expr.array, *args, **kwargs)),
                        newshape=self.rec_idx_or_size_tuple(expr.newshape,
                                                            *args, **kwargs),
                        order=expr.order,
@@ -684,10 +1141,11 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                                         *args: P.args, **kwargs: P.kwargs) -> Array:
         return DistributedSendRefHolder(
                 send=DistributedSend(
-                    data=self.rec_ary(expr.send.data, *args, **kwargs),
+                    data=_verify_is_array(self.rec(expr.send.data, *args, **kwargs)),
                     dest_rank=expr.send.dest_rank,
                     comm_tag=expr.send.comm_tag),
-                passthrough_data=self.rec_ary(expr.passthrough_data, *args, **kwargs))
+                passthrough_data=_verify_is_array(
+                    self.rec(expr.passthrough_data, *args, **kwargs)))
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
@@ -707,7 +1165,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_call(self, expr: Call,
                  *args: P.args, **kwargs: P.kwargs) -> AbstractResultWithNamedArrays:
-        return Call(self.map_function_definition(expr.function, *args, **kwargs),
+        return Call(self.rec_function_definition(expr.function, *args, **kwargs),
                     immutabledict({name: self.rec(bnd, *args, **kwargs)
                          for name, bnd in expr.bindings.items()}),
                     tags=expr.tags,
@@ -724,30 +1182,22 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
 # {{{ CombineMapper
 
-class CombineMapper(Mapper[ResultT, []]):
+class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
     """
     Abstract mapper that recursively combines the results of user nodes
     of a given expression.
 
     .. automethod:: combine
     """
-    def __init__(self) -> None:
-        super().__init__()
-        self.cache: dict[ArrayOrNames, ResultT] = {}
+    def get_cache_key(self, expr: ArrayOrNames) -> CacheKeyT:
+        return expr
+
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> CacheKeyT:
+        return expr
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...]
                               ) -> tuple[ResultT, ...]:
         return tuple(self.rec(s) for s in situp if isinstance(s, Array))
-
-    def rec(self, expr: ArrayOrNames) -> ResultT:
-        if expr in self.cache:
-            return self.cache[expr]
-        result: ResultT = super().rec(expr)
-        self.cache[expr] = result
-        return result
-
-    def __call__(self, expr: ArrayOrNames) -> ResultT:
-        return self.rec(expr)
 
     def combine(self, *args: ResultT) -> ResultT:
         """Combine the arguments."""
@@ -829,8 +1279,7 @@ class CombineMapper(Mapper[ResultT, []]):
     def map_distributed_recv(self, expr: DistributedRecv) -> ResultT:
         return self.combine(*self.rec_idx_or_size_tuple(expr.shape))
 
-    @memoize_method
-    def map_function_definition(self, expr: FunctionDefinition) -> ResultT:
+    def map_function_definition(self, expr: FunctionDefinition) -> FunctionResultT:
         raise NotImplementedError("Combining results from a callee expression"
                                   " is context-dependent. Derived classes"
                                   " must override map_function_definition.")
@@ -848,7 +1297,7 @@ class CombineMapper(Mapper[ResultT, []]):
 
 # {{{ DependencyMapper
 
-class DependencyMapper(CombineMapper[R]):
+class DependencyMapper(CombineMapper[R, R]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
     :class:`pytato.array.Array`'s it depends on.
@@ -910,18 +1359,20 @@ class DependencyMapper(CombineMapper[R]):
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
         return frozenset()
 
     def map_call(self, expr: Call) -> R:
-        return self.combine(self.map_function_definition(expr.function),
+        return self.combine(self.rec_function_definition(expr.function),
                             *[self.rec(bnd) for bnd in expr.bindings.values()])
 
     def map_named_call_result(self, expr: NamedCallResult) -> R:
         return self.rec(expr._container)
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        raise AssertionError("Control shouldn't reach this point.")
 
 # }}}
 
@@ -948,7 +1399,8 @@ class SubsetDependencyMapper(DependencyMapper):
 
 # {{{ InputGatherer
 
-class InputGatherer(CombineMapper[frozenset[InputArgumentBase]]):
+class InputGatherer(
+        CombineMapper[frozenset[InputArgumentBase], frozenset[InputArgumentBase]]):
     """
     Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
@@ -967,7 +1419,6 @@ class InputGatherer(CombineMapper[frozenset[InputArgumentBase]]):
     def map_size_param(self, expr: SizeParam) -> frozenset[SizeParam]:
         return frozenset([expr])
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
                                 ) -> frozenset[InputArgumentBase]:
         # get rid of placeholders local to the function.
@@ -989,7 +1440,7 @@ class InputGatherer(CombineMapper[frozenset[InputArgumentBase]]):
         return frozenset(result)
 
     def map_call(self, expr: Call) -> frozenset[InputArgumentBase]:
-        return self.combine(self.map_function_definition(expr.function),
+        return self.combine(self.rec_function_definition(expr.function),
             *[
                 self.rec(bnd)
                 for name, bnd in sorted(expr.bindings.items())])
@@ -999,7 +1450,8 @@ class InputGatherer(CombineMapper[frozenset[InputArgumentBase]]):
 
 # {{{ SizeParamGatherer
 
-class SizeParamGatherer(CombineMapper[frozenset[SizeParam]]):
+class SizeParamGatherer(
+        CombineMapper[frozenset[SizeParam], frozenset[SizeParam]]):
     """
     Mapper to combine all instances of :class:`pytato.array.SizeParam` that
     an array expression depends on.
@@ -1012,14 +1464,13 @@ class SizeParamGatherer(CombineMapper[frozenset[SizeParam]]):
     def map_size_param(self, expr: SizeParam) -> frozenset[SizeParam]:
         return frozenset([expr])
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition
                                 ) -> frozenset[SizeParam]:
         return self.combine(*[self.rec(ret)
                               for ret in expr.returns.values()])
 
     def map_call(self, expr: Call) -> frozenset[SizeParam]:
-        return self.combine(self.map_function_definition(expr.function),
+        return self.combine(self.rec_function_definition(expr.function),
             *[
                 self.rec(bnd)
                 for name, bnd in sorted(expr.bindings.items())])
@@ -1029,7 +1480,7 @@ class SizeParamGatherer(CombineMapper[frozenset[SizeParam]]):
 
 # {{{ WalkMapper
 
-class WalkMapper(Mapper[None, P]):
+class WalkMapper(Mapper[None, None, P]):
     """
     A mapper that walks over all the arrays in a :class:`pytato.Array`.
 
@@ -1218,7 +1669,7 @@ class WalkMapper(Mapper[None, P]):
         if not self.visit(expr, *args, **kwargs):
             return
 
-        self.map_function_definition(expr.function, *args, **kwargs)
+        self.rec_function_definition(expr.function, *args, **kwargs)
         for bnd in expr.bindings.values():
             self.rec(bnd, *args, **kwargs)
 
@@ -1238,6 +1689,9 @@ class WalkMapper(Mapper[None, P]):
 
 # {{{ CachedWalkMapper
 
+VisitKeyT: TypeAlias = Hashable
+
+
 class CachedWalkMapper(WalkMapper[P]):
     """
     WalkMapper that visits each node in the DAG exactly once. This loses some
@@ -1245,24 +1699,45 @@ class CachedWalkMapper(WalkMapper[P]):
     one of its predecessors.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+            self,
+            _visited_functions: set[VisitKeyT] | None = None
+            ) -> None:
         super().__init__()
-        self._visited_nodes: set[Any] = set()
+        self._visited_arrays_or_names: set[VisitKeyT] = set()
 
-    def get_cache_key(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> Any:
+        self._visited_functions: set[VisitKeyT] = \
+            _visited_functions if _visited_functions is not None else set()
+
+    def get_cache_key(
+            self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs
+            ) -> VisitKeyT:
         raise NotImplementedError
 
-    def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any
-            ) -> None:
+    def get_function_definition_cache_key(
+            self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
+            ) -> VisitKeyT:
+        raise NotImplementedError
+
+    def rec(self, expr: ArrayOrNames, *args: P.args, **kwargs: P.kwargs) -> None:
         cache_key = self.get_cache_key(expr, *args, **kwargs)
-        if cache_key in self._visited_nodes:
+        if cache_key in self._visited_arrays_or_names:
             return
 
         super().rec(expr, *args, **kwargs)
-        self._visited_nodes.add(cache_key)
+        self._visited_arrays_or_names.add(cache_key)
+
+    def rec_function_definition(self, expr: FunctionDefinition,
+                                *args: P.args, **kwargs: P.kwargs) -> None:
+        cache_key = self.get_function_definition_cache_key(expr, *args, **kwargs)
+        if cache_key in self._visited_functions:
+            return
+
+        super().rec_function_definition(expr, *args, **kwargs)
+        self._visited_functions.add(cache_key)
 
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
-        return type(self)()
+        return type(self)(_visited_functions=self._visited_functions)
 
 # }}}
 
@@ -1281,8 +1756,10 @@ class TopoSortMapper(CachedWalkMapper[[]]):
         :class:`~pytato.function.FunctionDefinition`.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            _visited_functions: set[VisitKeyT] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
         self.topological_order: list[Array] = []
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
@@ -1291,7 +1768,6 @@ class TopoSortMapper(CachedWalkMapper[[]]):
     def post_visit(self, expr: Any) -> None:
         self.topological_order.append(expr)
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
         return
@@ -1307,21 +1783,31 @@ class CachedMapAndCopyMapper(CopyMapper):
     traversals are memoized i.e. each node is mapped via *map_fn* exactly once.
     """
 
-    def __init__(self, map_fn: Callable[[ArrayOrNames], ArrayOrNames]) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            map_fn: Callable[[ArrayOrNames], ArrayOrNames],
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.map_fn: Callable[[ArrayOrNames], ArrayOrNames] = map_fn
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
-        return type(self)(self.map_fn)
+        return type(self)(
+            self.map_fn,
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        if expr in self._cache:
-            return self._cache[expr]
-
-        result = super().rec(self.map_fn(expr))
-        self._cache[expr] = result
-        return result
+        inputs = self._make_cache_inputs(expr)
+        try:
+            return self._cache_retrieve(inputs)
+        except KeyError:
+            # Intentionally going to Mapper instead of super() to avoid
+            # double caching when subclasses of CachedMapper override rec,
+            # see https://github.com/inducer/pytato/pull/585
+            return self._cache_add(inputs, Mapper.rec(self, self.map_fn(expr)))
 
 # }}}
 
@@ -1361,7 +1847,7 @@ def _materialize_if_mpms(expr: Array,
         return MPMSMaterializerAccumulator(materialized_predecessors, expr)
 
 
-class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, []]):
+class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
     """
     See :func:`materialize_with_mpms` for an explanation.
 
@@ -1546,7 +2032,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
     if not source_dict:
         data = {}
     else:
-        data = {name: copy_mapper.rec_ary(val.expr)
+        data = {name: _verify_is_array(copy_mapper.rec(val.expr))
                 for name, val in sorted(source_dict.items())}
 
     return DictOfNamedArrays(data, tags=source_dict.tags)
@@ -1572,7 +2058,7 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast(MappedT, CachedMapAndCopyMapper(map_fn)(expr))
+    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
 
 
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
@@ -1625,20 +2111,28 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
         ======  ========  =======
 
     """
-    from pytato.analysis import get_nusers
+    from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
     new_data = {}
     for name, ary in expr.items():
         new_data[name] = materializer(ary.expr).expr
 
-    return DictOfNamedArrays(new_data, tags=expr.tags)
+    res = DictOfNamedArrays(new_data, tags=expr.tags)
+
+    from pytato import DEBUG_ENABLED
+    if DEBUG_ENABLED:
+        transform_logger.info("materialize_with_mpms: materialized "
+            f"{get_num_tags_of_type(res, ImplStored)} out of "
+            f"{get_num_nodes(res)} nodes")
+
+    return res
 
 # }}}
 
 
 # {{{ UsersCollector
 
-class UsersCollector(CachedMapper[None, []]):
+class UsersCollector(CachedMapper[None, Never, []]):
     """
     Maps a graph to a dictionary representation mapping a node to its users,
     i.e. all the nodes using its value.
@@ -1655,7 +2149,7 @@ class UsersCollector(CachedMapper[None, []]):
         self.node_to_users: dict[ArrayOrNames,
                 set[DistributedSend | ArrayOrNames]] = {}
 
-    def __call__(self, expr: ArrayOrNames) -> None:
+    def __call__(self, expr: ArrayOrNames) -> None:  # type: ignore[override]
         # Root node has no predecessor
         self.node_to_users[expr] = set()
         self.rec(expr)
@@ -1762,7 +2256,6 @@ class UsersCollector(CachedMapper[None, []]):
     def map_distributed_recv(self, expr: DistributedRecv) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
-    @memoize_method
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         raise AssertionError("Control shouldn't reach at this point."
                              " Instantiate another UsersCollector to"
@@ -1832,44 +2325,72 @@ def rec_get_user_nodes(expr: ArrayOrNames,
 
 # {{{ deduplicate_data_wrappers
 
-def _get_data_dedup_cache_key(ary: DataInterface) -> Hashable:
-    import sys
-    if "pyopencl" in sys.modules:
-        from pyopencl import MemoryObjectHolder
-        from pyopencl.array import Array as CLArray
-        try:
-            from pyopencl import SVMPointer
-        except ImportError:
-            SVMPointer = None  # noqa: N806
+class DataWrapperDeduplicator(CopyMapper):
+    """
+    Mapper to replace all :class:`pytato.array.DataWrapper` instances containing
+    identical data with a single instance.
+    """
+    def __init__(
+            self,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        self.data_wrapper_cache: dict[CacheKeyT, DataWrapper] = {}
+        self.data_wrappers_encountered = 0
 
-        if isinstance(ary, CLArray):
-            base_data = ary.base_data
-            if isinstance(ary.base_data, MemoryObjectHolder):
-                ptr = base_data.int_ptr
-            elif SVMPointer is not None and isinstance(base_data, SVMPointer):
-                ptr = base_data.svm_ptr
-            elif base_data is None:
-                # pyopencl represents 0-long arrays' base_data as None
-                ptr = None
-            else:
-                raise ValueError("base_data of array not understood")
+    def _get_data_dedup_cache_key(self, ary: DataInterface) -> CacheKeyT:
+        import sys
+        if "pyopencl" in sys.modules:
+            from pyopencl import MemoryObjectHolder
+            from pyopencl.array import Array as CLArray
+            try:
+                from pyopencl import SVMPointer
+            except ImportError:
+                SVMPointer = None  # noqa: N806
 
+            if isinstance(ary, CLArray):
+                base_data = ary.base_data
+                if isinstance(ary.base_data, MemoryObjectHolder):
+                    ptr = base_data.int_ptr
+                elif SVMPointer is not None and isinstance(base_data, SVMPointer):
+                    ptr = base_data.svm_ptr
+                elif base_data is None:
+                    # pyopencl represents 0-long arrays' base_data as None
+                    ptr = None
+                else:
+                    raise ValueError("base_data of array not understood")
+
+                return (
+                        ptr,
+                        ary.offset,
+                        ary.shape,
+                        ary.strides,
+                        ary.dtype,
+                        )
+        if isinstance(ary, np.ndarray):
             return (
-                    ptr,
-                    ary.offset,
+                    ary.__array_interface__["data"],
                     ary.shape,
                     ary.strides,
                     ary.dtype,
                     )
-    if isinstance(ary, np.ndarray):
-        return (
-                ary.__array_interface__["data"],
-                ary.shape,
-                ary.strides,
-                ary.dtype,
-                )
-    else:
-        raise NotImplementedError(str(type(ary)))
+        else:
+            raise NotImplementedError(str(type(ary)))
+
+    def map_data_wrapper(self, expr: DataWrapper) -> Array:
+        self.data_wrappers_encountered += 1
+        cache_key = self._get_data_dedup_cache_key(expr.data)
+        try:
+            return self.data_wrapper_cache[cache_key]
+        except KeyError:
+            self.data_wrapper_cache[cache_key] = expr
+            return expr
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            _function_cache=cast(
+                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
 
 def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
@@ -1890,34 +2411,17 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
         this, but it must *also* tolerate this function doing a more thorough
         job of deduplication.
     """
+    dedup = DataWrapperDeduplicator()
+    array_or_names = dedup(array_or_names)
 
-    data_wrapper_cache: dict[Hashable, DataWrapper] = {}
-    data_wrappers_encountered = 0
-
-    def cached_data_wrapper_if_present(ary: ArrayOrNames) -> ArrayOrNames:
-        nonlocal data_wrappers_encountered
-
-        if isinstance(ary, DataWrapper):
-            data_wrappers_encountered += 1
-            cache_key = _get_data_dedup_cache_key(ary.data)
-
-            try:
-                return data_wrapper_cache[cache_key]
-            except KeyError:
-                result = ary
-                data_wrapper_cache[cache_key] = result
-                return result
-        else:
-            return ary
-
-    array_or_names = map_and_copy(array_or_names, cached_data_wrapper_if_present)
-
-    if data_wrappers_encountered:
+    if dedup.data_wrappers_encountered:
         transform_logger.debug("data wrapper de-duplication: "
                                "%d encountered, %d kept, %d eliminated",
-                               data_wrappers_encountered,
-                               len(data_wrapper_cache),
-                               data_wrappers_encountered - len(data_wrapper_cache))
+                               dedup.data_wrappers_encountered,
+                               len(dedup.data_wrapper_cache),
+                               (
+                                   dedup.data_wrappers_encountered
+                                   - len(dedup.data_wrapper_cache)))
 
     return array_or_names
 

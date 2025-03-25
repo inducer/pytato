@@ -28,8 +28,9 @@ THE SOFTWARE.
 import ast
 import os
 import sys
-from collections.abc import Callable, Iterable, Mapping
 from typing import (
+    TYPE_CHECKING,
+    Never,
     TypedDict,
     TypeVar,
     cast,
@@ -72,9 +73,14 @@ from pytato.reductions import (
     ReductionOperation,
     SumReductionOperation,
 )
-from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 from pytato.transform import CachedMapper
 from pytato.utils import are_shape_components_equal, get_einsum_specification
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping
+
+    from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 
 
 T = TypeVar("T")
@@ -166,7 +172,7 @@ PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
 }
 
 
-class NumpyCodegenMapper(CachedMapper[str, []]):
+class NumpyCodegenMapper(CachedMapper[str, Never, []]):
     """
     .. note::
 
@@ -410,7 +416,7 @@ class NumpyCodegenMapper(CachedMapper[str, []]):
             default=-1,
             pred=lambda i: not (isinstance(expr.indices[i], NormalizedSlice)
                                 and _is_slice_trivial(
-                                        cast(NormalizedSlice, expr.indices[i]),
+                                        cast("NormalizedSlice", expr.indices[i]),
                                         expr.array.shape[i]))
         )
 

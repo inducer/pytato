@@ -28,15 +28,13 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from typing import TYPE_CHECKING, Never
 
 import islpy as isl
 
 import loopy as lp
 import pymbolic.primitives as prim
-import pytools
 from pymbolic import ArithmeticExpression, var
-from pymbolic.typing import Expression
-from pytools.tag import Tag
 
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
@@ -59,30 +57,39 @@ from pytato.codegen import (
     normalize_outputs,
     preprocess,
 )
-from pytato.function import Call, NamedCallResult
-from pytato.loopy import LoopyCall
 from pytato.scalar_expr import (
     INT_CLASSES,
     ScalarExpression,
     TypeCast,
 )
 from pytato.tags import (
+    ForceValueArgTag,
     ImplementationStrategy,
     ImplInlined,
     ImplStored,
     Named,
     PrefixNamed,
 )
-from pytato.target import BoundProgram
 from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
+
+
+if TYPE_CHECKING:
+    import pyopencl
+    import pytools
+    from pymbolic.typing import Expression
+    from pytools.tag import Tag
+
+    from pytato.function import Call, NamedCallResult
+    from pytato.loopy import LoopyCall
+    from pytato.target import BoundProgram
 
 
 # set in doc/conf.py
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
-    import pyopencl
+    from pytools.tag import Tag  # noqa: TC001
 
 __doc__ = """
 .. autoclass:: PersistentExpressionContext
@@ -378,7 +385,7 @@ class CodeGenState:
 
 # {{{ codegen mapper
 
-class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
+class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
     """A mapper for generating code for nodes in the computation graph.
     """
     exprgen_mapper: InlinedExpressionGenMapper
@@ -418,7 +425,18 @@ class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
 
         shape = shape_to_scalar_expression(expr.shape, self, state)
 
-        arg = lp.GlobalArg(expr.name,
+        if expr.tags_of_type(ForceValueArgTag):
+            if expr.shape != ():
+                raise ValueError("ForceValueArgTag applied to non-scalar")
+
+            arg: lp.ArrayArg | lp.ValueArg = lp.ValueArg(expr.name,
+                              dtype=expr.dtype,
+                              tags=_filter_tags_not_of_type(expr,
+                                                            self
+                                                            .array_tag_t_to_not_propagate))
+        else:
+
+            arg = lp.GlobalArg(expr.name,
                 shape=shape,
                 dtype=expr.dtype,
                 order="C",
@@ -428,6 +446,7 @@ class CodeGenMapper(Mapper[ImplementedResult, [CodeGenState]]):
                 tags=_filter_tags_not_of_type(expr,
                                               self
                                               .array_tag_t_to_not_propagate))
+
         kernel = state.kernel.copy(args=[*state.kernel.args, arg])
         state.update_kernel(kernel)
         assert expr.name is not None
@@ -898,10 +917,7 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
     # Make the instruction
     from loopy.kernel.instruction import make_assignment
-    if indices:
-        assignee = prim.Variable(name)[indices]
-    else:
-        assignee = prim.Variable(name)
+    assignee = prim.Variable(name)[indices] if indices else prim.Variable(name)
     insn_id = state.insn_id_gen(f"{name}_store")
     insn = make_assignment((assignee,),
             loopy_expr,

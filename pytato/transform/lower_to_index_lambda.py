@@ -29,9 +29,8 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Never, TypeVar, cast
 
-import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
@@ -59,15 +58,20 @@ from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import Mapper
+from pytato.utils import normalized_slice_does_not_change_axis
+
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 ToIndexLambdaT = TypeVar("ToIndexLambdaT", Array, AbstractResultWithNamedArrays)
 
 
 @dataclass(frozen=True)
-class _ReshapeIndexGroup:
-    old_ax_indices: tuple[ShapeComponent, ...]
-    new_ax_indices: tuple[ShapeComponent, ...]
+class _ReshapeShapeGroup:
+    old_ax_shape_group: tuple[ShapeComponent, ...]
+    new_ax_shape_group: tuple[ShapeComponent, ...]
 
 
 def _generate_index_expressions(
@@ -80,6 +84,15 @@ def _generate_index_expressions(
     new_strides: list[ArithmeticExpression] = [1]
     old_strides = old_strides[:len(old_shape)]
     new_strides = new_strides[:len(new_shape)]
+
+    if not old_shape:
+        assert new_shape == (1,)
+        return (0,)
+
+    if old_shape == new_shape:
+        # Avoid generating modulo expressions for direct pass-through
+        assert len(old_shape) == 1
+        return (index_vars[0],)
 
     old_size_tills = [old_shape[-1] if order == "C" else old_shape[0]]
 
@@ -145,7 +158,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
     # {{{ generate subsets of old axes mapped to subsets of new axes
 
-    axis_mapping: list[_ReshapeIndexGroup] = []
+    axis_mapping: list[_ReshapeShapeGroup] = []
 
     old_index = 0
     new_index = 0
@@ -153,6 +166,21 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     while old_index < len(old_shape) and new_index < len(new_shape):
         old_ax_len_product = old_shape[old_index]
         new_ax_len_product = new_shape[new_index]
+
+        # Specially handle (i.e. skip) axes of length 1 at the start of an index group
+        if old_ax_len_product != new_ax_len_product:
+            if old_ax_len_product == 1:
+                axis_mapping.append(_ReshapeShapeGroup(
+                    old_ax_shape_group=(old_ax_len_product,),
+                    new_ax_shape_group=()))
+                old_index += 1
+                continue
+            if new_ax_len_product == 1:
+                axis_mapping.append(_ReshapeShapeGroup(
+                    old_ax_shape_group=(),
+                    new_ax_shape_group=(new_ax_len_product,)))
+                new_index += 1
+                continue
 
         old_product_end = old_index + 1
         new_product_end = new_index + 1
@@ -170,31 +198,36 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
                 old_ax_len_product *= old_shape[old_product_end]
                 old_product_end += 1
 
-        old_ax_indices = old_shape[old_index:old_product_end]
-        new_ax_indices = new_shape[new_index:new_product_end]
-
-        axis_mapping.append(_ReshapeIndexGroup(
-            old_ax_indices=old_ax_indices,
-            new_ax_indices=new_ax_indices))
+        axis_mapping.append(_ReshapeShapeGroup(
+            old_ax_shape_group=old_shape[old_index:old_product_end],
+            new_ax_shape_group=new_shape[new_index:new_product_end]))
 
         old_index = old_product_end
         new_index = new_product_end
 
     # handle trailing 1s
-    final_reshaped_indices = axis_mapping.pop(-1)
-    old_ax_indices = final_reshaped_indices.old_ax_indices
-    new_ax_indices = final_reshaped_indices.new_ax_indices
+
+    # At most one of the while loops below should execute.
+    assert not (
+        old_index < len(old_shape)
+        and
+        new_index < len(new_shape)
+    )
 
     while old_index < len(old_shape):
-        old_ax_indices += tuple([old_shape[old_index]])  # noqa: C409
+        assert old_shape[old_index] == 1
+        axis_mapping.append(_ReshapeShapeGroup(
+            old_ax_shape_group=(old_shape[old_index],),
+            new_ax_shape_group=()))
         old_index += 1
 
     while new_index < len(new_shape):
-        new_ax_indices += tuple([new_shape[new_index]])  # noqa: C409
+        assert new_shape[new_index] == 1
+        axis_mapping.append(_ReshapeShapeGroup(
+                                old_ax_shape_group=(),
+                                new_ax_shape_group=(new_shape[new_index],),
+                            ))
         new_index += 1
-
-    axis_mapping.append(_ReshapeIndexGroup(old_ax_indices=old_ax_indices,
-                                           new_ax_indices=new_ax_indices))
 
     # }}}
 
@@ -202,16 +235,20 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
     index_vars_begin = 0
     index_expressions = []
-    for reshaped_indices in axis_mapping:
-        sub_old_shape = reshaped_indices.old_ax_indices
-        sub_new_shape = reshaped_indices.new_ax_indices
+    for shape_group in axis_mapping:
+        sub_old_shape = shape_group.old_ax_shape_group
+        sub_new_shape = shape_group.new_ax_shape_group
 
         index_vars_end = index_vars_begin + len(sub_new_shape)
         sub_index_vars = index_vars[index_vars_begin:index_vars_end]
         index_vars_begin = index_vars_end
 
-        index_expressions.append(_generate_index_expressions(
-            sub_old_shape, sub_new_shape, order, sub_index_vars))
+        if not sub_old_shape:
+            # No need to generate index into old array
+            assert sub_new_shape == (1,)
+        else:
+            index_expressions.append(_generate_index_expressions(
+                sub_old_shape, sub_new_shape, order, sub_index_vars))
 
     # }}}
 
@@ -406,7 +443,7 @@ class ToIndexLambdaMixin:
     def map_roll(self, expr: Roll) -> IndexLambda:
         from pytato.utils import dim_to_index_lambda_components
 
-        index_expr: prim.Expression = prim.Variable("_in0")
+        index_expr: prim.ExpressionNode = prim.Variable("_in0")
         indices: list[ArithmeticExpression] = [
             prim.Variable(f"_{d}") for d in range(expr.ndim)]
         axis = expr.axis
@@ -443,7 +480,7 @@ class ToIndexLambdaMixin:
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-                    cast(Array | int | np.integer[Any], expr.indices[i_idx])
+                    cast("Array | int | np.integer[Any]", expr.indices[i_idx])
                     for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
@@ -462,7 +499,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
@@ -511,7 +551,7 @@ class ToIndexLambdaMixin:
                               for i, idx_expr in enumerate(expr.indices)
                               if isinstance(idx_expr, (Array, *INT_CLASSES)))
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | int | np.integer[Any], expr.indices[i_idx])
+            cast("Array | int | np.integer[Any]", expr.indices[i_idx])
             for i_idx in i_adv_indices])
 
         vng = UniqueNameGenerator()
@@ -531,7 +571,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             elif isinstance(idx, Array):
@@ -587,7 +630,10 @@ class ToIndexLambdaMixin:
                     bindings[bnd_name] = self.rec(axis_len)
                     indices.append(idx % prim.Variable(bnd_name))
             elif isinstance(idx, NormalizedSlice):
-                indices.append(idx.start
+                if normalized_slice_does_not_change_axis(idx, axis_len):
+                    indices.append(prim.Variable(f"_{islice_idx}"))
+                else:
+                    indices.append(idx.start
                                + idx.step * prim.Variable(f"_{islice_idx}"))
                 islice_idx += 1
             else:
@@ -622,7 +668,7 @@ class ToIndexLambdaMixin:
             indices[to_index] = prim.Variable(f"_{from_index}")
 
         index_expr = prim.Variable("_in0")[
-            cast(tuple[ArithmeticExpression], tuple(indices))]
+            cast("tuple[ArithmeticExpression]", tuple(indices))]
 
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
@@ -634,15 +680,16 @@ class ToIndexLambdaMixin:
                            non_equality_tags=expr.non_equality_tags)
 
 
-class ToIndexLambdaMapper(Mapper[Array, []], ToIndexLambdaMixin):
+class ToIndexLambdaMapper(Mapper[Array, Never, []], ToIndexLambdaMixin):
 
-    def handle_unsupported_array(self, expr: Any) -> Any:
+    def handle_unsupported_array(self, expr: Array) -> Array:
         raise CannotBeLoweredToIndexLambda(type(expr))
 
     def rec(self, expr: Array) -> Array:  # type: ignore[override]
         return expr
 
-    __call__ = Mapper.rec
+    def __call__(self, expr: Array) -> Array:  # type: ignore[override]
+        return Mapper.rec(self, expr)
 
 
 def to_index_lambda(expr: Array) -> IndexLambda:

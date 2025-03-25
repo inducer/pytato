@@ -38,8 +38,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from immutabledict import immutabledict
 
@@ -57,17 +56,23 @@ from pytato.array import (
     SizeParam,
     make_dict_of_named_arrays,
 )
-from pytato.function import NamedCallResult
 from pytato.loopy import LoopyCall
 from pytato.scalar_expr import IntegralScalarExpression, is_integral_scalar_expression
-from pytato.target import Target
 from pytato.transform import (
     ArrayOrNames,
     CachedWalkMapper,
     CopyMapper,
     SubsetDependencyMapper,
+    TransformMapperCache,
 )
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytato.function import FunctionDefinition, NamedCallResult
+    from pytato.target import Target
 
 
 SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
@@ -75,10 +80,7 @@ SymbolicIndex: TypeAlias = tuple[IntegralScalarExpression, ...]
 
 def is_symbolic_index(o: object) -> TypeIs[SymbolicIndex]:
     if isinstance(o, tuple):
-        for i in o:
-            if not is_integral_scalar_expression(i):
-                return False
-        return True
+        return all(is_integral_scalar_expression(i) for i in o)
     else:
         return False
 
@@ -132,10 +134,14 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
     ======================================  =====================================
     """
 
-    def __init__(self, target: Target,
-                 kernels_seen: dict[str, lp.LoopKernel] | None = None
-                 ) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            target: Target,
+            kernels_seen: dict[str, lp.LoopKernel] | None = None,
+            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
+            ) -> None:
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
         self.bound_arguments: dict[str, DataInterface] = {}
         self.var_name_gen: UniqueNameGenerator = UniqueNameGenerator()
         self.target = target
@@ -262,26 +268,29 @@ def normalize_outputs(
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class NamesValidityChecker(CachedWalkMapper[[]]):
-    def __init__(self) -> None:
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
         self.name_to_input: dict[str, InputArgumentBase] = {}
-        super().__init__()
+        super().__init__(_visited_functions=_visited_functions)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
+        return id(expr)
+
     def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, Placeholder | SizeParam | DataWrapper):
-            if expr.name is not None:
-                try:
-                    ary = self.name_to_input[expr.name]
-                except KeyError:
-                    self.name_to_input[expr.name] = expr
-                else:
-                    if ary is not expr:
-                        from pytato.diagnostic import NameClashError
-                        raise NameClashError(
-                                "Received two separate instances of inputs "
-                                f"named '{expr.name}'.")
+        if (isinstance(expr, Placeholder | SizeParam | DataWrapper)
+                    and expr.name is not None):
+            try:
+                ary = self.name_to_input[expr.name]
+            except KeyError:
+                self.name_to_input[expr.name] = expr
+            else:
+                if ary is not expr:
+                    from pytato.diagnostic import NameClashError
+                    raise NameClashError(
+                            "Received two separate instances of inputs "
+                            f"named '{expr.name}'.")
 
 
 def check_validity_of_outputs(exprs: DictOfNamedArrays) -> None:

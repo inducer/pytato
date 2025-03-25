@@ -35,9 +35,10 @@ dependencies = [
     "bidict",
     "immutabledict",
     "loopy>=2020.2",
-    "pytools>=2024.1.14",
+    "pytools>=2024.1.21",
     "pymbolic>=2024.2",
     "typing_extensions>=4",
+    "orderedsets",
 ]
 
 [project.urls]
@@ -62,6 +63,8 @@ extend-select = [
     "NPY",   # numpy
     "RUF",
     "UP",
+    "TC",
+    "SIM",
 ]
 extend-ignore = [
   "E226",

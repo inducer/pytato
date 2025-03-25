@@ -5,9 +5,8 @@
 """
 from __future__ import annotations
 
-from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, Never
 
 from pytools import UniqueNameGenerator
 
@@ -25,6 +24,10 @@ from pytato.array import (
     Stack,
 )
 from pytato.transform import CachedMapper
+
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
 
 
 # {{{ Graph node colors
@@ -97,7 +100,7 @@ def _get_dot_node_from_predecessors(node_id: str,
         return NoShowNode(), frozenset()
 
 
-class FancyDotWriter(CachedMapper[_FancyDotWriterNode, []]):
+class FancyDotWriter(CachedMapper[_FancyDotWriterNode, Never, []]):
     def __init__(self) -> None:
         super().__init__()
         self.vng = UniqueNameGenerator()

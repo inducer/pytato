@@ -10,8 +10,9 @@ copyright = "2020, Pytato Contributors"
 author = "Pytato Contributors"
 
 ver_dic = {}
-exec(compile(open("../pytato/version.py").read(), "../pytato/version.py",
-    "exec"), ver_dic)
+with open("../pytato/version.py") as vfile:
+    exec(compile(vfile.read(), "../pytato/version.py", "exec"), ver_dic)
+
 version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
@@ -30,6 +31,7 @@ intersphinx_mapping = {
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
     "immutabledict": ("https://immutabledict.corenting.fr/", None),
+    "orderedsets": ("https://matthiasdiener.github.io/orderedsets", None),
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in
@@ -46,8 +48,16 @@ import sys
 
 sys._BUILDING_SPHINX_DOCS = True
 
+
 nitpick_ignore_regex = [
     ["py:class", r"numpy.(u?)int[\d]+"],
     ["py:class", r"numpy.bool_"],
     ["py:class", r"typing_extensions(.+)"],
+    ["py:class", r"P\.args"],
+    ["py:class", r"P\.kwargs"],
+    ["py:class", r"lp\.LoopKernel"],
+    ["py:class", r"_dtype_any"],
+
+    # It's :data:, not :class:, but we can't tell autodoc that.
+    ["py:class", r"types\.EllipsisType"],
 ]

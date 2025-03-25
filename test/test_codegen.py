@@ -454,11 +454,9 @@ def test_slice(ctx_factory, shape):
     outputs = {}
     ref_outputs = {}
 
-    i = 0
-    for slice_ in generate_test_slices(shape):
+    for i, slice_ in enumerate(generate_test_slices(shape)):
         outputs[f"out_{i}"] = x[slice_]
         ref_outputs[f"out_{i}"] = x_in[slice_]
-        i += 1
 
     prog = pt.generate_loopy(outputs)
 
@@ -916,11 +914,11 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     m_in = np.random.randint(2, 20)
     n_in = np.random.randint(2, 20)
 
-    def _get_a_shape(_m, _n):
-        return (2*_m+1, 3*_n+7)
+    def _get_a_shape(m_, n_):
+        return (2*m_+1, 3*n_+7)
 
-    def _get_x_shape(_m, _n):
-        return (3*_n+7, )
+    def _get_x_shape(_m, n_):
+        return (3*n_+7, )
 
     A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
@@ -1570,16 +1568,16 @@ def test_regression_reduction_in_conditional(ctx_factory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
-    def kernel(usr_np, _pt_data_9):
-        _pt_tmp_53 = _pt_data_9 @ _pt_data_9
-        _pt_tmp_42 = usr_np.maximum(_pt_tmp_53, _pt_tmp_53)
-        _pt_tmp_27 = usr_np.sum(_pt_tmp_42)
-        _pt_tmp_0 = usr_np.maximum(_pt_tmp_27, _pt_tmp_53)
-        return _pt_tmp_0
+    def kernel(usr_np, pt_data_9):
+        pt_tmp_53 = pt_data_9 @ pt_data_9
+        pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
+        pt_tmp_27 = usr_np.sum(pt_tmp_42)
+        pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
+        return pt_tmp_0
 
     def get_np_input_args():
         return {
-            "_pt_data_9": np.ones((2, 2)),
+            "pt_data_9": np.ones((2, 2)),
         }
 
     np_inputs = get_np_input_args()
@@ -1956,7 +1954,7 @@ def test_function_call(ctx_factory, visualize=False):
 
     assert len(outputs) == len(expected)
 
-    for key in outputs.keys():
+    for key in outputs:
         np.testing.assert_allclose(outputs[key], expected[key])
 
 
@@ -2063,6 +2061,28 @@ def test_pow_arg_casting(ctx_factory):
                         else:
                             assert out.bindings["_in1"].dtype in \
                                 (float, np.float32, np.float64)
+
+
+def test_forcevalueargtag(ctx_factory):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (), np.float64,
+                            tags=frozenset({pt.tags.ForceValueArgTag()}))
+    y = pt.make_placeholder("y", (), np.float64,
+                            tags=frozenset({pt.tags.ForceValueArgTag()}))
+
+    out = x + y
+
+    # print(pt.generate_loopy(x).program)
+
+    t_unit = pt.generate_loopy(out).program
+    _, (pt_out,) = t_unit(cq, x=4, y=42)
+
+    assert isinstance(t_unit.default_entrypoint.arg_dict["x"], lp.ValueArg)
+    assert isinstance(t_unit.default_entrypoint.arg_dict["y"], lp.ValueArg)
+
+    np.testing.assert_allclose(pt_out.get(), 4+42)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@
 """
 from __future__ import annotations
 
+from pytato.utils import are_shape_components_equal
+
 
 __copyright__ = """
 Copyright (C) 2022 Kaushik Kulkarni
@@ -38,18 +40,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import logging
-from collections.abc import Collection, Mapping
+import re
 from typing import (
     TYPE_CHECKING,
-    Any,
+    Never,
+    ParamSpec,
+    TypeAlias,
     TypeVar,
-    cast,
 )
 
 from bidict import bidict
 
+import pymbolic.primitives as prim
+from pymbolic.typing import Expression
 from pytools import UniqueNameGenerator
 from pytools.tag import Tag
 
@@ -57,7 +61,6 @@ from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,
     Array,
-    ArrayOrScalar,
     AxisPermutation,
     BasicIndex,
     Concatenate,
@@ -67,44 +70,87 @@ from pytato.array import (
     IndexLambda,
     InputArgumentBase,
     NamedArray,
-    NormalizedSlice,
     Reshape,
     Stack,
 )
-from pytato.diagnostic import UnknownIndexLambdaExpr
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import NamedCallResult
-from pytato.raising import (
-    BinaryOp,
-    BroadcastOp,
-    C99CallOp,
-    FullOp,
-    ReduceOp,
-    WhereOp,
-    index_lambda_to_high_level_op,
+from pytato.scalar_expr import (
+    IDX_LAMBDA_AXIS_INDEX,
+    CombineMapper,
 )
-from pytato.scalar_expr import SCALAR_CLASSES
-from pytato.transform import ArrayOrNames, CopyMapper, Mapper
-from pytato.utils import are_shape_components_equal, are_shapes_equal
+from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
+from pytato.transform.lower_to_index_lambda import to_index_lambda
 
 
 logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Iterable, Mapping
+
+    from pytato.function import FunctionDefinition, NamedCallResult
     from pytato.loopy import LoopyCall
 
 
 GraphNodeT = TypeVar("GraphNodeT")
 
+BindingName: TypeAlias = str
+P = ParamSpec("P")
+
+BINDING_NAME_RESERVED_PATTERN = re.compile(r"^(_in?(0|([1-9][0-9]*)))$")
+
+
+# {{{ BindingSubscriptsCollector
+
+
+class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
+                                               set[tuple[Expression, ...]]],
+                                                      []]):
+    """
+    Return all the subscript expressions used by a variable specified by BindingName.
+    Ex:
+    ``_in1[_0,_1]`` would result in an dictionary entry ``{"_in1": ("_0", "_1")}``.
+    """
+    def combine(self,
+                values: Iterable[dict[BindingName,
+                                         set[tuple[Expression, ...]]]]) \
+                        -> dict[BindingName, set[tuple[Expression, ...]]]:
+        out: dict[BindingName, set[tuple[Expression, ...]]] = {}
+        import operator
+        from functools import reduce
+        return reduce(operator.or_, values, out)
+
+    def map_subscript(self, expr: prim.Subscript) -> dict[BindingName,
+                                                    set[tuple[Expression, ...]]]:
+        """
+        Record the indexing expression if the Subscript expression has a prim.Variable
+        as its aggregate.
+        """
+
+        base_result = super().map_subscript(expr)
+        if isinstance(expr.aggregate, prim.Variable):
+            return {expr.aggregate.name: {expr.index_tuple}, **base_result}
+        return base_result
+
+    def map_algebraic_leaf(self, expr: Expression) -> dict[BindingName,
+                                                    set[tuple[Expression, ...]]]:
+
+        return {}
+
+    def map_constant(self, expr: object) -> dict[BindingName,
+                                                    set[tuple[Expression, ...]]]:
+        return {}
+# }}}
 
 # {{{ AxesTagsEquationCollector
 
-class AxesTagsEquationCollector(Mapper[None, []]):
+
+class AxesTagsEquationCollector(Mapper[None, Never, []]):
     r"""
     Records equations arising from operand/output axes equivalence for an array
-    operation. This mapper implements a default set of propagation rules,
-    refer to documentation of mapper methods for their propagation semantics.
+    operation. An equation is recorded for "straight-through" axes in expressions,
+    i.e. ones that pass through an operation unmodified.
 
     .. attribute:: tag_t
 
@@ -139,7 +185,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
     .. note::
 
-        Users are encouraged to derive this mapper to implement domain-specific
+        Users may subclass this mapper to implement domain-specific
         axis tags propagation semantics.
     """
     def __init__(self, tag_t: type[Tag]) -> None:
@@ -154,8 +200,9 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         self.var_name_gen.add_names(["c", ""])
 
         # axis_to_var: mapping from (array, iaxis) to the variable to be
-        # used for unification.
-        self.axis_to_var: bidict[tuple[Array, int], str] = bidict()
+        # used for unification. If isinstance(iaxis, str), then we are dealing
+        # with a reduction axis and so that string will be uniquely defined.
+        self.axis_to_var: bidict[tuple[Array, int | str], str] = bidict()
         self.known_tag_to_var: dict[Tag, str] = {}
 
         self.equations: list[tuple[str, str]] = []
@@ -164,7 +211,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
 
     # {{{ unification helpers
 
-    def get_var_for_axis(self, ary: Array, iaxis: int) -> str:
+    def get_var_for_axis(self, ary: Array, iaxis: int | str) -> str:
         key = (ary, iaxis)
 
         try:
@@ -225,312 +272,85 @@ class AxesTagsEquationCollector(Mapper[None, []]):
     map_size_param = _map_input_base
 
     def map_index_lambda(self, expr: IndexLambda) -> None:
-        """
-        The propagation semantics for a :class:`~pytato.IndexLambda` are
-        implemented only for operations that can be raised to a
-        :class:`~pytato.raising.HighLevelOp`. In such cases, an equality
-        equation is recorded for every non-broadcasted axis of an operand and
-        its corresponding axis of *expr*.
-        """
         for bnd in expr.bindings.values():
             self.rec(bnd)
 
-        try:
-            hlo = index_lambda_to_high_level_op(expr)
-        except UnknownIndexLambdaExpr:
-            from warnings import warn
-            warn(f"'{expr}' is an unknown index lambda type"
-                 " no tags were propagated across it.", stacklevel=1)
-            # no propagation semantics implemented for such cases
-            return
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
-        if isinstance(hlo, BinaryOp):
-            subexprs: tuple[ArrayOrScalar, ...] = (hlo.x1, hlo.x2)
-        elif isinstance(hlo, WhereOp):
-            subexprs = (hlo.condition, hlo.then, hlo.else_)
-        elif isinstance(hlo, FullOp):
-            # A full-op does not impose any equations
-            subexprs = ()
-        elif isinstance(hlo, BroadcastOp):
-            subexprs = (hlo.x,)
-        elif isinstance(hlo, C99CallOp):
-            subexprs = hlo.args
-        elif isinstance(hlo, ReduceOp):
+    def add_equations_using_index_lambda_version_of_expr(self, expr: Array) -> None:
+        """
+        Equations are added between an axis of the bindings of *expr* and an axis of
+        *expr* if the binding's axis is indexed by by a :class:`~pymbolic.Variable`
+        which has a name that follows the reserved iname format, "_[0-9]+", and the axis
+        of the output specified by the iname.
+        """
+        idx_lambda = expr if isinstance(expr, IndexLambda) else to_index_lambda(expr)
 
-            # {{{ ReduceOp doesn't quite involve broadcasting
+        index_expr_used = BindingSubscriptsCollector()(idx_lambda.expr)
 
-            i_out_axis = 0
-            for i_in_axis in range(hlo.x.ndim):
-                if i_in_axis not in hlo.axes:
-                    self.record_equation(
-                        self.get_var_for_axis(hlo.x, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-                    i_out_axis += 1
+        for vname, set_of_ind_tuple in index_expr_used.items():
+            for ind_tuple in set_of_ind_tuple:
+                for iaxis, var_ind_name in enumerate(ind_tuple):
+                    if isinstance(var_ind_name, prim.Variable):
+                        lhs: str = self.get_var_for_axis(idx_lambda.bindings[vname],
+                                                     iaxis)
+                        ind_name: str = var_ind_name.name
+                        matched_pattern = IDX_LAMBDA_AXIS_INDEX.fullmatch(ind_name)
+                        if matched_pattern:
+                            idx_lambda_axis_index = int(matched_pattern.group("index"))
+                            if are_shape_components_equal(
+                                    idx_lambda.shape[idx_lambda_axis_index],
+                                    idx_lambda.bindings[vname].shape[iaxis]):
+                                self.record_equation(
+                                    lhs,
+                                    self.get_var_for_axis(expr, idx_lambda_axis_index))
 
-            assert i_out_axis == expr.ndim
+                        elif ind_name in idx_lambda.var_to_reduction_descr:
+                            # Matched with a reduction axis.
+                            # We are assuming that this axis is eliminated from the
+                            # axes of the output array. Thus, the metadata can only
+                            # be propagated to and from the reduction descriptor
+                            # which is indexed by the string ind_name.
+                            self.record_equation(lhs,
+                                self.get_var_for_axis(expr, ind_name))
 
-            # }}}
-
-            return
-
-        else:
-            raise NotImplementedError(type(hlo))
-
-        for subexpr in subexprs:
-            if isinstance(subexpr, Array):
-                for i_in_axis, i_out_axis in zip(
-                        range(subexpr.ndim),
-                        range(expr.ndim-subexpr.ndim, expr.ndim),
-                        strict=True):
-                    in_dim = subexpr.shape[i_in_axis]
-                    out_dim = expr.shape[i_out_axis]
-                    if are_shape_components_equal(in_dim, out_dim):
-                        self.record_equation(
-                            self.get_var_for_axis(subexpr, i_in_axis),
-                            self.get_var_for_axis(expr, i_out_axis)
-                        )
-                    else:
-                        # i_in_axis is broadcasted => do not propagate
-                        assert are_shape_components_equal(in_dim, 1)
-            else:
-                assert isinstance(subexpr, SCALAR_CLASSES)
+                        # Other cases are considered "complicated" and we won't
+                        # handle them here.
 
     def map_stack(self, expr: Stack) -> None:
-        """
-        Records an equality equation between the axes of arrays being stacked
-        and their corresponding axis in *expr*. No equation is added for the
-        newly created axis i.e. :attr:`pytato.array.Stack.axis`.
-        """
         for ary in expr.arrays:
             self.rec(ary)
 
-        for iaxis in range(expr.ndim):
-            for ary in expr.arrays:
-                if iaxis < expr.axis:
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
-                elif iaxis == expr.axis:
-                    pass
-                elif iaxis > expr.axis:
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis-1),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
-                else:
-                    raise AssertionError
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_concatenate(self, expr: Concatenate) -> None:
-        """
-        Records an equality equation between the axes of arrays being
-        concatenated and their corresponding axis in *expr*. No equation is
-        added for the concatenated axis i.e.
-        :attr:`pytato.array.Concatenate.axis`.
-        """
         for ary in expr.arrays:
             self.rec(ary)
-
-        for ary in expr.arrays:
-            assert ary.ndim == expr.ndim
-            for iaxis in range(expr.ndim):
-                if iaxis != expr.axis:
-                    # non-concatenated axes share the dimensions.
-                    self.record_equation(
-                        self.get_var_for_axis(ary, iaxis),
-                        self.get_var_for_axis(expr, iaxis)
-                    )
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> None:
-        """
-        Records an equality equation for every axis of *expr*\'s operand and
-        its corresponding axis in *expr* as specified by
-        :attr:`pytato.array.AxisPermutation.axis_permutation`.
-        """
         self.rec(expr.array)
-
-        assert expr.ndim == expr.array.ndim
-
-        for out_axis in range(expr.ndim):
-            in_axis = expr.axis_permutation[out_axis]
-            self.record_equation(
-                self.get_var_for_axis(expr, out_axis),
-                self.get_var_for_axis(expr.array, in_axis)
-            )
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_basic_index(self, expr: BasicIndex) -> None:
-        """
-        Records an equality equation for each trivially sliced axis of the
-        array being indexed and its corresponding axis in *expr*. A trivially
-        sliced axis is one which goes along the entire length of the axis with
-        a positive unit stride.
-        """
         self.rec(expr.array)
-
-        i_out_axis = 0
-
-        assert len(expr.indices) == expr.array.ndim
-
-        for i_in_axis, idx in enumerate(expr.indices):
-            if isinstance(idx, int):
-                pass
-            else:
-                assert isinstance(idx, NormalizedSlice)
-                if (idx.step == 1
-                        and are_shape_components_equal(idx.start, 0)
-                        and are_shape_components_equal(idx.stop,
-                                                       expr.array.shape[i_in_axis])):
-
-                    self.record_equation(
-                        self.get_var_for_axis(expr.array, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-
-                i_out_axis += 1
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_contiguous_advanced_index(self,
                                       expr: AdvancedIndexInContiguousAxes
                                       ) -> None:
-        """
-        For sliced indices adds all the equations as prescribed by
-        :meth:`AxesTagsEquationCollector.map_basic_index`. For the advanced
-        indices adds an equality equation for each non-broadcasted axis of an
-        indexing array to its corresponding axis in *expr*.
-        """
-        from pytato.utils import get_shape_after_broadcasting, partition
-
         self.rec(expr.array)
-        for idx in expr.indices:
-            if isinstance(idx, Array):
-                self.rec(idx)
-
-        i_adv_indices, i_basic_indices = partition(
-            lambda idx: isinstance(expr.indices[idx], NormalizedSlice),
-            range(len(expr.indices)))
-        npre_advanced_basic_indices = len([i_idx
-                                           for i_idx in i_basic_indices
-                                           if i_idx < i_adv_indices[0]])
-        npost_advanced_basic_indices = len([i_idx
-                                            for i_idx in i_basic_indices
-                                            if i_idx > i_adv_indices[-1]])
-
-        indirection_arrays: list[Array] = cast(list[Array],
-                                               [expr.indices[i_idx]
-                                                for i_idx in i_adv_indices
-                                                if isinstance(expr.indices[i_idx],
-                                                           Array)
-                                                ])
-
-        assert are_shapes_equal(
-            get_shape_after_broadcasting(indirection_arrays),
-            expr.shape[
-                npre_advanced_basic_indices:expr.ndim-npost_advanced_basic_indices])
-
-        # {{{ add equations from indirection arrays with the output
-
-        for subexpr in indirection_arrays:
-            for i_in_axis, i_out_axis in zip(
-                    range(subexpr.ndim),
-                    range(expr.ndim
-                          - npost_advanced_basic_indices
-                          - subexpr.ndim,
-                          expr.ndim-npost_advanced_basic_indices),
-                    strict=True):
-                in_dim = subexpr.shape[i_in_axis]
-                out_dim = expr.shape[i_out_axis]
-                if are_shape_components_equal(in_dim, out_dim):
-                    self.record_equation(
-                        self.get_var_for_axis(subexpr, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis))
-                else:
-                    # broadcasted axes, cannot belong to the same
-                    # discretization entity.
-                    assert are_shape_components_equal(in_dim, 1)
-        # }}}
-
-        # {{{ add equations from slices in indexed array's axes to output axes
-
-        for i_in_axis, idx in enumerate(expr.indices[:npre_advanced_basic_indices]):
-            assert isinstance(idx, NormalizedSlice)
-            if (idx.step == 1
-                    and are_shape_components_equal(idx.start, 0)
-                    and are_shape_components_equal(idx.stop,
-                                                   expr.array.shape[i_in_axis])):
-                assert are_shape_components_equal(expr.shape[i_in_axis],
-                                                  expr.array.shape[i_in_axis])
-                self.record_equation(
-                    self.get_var_for_axis(expr.array, i_in_axis),
-                    self.get_var_for_axis(expr, i_in_axis))
-
-        for i, idx in enumerate(
-                expr.indices[expr.array.ndim-npost_advanced_basic_indices:]):
-            i_in_axis = i + (expr.array.ndim - npost_advanced_basic_indices)
-            i_out_axis = i + (expr.ndim - npost_advanced_basic_indices)
-            assert isinstance(idx, NormalizedSlice)
-            if (idx.step == 1
-                    and are_shape_components_equal(idx.start, 0)
-                    and are_shape_components_equal(idx.stop,
-                                                   expr.array.shape[i_in_axis])):
-                assert are_shape_components_equal(expr.shape[i_out_axis],
-                                                  expr.array.shape[i_in_axis])
-                self.record_equation(
-                    self.get_var_for_axis(expr.array, i_in_axis),
-                    self.get_var_for_axis(expr, i_out_axis))
-        # }}}
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_reshape(self, expr: Reshape) -> None:
-        """
-        Reshaping generally does not preserve the axis between its input and
-        output and so no constraints are enforced except when the
-        :class:`pytato.Reshape` has come from a :func:`pytato.expand_dims`.
-        """
-        from pytato.tags import ExpandedDimsReshape
-
         self.rec(expr.array)
-
-        expand_dims_tags = expr.tags_of_type(ExpandedDimsReshape)
-
-        if expand_dims_tags:
-            expand_dims_tag, = expand_dims_tags
-            i_in_axis = 0
-            for i_out_axis in range(expr.ndim):
-                if i_out_axis not in expand_dims_tag.new_dims:
-                    self.record_equation(
-                        self.get_var_for_axis(expr.array, i_in_axis),
-                        self.get_var_for_axis(expr, i_out_axis)
-                    )
-                    i_in_axis += 1
-
-            assert i_in_axis == expr.array.ndim
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_einsum(self, expr: Einsum) -> None:
-        """
-        Equality conditions are added between axes of the operands and outputs
-        that have the same index when instantiated through
-        :func:`pytato.einsum` thereby having the same the
-        :class:`~pytato.array.EinsumAxisDescriptor`.
-        """
-        from pytato.array import EinsumAxisDescriptor, EinsumElementwiseAxis
-
         for arg in expr.args:
             self.rec(arg)
-
-        descr_to_var: dict[EinsumAxisDescriptor, str] = {}
-        for iaxis in range(expr.ndim):
-            descr_to_var[EinsumElementwiseAxis(iaxis)] = self.get_var_for_axis(expr,
-                                                                               iaxis)
-
-        for access_descrs, arg in zip(expr.access_descriptors,
-                                      expr.args, strict=True):
-            for iarg_axis, descr in enumerate(access_descrs):
-                in_tag_var = self.get_var_for_axis(arg, iarg_axis)
-
-                if descr in descr_to_var:
-                    self.record_equation(descr_to_var[descr], in_tag_var)
-                else:
-                    descr_to_var[descr] = in_tag_var
+        self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
         for _, subexpr in sorted(expr._data.items()):
@@ -575,6 +395,7 @@ class AxesTagsEquationCollector(Mapper[None, []]):
         :class:`pytato.DistributedRecv` does not have any operands and so no
         more equations are deduced.
         """
+        pass
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
@@ -593,62 +414,71 @@ class AxisTagAttacher(CopyMapper):
     A mapper that tags the axes in a DAG as prescribed by *axis_to_tags*.
     """
     def __init__(self,
-                 axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]],
-                 tag_corresponding_redn_descr: bool):
-        super().__init__()
-        self.axis_to_tags: Mapping[tuple[Array, int], Collection[Tag]] = axis_to_tags
+                 axis_to_tags: Mapping[tuple[Array, int | str], Collection[Tag]],
+                 tag_corresponding_redn_descr: bool,
+                 _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
+                 _function_cache:
+                    TransformMapperCache[FunctionDefinition, []] | None = None):
+        super().__init__(_cache=_cache, _function_cache=_function_cache)
+        self.axis_to_tags: Mapping[tuple[Array, int | str],
+                                   Collection[Tag]] = axis_to_tags
         self.tag_corresponding_redn_descr: bool = tag_corresponding_redn_descr
 
-    def rec(self, expr: ArrayOrNames) -> Any:
-        if isinstance(expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
-            return super().rec(expr)
-        else:
-            assert isinstance(expr, Array)
-            key = self.get_cache_key(expr)
-            try:
-                return self._cache[key]
-            except KeyError:
-                expr_copy = Mapper.rec(self, expr)
-                assert isinstance(expr_copy, Array)
-                assert expr_copy.ndim == expr.ndim
+    def _attach_tags(self, expr: Array, rec_expr: Array) -> Array:
+        assert rec_expr.ndim == expr.ndim
 
-                for iaxis in range(expr.ndim):
-                    expr_copy = expr_copy.with_tagged_axis(
-                        iaxis, self.axis_to_tags.get((expr, iaxis), []))
+        result = rec_expr
 
-                # {{{ tag reduction descrs
+        for iaxis in range(expr.ndim):
+            result = result.with_tagged_axis(
+                iaxis, self.axis_to_tags.get((expr, iaxis), []))
 
-                if self.tag_corresponding_redn_descr:
-                    if isinstance(expr, Einsum):
-                        assert isinstance(expr_copy, Einsum)
-                        for arg, access_descrs in zip(expr.args,
-                                                      expr.access_descriptors,
-                                                      strict=True):
-                            for iaxis, access_descr in enumerate(access_descrs):
-                                if isinstance(access_descr, EinsumReductionAxis):
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        access_descr,
-                                        self.axis_to_tags.get((arg, iaxis), [])
-                                    )
+        # {{{ tag reduction descrs
 
-                    if isinstance(expr, IndexLambda):
-                        assert isinstance(expr_copy, IndexLambda)
-                        try:
-                            hlo = index_lambda_to_high_level_op(expr)
-                        except UnknownIndexLambdaExpr:
-                            pass
-                        else:
-                            if isinstance(hlo, ReduceOp):
-                                for iaxis, redn_var in hlo.axes.items():
-                                    expr_copy = expr_copy.with_tagged_reduction(
-                                        redn_var,
-                                        self.axis_to_tags.get((hlo.x, iaxis), [])
-                                    )
+        if self.tag_corresponding_redn_descr:
+            if isinstance(expr, Einsum):
+                assert isinstance(result, Einsum)
+                for arg, access_descrs in zip(expr.args,
+                                              expr.access_descriptors,
+                                              strict=True):
+                    for iaxis, access_descr in enumerate(access_descrs):
+                        if isinstance(access_descr, EinsumReductionAxis):
+                            result = result.with_tagged_reduction(
+                                access_descr,
+                                self.axis_to_tags.get((arg, iaxis), [])
+                            )
 
-                # }}}
+            if isinstance(expr, IndexLambda):
+                assert isinstance(result, IndexLambda)
+                if result.var_to_reduction_descr:
+                    # This is a reduction operation.
+                    # We need to find the axes that are reduced over
+                    # and update the tag/tag them appropriately.
+                    for redn_var in expr.var_to_reduction_descr:
+                        result = result.with_tagged_reduction(
+                            redn_var,
+                            self.axis_to_tags.get((expr, redn_var), [])
+                        )
 
-                self._cache[key] = expr_copy
-                return expr_copy
+        # }}}
+
+        return result
+
+    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
+        inputs = self._make_cache_inputs(expr)
+        try:
+            return self._cache_retrieve(inputs)
+        except KeyError:
+            # Intentionally going to Mapper instead of super() to avoid
+            # double caching when subclasses of CachedMapper override rec,
+            # see https://github.com/inducer/pytato/pull/585
+            result = Mapper.rec(self, expr)
+            if not isinstance(
+                    expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
+                assert isinstance(expr, Array)
+                # type-ignore reason: passed "ArrayOrNames"; expected "Array"
+                result = self._attach_tags(expr, result)  # type: ignore[arg-type]
+            return self._cache_add(inputs, result)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
@@ -709,17 +539,32 @@ def unify_axes_tags(
     )
 
     known_tag_vars = frozenset(equations_collector.known_tag_to_var.values())
-    axis_to_solved_tags: dict[tuple[Array, int], set[Tag]] = {}
+
+    # Reduction axes are specified by a str but all other axes are specified
+    # by an integer. Note that the axes are still uniquely identified.
+    axis_to_solved_tags: dict[tuple[Array, int | str], set[Tag]] = {}
 
     propagation_graph = undirected_graph_from_edges(
         equations_collector.equations
     )
 
-    for tag, var in equations_collector.known_tag_to_var.items():
-        if isinstance(tag, AxisIgnoredForPropagationTag):
-            continue
+    ignored_vars = {
+        tag_var for tag, tag_var in equations_collector.known_tag_to_var.items()
+        if isinstance(tag, AxisIgnoredForPropagationTag)
+    } | {
+        ax_var
+        for (ary, ax), ax_var in equations_collector.axis_to_var.items()
 
-        reachable_nodes = get_reachable_nodes(propagation_graph, var)
+        # FIXME? Reduction axes ignore AxisIgnoredForPropagation.
+        # They cannot propagate the information to descendant of the array anyway.
+        if isinstance(ax, int)
+
+        and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag)
+    }
+
+    for tag, var in equations_collector.known_tag_to_var.items():
+        reachable_nodes = get_reachable_nodes(propagation_graph, var,
+                                              exclude_nodes=ignored_vars)
         for reachable_var in (reachable_nodes - known_tag_vars):
             axis_to_solved_tags.setdefault(
                 equations_collector.axis_to_var.inverse[reachable_var],

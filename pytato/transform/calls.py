@@ -29,7 +29,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Mapping
+
+from typing import TYPE_CHECKING
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -39,7 +40,11 @@ from pytato.array import (
 )
 from pytato.function import Call, NamedCallResult
 from pytato.tags import InlineCallTag
-from pytato.transform import ArrayOrNames, CopyMapper
+from pytato.transform import ArrayOrNames, CopyMapper, _verify_is_array
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 # {{{ inlining
@@ -53,11 +58,16 @@ class PlaceholderSubstitutor(CopyMapper):
     """
 
     def __init__(self, substitutions: Mapping[str, Array]) -> None:
+        # Ignoring function cache, since we don't support functions anyway
         super().__init__()
         self.substitutions = substitutions
 
     def map_placeholder(self, expr: Placeholder) -> Array:
         return self.substitutions[expr.name]
+
+    def map_named_call_result(self, expr: NamedCallResult) -> NamedCallResult:
+        raise NotImplementedError(
+            "PlaceholderSubstitutor does not support functions.")
 
 
 class Inliner(CopyMapper):
@@ -73,7 +83,7 @@ class Inliner(CopyMapper):
             substitutor = PlaceholderSubstitutor(new_expr.bindings)
 
             return DictOfNamedArrays(
-                {name: substitutor.rec_ary(ret)
+                {name: _verify_is_array(substitutor.rec(ret))
                  for name, ret in new_expr.function.returns.items()},
                 tags=new_expr.tags
             )

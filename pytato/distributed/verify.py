@@ -38,10 +38,7 @@ THE SOFTWARE.
 
 import dataclasses
 import logging
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
-
-import numpy as np
 
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -51,7 +48,6 @@ from pytato.array import (
     ShapeType,
     make_dict_of_named_arrays,
 )
-from pytato.distributed.nodes import CommTagType, DistributedRecv
 from pytato.distributed.partition import (
     CommunicationOpIdentifier,
     DistributedGraphPartition,
@@ -64,7 +60,12 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import mpi4py.MPI
+    import numpy as np
+
+    from pytato.distributed.nodes import CommTagType, DistributedRecv
 
 
 # {{{ data structures
@@ -143,8 +144,8 @@ class MissingRecvError(DistributedPartitionVerificationError):
 
 @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
 class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
         self.seen_nodes: set[ArrayOrNames] = set()
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:

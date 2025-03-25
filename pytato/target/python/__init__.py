@@ -37,14 +37,17 @@ __doc__ = """
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from pytato.target import BoundProgram, Target
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 # {{{ abstract types

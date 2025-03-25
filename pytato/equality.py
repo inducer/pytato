@@ -25,10 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
-
-from pytools import memoize_method
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -50,11 +47,14 @@ from pytato.array import (
     SizeParam,
     Stack,
 )
-from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.function import FunctionDefinition
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    from pytato.function import Call, NamedCallResult
     from pytato.loopy import LoopyCall, LoopyCallResult
 
 __doc__ = """
@@ -84,26 +84,31 @@ class EqualityComparer:
           more on this.
     """
     def __init__(self) -> None:
+        # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], bool] = {}
 
-    def rec(self, expr1: ArrayOrNames, expr2: Any) -> bool:
+    def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
         cache_key = id(expr1), id(expr2)
         try:
             return self._cache[cache_key]
         except KeyError:
-
-            method: Callable[[Array | AbstractResultWithNamedArrays, Any],
-                             bool]
-
-            try:
-                method = getattr(self, expr1._mapper_method)
-            except AttributeError:
-                if isinstance(expr1, Array):
-                    result = self.handle_unsupported_array(expr1, expr2)
+            if expr1 is expr2:
+                result = True
+            elif isinstance(expr1, ArrayOrNames):
+                method: Callable[[ArrayOrNames, Any], bool]
+                try:
+                    method = getattr(self, expr1._mapper_method)
+                except AttributeError:
+                    if isinstance(expr1, Array):
+                        result = self.handle_unsupported_array(expr1, expr2)
+                    else:
+                        result = self.map_foreign(expr1, expr2)
                 else:
-                    result = self.map_foreign(expr1, expr2)
+                    result = method(expr1, expr2)
+            elif isinstance(expr1, FunctionDefinition):
+                result = self.map_function_definition(expr1, expr2)
             else:
-                result = (expr1 is expr2) or method(expr1, expr2)
+                result = self.map_foreign(expr1, expr2)
 
             self._cache[cache_key] = result
             return result
@@ -295,7 +300,6 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    @memoize_method
     def map_function_definition(self, expr1: FunctionDefinition, expr2: Any
                                 ) -> bool:
         return (expr1.__class__ is expr2.__class__
@@ -309,7 +313,7 @@ class EqualityComparer:
 
     def map_call(self, expr1: Call, expr2: Any) -> bool:
         return (expr1.__class__ is expr2.__class__
-                and self.map_function_definition(expr1.function, expr2.function)
+                and self.rec(expr1.function, expr2.function)
                 and frozenset(expr1.bindings) == frozenset(expr2.bindings)
                 and all(self.rec(bnd,
                                  expr2.bindings[name])

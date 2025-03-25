@@ -188,6 +188,7 @@ from collections.abc import (
 )
 from functools import cached_property, partialmethod
 from sys import intern
+from types import EllipsisType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -217,22 +218,6 @@ from pytato.scalar_expr import (
     ScalarExpression,
     get_reduction_induction_variables,
 )
-
-
-# {{{ get a type variable that represents the type of '...'
-
-# https://github.com/python/typing/issues/684#issuecomment-548203158
-if TYPE_CHECKING:
-    from enum import Enum
-
-    class EllipsisType(Enum):
-        Ellipsis = "..."
-
-    Ellipsis = EllipsisType.Ellipsis
-else:
-    EllipsisType = type(Ellipsis)
-
-# }}}
 
 
 if TYPE_CHECKING:
@@ -355,10 +340,7 @@ def _augment_array_dataclass(
         attr_tuple_hash = ", ".join(f"self.{fld.name}"
                             for fld in fields(cls) if fld.name != "non_equality_tags")
 
-        if attr_tuple_hash:
-            attr_tuple_hash = f"({attr_tuple_hash},)"
-        else:
-            attr_tuple_hash = "()"
+        attr_tuple_hash = f"({attr_tuple_hash},)" if attr_tuple_hash else "()"
 
         from pytools.codegen import remove_common_indentation
         augment_code = remove_common_indentation(
@@ -371,7 +353,7 @@ def _augment_array_dataclass(
                 except AttributeError:
                     pass
 
-                h = hash(frozenset({attr_tuple_hash}))
+                h = hash({attr_tuple_hash})
                 object.__setattr__(self, "_hash_value", h)
                 return h
 
@@ -405,7 +387,7 @@ def _augment_array_dataclass(
 
     # {{{ assign mapper_method
 
-    mm_cls = cast(type[_HasMapperMethod], cls)
+    mm_cls = cast("type[_HasMapperMethod]", cls)
 
     snake_clsname = _CAMEL_TO_SNAKE_RE.sub("_", mm_cls.__name__).lower()
     default_mapper_method_name = f"map_{snake_clsname}"
@@ -414,11 +396,10 @@ def _augment_array_dataclass(
     # place, or it inherits a value but does not set it itself.
     sets_mapper_method = "_mapper_method" in mm_cls.__dict__
 
-    if sets_mapper_method:
-        if default_mapper_method_name == mm_cls._mapper_method:
-            warn(f"Explicit _mapper_method on {mm_cls} not needed, default matches "
-                 "explicit assignment. Just delete the explicit assignment.",
-                 stacklevel=3)
+    if sets_mapper_method and default_mapper_method_name == mm_cls._mapper_method:
+        warn(f"Explicit _mapper_method on {mm_cls} not needed, default matches "
+             "explicit assignment. Just delete the explicit assignment.",
+             stacklevel=3)
 
     if not sets_mapper_method:
         mm_cls._mapper_method = intern(default_mapper_method_name)
@@ -719,8 +700,7 @@ class Array(Taggable):
 
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
             # https://github.com/python/mypy/issues/4791
-            # This type-ignore will become necessary with mypy 1.14.
-            return NotImplemented  # not-yet-type: ignore[no-any-return]
+            return NotImplemented  # type: ignore[no-any-return]
 
         # }}}
 
@@ -804,7 +784,7 @@ class Array(Taggable):
 
     def __abs__(self) -> Array:
         import pytato as pt
-        return cast(Array, pt.abs(self))
+        return cast("Array", pt.abs(self))
 
     def __pos__(self) -> Array:
         return self
@@ -1501,9 +1481,9 @@ def einsum(subscripts: str, *operands: Array,
             raise ValueError(f"'{idx}' is not a reduction dim.")
 
     for descr in index_to_descr.values():
-        if isinstance(descr, EinsumReductionAxis):
-            if descr not in redn_axis_to_redn_descr:
-                redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+        if (isinstance(descr, EinsumReductionAxis)
+                and descr not in redn_axis_to_redn_descr):
+            redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
 
     # }}}
 
@@ -1755,7 +1735,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
                        for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | Integer, not_none(self.indices[i_idx]))
+            cast("Array | Integer", not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer
@@ -1803,7 +1783,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
                    for i_basic_idx in i_basic_indices)
 
         adv_idx_shape = get_shape_after_broadcasting([
-            cast(Array | Integer, not_none(self.indices[i_idx]))
+            cast("Array | Integer", not_none(self.indices[i_idx]))
             for i_idx in i_adv_indices])
 
         # type-ignored because mypy cannot figure out basic-indices only refer slices
@@ -2037,7 +2017,7 @@ def matmul(x1: Array, x2: Array) -> Array:
     if x1.ndim == x2.ndim == 1:
         return pt.sum(x1 * x2)
     elif x1.ndim == 1:
-        return cast(Array, pt.dot(x1, x2))
+        return cast("Array", pt.dot(x1, x2))
     elif x2.ndim == 1:
         x1_indices = index_names[:x1.ndim]
         return pt.einsum(f"{x1_indices}, {x1_indices[-1]} -> {x1_indices[:-1]}",
@@ -2357,10 +2337,7 @@ def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
     if order != "C":
         raise ValueError("Only C-ordered arrays supported for now.")
 
-    if dtype is None:
-        conv_dtype = np.array(fill_value).dtype
-    else:
-        conv_dtype = np.dtype(dtype)
+    conv_dtype = np.array(fill_value).dtype if dtype is None else np.dtype(dtype)
 
     shape = normalize_shape(shape)
 
@@ -2370,7 +2347,7 @@ def full(shape: ConvertibleToShape, fill_value: Scalar | prim.NaN,
     else:
         fill_value = conv_dtype.type(fill_value)
 
-    return IndexLambda(expr=cast(ArithmeticExpression, fill_value),
+    return IndexLambda(expr=cast("ArithmeticExpression", fill_value),
                        shape=shape, dtype=conv_dtype,
                        bindings=immutabledict(),
                        tags=_get_default_tags(),
@@ -2513,7 +2490,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
     from math import ceil
     # np.real() suppresses "ComplexWarning: Casting complex values to real
     # discards the imaginary part":
-    size = max(0, int(ceil((np.real(stop)-np.real(start))/np.real(step))))
+    size = max(0, ceil((np.real(stop)-np.real(start))/np.real(step)))
 
     from pymbolic.primitives import Variable
     return IndexLambda(expr=start + Variable("_0") * step,

@@ -27,9 +27,9 @@ THE SOFTWARE.
 
 
 import dataclasses
-from collections.abc import Iterable, Iterator, Mapping, Sequence
 from numbers import Number
 from typing import (
+    TYPE_CHECKING,
     Any,
 )
 
@@ -39,7 +39,7 @@ from immutabledict import immutabledict
 
 import loopy as lp
 import pymbolic.primitives as prim
-from pymbolic.typing import ArithmeticExpression, Expression, Integer, not_none
+from loopy.typing import assert_tuple
 from pytools import memoize_method
 
 from pytato.array import (
@@ -56,6 +56,12 @@ from pytato.scalar_expr import (
     ScalarExpression,
     SubstitutionMapper,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
+
+    from pymbolic.typing import ArithmeticExpression, Expression, Integer
 
 
 __doc__ = r"""
@@ -155,9 +161,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
 
 
 @array_dataclass()
-# https://github.com/python/mypy/issues/18115
-# https://github.com/python/mypy/issues/17623
-class LoopyCallResult(NamedArray):   # type: ignore[override]
+class LoopyCallResult(NamedArray):
     """
     Named array for :class:`LoopyCall`'s result.
     Inherits from :class:`~pytato.array.NamedArray`.
@@ -414,16 +418,18 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
     from loopy.kernel.array import ArrayBase
     from loopy.symbolic import get_dependencies as lpy_get_deps
     from pymbolic.mapper.substitutor import make_subst_func
+    from pymbolic.primitives import is_expression
 
     from pytato.transform import SizeParamGatherer
 
     get_size_param_deps = SizeParamGatherer()
 
     lp_size_params: frozenset[str] = reduce(frozenset.union,
-                                            (lpy_get_deps(not_none(arg.shape))
+                                            (lpy_get_deps(assert_tuple(arg.shape))
                                              for arg in knl.args
-                                             if isinstance(arg, ArrayBase)),
-                                            frozenset())
+                                             if isinstance(arg, ArrayBase)
+                                             and is_expression(arg.shape)
+                                         ), frozenset())
 
     pt_size_params: frozenset[SizeParam] = reduce(frozenset.union,
                                                   (get_size_param_deps(bnd)

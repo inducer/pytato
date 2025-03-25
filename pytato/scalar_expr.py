@@ -92,7 +92,7 @@ ScalarExpression = ArithmeticExpression | Bool
 
 
 def is_integral_scalar_expression(expr: object) -> TypeIs[IntegralScalarExpression]:
-    return isinstance(expr, int | np.integer) or isinstance(expr, prim.ExpressionNode)
+    return isinstance(expr, int | np.integer | prim.ExpressionNode)
 
 
 def parse(s: str) -> ScalarExpression:
@@ -134,7 +134,7 @@ class IdentityMapper(IdentityMapperBase[P]):
                    expr: Reduce,
                    *args: P.args, **kwargs: P.kwargs) -> Expression:
         return Reduce(
-                      cast(ArithmeticExpression,
+                      cast("ArithmeticExpression",
                            self.rec(expr.inner_expr, *args, **kwargs)),
                       expr.op,
                       immutabledict({
@@ -148,7 +148,7 @@ class IdentityMapper(IdentityMapperBase[P]):
     def map_type_cast(self,
                 expr: TypeCast, *args: P.args, **kwargs: P.kwargs) -> Expression:
         return TypeCast(expr.dtype,
-                        cast(ArithmeticExpression,
+                        cast("ArithmeticExpression",
                              self.rec(expr.inner_expr, *args, **kwargs)))
 
 
@@ -163,7 +163,8 @@ class SubstitutionMapper(SubstitutionMapperBase):
                            for name, bound in expr.bounds.items()}))
 
 
-IDX_LAMBDA_RE = re.compile(r"_r?(0|([1-9][0-9]*))")
+IDX_LAMBDA_REDUCTION_AXIS_INDEX = re.compile(r"^(_r?(?P<index>0|[1-9][0-9]*))$")
+IDX_LAMBDA_AXIS_INDEX = re.compile(r"^(_(?P<index>0|[1-9][0-9]*))$")
 
 
 class DependencyMapper(DependencyMapperBase[P]):
@@ -185,7 +186,7 @@ class DependencyMapper(DependencyMapperBase[P]):
                 expr: prim.Variable, *args: P.args, **kwargs: P.kwargs
             ) -> DependenciesT:
         if ((not self.include_idx_lambda_indices)
-                and IDX_LAMBDA_RE.fullmatch(str(expr))):
+                and IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(str(expr))):
             return set()
         else:
             return super().map_variable(expr, *args, **kwargs)
