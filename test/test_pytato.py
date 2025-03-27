@@ -1054,6 +1054,8 @@ def test_created_at():
     # }}}
 
 
+# {{{ test_mapper_duplication_check
+
 class NonDuplicatingMapper(pt.transform.TransformMapper):
     def __init__(self) -> None:
         super().__init__(err_on_collision=False, err_on_created_duplicate=True)
@@ -1143,6 +1145,8 @@ def test_mapper_duplication_check():
 
     with pytest.raises(ValueError):
         DuplicatingMapper()(dag)
+
+# }}}
 
 
 def test_pickling_and_unpickling_is_equal():
