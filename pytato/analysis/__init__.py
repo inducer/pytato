@@ -337,7 +337,7 @@ class ListOfDirectPredecessorsGetter(
 
     .. note::
 
-        We only consider the predecessors of a nodes in a data-flow sense.
+        We only consider the predecessors of a node in a data-flow sense.
     """
     def __init__(self, *, include_functions: bool = False) -> None:
         super().__init__()
@@ -442,7 +442,7 @@ class DirectPredecessorsGetter(
 
     .. note::
 
-        We only consider the predecessors of a nodes in a data-flow sense.
+        We only consider the predecessors of a node in a data-flow sense.
     """
     def __init__(self, *, include_functions: bool = False) -> None:
         super().__init__()
