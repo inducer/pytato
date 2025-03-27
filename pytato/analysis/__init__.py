@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Any, Never, overload
 
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Self
@@ -330,7 +330,7 @@ class ListOfDirectPredecessorsGetter(
             list[ArrayOrNames],
             []]):
     """
-    Mapper to get the
+    Helper to get the
     `direct predecessors
     <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
     of a node.
@@ -429,13 +429,9 @@ class ListOfDirectPredecessorsGetter(
 
 # {{{ DirectPredecessorsGetter
 
-class DirectPredecessorsGetter(
-        Mapper[
-            FrozenOrderedSet[ArrayOrNames | FunctionDefinition],
-            FrozenOrderedSet[ArrayOrNames],
-            []]):
+class DirectPredecessorsGetter:
     """
-    Mapper to get the
+    Helper to get the
     `direct predecessors
     <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
     of a node.
@@ -445,17 +441,26 @@ class DirectPredecessorsGetter(
         We only consider the predecessors of a node in a data-flow sense.
     """
     def __init__(self, *, include_functions: bool = False) -> None:
-        super().__init__()
         self._pred_getter = \
             ListOfDirectPredecessorsGetter(include_functions=include_functions)
 
-    def rec(
+    @overload
+    def __call__(
             self, expr: ArrayOrNames
             ) -> FrozenOrderedSet[ArrayOrNames | FunctionDefinition]:
-        return FrozenOrderedSet(self._pred_getter(expr))
+        ...
 
-    def rec_function_definition(
-            self, expr: FunctionDefinition) -> FrozenOrderedSet[ArrayOrNames]:
+    @overload
+    def __call__(self, expr: FunctionDefinition) -> FrozenOrderedSet[ArrayOrNames]:
+        ...
+
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            ) -> (
+                FrozenOrderedSet[ArrayOrNames | FunctionDefinition]
+                | FrozenOrderedSet[ArrayOrNames]):
+        """Get the direct predecessors of *expr*."""
         return FrozenOrderedSet(self._pred_getter(expr))
 
 # }}}
