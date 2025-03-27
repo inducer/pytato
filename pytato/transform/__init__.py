@@ -579,8 +579,8 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
             # For this check to work, must preserve duplicates when retrieving
             # predecessors. DirectPredecessorsGetter deduplicates by virtue of storing
             # the predecessors it finds in sets
-            from pytato.analysis import NonUniqueDirectPredecessorsGetter
-            pred_getter = NonUniqueDirectPredecessorsGetter(include_functions=True)
+            from pytato.analysis import ListOfDirectPredecessorsGetter
+            pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
             if (
                     hash(result) == hash(inputs.expr)
                     and result == inputs.expr

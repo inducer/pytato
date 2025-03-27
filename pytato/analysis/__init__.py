@@ -75,7 +75,7 @@ __doc__ = """
 .. autofunction:: get_num_call_sites
 
 .. autoclass:: DirectPredecessorsGetter
-.. autoclass:: NonUniqueDirectPredecessorsGetter
+.. autoclass:: ListOfDirectPredecessorsGetter
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
@@ -322,9 +322,9 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 # }}}
 
 
-# {{{ NonUniqueDirectPredecessorsGetter
+# {{{ ListOfDirectPredecessorsGetter
 
-class NonUniqueDirectPredecessorsGetter(
+class ListOfDirectPredecessorsGetter(
         Mapper[
             list[ArrayOrNames | FunctionDefinition],
             list[ArrayOrNames],
@@ -447,7 +447,7 @@ class DirectPredecessorsGetter(
     def __init__(self, *, include_functions: bool = False) -> None:
         super().__init__()
         self._pred_getter = \
-            NonUniqueDirectPredecessorsGetter(include_functions=include_functions)
+            ListOfDirectPredecessorsGetter(include_functions=include_functions)
 
     def rec(
             self, expr: ArrayOrNames
