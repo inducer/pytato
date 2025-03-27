@@ -576,8 +576,11 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
             f"Cache entry is already present for key '{key}'."
 
         if self.err_on_created_duplicate:
-            from pytato.analysis import DirectPredecessorsGetter
-            pred_getter = DirectPredecessorsGetter(include_functions=True)
+            # For this check to work, must preserve duplicates when retrieving
+            # predecessors. DirectPredecessorsGetter deduplicates by virtue of storing
+            # the predecessors it finds in sets
+            from pytato.analysis import ListOfDirectPredecessorsGetter
+            pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
             if (
                     hash(result) == hash(inputs.expr)
                     and result == inputs.expr

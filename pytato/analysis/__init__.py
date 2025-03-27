@@ -26,7 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Any, Never, overload
 
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Self
@@ -75,6 +75,7 @@ __doc__ = """
 .. autofunction:: get_num_call_sites
 
 .. autoclass:: DirectPredecessorsGetter
+.. autoclass:: ListOfDirectPredecessorsGetter
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
@@ -321,79 +322,77 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 # }}}
 
 
-# {{{ DirectPredecessorsGetter
+# {{{ ListOfDirectPredecessorsGetter
 
-class DirectPredecessorsGetter(
+class ListOfDirectPredecessorsGetter(
         Mapper[
-            FrozenOrderedSet[ArrayOrNames | FunctionDefinition],
-            FrozenOrderedSet[ArrayOrNames],
+            list[ArrayOrNames | FunctionDefinition],
+            list[ArrayOrNames],
             []]):
     """
-    Mapper to get the
+    Helper to get the
     `direct predecessors
     <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
     of a node.
 
     .. note::
 
-        We only consider the predecessors of a nodes in a data-flow sense.
+        We only consider the predecessors of a node in a data-flow sense.
     """
     def __init__(self, *, include_functions: bool = False) -> None:
         super().__init__()
         self.include_functions = include_functions
 
-    def _get_preds_from_shape(self, shape: ShapeType) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet(dim for dim in shape if isinstance(dim, Array))
+    def _get_preds_from_shape(self, shape: ShapeType) -> list[ArrayOrNames]:
+        return [dim for dim in shape if isinstance(dim, Array)]
 
     def map_dict_of_named_arrays(
-            self, expr: DictOfNamedArrays) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet(expr._data.values())
+            self, expr: DictOfNamedArrays) -> list[ArrayOrNames]:
+        return list(expr._data.values())
 
-    def map_index_lambda(self, expr: IndexLambda) -> FrozenOrderedSet[ArrayOrNames]:
-        return (FrozenOrderedSet(expr.bindings.values())
-                | self._get_preds_from_shape(expr.shape))
+    def map_index_lambda(self, expr: IndexLambda) -> list[ArrayOrNames]:
+        return self._get_preds_from_shape(expr.shape) + list(expr.bindings.values())
 
-    def map_stack(self, expr: Stack) -> FrozenOrderedSet[ArrayOrNames]:
-        return (FrozenOrderedSet(expr.arrays)
-                | self._get_preds_from_shape(expr.shape))
+    def map_stack(self, expr: Stack) -> list[ArrayOrNames]:
+        return self._get_preds_from_shape(expr.shape) + list(expr.arrays)
 
-    def map_concatenate(self, expr: Concatenate) -> FrozenOrderedSet[ArrayOrNames]:
-        return (FrozenOrderedSet(expr.arrays)
-                | self._get_preds_from_shape(expr.shape))
+    def map_concatenate(self, expr: Concatenate) -> list[ArrayOrNames]:
+        return self._get_preds_from_shape(expr.shape) + list(expr.arrays)
 
-    def map_einsum(self, expr: Einsum) -> FrozenOrderedSet[ArrayOrNames]:
-        return (FrozenOrderedSet(expr.args)
-                | self._get_preds_from_shape(expr.shape))
+    def map_einsum(self, expr: Einsum) -> list[ArrayOrNames]:
+        return self._get_preds_from_shape(expr.shape) + list(expr.args)
 
-    def map_loopy_call_result(self, expr: NamedArray) -> FrozenOrderedSet[ArrayOrNames]:
+    def map_loopy_call_result(self, expr: NamedArray) -> list[ArrayOrNames]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
-        return (FrozenOrderedSet(ary
-                          for ary in expr._container.bindings.values()
-                          if isinstance(ary, Array))
-                | self._get_preds_from_shape(expr.shape))
+        return (
+            self._get_preds_from_shape(expr.shape)
+            + [
+                ary
+                for ary in expr._container.bindings.values()
+                if isinstance(ary, Array)])
 
-    def _map_index_base(self, expr: IndexBase) -> FrozenOrderedSet[ArrayOrNames]:
-        return (FrozenOrderedSet([expr.array])
-                | FrozenOrderedSet(idx for idx in expr.indices
-                            if isinstance(idx, Array))
-                | self._get_preds_from_shape(expr.shape))
+    def _map_index_base(self, expr: IndexBase) -> list[ArrayOrNames]:
+        return (
+            self._get_preds_from_shape(expr.shape)
+            + [expr.array]
+            + [idx for idx in expr.indices if isinstance(idx, Array)])
 
     map_basic_index = _map_index_base
     map_contiguous_advanced_index = _map_index_base
     map_non_contiguous_advanced_index = _map_index_base
 
     def _map_index_remapping_base(self, expr: IndexRemappingBase
-                                  ) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet([expr.array])
+                                  ) -> list[ArrayOrNames]:
+        return [expr.array]
 
     map_roll = _map_index_remapping_base
     map_axis_permutation = _map_index_remapping_base
     map_reshape = _map_index_remapping_base
 
     def _map_input_base(self, expr: InputArgumentBase) \
-            -> FrozenOrderedSet[ArrayOrNames]:
+            -> list[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     map_placeholder = _map_input_base
@@ -401,30 +400,68 @@ class DirectPredecessorsGetter(
     map_size_param = _map_input_base
 
     def map_distributed_recv(self,
-                             expr: DistributedRecv) -> FrozenOrderedSet[ArrayOrNames]:
+                             expr: DistributedRecv) -> list[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
-                                        ) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet([expr.passthrough_data])
+                                        ) -> list[ArrayOrNames]:
+        return [expr.passthrough_data]
 
     def map_call(
-            self, expr: Call) -> FrozenOrderedSet[ArrayOrNames | FunctionDefinition]:
-        result: FrozenOrderedSet[ArrayOrNames | FunctionDefinition] = \
-            FrozenOrderedSet(expr.bindings.values())
+            self, expr: Call) -> list[ArrayOrNames | FunctionDefinition]:
+        result: list[ArrayOrNames | FunctionDefinition] = []
         if self.include_functions:
-            result = result | FrozenOrderedSet([expr.function])
+            result.append(expr.function)
+        result += list(expr.bindings.values())
         return result
 
     def map_function_definition(
-            self, expr: FunctionDefinition) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet(expr.returns.values())
+            self, expr: FunctionDefinition) -> list[ArrayOrNames]:
+        return list(expr.returns.values())
 
     def map_named_call_result(
-            self, expr: NamedCallResult) -> FrozenOrderedSet[ArrayOrNames]:
-        return FrozenOrderedSet([expr._container])
+            self, expr: NamedCallResult) -> list[ArrayOrNames]:
+        return [expr._container]
 
+# }}}
+
+
+# {{{ DirectPredecessorsGetter
+
+class DirectPredecessorsGetter:
+    """
+    Helper to get the
+    `direct predecessors
+    <https://en.wikipedia.org/wiki/Glossary_of_graph_theory#direct_predecessor>`__
+    of a node.
+
+    .. note::
+
+        We only consider the predecessors of a node in a data-flow sense.
+    """
+    def __init__(self, *, include_functions: bool = False) -> None:
+        self._pred_getter = \
+            ListOfDirectPredecessorsGetter(include_functions=include_functions)
+
+    @overload
+    def __call__(
+            self, expr: ArrayOrNames
+            ) -> FrozenOrderedSet[ArrayOrNames | FunctionDefinition]:
+        ...
+
+    @overload
+    def __call__(self, expr: FunctionDefinition) -> FrozenOrderedSet[ArrayOrNames]:
+        ...
+
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            ) -> (
+                FrozenOrderedSet[ArrayOrNames | FunctionDefinition]
+                | FrozenOrderedSet[ArrayOrNames]):
+        """Get the direct predecessors of *expr*."""
+        return FrozenOrderedSet(self._pred_getter(expr))
 
 # }}}
 
