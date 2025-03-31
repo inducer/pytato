@@ -603,6 +603,9 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
             f"Cache entry is already present for key '{key}'."
 
         try:
+            # The first encountered instance of each distinct result (in terms of
+            # "==") gets cached, and subsequent mappings with results that are equal
+            # to prior cached results are replaced with the original instance
             result = self._result_to_cached_result[result]
         except KeyError:
             if (
@@ -2091,6 +2094,10 @@ class MPMSMaterializerCache(
             f"Cache entry is already present for key '{key}'."
 
         try:
+            # The first encountered instance of each distinct result (in terms of
+            # "==" of result.expr) gets cached, and subsequent mappings with results
+            # that are equal to prior cached results are replaced with the original
+            # instance
             result = self._result_key_to_result[result.expr]
         except KeyError:
             if (
