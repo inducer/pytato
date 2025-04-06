@@ -833,9 +833,9 @@ class Array(Taggable):
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (self.axes[:iaxis]
-                    + (self.axes[iaxis].tagged(tags),)
-                    + self.axes[iaxis+1:])
+        new_axes = (*self.axes[:iaxis],
+                    self.axes[iaxis].tagged(tags),
+                    *self.axes[iaxis+1:])
         return self.copy(axes=new_axes)
 
     @memoize_method
@@ -1560,9 +1560,9 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
         common_axis_len = sum(ary.shape[self.axis]  # type: ignore[misc]
                               for ary in self.arrays)
 
-        return (self.arrays[0].shape[:self.axis]
-                + (common_axis_len,)
-                + self.arrays[0].shape[self.axis+1:])
+        return (*self.arrays[0].shape[:self.axis],
+                common_axis_len,
+                *self.arrays[0].shape[self.axis+1:])
 
 # }}}
 
