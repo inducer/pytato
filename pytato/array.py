@@ -199,6 +199,7 @@ from typing import (
     Union,
     cast,
     dataclass_transform,
+    overload,
 )
 from warnings import warn
 
@@ -332,6 +333,10 @@ def _augment_array_dataclass(
 
     # {{{ hashing and hash caching
 
+    from pytools.codegen import remove_common_indentation
+
+    augment_code = ""
+
     if generate_hash:
         from dataclasses import fields
 
@@ -342,8 +347,7 @@ def _augment_array_dataclass(
 
         attr_tuple_hash = f"({attr_tuple_hash},)" if attr_tuple_hash else "()"
 
-        from pytools.codegen import remove_common_indentation
-        augment_code = remove_common_indentation(
+        augment_code += remove_common_indentation(
             f"""
             from dataclasses import fields
 
@@ -378,10 +382,47 @@ def _augment_array_dataclass(
             cls.__getstate__ = _dataclass_getstate
             cls.__setstate__ = _dataclass_setstate
             """)
-        exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-        exec(compile(augment_code,
-                     f"<dataclass augmentation code for {cls}>", "exec"),
-             exec_dict)
+
+    augment_code += "\n"
+    augment_code += remove_common_indentation(
+        """
+        from collections.abc import Iterable, Mapping
+        from dataclasses import replace
+
+        def _dataclass_sequence_or_mapping_entries_are_identical(a, b):
+            if isinstance(a, Mapping):
+                assert isinstance(b, Mapping)
+                return (
+                    a.keys() == b.keys()
+                    and all(
+                        b_k is a_k
+                        for a_k, b_k in zip(
+                            a.values(), b.values(), strict=True)))
+            else:
+                return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+
+        def _dataclass_replace_if_different(self, **kwargs):
+            diff_fields = {}
+            for name, new_value in kwargs.items():
+                value = getattr(self, name)
+                if isinstance(value, Iterable | Mapping):
+                    if not _dataclass_sequence_or_mapping_entries_are_identical(
+                            new_value, value):
+                        diff_fields[name] = new_value
+                elif new_value is not value:
+                    diff_fields[name] = new_value
+            if diff_fields:
+                return replace(self, **diff_fields)
+            else:
+                return self
+
+        cls.replace_if_different = _dataclass_replace_if_different
+        """)
+
+    exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
+    exec(compile(augment_code,
+                 f"<dataclass augmentation code for {cls}>", "exec"),
+         exec_dict)
 
     # }}}
 
@@ -405,6 +446,35 @@ def _augment_array_dataclass(
         mm_cls._mapper_method = intern(default_mapper_method_name)
 
     # }}}
+
+
+@overload
+def _entries_are_identical(
+        a: Iterable[Any],
+        b: Iterable[Any]) -> bool:
+    ...
+
+
+@overload
+def _entries_are_identical(
+        a: Mapping[str, Any],
+        b: Mapping[str, Any]) -> bool:
+    ...
+
+
+def _entries_are_identical(
+        a: Iterable[Any] | Mapping[str, Any],
+        b: Iterable[Any] | Mapping[str, Any]) -> bool:
+    if isinstance(a, Mapping):
+        assert isinstance(b, Mapping)
+        return (
+            a.keys() == b.keys()
+            and all(
+                b_k is a_k
+                for a_k, b_k in zip(
+                    a.values(), b.values(), strict=True)))
+    else:
+        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
 
 # }}}
 
@@ -617,6 +687,10 @@ class Array(Taggable):
 
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         return dataclasses.replace(self, **kwargs)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
     @property
     def size(self) -> ShapeComponent:
@@ -931,7 +1005,8 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
 
 
 @opt_frozen_dataclass(eq=False)
-class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
+class AbstractResultWithNamedArrays(
+        Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
     is determined by concrete subclasses of this class, e.g.
@@ -958,6 +1033,20 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
             # ensure that a developer does not uses dataclass' "__eq__"
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
+
+    def replace_if_different(self, **kwargs: Any) -> Self:
+        diff_fields: Mapping[str, Any] = {}
+        for name, new_value in kwargs.items():
+            value = getattr(self, name)
+            if isinstance(value, Iterable | Mapping):
+                if not _entries_are_identical(new_value, value):
+                    diff_fields[name] = new_value
+            elif new_value is not value:
+                diff_fields[name] = new_value
+        if diff_fields:
+            return dataclasses.replace(self, **diff_fields)
+        else:
+            return self
 
     @abstractmethod
     def __contains__(self, name: object) -> bool:
@@ -1013,6 +1102,18 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
 
     def __hash__(self) -> int:
         return hash((frozenset(self._data.items()), self.tags))
+
+    def replace_if_different(
+            self, *, data: Mapping[str, Array] | None = None, **kwargs: Any) -> Self:
+        new_self = super().replace_if_different(**kwargs)
+        if data is not None and not _entries_are_identical(data, new_self._data):
+            # FIXME: Would be better to use dataclasses.replace here, but currently
+            # gives an error:
+            #     TypeError: DictOfNamedArrays.__init__() got an unexpected keyword
+            #         argument '_data'
+            # new_self = dataclasses.replace(data=data)
+            new_self = type(self)(data=data, tags=new_self.tags)
+        return new_self
 
     def __contains__(self, name: object) -> bool:
         return name in self._data

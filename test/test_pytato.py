@@ -1075,21 +1075,7 @@ class NonDuplicatingMapper(pt.transform.TransformMapper):
         new_bindings: Mapping[str, pt.Array] = immutabledict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
-        if (
-                frozenset(new_bindings.keys()) == frozenset(expr.bindings.keys())
-                and all(
-                    new_bindings[name] is expr.bindings[name]
-                    for name in expr.bindings)):
-            return expr
-        else:
-            return pt.IndexLambda(expr=expr.expr,
-                    shape=expr.shape,
-                    dtype=expr.dtype,
-                    bindings=new_bindings,
-                    axes=expr.axes,
-                    var_to_reduction_descr=expr.var_to_reduction_descr,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
+        return expr.replace_if_different(bindings=new_bindings)
 
     def map_placeholder(self, expr: pt.Placeholder) -> pt.Array:
         assert not any(isinstance(s, pt.Array) for s in expr.shape)
