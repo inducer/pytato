@@ -159,19 +159,13 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         self.target = target
         self.kernels_seen: dict[str, lp.LoopKernel] = kernels_seen or {}
 
-    def map_size_param(self, expr: SizeParam) -> Array:
-        assert expr.name is not None
-        return expr
-
     def map_placeholder(self, expr: Placeholder) -> Array:
         new_name = expr.name
         if new_name is None:
             new_name = self.var_name_gen("_pt_in")
-        new_shape = self.rec_idx_or_size_tuple(expr.shape)
-        if (
-                new_name is expr.name
-                and new_shape is expr.shape):
-            return expr
+        new_shape = self.rec_size_tuple(expr.shape)
+        if new_name is expr.name:
+            return self._ident_map_placeholder(expr, new_shape)
         else:
             return Placeholder(name=new_name,
                     shape=new_shape,
@@ -238,7 +232,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         name = _generate_name_for_temp(expr, self.var_name_gen, "_pt_data")
-        shape = self.rec_idx_or_size_tuple(expr.shape)
+        shape = self.rec_size_tuple(expr.shape)
 
         self.bound_arguments[name] = expr.data
         return Placeholder(name=name,
