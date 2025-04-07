@@ -82,12 +82,6 @@ from pytools.graph import CycleError
 
 from pytato.analysis import DirectPredecessorsGetter
 from pytato.array import Array, DictOfNamedArrays, Placeholder, make_placeholder
-from pytato.distributed.nodes import (
-    CommTagType,
-    DistributedRecv,
-    DistributedSend,
-    DistributedSendRefHolder,
-)
 from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import (
     ArrayOrNames,
@@ -102,6 +96,12 @@ from pytato.transform import (
 if TYPE_CHECKING:
     import mpi4py.MPI
 
+    from pytato.distributed.nodes import (
+        CommTagType,
+        DistributedRecv,
+        DistributedSend,
+        DistributedSendRefHolder,
+    )
     from pytato.function import FunctionDefinition, NamedCallResult
 
 
@@ -286,12 +286,7 @@ class _DistributedInputReplacer(CopyMapper):
     def map_distributed_send(self, expr: DistributedSend) -> DistributedSend:
         new_data = self.rec(expr.data)
         assert isinstance(new_data, Array)
-        new_send = DistributedSend(
-                data=new_data,
-                dest_rank=expr.dest_rank,
-                comm_tag=expr.comm_tag,
-                tags=expr.tags)
-        return new_send
+        return expr.replace_if_different(data=new_data)
 
     def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
         inputs = self._make_cache_inputs(expr)

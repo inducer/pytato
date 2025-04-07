@@ -68,7 +68,9 @@ from collections.abc import (
 )
 from functools import cached_property
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Self,
     TypeVar,
 )
 
@@ -163,6 +165,10 @@ class FunctionDefinition(Taggable):
     if __debug__:
         def __post_init__(self) -> None:
             assert isinstance(self.returns, immutabledict)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
