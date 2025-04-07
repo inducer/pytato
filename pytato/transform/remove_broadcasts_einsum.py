@@ -46,43 +46,42 @@ if TYPE_CHECKING:
     from pytato.function import FunctionDefinition
 
 
-class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...] | None]]):
+class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]]):
     def get_cache_key(
                 self,
                 expr: ArrayOrNames,
-                axes_to_squeeze: tuple[int, ...] | None = None
+                axes_to_squeeze: tuple[int, ...]
             ) -> CacheKeyT:
         return (expr, axes_to_squeeze)
 
     def get_function_definition_cache_key(
                 self,
                 expr: FunctionDefinition,
-                axes_to_squeeze: tuple[int, ...] | None = None
+                axes_to_squeeze: tuple[int, ...]
             ) -> CacheKeyT:
-        assert axes_to_squeeze is None
+        assert not axes_to_squeeze
         return expr
 
     def _squeeze_axes(
             self,
             expr: Array,
-            axes_to_squeeze: tuple[int, ...] | None = None) -> Array:
-        result = (
+            axes_to_squeeze: tuple[int, ...]) -> Array:
+        return (
             expr[
                 tuple(
                     slice(None) if idim not in axes_to_squeeze else 0
                     for idim in range(expr.ndim))]
             if axes_to_squeeze else expr)
-        return result
 
     def rec(
             self,
             expr: ArrayOrNames,
-            axes_to_squeeze: tuple[int, ...] | None = None) -> ArrayOrNames:
+            axes_to_squeeze: tuple[int, ...]) -> ArrayOrNames:
         inputs = self._make_cache_inputs(expr, axes_to_squeeze)
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            rec_result: ArrayOrNames = Mapper.rec(self, expr, None)
+            rec_result: ArrayOrNames = Mapper.rec(self, expr, ())
             result: ArrayOrNames
             if isinstance(expr, Array):
                 result = self._squeeze_axes(
@@ -93,7 +92,7 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...] | 
             return self._cache_add(inputs, result)
 
     def map_einsum(
-            self, expr: Einsum, axes_to_squeeze: tuple[int, ...] | None) -> Array:
+            self, expr: Einsum, axes_to_squeeze: tuple[int, ...]) -> Array:
         new_args: list[Array] = []
         new_access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
         descr_to_axis_len = expr._access_descr_to_axis_len()
@@ -113,7 +112,7 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...] | 
                                    for idim, acc_descr in enumerate(acc_descrs)
                                    if idim not in axes_to_squeeze)
             else:
-                new_arg = _verify_is_array(self.rec(arg))
+                new_arg = _verify_is_array(self.rec(arg, ()))
                 new_acc_descrs = acc_descrs
 
             new_args.append(new_arg)
@@ -169,6 +168,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return cast("MappedT", mapper(expr, None))
+    return cast("MappedT", mapper(expr, ()))
 
 # vim:fdm=marker
