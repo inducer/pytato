@@ -96,6 +96,11 @@ class PlaceholderSubstitutor(CopyMapper):
 class Inliner(CopyMapper):
     """
     Primary mapper for :func:`inline_calls`.
+
+    .. note::
+
+        This mapper may produce DAGs with duplicated nodes, as it is combining
+        expressions from multiple call stack frames.
     """
     def __init__(
             self,
