@@ -29,7 +29,7 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Never, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Never, Sequence, TypeVar, cast
 
 from immutabledict import immutabledict
 
@@ -126,8 +126,7 @@ def _generate_index_expressions(
         for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
 
 
-def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
-
+def _get_reshape_shape_groups(expr: Reshape) -> Sequence[_ReshapeShapeGroup]:
     if expr.order.upper() not in ["C", "F"]:
         raise NotImplementedError("Order expected to be 'C' or 'F'",
                                   " (case insensitive). Found order = ",
@@ -138,21 +137,16 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
     new_shape = expr.shape
 
     # index variables need to be unique and depend on the new shape length
-    index_vars = [prim.Variable(f"_{i}") for i in range(len(new_shape))]
 
-    # {{{ check for scalars
+    # {{{ check for special cases
 
-    if old_shape == ():
+    if old_shape == () or new_shape == ():
         assert expr.size == 1
-        return ()
-
-    if new_shape == ():
-        return _generate_index_expressions(old_shape, new_shape, order,
-                                           index_vars)
+        return [_ReshapeShapeGroup(old_shape, new_shape)]
 
     if 0 in old_shape and 0 in new_shape:
-        return _generate_index_expressions(old_shape, new_shape, order,
-                                           index_vars)
+        assert expr.size == 0
+        return [_ReshapeShapeGroup(old_shape, new_shape)]
 
     # }}}
 
@@ -231,6 +225,14 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
 
     # }}}
 
+    return axis_mapping
+
+
+def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
+    axis_mapping = _get_reshape_shape_groups(expr)
+
+    index_vars = [prim.Variable(f"_{i}") for i in range(len(expr.shape))]
+
     # {{{ compute index expressions for sub shapes
 
     index_vars_begin = 0
@@ -248,7 +250,7 @@ def _get_reshaped_indices(expr: Reshape) -> tuple[ScalarExpression, ...]:
             assert sub_new_shape == (1,)
         else:
             index_expressions.append(_generate_index_expressions(
-                sub_old_shape, sub_new_shape, order, sub_index_vars))
+                sub_old_shape, sub_new_shape, expr.order, sub_index_vars))
 
     # }}}
 

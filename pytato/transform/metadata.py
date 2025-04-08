@@ -345,7 +345,24 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
 
     def map_reshape(self, expr: Reshape) -> None:
         self.rec(expr.array)
-        self.add_equations_using_index_lambda_version_of_expr(expr)
+
+        from pytato.transform.lower_to_index_lambda import _get_reshape_shape_groups
+        iaxis_child = 0
+        iaxis_expr = 0
+        pu.db
+        for rssg in _get_reshape_shape_groups(expr):
+            # Lowering to index-lambda may make some axes look
+            # 'straight-through' in the presence of 1-long axes
+            # even when, 'logically', by the reshape, they are not.
+            if (
+                    len(rssg.new_ax_shape_group) == 1
+                    and len(rssg.old_ax_shape_group) == 1):
+                self.record_equation(
+                    self.get_var_for_axis(expr.array, iaxis_child),
+                    self.get_var_for_axis(expr, iaxis_expr),
+                )
+            iaxis_child += len(rssg.old_ax_shape_group)
+            iaxis_expr += len(rssg.new_ax_shape_group)
 
     def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:

@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from pytools.tag import Tag
+
+from pytato.transform.metadata import AxesTagsEquationCollector
+
 
 __copyright__ = """Copyright (C) 2020 Andreas Kloeckner
 Copyright (C) 2021 Kaushik Kulkarni
@@ -1942,6 +1946,25 @@ def test_pickling_hash():
     assert dw != dw_new
 
     # }}}
+
+
+def test_reshape_lowering_for_tag_prop():
+    # The 3-long axis becomes a straight-through axis in code generation,
+    # but it should not propagate tags.
+    a = pt.make_placeholder("a", (3*1, 4))
+    a_rs = pt.reshape(a, (3, 1, 4))
+
+    eqcoll = AxesTagsEquationCollector(Tag)
+    eqcoll(a_rs)
+
+    a_ax0_var = eqcoll.get_var_for_axis(a, 0)
+    a_rs_ax0_var = eqcoll.get_var_for_axis(a_rs, 0)
+    a_rs_ax1_var = eqcoll.get_var_for_axis(a_rs, 1)
+
+    from pytools.graph import undirected_graph_from_edges
+    eq_graph = undirected_graph_from_edges(eqcoll.equations)
+    assert a_rs_ax0_var not in eq_graph[a_ax0_var]
+    assert a_rs_ax1_var not in eq_graph[a_ax0_var]
 
 
 if __name__ == "__main__":
