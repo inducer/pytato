@@ -809,6 +809,7 @@ class CopyMapper(TransformMapper):
         new_shape = self.rec_idx_or_size_tuple(expr.shape)
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: self.rec(subexpr)
+                # FIXME: Are these sorts still necessary?
                 for name, subexpr in sorted(expr.bindings.items())})
         if (
                 new_shape is expr.shape
