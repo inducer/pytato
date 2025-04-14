@@ -1573,6 +1573,38 @@ def test_unify_axes_tags():
 
     # }}}
 
+    # {{{ 4. reshape
+
+    # Tags cannot propagate across reshapes
+
+    x = pt.make_placeholder("x", (10, 4))
+    x = x.with_tagged_axis(0, FooTag())
+    x = x.with_tagged_axis(1, BarTag())
+
+    y = pt.reshape(x, (5, 2, 4))
+
+    y_unified = pt.unify_axes_tags(y)
+
+    assert not y_unified.axes[0].tags_of_type(TestlibTag)
+    assert not y_unified.axes[1].tags_of_type(TestlibTag)
+    assert not y_unified.axes[2].tags_of_type(TestlibTag)
+
+    # Make sure this behaves the same with a length-1 axis
+
+    x = pt.make_placeholder("x", (5, 4))
+    x = x.with_tagged_axis(0, FooTag())
+    x = x.with_tagged_axis(1, BarTag())
+
+    y = pt.reshape(x, (5, 1, 4))
+
+    y_unified = pt.unify_axes_tags(y)
+
+    assert not y_unified.axes[0].tags_of_type(TestlibTag)
+    assert not y_unified.axes[1].tags_of_type(TestlibTag)
+    assert not y_unified.axes[2].tags_of_type(TestlibTag)
+
+    # }}}
+
     # {{ Reduction Operations with IndexLambda
     # {{{ Reduce on outside of scalar expression
 
