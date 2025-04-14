@@ -349,6 +349,14 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         output and so no constraints are enforced except when the
         :class:`pytato.Reshape` has come from a :func:`pytato.expand_dims`.
         """
+        # Cannot use add_equations_using_index_lambda_version_of_expr here because
+        # reshapes that represent a change in the meaning of an axis may produce
+        # index expressions that look like direct passthroughs (for example,
+        # reshaping an array of shape (m*n,) to (m, n) when n == 1).
+        # We also cannot preserve "unchanged" axes, because it may be unclear which
+        # axes those actually are. For example, when reshaping (m, n) -> (m, 1, n),
+        # we can't tell from the shape alone which, if any, axes are unchanged
+        # (unless made explicit using the ExpandedDimsReshape tag).
         from pytato.tags import ExpandedDimsReshape
 
         self.rec(expr.array)
