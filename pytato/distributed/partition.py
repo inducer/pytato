@@ -33,6 +33,10 @@ Internal stuff that is only here because the documentation tool wants it
 
     An alias for
     ``Mapping[CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]``.
+
+.. class:: PartId
+
+    Generic hashable identifier for a distributed part.
 """
 
 from __future__ import annotations
