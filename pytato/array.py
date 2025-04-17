@@ -467,8 +467,7 @@ class Axis(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -480,8 +479,7 @@ class ReductionDescriptor(Taggable):
     tags: frozenset[Tag]
 
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @array_dataclass()
@@ -833,10 +831,12 @@ class Array(Taggable):
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (*self.axes[:iaxis],
-                    self.axes[iaxis].tagged(tags),
-                    *self.axes[iaxis+1:])
-        return self.copy(axes=new_axes)
+        new_axis = self.axes[iaxis].tagged(tags)
+        if new_axis is not self.axes[iaxis]:
+            return self.copy(
+                axes=(*self.axes[:iaxis], new_axis, *self.axes[iaxis+1:]))
+        else:
+            return self
 
     @memoize_method
     def __repr__(self) -> str:
@@ -1114,20 +1114,22 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
                 f" '{self.var_to_reduction_descr.keys()}',"
                 f" got '{reduction_variable}'.")
 
-        assert isinstance(self.var_to_reduction_descr, immutabledict)
-        new_var_to_redn_descr = dict(self.var_to_reduction_descr)
-        new_var_to_redn_descr[reduction_variable] = \
-            self.var_to_reduction_descr[reduction_variable].tagged(tags)
-
-        return type(self)(expr=self.expr,
-                          shape=self.shape,
-                          dtype=self.dtype,
-                          bindings=self.bindings,
-                          axes=self.axes,
-                          var_to_reduction_descr=immutabledict
-                            (new_var_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags)
+        new_redn_descr = self.var_to_reduction_descr[reduction_variable].tagged(tags)
+        if new_redn_descr is not self.var_to_reduction_descr[reduction_variable]:
+            assert isinstance(self.var_to_reduction_descr, immutabledict)
+            new_var_to_redn_descr = dict(self.var_to_reduction_descr)
+            new_var_to_redn_descr[reduction_variable] = new_redn_descr
+            return type(self)(expr=self.expr,
+                              shape=self.shape,
+                              dtype=self.dtype,
+                              bindings=self.bindings,
+                              axes=self.axes,
+                              var_to_reduction_descr=immutabledict
+                                (new_var_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags)
+        else:
+            return self
 
 # }}}
 
@@ -1160,6 +1162,34 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     correspond to indexing the array's axis as ``_r0`` in the expression.
     """
     dim: int
+
+
+def _get_einsum_access_descr_to_axis_len(
+        access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...],
+        args: tuple[Array, ...],
+        ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
+    from pytato.utils import are_shape_components_equal
+    descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
+
+    for access_descrs, arg in zip(access_descriptors,
+                                  args, strict=True):
+        assert arg.ndim == len(access_descrs)
+        for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
+            if descr in descr_to_axis_len:
+                seen_axis_len = descr_to_axis_len[descr]
+
+                if not are_shape_components_equal(seen_axis_len,
+                                                  arg_axis_len):
+                    if are_shape_components_equal(arg_axis_len, 1):
+                        # this axis would be broadcasted
+                        pass
+                    else:
+                        assert are_shape_components_equal(seen_axis_len, 1)
+                        descr_to_axis_len[descr] = arg_axis_len
+            else:
+                descr_to_axis_len[descr] = arg_axis_len
+
+    return immutabledict(descr_to_axis_len)
 
 
 @array_dataclass()
@@ -1209,28 +1239,8 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     @memoize_method
     def _access_descr_to_axis_len(self
                                   ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
-        from pytato.utils import are_shape_components_equal
-        descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
-
-        for access_descrs, arg in zip(self.access_descriptors,
-                                      self.args, strict=True):
-            assert arg.ndim == len(access_descrs)
-            for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
-                if descr in descr_to_axis_len:
-                    seen_axis_len = descr_to_axis_len[descr]
-
-                    if not are_shape_components_equal(seen_axis_len,
-                                                      arg_axis_len):
-                        if are_shape_components_equal(arg_axis_len, 1):
-                            # this axis would be broadcasted
-                            pass
-                        else:
-                            assert are_shape_components_equal(seen_axis_len, 1)
-                            descr_to_axis_len[descr] = arg_axis_len
-                else:
-                    descr_to_axis_len[descr] = arg_axis_len
-
-        return immutabledict(descr_to_axis_len)
+        return _get_einsum_access_descr_to_axis_len(
+            self.access_descriptors, self.args)
 
     @cached_property
     def shape(self) -> ShapeType:
@@ -1278,19 +1288,21 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
         # }}}
 
-        assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
-        new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
-        new_redn_axis_to_redn_descr[redn_axis] = \
-            self.redn_axis_to_redn_descr[redn_axis].tagged(tags)
-
-        return type(self)(access_descriptors=self.access_descriptors,
-                          args=self.args,
-                          axes=self.axes,
-                          redn_axis_to_redn_descr=immutabledict
-                            (new_redn_axis_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags,
-                          )
+        new_redn_descr = self.redn_axis_to_redn_descr[redn_axis].tagged(tags)
+        if new_redn_descr is not self.redn_axis_to_redn_descr[redn_axis]:
+            assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
+            new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
+            new_redn_axis_to_redn_descr[redn_axis] = new_redn_descr
+            return type(self)(access_descriptors=self.access_descriptors,
+                              args=self.args,
+                              axes=self.axes,
+                              redn_axis_to_redn_descr=immutabledict
+                                (new_redn_axis_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags,
+                              )
+        else:
+            return self
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
