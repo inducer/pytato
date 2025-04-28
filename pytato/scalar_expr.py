@@ -17,8 +17,6 @@
 
 from __future__ import annotations
 
-from typing_extensions import TypeIs
-
 
 __copyright__ = """
 Copyright (C) 2020 Andreas Kloeckner
@@ -55,6 +53,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
+from typing_extensions import TypeIs
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
