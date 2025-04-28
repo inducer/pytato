@@ -166,7 +166,7 @@ def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
         v = rng.integers(0, max_prob_hardcoded + additional_prob)
 
         if v < 600:
-            return make_random_constant(rdagc, naxes=rng.integers(1, 3))
+            return make_random_constant(rdagc, naxes=int(rng.integers(1, 3)))
 
         elif v < 1000:
             op1 = make_random_dag(rdagc)
