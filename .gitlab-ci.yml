@@ -15,12 +15,18 @@ Python 3 POCL:
       junit: test/pytest.xml
 
 Python 3 POCL Examples:
-  script:
-  - export PY_EXE=python3
-  - export PYOPENCL_TEST=portable:pthread
-  - export EXTRA_INSTALL="pyopencl mpi4py pytest"
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-py-project-and-run-examples.sh
-  - ". ./build-py-project-and-run-examples.sh"
+  script: |
+
+    curl -L -O https://tiker.net/ci-support-v0
+    . ci-support-v0
+    build_py_project_in_conda_env
+    pip install pytest  # for advection.py
+
+    # ensure that running with optimization works
+    python -O examples/demo.py
+
+    run_examples --no-require-main
+
   tags:
   - python3
   - pocl
