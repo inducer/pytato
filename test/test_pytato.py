@@ -1046,7 +1046,7 @@ def test_created_at():
     a = pt.make_placeholder("a", (10, 10), "float64")
 
     created_tag = frozenset({tag
-                         for tag in a.non_equality_tags
+                         for tag in a.non_equality_tags  # pylint: disable=not-an-iterable
                          if isinstance(tag, CreatedAt)})
 
     assert len(created_tag) == 0
