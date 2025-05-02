@@ -209,7 +209,7 @@ from typing_extensions import Self
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Integer, Scalar, not_none
-from pytools import memoize_method
+from pytools import memoize_method, opt_frozen_dataclass
 from pytools.tag import Tag, Taggable
 
 from pytato.scalar_expr import (
@@ -854,7 +854,7 @@ ArrayOrScalar: TypeAlias = Array | Scalar
 
 # {{{ mixins
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False)
+@opt_frozen_dataclass(eq=False, repr=False)
 class _SuppliedAxesAndTagsMixin(Taggable):
     axes: AxesT = dataclasses.field(kw_only=True)
     tags: frozenset[Tag] = dataclasses.field(kw_only=True)
@@ -868,7 +868,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
         return dataclasses.replace(self, tags=tags)
 
 
-@dataclasses.dataclass(frozen=True, eq=False, repr=False)
+@opt_frozen_dataclass(eq=False, repr=False)
 class _SuppliedShapeAndDtypeMixin:
     """A mixin class for when an array must store its own *shape* and *dtype*,
     rather than when it can derive them easily from inputs.
@@ -930,7 +930,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
         return self.expr.dtype
 
 
-@dataclasses.dataclass(frozen=True, eq=False)
+@opt_frozen_dataclass(eq=False)
 class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
@@ -986,7 +986,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         pass
 
 
-@dataclasses.dataclass(frozen=True, eq=False, init=False)
+@opt_frozen_dataclass(eq=False, init=False)
 class DictOfNamedArrays(AbstractResultWithNamedArrays):
     """A container of named results, each of which can be computed as an
     array expression provided to the constructor.
