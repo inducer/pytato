@@ -105,8 +105,27 @@ docstring-quotes = "double"
 multiline-quotes = "double"
 
 [tool.mypy]
+# FIXME
+# basedmypy baseline contains spurious errors flagged due to
+# https://github.com/python/mypy/issues/17731
+# https://github.com/python/mypy/issues/19017
+
 strict = true
 warn_unused_ignores = true
+
+default_return = false
+
+# FIXME
+disallow_any_explicit = false
+disallow_any_expr = false
+disallow_any_decorated = false
+
+disable_error_code = [
+  "explicit-override",
+  "unreachable",
+  "redundant-expr",
+  "callable-functiontype",
+]
 
 [[tool.mypy.overrides]]
 module = [
