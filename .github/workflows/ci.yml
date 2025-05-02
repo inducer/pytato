@@ -83,6 +83,10 @@ jobs:
                 . ci-support-v0
                 build_py_project_in_conda_env
                 pip install pytest  # for advection.py
+
+                # ensure that running with optimization works
+                python -O examples/demo.py
+
                 run_examples --no-require-main
 
     docs:
