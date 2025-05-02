@@ -1,0 +1,3017 @@
+{
+  "files": {
+    "pytato/analysis/__init__.py": [
+      {
+        "code": "arg-type",
+        "column": 17,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[str | None]\"; expected \"Iterable[str]\"",
+        "offset": 262,
+        "src": "return tuple(normalized_indices)",
+        "target": "pytato.analysis._get_indices_from_input_subscript"
+      }
+    ],
+    "pytato/array.py": [
+      {
+        "code": "no-untyped-usage",
+        "column": 8,
+        "message": "Usage of untyped name \"augment_code\" in typed context",
+        "offset": 346,
+        "src": "augment_code = remove_common_indentation(",
+        "target": "pytato.array._augment_array_dataclass"
+      },
+      {
+        "code": "no-untyped-usage",
+        "column": 8,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-no-untyped-usage for more info",
+        "offset": 0,
+        "src": "augment_code = remove_common_indentation(",
+        "target": null
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 23,
+        "message": "Call to incomplete function \"remove_common_indentation\" in typed context",
+        "offset": 0,
+        "src": "augment_code = remove_common_indentation(",
+        "target": "pytato.array._augment_array_dataclass"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 23,
+        "message": "Type is \"def (code: str, require_leading_newline: bool =) -> Untyped\"",
+        "offset": 0,
+        "src": "augment_code = remove_common_indentation(",
+        "target": "pytato.array._augment_array_dataclass"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 546,
+        "src": "_container: AbstractResultWithNamedArrays",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "name: str",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 105,
+        "src": "_data: Mapping[str, Array]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"axes\"",
+        "offset": 26,
+        "src": "return NamedArray(self, name,",
+        "target": "pytato.array.DictOfNamedArrays.__getitem__"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return NamedArray(self, name,",
+        "target": "pytato.array.DictOfNamedArrays.__getitem__"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"NamedArray\"",
+        "offset": 0,
+        "src": "return NamedArray(self, name,",
+        "target": "pytato.array.DictOfNamedArrays.__getitem__"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-call-arg for more info",
+        "offset": 0,
+        "src": "return NamedArray(self, name,",
+        "target": null
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 1 to \"NamedArray\" has incompatible type \"DictOfNamedArrays\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return NamedArray(self, name,",
+        "target": "pytato.array.DictOfNamedArrays.__getitem__"
+      },
+      {
+        "code": "arg-type",
+        "column": 32,
+        "message": "Argument 2 to \"NamedArray\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return NamedArray(self, name,",
+        "target": "pytato.array.DictOfNamedArrays.__getitem__"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 59,
+        "src": "expr: ScalarExpression",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "bindings: Mapping[str, Array]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "var_to_reduction_descr: Mapping[str, ReductionDescriptor]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 114,
+        "src": "access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "args: tuple[Array, ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,",
+        "target": "pytato.array"
+      },
+      {
+        "code": "call-arg",
+        "column": 31,
+        "message": "Too few arguments for \"_access_descr_to_axis_len\" of \"Einsum\"",
+        "offset": 38,
+        "src": "for descr, axis_len in self._access_descr_to_axis_len().items():",
+        "target": "pytato.array.Einsum.shape"
+      },
+      {
+        "code": "arg-type",
+        "column": 42,
+        "message": "Argument 1 to \"append\" of \"list\" has incompatible type \"str | None\"; expected \"str\"",
+        "offset": 86,
+        "src": "normalized_indices.append(match.groupdict()[\"alpha\"])",
+        "target": "pytato.array._normalize_einsum_out_subscript"
+      },
+      {
+        "code": "arg-type",
+        "column": 42,
+        "message": "Argument 1 to \"append\" of \"list\" has incompatible type \"str | None\"; expected \"str\"",
+        "offset": 55,
+        "src": "normalized_indices.append(match.groupdict()[\"alpha\"])",
+        "target": "pytato.array._normalize_einsum_in_subscript"
+      },
+      {
+        "code": "var-annotated",
+        "column": 27,
+        "message": "Need type annotation for \"index_to_axis_length\"",
+        "offset": 46,
+        "src": "index_to_axis_length = immutabledict(index_to_axis_length_dict)",
+        "target": "pytato.array._normalize_einsum_in_subscript"
+      },
+      {
+        "code": "var-annotated",
+        "column": 27,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-var-annotated for more info",
+        "offset": 0,
+        "src": "index_to_axis_length = immutabledict(index_to_axis_length_dict)",
+        "target": null
+      },
+      {
+        "code": "var-annotated",
+        "column": 21,
+        "message": "Need type annotation for \"index_to_descr\"",
+        "offset": 1,
+        "src": "index_to_descr = immutabledict(index_to_descr_dict)",
+        "target": "pytato.array._normalize_einsum_in_subscript"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 63,
+        "src": "return Einsum(tuple(access_descriptors), operands,",
+        "target": "pytato.array.einsum"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(access_descriptors), operands,",
+        "target": "pytato.array.einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(access_descriptors), operands,",
+        "target": "pytato.array.einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 24,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[tuple[EinsumAxisDescriptor, ...]]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(access_descriptors), operands,",
+        "target": "pytato.array.einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 45,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(access_descriptors), operands,",
+        "target": "pytato.array.einsum"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 29,
+        "src": "arrays: tuple[Array, ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "axis: int",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 30,
+        "src": "arrays: tuple[Array, ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "axis: int",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 56,
+        "src": "shift: int",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "axis: int",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 21,
+        "src": "axis_permutation: tuple[int, ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 32,
+        "src": "newshape: ShapeType",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "order: str",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 22,
+        "src": "indices: tuple[IndexExpr, ...]",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 0,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 4,
+        "src": "class BasicIndex(IndexBase):",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 192,
+        "src": "data: DataInterface",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "shape: ShapeType",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 41,
+        "src": "name: str",
+        "target": "pytato.array"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Roll\" gets multiple values for keyword argument \"axes\"",
+        "offset": 135,
+        "src": "return Roll(a, shift, axis,",
+        "target": "pytato.array.roll"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Roll\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Roll(a, shift, axis,",
+        "target": "pytato.array.roll"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"Roll\"",
+        "offset": 0,
+        "src": "return Roll(a, shift, axis,",
+        "target": "pytato.array.roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 19,
+        "message": "Argument 2 to \"Roll\" has incompatible type \"int\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return Roll(a, shift, axis,",
+        "target": "pytato.array.roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 3 to \"Roll\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Roll(a, shift, axis,",
+        "target": "pytato.array.roll"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"AxisPermutation\" gets multiple values for keyword argument \"axes\"",
+        "offset": 23,
+        "src": "return AxisPermutation(a, tuple(axes),",
+        "target": "pytato.array.transpose"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"AxisPermutation\"",
+        "offset": 0,
+        "src": "return AxisPermutation(a, tuple(axes),",
+        "target": "pytato.array.transpose"
+      },
+      {
+        "code": "arg-type",
+        "column": 36,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"Sequence[int]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return AxisPermutation(a, tuple(axes),",
+        "target": "pytato.array.transpose"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Stack\" gets multiple values for keyword argument \"axes\"",
+        "offset": 35,
+        "src": "return Stack(tuple(arrays), axis,",
+        "target": "pytato.array.stack"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Stack\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Stack(tuple(arrays), axis,",
+        "target": "pytato.array.stack"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"Stack\"",
+        "offset": 0,
+        "src": "return Stack(tuple(arrays), axis,",
+        "target": "pytato.array.stack"
+      },
+      {
+        "code": "arg-type",
+        "column": 23,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"Sequence[Array]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return Stack(tuple(arrays), axis,",
+        "target": "pytato.array.stack"
+      },
+      {
+        "code": "arg-type",
+        "column": 32,
+        "message": "Argument 2 to \"Stack\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Stack(tuple(arrays), axis,",
+        "target": "pytato.array.stack"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"axes\"",
+        "offset": 36,
+        "src": "return Concatenate(tuple(arrays), axis,",
+        "target": "pytato.array.concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Concatenate(tuple(arrays), axis,",
+        "target": "pytato.array.concatenate"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"Concatenate\"",
+        "offset": 0,
+        "src": "return Concatenate(tuple(arrays), axis,",
+        "target": "pytato.array.concatenate"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"Sequence[Array]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return Concatenate(tuple(arrays), axis,",
+        "target": "pytato.array.concatenate"
+      },
+      {
+        "code": "arg-type",
+        "column": 38,
+        "message": "Argument 2 to \"Concatenate\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Concatenate(tuple(arrays), axis,",
+        "target": "pytato.array.concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"axes\"",
+        "offset": 72,
+        "src": "return Reshape(array, tuple(newshape_explicit), order,",
+        "target": "pytato.array.reshape"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Reshape(array, tuple(newshape_explicit), order,",
+        "target": "pytato.array.reshape"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"Reshape\"",
+        "offset": 0,
+        "src": "return Reshape(array, tuple(newshape_explicit), order,",
+        "target": "pytato.array.reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 32,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[int]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return Reshape(array, tuple(newshape_explicit), order,",
+        "target": "pytato.array.reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 52,
+        "message": "Argument 3 to \"Reshape\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Reshape(array, tuple(newshape_explicit), order,",
+        "target": "pytato.array.reshape"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"DataWrapper\" gets multiple values for keyword argument \"axes\"",
+        "offset": 101,
+        "src": "return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),",
+        "target": "pytato.array.make_data_wrapper"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"DataWrapper\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),",
+        "target": "pytato.array.make_data_wrapper"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"DataWrapper\"",
+        "offset": 0,
+        "src": "return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),",
+        "target": "pytato.array.make_data_wrapper"
+      },
+      {
+        "code": "arg-type",
+        "column": 23,
+        "message": "Argument 1 to \"DataWrapper\" has incompatible type \"DataInterface\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),",
+        "target": "pytato.array.make_data_wrapper"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 2 to \"DataWrapper\" has incompatible type \"tuple[int | integer[Any] | Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),",
+        "target": "pytato.array.make_data_wrapper"
+      }
+    ],
+    "pytato/cmath.py": [
+      {
+        "code": "operator",
+        "column": 37,
+        "message": "\"object\" not callable",
+        "offset": 94,
+        "src": "return cast(\"ArrayOrScalar\", np_func(*inputs))",
+        "target": "pytato.cmath._apply_elem_wise_func"
+      },
+      {
+        "code": "operator",
+        "column": 37,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-operator for more info",
+        "offset": 0,
+        "src": "return cast(\"ArrayOrScalar\", np_func(*inputs))",
+        "target": null
+      }
+    ],
+    "pytato/codegen.py": [
+      {
+        "code": "call-arg",
+        "column": 7,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 94,
+        "src": "if expr.tags_of_type(_BaseNameTag):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 25,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[_BaseNameTag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if expr.tags_of_type(_BaseNameTag):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 1,
+        "src": "if expr.tags_of_type(Named):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[Named]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if expr.tags_of_type(Named):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "call-arg",
+        "column": 24,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 1,
+        "src": "name_tag, = expr.tags_of_type(Named)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "var-annotated",
+        "column": 24,
+        "message": "Need type annotation for \"name_tag\"",
+        "offset": 0,
+        "src": "name_tag, = expr.tags_of_type(Named)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 42,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[Named]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "name_tag, = expr.tags_of_type(Named)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "call-arg",
+        "column": 13,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 8,
+        "src": "elif expr.tags_of_type(PrefixNamed):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[PrefixNamed]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "elif expr.tags_of_type(PrefixNamed):",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "call-arg",
+        "column": 26,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 1,
+        "src": "prefix_tag, = expr.tags_of_type(PrefixNamed)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "var-annotated",
+        "column": 26,
+        "message": "Need type annotation for \"prefix_tag\"",
+        "offset": 0,
+        "src": "prefix_tag, = expr.tags_of_type(PrefixNamed)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 44,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[PrefixNamed]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "prefix_tag, = expr.tags_of_type(PrefixNamed)",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "call-arg",
+        "column": 53,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 3,
+        "src": "raise NotImplementedError(type(next(iter(expr.tags_of_type(_BaseNameTag)))))",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "arg-type",
+        "column": 71,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[_BaseNameTag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "raise NotImplementedError(type(next(iter(expr.tags_of_type(_BaseNameTag)))))",
+        "target": "pytato.codegen._generate_name_for_temp"
+      },
+      {
+        "code": "possibly-undefined",
+        "column": 37,
+        "message": "Name \"new_name\" may be undefined",
+        "offset": 96,
+        "src": "entrypoint = new_name",
+        "target": "pytato.codegen"
+      },
+      {
+        "code": "possibly-undefined",
+        "column": 68,
+        "message": "Name \"new_name\" may be undefined",
+        "offset": 3,
+        "src": "translation_unit, name, new_name)",
+        "target": "pytato.codegen"
+      }
+    ],
+    "pytato/distributed/execute.py": [
+      {
+        "code": "call-arg",
+        "column": 24,
+        "message": "Too few arguments for \"all_input_names\" of \"DistributedGraphPart\"",
+        "offset": 155,
+        "src": "for name in partition.parts[pid].all_input_names():",
+        "target": "_get_partition_input_name_refcount"
+      },
+      {
+        "code": "call-arg",
+        "column": 41,
+        "message": "Too few arguments for \"all_input_names\" of \"DistributedGraphPart\"",
+        "offset": 14,
+        "src": "inputs = {k: context[k] for k in part.all_input_names()}",
+        "target": "exec_ready_part"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 16,
+        "message": "Call to incomplete function \"append\" of \"list\" in typed context",
+        "offset": 15,
+        "src": "send_requests.append(_mpi_send(mpi_communicator, send_node, data))",
+        "target": "exec_ready_part"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 16,
+        "message": "Type is \"_NamedCallable & (Any (unannotated)) -> None\"",
+        "offset": 0,
+        "src": "send_requests.append(_mpi_send(mpi_communicator, send_node, data))",
+        "target": "exec_ready_part"
+      },
+      {
+        "code": "call-arg",
+        "column": 21,
+        "message": "Too few arguments for \"all_input_names\" of \"DistributedGraphPart\"",
+        "offset": 36,
+        "src": "for p in part.all_input_names():",
+        "target": "pytato.distributed.execute.execute_distributed_partition"
+      }
+    ],
+    "pytato/distributed/nodes.py": [
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 211,
+        "src": "src_rank: int",
+        "target": "pytato.distributed.nodes"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "comm_tag: CommTagType",
+        "target": "pytato.distributed.nodes"
+      }
+    ],
+    "pytato/distributed/partition.py": [
+      {
+        "code": "call-arg",
+        "column": 40,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 593,
+        "src": "if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):",
+        "target": "pytato.distributed.partition._MaterializedArrayCollector.post_visit"
+      },
+      {
+        "code": "arg-type",
+        "column": 58,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplStored]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):",
+        "target": "pytato.distributed.partition._MaterializedArrayCollector.post_visit"
+      }
+    ],
+    "pytato/distributed/tags.py": [
+      {
+        "code": "no-untyped-usage",
+        "column": 16,
+        "message": "Untyped indexed-assignment to \"sym_tag_to_int_tag\" in typed context",
+        "offset": 98,
+        "src": "sym_tag_to_int_tag[sym_tag] = next_tag",
+        "target": "pytato.distributed.tags.number_distributed_tags"
+      }
+    ],
+    "pytato/equality.py": [
+      {
+        "code": "assignment",
+        "column": 29,
+        "message": "Incompatible types in assignment (expression has type \"object\", variable has type \"(Array | AbstractResultWithNamedArrays, Any) -> bool\")",
+        "offset": 100,
+        "src": "method = getattr(self, expr1._mapper_method)",
+        "target": "pytato.equality.EqualityComparer.rec"
+      }
+    ],
+    "pytato/function.py": [
+      {
+        "code": "misc",
+        "column": 20,
+        "message": "\"Call\" gets multiple values for keyword argument \"tags\"",
+        "offset": 230,
+        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "call-arg",
+        "column": 20,
+        "message": "Missing positional argument \"function\" in call to \"Call\"",
+        "offset": 0,
+        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "arg-type",
+        "column": 25,
+        "message": "Argument 1 to \"Call\" has incompatible type \"FunctionDefinition\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 4,
+        "src": "return call_site[\"_\"]",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "index",
+        "column": 29,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return call_site[\"_\"]",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "call-arg",
+        "column": 25,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 2,
+        "src": "return tuple(call_site[f\"_{iarg}\"]",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "index",
+        "column": 35,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return tuple(call_site[f\"_{iarg}\"]",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "call-arg",
+        "column": 38,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 3,
+        "src": "return immutabledict({kw: call_site[kw] for kw in self.returns})",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "index",
+        "column": 48,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return immutabledict({kw: call_site[kw] for kw in self.returns})",
+        "target": "pytato.function.FunctionDefinition.__call__"
+      },
+      {
+        "code": "misc",
+        "column": 0,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 15,
+        "src": "class NamedCallResult(NamedArray):",
+        "target": "pytato.function"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 62,
+        "src": "function: FunctionDefinition",
+        "target": "pytato.function"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "bindings: Mapping[str, Array]",
+        "target": "pytato.function"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedCallResult\" gets multiple values for keyword argument \"axes\"",
+        "offset": 20,
+        "src": "return NamedCallResult(",
+        "target": "pytato.function.Call.__getitem__"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedCallResult\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return NamedCallResult(",
+        "target": "pytato.function.Call.__getitem__"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"NamedCallResult\"",
+        "offset": 0,
+        "src": "return NamedCallResult(",
+        "target": "pytato.function.Call.__getitem__"
+      },
+      {
+        "code": "arg-type",
+        "column": 12,
+        "message": "Argument 1 to \"NamedCallResult\" has incompatible type \"Call\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "self, name,",
+        "target": "pytato.function.Call.__getitem__"
+      },
+      {
+        "code": "arg-type",
+        "column": 18,
+        "message": "Argument 2 to \"NamedCallResult\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "self, name,",
+        "target": "pytato.function.Call.__getitem__"
+      }
+    ],
+    "pytato/loopy.py": [
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 104,
+        "src": "translation_unit: lp.TranslationUnit",
+        "target": "pytato.loopy"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "bindings: Mapping[str, ArrayOrScalar]",
+        "target": "pytato.loopy"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 1,
+        "src": "entrypoint: str",
+        "target": "pytato.loopy"
+      },
+      {
+        "code": "misc",
+        "column": 0,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 58,
+        "src": "class LoopyCallResult(NamedArray):",
+        "target": "pytato.loopy"
+      },
+      {
+        "code": "misc",
+        "column": 4,
+        "message": "Attributes without a default cannot follow attributes with one",
+        "offset": 5,
+        "src": "_container: LoopyCall",
+        "target": "pytato.loopy"
+      },
+      {
+        "code": "call-arg",
+        "column": 27,
+        "message": "Missing positional argument \"expr\" in call to \"_to_pytato\" of \"LoopyCall\"",
+        "offset": 12,
+        "src": "shape: ShapeType = self._container._to_pytato(  # type:ignore[assignment]",
+        "target": "pytato.loopy.LoopyCallResult.shape"
+      },
+      {
+        "code": null,
+        "column": 27,
+        "message": "Error code \"call-arg\" not covered by \"type: ignore\" comment",
+        "offset": 0,
+        "src": "shape: ShapeType = self._container._to_pytato(  # type:ignore[assignment]",
+        "target": null
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 31,
+        "message": "Call to incomplete function \"add_dtypes\" in typed context",
+        "offset": 100,
+        "src": "translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 31,
+        "message": "Type is \"def [TUnitOrKernelT in (loopy.kernel.LoopKernel, loopy.translation_unit.TranslationUnit)] (kernel: TUnitOrKernelT, dtype_dict: typing.Mapping[str, type[loopy.typing.auto] | numpy.dtype[Untyped] | loopy.types.LoopyType | None]) -> TUnitOrKernelT\"",
+        "offset": 0,
+        "src": "translation_unit = lp.add_dtypes(translation_unit, {name: ary.dtype})",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 31,
+        "message": "Call to incomplete function \"add_dtypes\" in typed context",
+        "offset": 3,
+        "src": "translation_unit = lp.add_dtypes(translation_unit,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 31,
+        "message": "Type is \"def [TUnitOrKernelT in (loopy.kernel.LoopKernel, loopy.translation_unit.TranslationUnit)] (kernel: TUnitOrKernelT, dtype_dict: typing.Mapping[str, type[loopy.typing.auto] | numpy.dtype[Untyped] | loopy.types.LoopyType | None]) -> TUnitOrKernelT\"",
+        "offset": 0,
+        "src": "translation_unit = lp.add_dtypes(translation_unit,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "misc",
+        "column": 11,
+        "message": "\"LoopyCall\" gets multiple values for keyword argument \"tags\"",
+        "offset": 15,
+        "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Too few arguments for \"LoopyCall\"",
+        "offset": 0,
+        "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "arg-type",
+        "column": 21,
+        "message": "Argument 1 to \"LoopyCall\" has incompatible type \"TranslationUnit\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "arg-type",
+        "column": 39,
+        "message": "Argument 2 to \"LoopyCall\" has incompatible type \"immutabledict[str, Array | int | integer[Any] | float | complex | inexact[Any, float | complex] | bool | numpy.bool[bool]]\"; expected \"TranslationUnit\"",
+        "offset": 0,
+        "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "arg-type",
+        "column": 53,
+        "message": "Argument 3 to \"LoopyCall\" has incompatible type \"str\"; expected \"Mapping[str, Array | int | integer[Any] | float | complex | inexact[Any, float | complex] | bool | numpy.bool[bool]]\"",
+        "offset": 0,
+        "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
+        "target": "pytato.loopy.call_loopy"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Argument 1 to \"_get_val_in_bset\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 10,
+        "src": "def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:",
+        "target": "pytato.loopy._get_val_in_bset"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 14,
+        "message": "Call to incomplete function \"aff_from_expr\" in typed context",
+        "offset": 49,
+        "src": "aff = aff_from_expr(space, lhs-rhs)",
+        "target": "pytato.loopy.solve_constraints"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 14,
+        "message": "Type is \"def (space: Any (from unimported type), expr: int | numpy.integer[...] | float | complex | numpy.inexact[..., float | complex] | bool | numpy.bool[bool] | pymbolic.primitives.ExpressionNode | tuple[..., ...], vars_to_zero: Untyped =) -> Any (from unimported type)\"",
+        "offset": 0,
+        "src": "aff = aff_from_expr(space, lhs-rhs)",
+        "target": "pytato.loopy.solve_constraints"
+      }
+    ],
+    "pytato/scalar_expr.py": [
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Call to incomplete function \"visit\" of \"WalkMapper\" in typed context",
+        "offset": 112,
+        "src": "if not self.visit(expr):",
+        "target": "pytato.scalar_expr.WalkMapper.map_reduce"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Type is \"_NamedCallable & (expr: Untyped) -> bool\"",
+        "offset": 0,
+        "src": "if not self.visit(expr):",
+        "target": "pytato.scalar_expr.WalkMapper.map_reduce"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 8,
+        "message": "Call to incomplete function \"post_visit\" of \"WalkMapper\" in typed context",
+        "offset": 5,
+        "src": "self.post_visit(expr)",
+        "target": "pytato.scalar_expr.WalkMapper.map_reduce"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 8,
+        "message": "Type is \"_NamedCallable & (expr: Untyped) -> None\"",
+        "offset": 0,
+        "src": "self.post_visit(expr)",
+        "target": "pytato.scalar_expr.WalkMapper.map_reduce"
+      }
+    ],
+    "pytato/target/loopy/__init__.py": [
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 2 to \"__init__\" becomes \"Any (from unimported type) | None\" due to an unfollowed import",
+        "offset": 119,
+        "src": "def __init__(self, device: pyopencl.Device | None = None):",
+        "target": "pytato.target.loopy.LoopyPyOpenCLTarget.__init__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-no-any-unimported for more info",
+        "offset": 0,
+        "src": "def __init__(self, device: pyopencl.Device | None = None):",
+        "target": null
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 5 to \"__init__\" becomes \"dict[Any (from unimported type), Mapping[str, Any]]\" due to an unfollowed import",
+        "offset": 18,
+        "src": "class BoundPyOpenCLProgram(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.__init__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 4 to \"__mypy-replace\" becomes \"dict[Any (from unimported type), Mapping[str, Any]]\" due to an unfollowed import",
+        "offset": 0,
+        "src": "class BoundPyOpenCLProgram(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.__mypy-replace"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 5 to \"__replace__\" becomes \"dict[Any (from unimported type), Mapping[str, Any]]\" due to an unfollowed import",
+        "offset": 0,
+        "src": "class BoundPyOpenCLProgram(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.__replace__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Type of variable becomes \"dict[Any (from unimported type), Mapping[str, Any]]\" due to an unfollowed import",
+        "offset": 9,
+        "src": "_processed_bound_args_cache: dict[pyopencl.Context,",
+        "target": "pytato.target.loopy"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 2 to \"_get_processed_bound_arguments\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 30,
+        "src": "def _get_processed_bound_arguments(",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram._get_processed_bound_arguments"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 3 to \"_get_processed_bound_arguments\" becomes \"(int) -> Any (from unimported type) | None\" due to an unfollowed import",
+        "offset": 0,
+        "src": "def _get_processed_bound_arguments(",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram._get_processed_bound_arguments"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 2 to \"bind_to_context\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 82,
+        "src": "def bind_to_context(self, context: pyopencl.Context,",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.bind_to_context"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 3 to \"bind_to_context\" becomes \"(int) -> Any (from unimported type) | None\" due to an unfollowed import",
+        "offset": 0,
+        "src": "def bind_to_context(self, context: pyopencl.Context,",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.bind_to_context"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 24,
+        "message": "Call to incomplete function \"executor\" of \"TranslationUnit\" in typed context",
+        "offset": 11,
+        "src": "program=self.program.executor(context),",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.bind_to_context"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 24,
+        "message": "Type is \"_NamedCallable & (*args: Untyped, entrypoint: str | None =, **kwargs: Untyped) -> loopy.target.execution.ExecutorBase\"",
+        "offset": 0,
+        "src": "program=self.program.executor(context),",
+        "target": "pytato.target.loopy.BoundPyOpenCLProgram.bind_to_context"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 24,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-no-untyped-call for more info",
+        "offset": 0,
+        "src": "program=self.program.executor(context),",
+        "target": null
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 5 to \"__init__\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 7,
+        "src": "class BoundPyOpenCLExecutable(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLExecutable.__init__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 4 to \"__mypy-replace\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 0,
+        "src": "class BoundPyOpenCLExecutable(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLExecutable.__mypy-replace"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": -1,
+        "message": "Argument 5 to \"__replace__\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 0,
+        "src": "class BoundPyOpenCLExecutable(BoundProgram):",
+        "target": "pytato.target.loopy.BoundPyOpenCLExecutable.__replace__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Type of variable becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 14,
+        "src": "cl_context: pyopencl.Context",
+        "target": "pytato.target.loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 24,
+        "message": "Call to incomplete function \"executor\" of \"TranslationUnit\" in typed context",
+        "offset": 10,
+        "src": "program=f(self.program.t_unit).executor(self.cl_context),",
+        "target": "pytato.target.loopy.BoundPyOpenCLExecutable.with_transformed_translation_unit"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 24,
+        "message": "Type is \"_NamedCallable & (*args: Untyped, entrypoint: str | None =, **kwargs: Untyped) -> loopy.target.execution.ExecutorBase\"",
+        "offset": 0,
+        "src": "program=f(self.program.t_unit).executor(self.cl_context),",
+        "target": "pytato.target.loopy.BoundPyOpenCLExecutable.with_transformed_translation_unit"
+      }
+    ],
+    "pytato/target/loopy/codegen.py": [
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 428,
+        "src": "if expr.tags_of_type(ForceValueArgTag):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_placeholder"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ForceValueArgTag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if expr.tags_of_type(ForceValueArgTag):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_placeholder"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 18,
+        "message": "Call to incomplete function \"GlobalArg\" in typed context",
+        "offset": 11,
+        "src": "arg = lp.GlobalArg(expr.name,",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_placeholder"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 18,
+        "message": "Type is \"def (*args: Untyped, **kwargs: Untyped) -> loopy.kernel.data.ArrayArg\"",
+        "offset": 0,
+        "src": "arg = lp.GlobalArg(expr.name,",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_placeholder"
+      },
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 42,
+        "src": "if expr.tags_of_type(ImplStored):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplStored]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if expr.tags_of_type(ImplStored):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 13,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 6,
+        "src": "elif expr.tags_of_type(ImplInlined):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplInlined]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "elif expr.tags_of_type(ImplInlined):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 13,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 3,
+        "src": "elif expr.tags_of_type(ImplSubstitution):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplSubstitution]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "elif expr.tags_of_type(ImplSubstitution):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 13,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 7,
+        "src": "elif expr.tags_of_type(ImplementationStrategy):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplementationStrategy]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "elif expr.tags_of_type(ImplementationStrategy):",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 30,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 3,
+        "src": "f\"'{next(iter(expr.tags_of_type(ImplementationStrategy)))}'.\"",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "arg-type",
+        "column": 48,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ImplementationStrategy]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "f\"'{next(iter(expr.tags_of_type(ImplementationStrategy)))}'.\"",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 22,
+        "message": "Too few arguments for \"__getitem__\" of \"DictOfNamedArrays\"",
+        "offset": 13,
+        "src": "subexpr = expr[key].expr",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_dict_of_named_arrays"
+      },
+      {
+        "code": "index",
+        "column": 27,
+        "message": "Invalid index type \"str\" for \"DictOfNamedArrays\"; expected type \"DictOfNamedArrays\"",
+        "offset": 0,
+        "src": "subexpr = expr[key].expr",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_dict_of_named_arrays"
+      },
+      {
+        "code": "call-arg",
+        "column": 51,
+        "message": "Too few arguments for \"__getitem__\" of \"DictOfNamedArrays\"",
+        "offset": 4,
+        "src": "state.results[subexpr] = state.results[expr[key]] = (",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_dict_of_named_arrays"
+      },
+      {
+        "code": "index",
+        "column": 56,
+        "message": "Invalid index type \"str\" for \"DictOfNamedArrays\"; expected type \"DictOfNamedArrays\"",
+        "offset": 0,
+        "src": "state.results[subexpr] = state.results[expr[key]] = (",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_dict_of_named_arrays"
+      },
+      {
+        "code": "call-arg",
+        "column": 28,
+        "message": "Too few arguments for \"__getitem__\" of \"LoopyCall\"",
+        "offset": 50,
+        "src": "expr[arg.name], state.var_name_gen)",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "index",
+        "column": 33,
+        "message": "Invalid index type \"str\" for \"LoopyCall\"; expected type \"LoopyCall\"",
+        "offset": 0,
+        "src": "expr[arg.name], state.var_name_gen)",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 56,
+        "message": "Too few arguments for \"__getitem__\" of \"LoopyCall\"",
+        "offset": 1,
+        "src": "assignees.append(_get_sub_array_ref(expr[arg.name],",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "index",
+        "column": 61,
+        "message": "Invalid index type \"str\" for \"LoopyCall\"; expected type \"LoopyCall\"",
+        "offset": 0,
+        "src": "assignees.append(_get_sub_array_ref(expr[arg.name],",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 34,
+        "message": "Too few arguments for \"__getitem__\" of \"LoopyCall\"",
+        "offset": 3,
+        "src": "named_array = expr[arg.name]",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "index",
+        "column": 39,
+        "message": "Invalid index type \"str\" for \"LoopyCall\"; expected type \"LoopyCall\"",
+        "offset": 0,
+        "src": "named_array = expr[arg.name]",
+        "target": "pytato.target.loopy.codegen.CodeGenMapper.map_loopy_call"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 20,
+        "message": "Call to incomplete function \"to_loopy_type\" in typed context",
+        "offset": 225,
+        "src": "lp.to_loopy_type(expr.dtype),",
+        "target": "pytato.target.loopy.codegen.InlinedExpressionGenMapper.map_type_cast"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 20,
+        "message": "Type is \"def (dtype: type[loopy.typing.auto] | numpy.dtype[Untyped] | loopy.types.LoopyType | None, allow_auto: bool =, allow_none: bool =, for_atomic: bool =) -> type[loopy.typing.auto] | loopy.types.LoopyType | None\"",
+        "offset": 0,
+        "src": "lp.to_loopy_type(expr.dtype),",
+        "target": "pytato.target.loopy.codegen.InlinedExpressionGenMapper.map_type_cast"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Return type becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 28,
+        "src": "def domain_for_shape(dim_names: tuple[str, ...],",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 34,
+        "message": "Call to incomplete function \"aff_from_expr\" in typed context",
+        "offset": 47,
+        "src": "dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 34,
+        "message": "Type is \"def (space: Any (from unimported type), expr: int | numpy.integer[...] | float | complex | numpy.inexact[..., float | complex] | bool | numpy.bool[bool] | pymbolic.primitives.ExpressionNode | tuple[..., ...], vars_to_zero: Untyped =) -> Any (from unimported type)\"",
+        "offset": 0,
+        "src": "dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Call to incomplete function \"aff_from_expr\" in typed context",
+        "offset": 3,
+        "src": "dom &= aff_from_expr(dom.space, left).le_set(affs[iname])",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Type is \"def (space: Any (from unimported type), expr: int | numpy.integer[...] | float | complex | numpy.inexact[..., float | complex] | bool | numpy.bool[bool] | pymbolic.primitives.ExpressionNode | tuple[..., ...], vars_to_zero: Untyped =) -> Any (from unimported type)\"",
+        "offset": 0,
+        "src": "dom &= aff_from_expr(dom.space, left).le_set(affs[iname])",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 34,
+        "message": "Call to incomplete function \"aff_from_expr\" in typed context",
+        "offset": 1,
+        "src": "dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 34,
+        "message": "Type is \"def (space: Any (from unimported type), expr: int | numpy.integer[...] | float | complex | numpy.inexact[..., float | complex] | bool | numpy.bool[bool] | pymbolic.primitives.ExpressionNode | tuple[..., ...], vars_to_zero: Untyped =) -> Any (from unimported type)\"",
+        "offset": 0,
+        "src": "dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))",
+        "target": "pytato.target.loopy.codegen.domain_for_shape"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 14,
+        "message": "Call to incomplete function \"GlobalArg\" in typed context",
+        "offset": 78,
+        "src": "arg = lp.GlobalArg(name,",
+        "target": "pytato.target.loopy.codegen.add_store"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 14,
+        "message": "Type is \"def (*args: Untyped, **kwargs: Untyped) -> loopy.kernel.data.ArrayArg\"",
+        "offset": 0,
+        "src": "arg = lp.GlobalArg(name,",
+        "target": "pytato.target.loopy.codegen.add_store"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Argument 5 to \"generate_loopy\" becomes \"Any (from unimported type) | None\" due to an unfollowed import",
+        "offset": 82,
+        "src": "def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "call-arg",
+        "column": 34,
+        "message": "Too few arguments for \"__getitem__\" of \"DictOfNamedArrays\"",
+        "offset": 91,
+        "src": "for input_expr in ing(outputs[name].expr)",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "index",
+        "column": 42,
+        "message": "Invalid index type \"str\" for \"DictOfNamedArrays\"; expected type \"DictOfNamedArrays\"",
+        "offset": 0,
+        "src": "for input_expr in ing(outputs[name].expr)",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"__getitem__\" of \"DictOfNamedArrays\"",
+        "offset": 11,
+        "src": "expr = outputs[name].expr",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "index",
+        "column": 23,
+        "message": "Invalid index type \"str\" for \"DictOfNamedArrays\"; expected type \"DictOfNamedArrays\"",
+        "offset": 0,
+        "src": "expr = outputs[name].expr",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 13,
+        "message": "Call to incomplete function \"make_reduction_inames_unique\" in typed context",
+        "offset": 11,
+        "src": "t_unit = lp.make_reduction_inames_unique(state.t_unit)",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 13,
+        "message": "Type is \"[TUnitOrKernelT (from for_each_kernel) in (loopy.kernel.LoopKernel, loopy.translation_unit.TranslationUnit)] (TUnitOrKernelT, inames: Untyped =, within: Untyped =) -> TUnitOrKernelT\"",
+        "offset": 0,
+        "src": "t_unit = lp.make_reduction_inames_unique(state.t_unit)",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 17,
+        "message": "Call to incomplete function \"set_options\" in typed context",
+        "offset": 4,
+        "src": "t_unit = lp.set_options(t_unit,",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 17,
+        "message": "Type is \"[TUnitOrKernelT (from for_each_kernel) in (loopy.kernel.LoopKernel, loopy.translation_unit.TranslationUnit)] (TUnitOrKernelT, *args: Untyped, **kwargs: Untyped) -> TUnitOrKernelT\"",
+        "offset": 0,
+        "src": "t_unit = lp.set_options(t_unit,",
+        "target": "pytato.target.loopy.codegen.generate_loopy"
+      }
+    ],
+    "pytato/target/python/__init__.py": [
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Call to incomplete function \"device_put\" in typed context",
+        "offset": 164,
+        "src": "return jax.device_put(arg)",
+        "target": "pytato.target.python._process_jax_bnd_arg"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 15,
+        "message": "Type is \"def (x: Untyped, device: None | jaxlib.xla_extension.Device | jax._src.sharding.Sharding | jax._src.layout.Layout | Any | jax._src.sharding_impls.TransferToMemoryKind =, *, src: None | jaxlib.xla_extension.Device | jax._src.sharding.Sharding | jax._src.layout.Layout | Any | jax._src.sharding_impls.TransferToMemoryKind =, donate: bool | Any =, may_alias: bool | None | Any =) -> Untyped\"",
+        "offset": 0,
+        "src": "return jax.device_put(arg)",
+        "target": "pytato.target.python._process_jax_bnd_arg"
+      }
+    ],
+    "pytato/transform/__init__.py": [
+      {
+        "code": "assignment",
+        "column": 21,
+        "message": "Incompatible types in assignment (expression has type \"object\", variable has type \"(...) -> ResultT@Mapper | None\")",
+        "offset": 241,
+        "src": "method = getattr(self, expr._mapper_method)",
+        "target": "pytato.transform.Mapper.rec"
+      },
+      {
+        "code": "assignment",
+        "column": 33,
+        "message": "Incompatible types in assignment (expression has type \"object\", variable has type \"(...) -> ResultT@Mapper | None\")",
+        "offset": 6,
+        "src": "method = getattr(self, method_name, None)",
+        "target": "pytato.transform.Mapper.rec"
+      },
+      {
+        "code": "arg-type",
+        "column": 47,
+        "message": "Argument 2 to \"getattr\" has incompatible type \"object\"; expected \"str\"",
+        "offset": 0,
+        "src": "method = getattr(self, method_name, None)",
+        "target": "pytato.transform.Mapper.rec"
+      },
+      {
+        "code": "redundant-cast",
+        "column": 15,
+        "message": "Redundant cast to \"ResultT@Mapper\"",
+        "offset": 11,
+        "src": "return cast(\"ResultT\", method(expr, *args, **kwargs))",
+        "target": "pytato.transform.Mapper.rec"
+      },
+      {
+        "code": "redundant-cast",
+        "column": 15,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-redundant-cast for more info",
+        "offset": 0,
+        "src": "return cast(\"ResultT\", method(expr, *args, **kwargs))",
+        "target": null
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 613,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapper.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapper.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapper.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 1 to \"Einsum\" has incompatible type \"tuple[tuple[EinsumAxisDescriptor, ...], ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapper.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "tuple(_verify_is_array(self.rec(arg)) for arg in expr.args),",
+        "target": "pytato.transform.CopyMapper.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapper.map_named_array"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapper.map_named_array"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"NamedArray\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapper.map_named_array"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 1 to \"NamedArray\" has incompatible type \"AbstractResultWithNamedArrays\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapper.map_named_array"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 2 to \"NamedArray\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.name,",
+        "target": "pytato.transform.CopyMapper.map_named_array"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Call\" gets multiple values for keyword argument \"tags\"",
+        "offset": 69,
+        "src": "return Call(self.rec_function_definition(expr.function),",
+        "target": "pytato.transform.CopyMapper.map_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Call\"",
+        "offset": 0,
+        "src": "return Call(self.rec_function_definition(expr.function),",
+        "target": "pytato.transform.CopyMapper.map_call"
+      },
+      {
+        "code": "arg-type",
+        "column": 20,
+        "message": "Argument 1 to \"Call\" has incompatible type \"FunctionDefinition\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Call(self.rec_function_definition(expr.function),",
+        "target": "pytato.transform.CopyMapper.map_call"
+      },
+      {
+        "code": "arg-type",
+        "column": 20,
+        "message": "Argument 2 to \"Call\" has incompatible type \"immutabledict[Never, Never]\"; expected \"FunctionDefinition\"",
+        "offset": 1,
+        "src": "immutabledict({name: self.rec(bnd)",
+        "target": "pytato.transform.CopyMapper.map_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 8,
+        "src": "return call[expr.name]",
+        "target": "pytato.transform.CopyMapper.map_named_call_result"
+      },
+      {
+        "code": "index",
+        "column": 20,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return call[expr.name]",
+        "target": "pytato.transform.CopyMapper.map_named_call_result"
+      },
+      {
+        "code": "index",
+        "column": 20,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-index for more info",
+        "offset": 0,
+        "src": "return call[expr.name]",
+        "target": null
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 121,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 1 to \"Einsum\" has incompatible type \"tuple[tuple[EinsumAxisDescriptor, ...], ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "tuple(_verify_is_array(",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"axes\"",
+        "offset": 11,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_array"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"NamedArray\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_array"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"NamedArray\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_array"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 1 to \"NamedArray\" has incompatible type \"AbstractResultWithNamedArrays\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "return type(expr)(container,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_array"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 2 to \"NamedArray\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.name,",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_array"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Call\" gets multiple values for keyword argument \"tags\"",
+        "offset": 77,
+        "src": "return Call(self.rec_function_definition(expr.function, *args, **kwargs),",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Call\"",
+        "offset": 0,
+        "src": "return Call(self.rec_function_definition(expr.function, *args, **kwargs),",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_call"
+      },
+      {
+        "code": "arg-type",
+        "column": 20,
+        "message": "Argument 1 to \"Call\" has incompatible type \"FunctionDefinition\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "return Call(self.rec_function_definition(expr.function, *args, **kwargs),",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_call"
+      },
+      {
+        "code": "arg-type",
+        "column": 20,
+        "message": "Argument 2 to \"Call\" has incompatible type \"immutabledict[Never, Never]\"; expected \"FunctionDefinition\"",
+        "offset": 1,
+        "src": "immutabledict({name: self.rec(bnd, *args, **kwargs)",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 9,
+        "src": "return call[expr.name]",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_call_result"
+      },
+      {
+        "code": "index",
+        "column": 20,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return call[expr.name]",
+        "target": "pytato.transform.CopyMapperWithExtraArgs.map_named_call_result"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Stack\" gets multiple values for keyword argument \"axes\"",
+        "offset": 723,
+        "src": "new_expr = Stack(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Stack\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "new_expr = Stack(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_stack"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Stack\"",
+        "offset": 0,
+        "src": "new_expr = Stack(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 31,
+        "message": "Generator has incompatible item type \"Array\"; expected \"Axis\"",
+        "offset": 0,
+        "src": "new_expr = Stack(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_stack"
+      },
+      {
+        "code": "arg-type",
+        "column": 25,
+        "message": "Argument 2 to \"Stack\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.axis, axes=expr.axes, tags=expr.tags,",
+        "target": "pytato.transform.MPMSMaterializer.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_concatenate"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Concatenate\"",
+        "offset": 0,
+        "src": "new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 37,
+        "message": "Generator has incompatible item type \"Array\"; expected \"Axis\"",
+        "offset": 0,
+        "src": "new_expr = Concatenate(tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_concatenate"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 2 to \"Concatenate\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.axis,",
+        "target": "pytato.transform.MPMSMaterializer.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Roll\" gets multiple values for keyword argument \"axes\"",
+        "offset": 10,
+        "src": "new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,",
+        "target": "pytato.transform.MPMSMaterializer.map_roll"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Roll\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,",
+        "target": "pytato.transform.MPMSMaterializer.map_roll"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Roll\"",
+        "offset": 0,
+        "src": "new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,",
+        "target": "pytato.transform.MPMSMaterializer.map_roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 40,
+        "message": "Argument 2 to \"Roll\" has incompatible type \"int\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,",
+        "target": "pytato.transform.MPMSMaterializer.map_roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 52,
+        "message": "Argument 3 to \"Roll\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 0,
+        "src": "new_expr = Roll(rec_array.expr, expr.shift, expr.axis, axes=expr.axes,",
+        "target": "pytato.transform.MPMSMaterializer.map_roll"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"AxisPermutation\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,",
+        "target": "pytato.transform.MPMSMaterializer.map_axis_permutation"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"AxisPermutation\"",
+        "offset": 0,
+        "src": "new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,",
+        "target": "pytato.transform.MPMSMaterializer.map_axis_permutation"
+      },
+      {
+        "code": "arg-type",
+        "column": 51,
+        "message": "Argument 2 to \"AxisPermutation\" has incompatible type \"tuple[int, ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "new_expr = AxisPermutation(rec_array.expr, expr.axis_permutation,",
+        "target": "pytato.transform.MPMSMaterializer.map_axis_permutation"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"IndexBase\" gets multiple values for keyword argument \"axes\"",
+        "offset": 13,
+        "src": "new_expr = type(expr)(rec_array.expr,",
+        "target": "pytato.transform.MPMSMaterializer._map_index_base"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"IndexBase\"",
+        "offset": 0,
+        "src": "new_expr = type(expr)(rec_array.expr,",
+        "target": "pytato.transform.MPMSMaterializer._map_index_base"
+      },
+      {
+        "code": "misc",
+        "column": 36,
+        "message": "Generator has incompatible item type \"Array | int | integer[Any] | NormalizedSlice | None\"; expected \"Axis\"",
+        "offset": 1,
+        "src": "tuple(rec_indices[i].expr",
+        "target": "pytato.transform.MPMSMaterializer._map_index_base"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"axes\"",
+        "offset": 20,
+        "src": "new_expr = Reshape(rec_array.expr, expr.newshape,",
+        "target": "pytato.transform.MPMSMaterializer.map_reshape"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "new_expr = Reshape(rec_array.expr, expr.newshape,",
+        "target": "pytato.transform.MPMSMaterializer.map_reshape"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Reshape\"",
+        "offset": 0,
+        "src": "new_expr = Reshape(rec_array.expr, expr.newshape,",
+        "target": "pytato.transform.MPMSMaterializer.map_reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 43,
+        "message": "Argument 2 to \"Reshape\" has incompatible type \"tuple[int | integer[Any] | Array, ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "new_expr = Reshape(rec_array.expr, expr.newshape,",
+        "target": "pytato.transform.MPMSMaterializer.map_reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 27,
+        "message": "Argument 3 to \"Reshape\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.order, axes=expr.axes, tags=expr.tags,",
+        "target": "pytato.transform.MPMSMaterializer.map_reshape"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "new_expr = Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "new_expr = Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"non_equality_tags\"",
+        "offset": 0,
+        "src": "new_expr = Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "new_expr = Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 1 to \"Einsum\" has incompatible type \"tuple[tuple[EinsumAxisDescriptor, ...], ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 0,
+        "src": "new_expr = Einsum(expr.access_descriptors,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "tuple(ary.expr for ary in rec_arrays),",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 26,
+        "message": "Argument 3 to \"Einsum\" has incompatible type \"Mapping[EinsumReductionAxis, ReductionDescriptor]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.redn_axis_to_redn_descr,",
+        "target": "pytato.transform.MPMSMaterializer.map_einsum"
+      }
+    ],
+    "pytato/transform/calls.py": [
+      {
+        "code": "call-arg",
+        "column": 11,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 82,
+        "src": "if expr.tags_of_type(InlineCallTag):",
+        "target": "pytato.transform.calls.Inliner.map_call"
+      },
+      {
+        "code": "arg-type",
+        "column": 29,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[InlineCallTag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if expr.tags_of_type(InlineCallTag):",
+        "target": "pytato.transform.calls.Inliner.map_call"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"__getitem__\" of \"Call\"",
+        "offset": 15,
+        "src": "return new_call_or_inlined_expr[expr.name]",
+        "target": "pytato.transform.calls.Inliner.map_named_call_result"
+      },
+      {
+        "code": "index",
+        "column": 44,
+        "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
+        "offset": 0,
+        "src": "return new_call_or_inlined_expr[expr.name]",
+        "target": "pytato.transform.calls.Inliner.map_named_call_result"
+      }
+    ],
+    "pytato/transform/einsum_distributive_law.py": [
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 131,
+        "src": "return Einsum(",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Einsum(",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "return Einsum(",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "arg-type",
+        "column": 12,
+        "message": "Argument 1 to \"Einsum\" has incompatible type \"tuple[tuple[EinsumAxisDescriptor, ...], ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "ctx.access_descriptors,",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "arg-type",
+        "column": 12,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "new_args,",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "arg-type",
+        "column": 12,
+        "message": "Argument 3 to \"Einsum\" has incompatible type \"Mapping[EinsumReductionAxis, ReductionDescriptor]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "ctx.redn_axis_to_redn_descr,",
+        "target": "pytato.transform.einsum_distributive_law._wrap_einsum_from_ctx"
+      },
+      {
+        "code": "misc",
+        "column": 23,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 131,
+        "src": "rec_expr = Einsum(",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 23,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "rec_expr = Einsum(",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 23,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "rec_expr = Einsum(",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 16,
+        "message": "Argument 1 to \"Einsum\" has incompatible type \"tuple[tuple[EinsumAxisDescriptor, ...], ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "expr.access_descriptors,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 16,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "tuple(_verify_is_array(self.rec(arg, None)) for arg in expr.args),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 16,
+        "message": "Argument 3 to \"Einsum\" has incompatible type \"Mapping[EinsumReductionAxis, ReductionDescriptor]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.redn_axis_to_redn_descr,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Stack\" gets multiple values for keyword argument \"axes\"",
+        "offset": 10,
+        "src": "rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Stack\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_stack"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Stack\"",
+        "offset": 0,
+        "src": "rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 31,
+        "message": "Generator has incompatible item type \"Array\"; expected \"Axis\"",
+        "offset": 0,
+        "src": "rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_stack"
+      },
+      {
+        "code": "arg-type",
+        "column": 25,
+        "message": "Argument 2 to \"Stack\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 2,
+        "src": "expr.axis,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_stack"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Concatenate\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_concatenate"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Concatenate\"",
+        "offset": 0,
+        "src": "rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 37,
+        "message": "Generator has incompatible item type \"Array\"; expected \"Axis\"",
+        "offset": 0,
+        "src": "rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_concatenate"
+      },
+      {
+        "code": "arg-type",
+        "column": 31,
+        "message": "Argument 2 to \"Concatenate\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 2,
+        "src": "expr.axis,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_concatenate"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Roll\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "rec_expr = Roll(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_roll"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Roll\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "rec_expr = Roll(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_roll"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Roll\"",
+        "offset": 0,
+        "src": "rec_expr = Roll(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 24,
+        "message": "Argument 2 to \"Roll\" has incompatible type \"int\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "expr.shift,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_roll"
+      },
+      {
+        "code": "arg-type",
+        "column": 24,
+        "message": "Argument 3 to \"Roll\" has incompatible type \"int\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.axis,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_roll"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"AxisPermutation\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "rec_expr = AxisPermutation(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_axis_permutation"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"AxisPermutation\"",
+        "offset": 0,
+        "src": "rec_expr = AxisPermutation(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_axis_permutation"
+      },
+      {
+        "code": "arg-type",
+        "column": 35,
+        "message": "Argument 2 to \"AxisPermutation\" has incompatible type \"tuple[int, ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "expr.axis_permutation,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_axis_permutation"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"IndexBase\" gets multiple values for keyword argument \"axes\"",
+        "offset": 9,
+        "src": "rec_expr = type(expr)(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper._map_index_base"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"IndexBase\"",
+        "offset": 0,
+        "src": "rec_expr = type(expr)(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper._map_index_base"
+      },
+      {
+        "code": "arg-type",
+        "column": 30,
+        "message": "Argument 2 to \"IndexBase\" has incompatible type \"tuple[int | integer[Any] | NormalizedSlice | Array | None, ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "expr.indices,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper._map_index_base"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"axes\"",
+        "offset": 13,
+        "src": "rec_expr = Reshape(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_reshape"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"Reshape\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "rec_expr = Reshape(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_reshape"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"Reshape\"",
+        "offset": 0,
+        "src": "rec_expr = Reshape(_verify_is_array(self.rec(expr.array, None)),",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 27,
+        "message": "Argument 2 to \"Reshape\" has incompatible type \"tuple[int | integer[Any] | Array, ...]\"; expected \"tuple[Axis, ...]\"",
+        "offset": 1,
+        "src": "expr.newshape,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 27,
+        "message": "Argument 3 to \"Reshape\" has incompatible type \"str\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.order,",
+        "target": "pytato.transform.einsum_distributive_law.EinsumDistributiveLawMapper.map_reshape"
+      }
+    ],
+    "pytato/transform/lower_to_index_lambda.py": [
+      {
+        "code": "possibly-undefined",
+        "column": 32,
+        "message": "Name \"stack_expr\" may be undefined",
+        "offset": 311,
+        "src": "return IndexLambda(expr=stack_expr,",
+        "target": "pytato.transform.lower_to_index_lambda"
+      },
+      {
+        "code": "possibly-undefined",
+        "column": 32,
+        "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-possibly-undefined for more info",
+        "offset": 0,
+        "src": "return IndexLambda(expr=stack_expr,",
+        "target": null
+      },
+      {
+        "code": "possibly-undefined",
+        "column": 32,
+        "message": "Name \"concat_expr\" may be undefined",
+        "offset": 49,
+        "src": "return IndexLambda(expr=concat_expr,",
+        "target": "pytato.transform.lower_to_index_lambda"
+      },
+      {
+        "code": "call-arg",
+        "column": 28,
+        "message": "Too few arguments for \"_access_descr_to_axis_len\" of \"Einsum\"",
+        "offset": 34,
+        "src": "expr._access_descr_to_axis_len()[axis]):",
+        "target": "pytato.transform.lower_to_index_lambda.ToIndexLambdaMixin.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 27,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 124,
+        "src": "if not idx.tags_of_type(AssumeNonNegative):",
+        "target": "pytato.transform.lower_to_index_lambda.ToIndexLambdaMixin.map_contiguous_advanced_index"
+      },
+      {
+        "code": "arg-type",
+        "column": 44,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[AssumeNonNegative]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if not idx.tags_of_type(AssumeNonNegative):",
+        "target": "pytato.transform.lower_to_index_lambda.ToIndexLambdaMixin.map_contiguous_advanced_index"
+      },
+      {
+        "code": "unused-ignore",
+        "column": -1,
+        "message": "Unused \"type: ignore\" comment",
+        "offset": 6,
+        "src": "indirect_idx_expr = indirect_idx_expr % axis_len  # type: ignore[operator]",
+        "target": null
+      },
+      {
+        "code": "call-arg",
+        "column": 27,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 67,
+        "src": "if not idx.tags_of_type(AssumeNonNegative):",
+        "target": "pytato.transform.lower_to_index_lambda.ToIndexLambdaMixin.map_non_contiguous_advanced_index"
+      },
+      {
+        "code": "arg-type",
+        "column": 44,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[AssumeNonNegative]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "if not idx.tags_of_type(AssumeNonNegative):",
+        "target": "pytato.transform.lower_to_index_lambda.ToIndexLambdaMixin.map_non_contiguous_advanced_index"
+      },
+      {
+        "code": "unused-ignore",
+        "column": -1,
+        "message": "Unused \"type: ignore\" comment",
+        "offset": 5,
+        "src": "indirect_idx_expr = indirect_idx_expr % axis_len  # type: ignore[operator]",
+        "target": null
+      }
+    ],
+    "pytato/transform/metadata.py": [
+      {
+        "code": "var-annotated",
+        "column": 12,
+        "message": "Need type annotation for \"tag\"",
+        "offset": 246,
+        "src": "for tag in axis.tags_of_type(self.tag_t):",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.record_equations_from_axes_tags"
+      },
+      {
+        "code": "call-arg",
+        "column": 23,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 0,
+        "src": "for tag in axis.tags_of_type(self.tag_t):",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.record_equations_from_axes_tags"
+      },
+      {
+        "code": "arg-type",
+        "column": 41,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[Tag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "for tag in axis.tags_of_type(self.tag_t):",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.record_equations_from_axes_tags"
+      },
+      {
+        "code": "call-arg",
+        "column": 27,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 118,
+        "src": "expand_dims_tags = expr.tags_of_type(ExpandedDimsReshape)",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.map_reshape"
+      },
+      {
+        "code": "var-annotated",
+        "column": 27,
+        "message": "Need type annotation for \"expand_dims_tags\"",
+        "offset": 0,
+        "src": "expand_dims_tags = expr.tags_of_type(ExpandedDimsReshape)",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.map_reshape"
+      },
+      {
+        "code": "arg-type",
+        "column": 45,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[ExpandedDimsReshape]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "expand_dims_tags = expr.tags_of_type(ExpandedDimsReshape)",
+        "target": "pytato.transform.metadata.AxesTagsEquationCollector.map_reshape"
+      },
+      {
+        "code": "call-arg",
+        "column": 12,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 227,
+        "src": "and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag)",
+        "target": "pytato.transform.metadata.unify_axes_tags"
+      },
+      {
+        "code": "arg-type",
+        "column": 38,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[AxisIgnoredForPropagationTag]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "and ary.axes[ax].tags_of_type(AxisIgnoredForPropagationTag)",
+        "target": "pytato.transform.metadata.unify_axes_tags"
+      }
+    ],
+    "pytato/transform/remove_broadcasts_einsum.py": [
+      {
+        "code": "call-arg",
+        "column": 28,
+        "message": "Too few arguments for \"_access_descr_to_axis_len\" of \"Einsum\"",
+        "offset": 42,
+        "src": "descr_to_axis_len = expr._access_descr_to_axis_len()",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"axes\"",
+        "offset": 24,
+        "src": "return Einsum(tuple(new_access_descriptors),",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"Einsum\" gets multiple values for keyword argument \"tags\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(new_access_descriptors),",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"Einsum\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(new_access_descriptors),",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 28,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[tuple[EinsumAxisDescriptor, ...]]\"; expected \"Iterable[Axis]\"",
+        "offset": 0,
+        "src": "return Einsum(tuple(new_access_descriptors),",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 2 to \"Einsum\" has incompatible type \"tuple[Array, ...]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "tuple(new_args),",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 3 to \"Einsum\" has incompatible type \"Mapping[EinsumReductionAxis, ReductionDescriptor]\"; expected \"frozenset[Tag]\"",
+        "offset": 1,
+        "src": "expr.redn_axis_to_redn_descr,",
+        "target": "pytato.transform.remove_broadcasts_einsum.EinsumWithNoBroadcastsRewriter.map_einsum"
+      }
+    ],
+    "pytato/utils.py": [
+      {
+        "code": "unused-ignore",
+        "column": -1,
+        "message": "Unused \"type: ignore\" comment",
+        "offset": 215,
+        "src": "return evaluate(op(a1, a2))  # type: ignore",
+        "target": null
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 33,
+        "message": "Base type becomes \"CachedMapper[Any (from unimported type), Never, []]\" due to an unfollowed import",
+        "offset": 160,
+        "src": "class ShapeToISLExpressionMapper(CachedMapper[isl.Aff, Never, []]):",
+        "target": "pytato.utils"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Argument 2 to \"__init__\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 4,
+        "src": "def __init__(self, space: isl.Space):",
+        "target": "pytato.utils.ShapeToISLExpressionMapper.__init__"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Return type becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 4,
+        "src": "def map_index_lambda(self, expr: IndexLambda) -> isl.Aff:",
+        "target": "pytato.utils.ShapeToISLExpressionMapper.map_index_lambda"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 4,
+        "message": "Return type becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 5,
+        "src": "def map_size_param(self, expr: SizeParam) -> isl.Aff:",
+        "target": "pytato.utils.ShapeToISLExpressionMapper.map_size_param"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Return type becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 7,
+        "src": "def _create_size_param_space(names: Iterable[str]) -> isl.Space:",
+        "target": "pytato.utils._create_size_param_space"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Return type becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 6,
+        "src": "def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:",
+        "target": "pytato.utils._get_size_params_assumptions_bset"
+      },
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Argument 1 to \"_get_size_params_assumptions_bset\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 0,
+        "src": "def _get_size_params_assumptions_bset(space: isl.Space) -> isl.BasicSet:",
+        "target": "pytato.utils._get_size_params_assumptions_bset"
+      },
+      {
+        "code": "assignment",
+        "column": 18,
+        "message": "Incompatible types in assignment (expression has type \"tuple[int | slice[Any, Any, Any] | Array | None, ...]\", variable has type \"(int, slice[Any, Any, Any], Array, None)\")",
+        "offset": 145,
+        "src": "indices = indices + (slice(None, None, None),) * (ary.ndim - len(indices))",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"AdvancedIndexInNoncontiguousAxes\" gets multiple values for keyword argument \"axes\"",
+        "offset": 65,
+        "src": "return AdvancedIndexInNoncontiguousAxes(",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"AdvancedIndexInNoncontiguousAxes\"",
+        "offset": 0,
+        "src": "return AdvancedIndexInNoncontiguousAxes(",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[int | integer[Any] | NormalizedSlice | Array | None]\"; expected \"Iterable[Axis]\"",
+        "offset": 2,
+        "src": "tuple(normalized_indices),",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "misc",
+        "column": 19,
+        "message": "\"AdvancedIndexInContiguousAxes\" gets multiple values for keyword argument \"axes\"",
+        "offset": 6,
+        "src": "return AdvancedIndexInContiguousAxes(",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Too few arguments for \"AdvancedIndexInContiguousAxes\"",
+        "offset": 0,
+        "src": "return AdvancedIndexInContiguousAxes(",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "arg-type",
+        "column": 22,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[int | integer[Any] | NormalizedSlice | Array | None]\"; expected \"Iterable[Axis]\"",
+        "offset": 2,
+        "src": "tuple(normalized_indices),",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "misc",
+        "column": 15,
+        "message": "\"BasicIndex\" gets multiple values for keyword argument \"axes\"",
+        "offset": 7,
+        "src": "return BasicIndex(ary,",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "call-arg",
+        "column": 15,
+        "message": "Too few arguments for \"BasicIndex\"",
+        "offset": 0,
+        "src": "return BasicIndex(ary,",
+        "target": "pytato.utils._index_into"
+      },
+      {
+        "code": "arg-type",
+        "column": 32,
+        "message": "Argument 1 to \"tuple\" has incompatible type \"list[int | integer[Any] | NormalizedSlice | Array | None]\"; expected \"Iterable[Axis]\"",
+        "offset": 1,
+        "src": "tuple(normalized_indices),",
+        "target": "pytato.utils._index_into"
+      }
+    ],
+    "pytato/visualization/dot.py": [
+      {
+        "code": "no-untyped-call",
+        "column": 20,
+        "message": "Call to incomplete function \"remove_common_indentation\" in typed context",
+        "offset": 102,
+        "src": "s = remove_common_indentation(s)",
+        "target": "pytato.visualization.dot.DotEmitter.__call__"
+      },
+      {
+        "code": "no-untyped-call",
+        "column": 20,
+        "message": "Type is \"def (code: str, require_leading_newline: bool =) -> Untyped\"",
+        "offset": 0,
+        "src": "s = remove_common_indentation(s)",
+        "target": "pytato.visualization.dot.DotEmitter.__call__"
+      },
+      {
+        "code": "call-arg",
+        "column": 19,
+        "message": "Missing positional argument \"tag_t\" in call to \"tags_of_type\" of \"Taggable\"",
+        "offset": 394,
+        "src": "func_id_tags = f.tags_of_type(FunctionIdentifier)",
+        "target": "pytato.visualization.dot._get_function_name"
+      },
+      {
+        "code": "var-annotated",
+        "column": 19,
+        "message": "Need type annotation for \"func_id_tags\"",
+        "offset": 0,
+        "src": "func_id_tags = f.tags_of_type(FunctionIdentifier)",
+        "target": "pytato.visualization.dot._get_function_name"
+      },
+      {
+        "code": "arg-type",
+        "column": 34,
+        "message": "Argument 1 to \"tags_of_type\" of \"Taggable\" has incompatible type \"type[FunctionIdentifier]\"; expected \"Taggable\"",
+        "offset": 0,
+        "src": "func_id_tags = f.tags_of_type(FunctionIdentifier)",
+        "target": "pytato.visualization.dot._get_function_name"
+      }
+    ],
+    "test/testlib.py": [
+      {
+        "code": "no-any-unimported",
+        "column": 0,
+        "message": "Argument 2 to \"assert_allclose_to_numpy\" becomes \"Any (from unimported type)\" due to an unfollowed import",
+        "offset": 69,
+        "src": "def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,",
+        "target": "testlib.assert_allclose_to_numpy"
+      },
+      {
+        "code": "operator",
+        "column": 40,
+        "message": "\"object\" not callable",
+        "offset": 123,
+        "src": "return rdagc.np.squeeze(getattr(rdagc.np, which_op)(op1, op2))",
+        "target": "testlib.make_random_dag_inner"
+      }
+    ]
+  },
+  "format": "1.7",
+  "targets": [
+    "file:pytato",
+    "file:test/testlib.py"
+  ]
+}
