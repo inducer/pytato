@@ -295,7 +295,7 @@ T = TypeVar("T")
 
 
 @dataclass_transform(eq_default=False, frozen_default=True)
-def array_dataclass(hash: bool = True) -> Callable[[type[T]], type[T]]:
+def array_dataclass(*, hash: bool = True) -> Callable[[type[T]], type[T]]:
     def map_cls(cls: type[T]) -> type[T]:
         # Frozen dataclasses (empirically) have a ~20% speed penalty,
         # and their frozen-ness is arguably a debug feature.
