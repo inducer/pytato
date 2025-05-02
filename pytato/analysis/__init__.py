@@ -102,9 +102,7 @@ class NUserCollector(Mapper[None, None, []]):
         self._visited_ids: set[int] = set()
         self.nusers: dict[Array, int] = defaultdict(lambda: 0)
 
-    # type-ignore reason: NUserCollector.rec's type does not match
-    # Mapper.rec's type
-    def rec(self, expr: ArrayOrNames) -> None:  # type: ignore
+    def rec(self, expr: ArrayOrNames) -> None:
         # See CachedWalkMapper.rec on why we chose id(x) as the cache key.
 
         if id(expr) in self._visited_ids:
