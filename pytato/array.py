@@ -864,7 +864,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
                                                     hash=False,
                                                     default=frozenset())
 
-    def _with_new_tags(self: Self, tags: frozenset[Tag]) -> Self:
+    def _with_new_tags(self, tags: frozenset[Tag]) -> Self:
         return dataclasses.replace(self, tags=tags)
 
 
