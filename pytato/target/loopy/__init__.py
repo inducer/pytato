@@ -215,7 +215,7 @@ class BoundPyOpenCLProgram(BoundProgram):
         return all(isinstance(arg, np.ndarray) or np.isscalar(arg)
                    for arg in self.bound_arguments.values())
 
-    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore
+    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore[no-untyped-def,no-any-unimported]
                  allocator=None, wait_for=None, out_host: bool | None = None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
@@ -309,7 +309,7 @@ class BoundPyOpenCLExecutable(BoundProgram):
         """
         return all(np.isscalar(arg) for arg in self.bound_arguments.values())
 
-    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore
+    def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore[no-untyped-def,no-any-unimported]
                  allocator=None, wait_for=None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""

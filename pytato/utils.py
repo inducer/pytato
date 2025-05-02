@@ -416,7 +416,7 @@ def _is_non_negative(expr: ShapeComponent) -> Bool:
     assert isinstance(expr, Array) and expr.shape == ()
     from pytato.transform import InputGatherer
     # type-ignore reason: passed Set[Optional[str]]; function expects Set[str]
-    space = _create_size_param_space({expr.name  # type: ignore
+    space = _create_size_param_space({expr.name  # type: ignore[attr-defined]
                                       for expr in InputGatherer()(expr)})
     aff = ShapeToISLExpressionMapper(space)(expr)
 
