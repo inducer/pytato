@@ -52,7 +52,7 @@ from typing import (
 )
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import TypeIs
 
 import pymbolic.primitives as prim
@@ -136,7 +136,7 @@ class IdentityMapper(IdentityMapperBase[P]):
                       cast("ArithmeticExpression",
                            self.rec(expr.inner_expr, *args, **kwargs)),
                       expr.op,
-                      immutabledict({
+                      constantdict({
                                         name: (
                                             self.rec(lower, *args, **kwargs),
                                             self.rec(upper, *args, **kwargs)
@@ -157,7 +157,7 @@ class SubstitutionMapper(SubstitutionMapperBase):
         assert not isinstance(inner_expr, tuple)
         return Reduce(inner_expr,
                       op=expr.op,
-                      bounds=immutabledict(
+                      bounds=constantdict(
                           {name: self.rec(bound)
                            for name, bound in expr.bounds.items()}))
 

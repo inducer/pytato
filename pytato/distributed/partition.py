@@ -73,7 +73,7 @@ from typing import (
     cast,
 )
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 from orderedsets import FrozenOrderedSet, OrderedSet
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -372,11 +372,11 @@ def _make_distributed_partition(
                 partition_input_names=frozenset(
                     comm_replacer.partition_input_name_to_placeholder.keys()),
                 output_names=frozenset(name_to_part_output.keys()),
-                name_to_recv_node=immutabledict({
+                name_to_recv_node=constantdict({
                     recvd_ary_to_name[local_recv_id_to_recv_node[recv_id]]:
                     local_recv_id_to_recv_node[recv_id]
                     for recv_id in comm_ids.recv_ids}),
-                name_to_send_nodes=immutabledict(name_to_send_nodes))
+                name_to_send_nodes=constantdict(name_to_send_nodes))
 
     result = DistributedGraphPartition(
             parts=parts,

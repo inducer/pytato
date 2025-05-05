@@ -33,7 +33,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
@@ -225,7 +225,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
             indices.append(prim.Variable(f"_{n_out_dims}"))
             n_out_dims += 1
 
-    return indices, immutabledict(redn_bounds)
+    return indices, constantdict(redn_bounds)
 
 
 def _get_var_to_redn_descr(
@@ -269,7 +269,7 @@ def _get_var_to_redn_descr(
             var_to_redn_descr[idx] = redn_descr
             n_redn_dims += 1
 
-    return immutabledict(var_to_redn_descr)
+    return constantdict(var_to_redn_descr)
 
 
 def _make_reduction_lambda(

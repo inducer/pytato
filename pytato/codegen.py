@@ -40,7 +40,7 @@ THE SOFTWARE.
 import dataclasses
 from typing import TYPE_CHECKING, Any
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import loopy as lp
 from pymbolic.mapper.optimize import optimize_mapper
@@ -211,7 +211,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
         # }}}
 
-        bindings: Mapping[str, Any] = immutabledict(
+        bindings: Mapping[str, Any] = constantdict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
@@ -327,7 +327,7 @@ def preprocess(outputs: DictOfNamedArrays, target: Target) -> PreprocessResult:
                                                 for out in outputs.values()))
 
     # only look for dependencies between the outputs
-    deps: Mapping[str, Any] = immutabledict({name: get_deps(output.expr)
+    deps: Mapping[str, Any] = constantdict({name: get_deps(output.expr)
             for name, output in outputs.items()})
 
     # represent deps in terms of output names

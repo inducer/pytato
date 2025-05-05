@@ -55,7 +55,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import loopy
 
@@ -202,7 +202,7 @@ class BoundPyOpenCLProgram(BoundProgram):
                                     f" Got {type(bnd_arg).__name__} for '{name}'."
                                 ) from None
 
-            result: Mapping[str, Any] = immutabledict(proc_bnd_args)
+            result: Mapping[str, Any] = constantdict(proc_bnd_args)
             assert set(result.keys()) == set(self.bound_arguments.keys())
             self._processed_bound_args_cache[cache_key] = result
             return result

@@ -31,7 +31,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Never, TypeVar, cast
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
@@ -274,7 +274,7 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=expr.expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({name: self.rec(bnd)
+                           bindings=constantdict({name: self.rec(bnd)
                                          for name, bnd
                                          in sorted(expr.bindings.items())}),
                            axes=expr.axes,
@@ -312,8 +312,8 @@ class ToIndexLambdaMixin:
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           bindings=immutabledict(bindings),
-                           var_to_reduction_descr=immutabledict(),
+                           bindings=constantdict(bindings),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
@@ -360,9 +360,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=concat_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict(bindings),
+                           bindings=constantdict(bindings),
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
@@ -429,14 +429,14 @@ class ToIndexLambdaMixin:
             from pytato.reductions import SumReductionOperation
             inner_expr = Reduce(inner_expr,
                                 SumReductionOperation(),
-                                immutabledict(redn_bounds))
+                                constantdict(redn_bounds))
 
         return IndexLambda(expr=inner_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict(bindings),
+                           bindings=constantdict(bindings),
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(var_to_redn_descr),
+                           var_to_reduction_descr=constantdict(var_to_redn_descr),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
@@ -464,10 +464,10 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({name: self.rec(bnd)
+                           bindings=constantdict({name: self.rec(bnd)
                                      for name, bnd in bindings.items()}),
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
@@ -535,11 +535,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=immutabledict(bindings),
+                           bindings=constantdict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags,
                            )
@@ -604,11 +604,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=immutabledict(bindings),
+                           bindings=constantdict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags,
                            )
@@ -641,11 +641,11 @@ class ToIndexLambdaMixin:
 
         return IndexLambda(expr=prim.Subscript(prim.Variable(in_ary),
                                                tuple(indices)),
-                           bindings=immutabledict(bindings),
+                           bindings=constantdict(bindings),
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags,
                            )
@@ -656,9 +656,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
+                           bindings=constantdict({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
@@ -673,9 +673,9 @@ class ToIndexLambdaMixin:
         return IndexLambda(expr=index_expr,
                            shape=self._rec_shape(expr.shape),
                            dtype=expr.dtype,
-                           bindings=immutabledict({"_in0": self.rec(expr.array)}),
+                           bindings=constantdict({"_in0": self.rec(expr.array)}),
                            axes=expr.axes,
-                           var_to_reduction_descr=immutabledict(),
+                           var_to_reduction_descr=constantdict(),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
