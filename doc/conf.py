@@ -28,10 +28,10 @@ intersphinx_mapping = {
     "loopy": ("https://documen.tician.de/loopy/", None),
     "sumpy": ("https://documen.tician.de/sumpy/", None),
     "islpy": ("https://documen.tician.de/islpy/", None),
-    "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "jax": ("https://docs.jax.dev/en/latest/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
-    "immutabledict": ("https://immutabledict.corenting.fr/", None),
-    "orderedsets": ("https://matthiasdiener.github.io/orderedsets", None),
+    "constantdict": ("https://matthiasdiener.github.io/constantdict/", None),
+    "orderedsets": ("https://matthiasdiener.github.io/orderedsets/", None),
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in

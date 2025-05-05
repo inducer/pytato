@@ -72,7 +72,7 @@ from typing import (
     TypeVar,
 )
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
@@ -162,7 +162,7 @@ class FunctionDefinition(Taggable):
 
     if __debug__:
         def __post_init__(self) -> None:
-            assert isinstance(self.returns, immutabledict)
+            assert isinstance(self.returns, constantdict)
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -185,7 +185,7 @@ class FunctionDefinition(Taggable):
                 f"Found non-argument placeholder '{next(iter(extra_pl_names))}' " \
                 "in function definition."
 
-        return immutabledict({arg.name: arg for arg in all_placeholders})
+        return constantdict({arg.name: arg for arg in all_placeholders})
 
     def get_placeholder(self, name: str) -> Placeholder:
         """
@@ -227,7 +227,7 @@ class FunctionDefinition(Taggable):
 
         # }}}
 
-        call_site = Call(self, bindings=immutabledict(kwargs),
+        call_site = Call(self, bindings=constantdict(kwargs),
                          tags=_get_default_tags())
 
         if self.return_type == ReturnType.ARRAY:
@@ -236,7 +236,7 @@ class FunctionDefinition(Taggable):
             return tuple(call_site[f"_{iarg}"]
                          for iarg in range(len(self.returns)))
         elif self.return_type == ReturnType.DICT_OF_ARRAYS:
-            return immutabledict({kw: call_site[kw] for kw in self.returns})
+            return constantdict({kw: call_site[kw] for kw in self.returns})
         else:
             raise NotImplementedError(self.return_type)
 
@@ -323,7 +323,7 @@ class Call(AbstractResultWithNamedArrays):
             # check that the invocation parameters and the function definition
             # parameters agree with each other.
             assert frozenset(self.bindings) == self.function.parameters
-            assert isinstance(self.bindings, immutabledict)
+            assert isinstance(self.bindings, constantdict)
             super().__post_init__()
 
     def __contains__(self, name: object) -> bool:
@@ -422,7 +422,7 @@ def trace_call(f: Callable[..., ReturnT],
     function = FunctionDefinition(
         frozenset(pl_arg.name for pl_arg in pl_args) | frozenset(pl_kwargs),
         return_type,
-        immutabledict(returns),
+        constantdict(returns),
         tags=_get_default_tags() | (frozenset([FunctionIdentifier(identifier)])
                                     if identifier
                                     else frozenset())

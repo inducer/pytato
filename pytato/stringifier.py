@@ -29,7 +29,7 @@ import dataclasses
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 from pytato.array import (
     Array,
@@ -99,7 +99,7 @@ class Reprifier(Mapper[str, str, [int]]):
     def map_foreign(self, expr: Any, depth: int) -> str:
         if isinstance(expr, tuple):
             return "(" + ", ".join(self.rec(el, depth) for el in expr) + ")"
-        elif isinstance(expr, dict | immutabledict):
+        elif isinstance(expr, dict | constantdict):
             return ("{"
                     + ", ".join(f"{key!r}: {self.rec(val, depth)}"
                                 for key, val

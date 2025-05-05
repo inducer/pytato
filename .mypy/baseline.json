@@ -192,7 +192,7 @@
         "column": 27,
         "message": "Need type annotation for \"index_to_axis_length\"",
         "offset": 46,
-        "src": "index_to_axis_length = immutabledict(index_to_axis_length_dict)",
+        "src": "index_to_axis_length = constantdict(index_to_axis_length_dict)",
         "target": "pytato.array._normalize_einsum_in_subscript"
       },
       {
@@ -200,7 +200,7 @@
         "column": 27,
         "message": "See https://kotlinisland.github.io/basedmypy/_refs.html#code-var-annotated for more info",
         "offset": 0,
-        "src": "index_to_axis_length = immutabledict(index_to_axis_length_dict)",
+        "src": "index_to_axis_length = constantdict(index_to_axis_length_dict)",
         "target": null
       },
       {
@@ -208,7 +208,7 @@
         "column": 21,
         "message": "Need type annotation for \"index_to_descr\"",
         "offset": 1,
-        "src": "index_to_descr = immutabledict(index_to_descr_dict)",
+        "src": "index_to_descr = constantdict(index_to_descr_dict)",
         "target": "pytato.array._normalize_einsum_in_subscript"
       },
       {
@@ -840,7 +840,7 @@
         "column": 20,
         "message": "\"Call\" gets multiple values for keyword argument \"tags\"",
         "offset": 230,
-        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "src": "call_site = Call(self, bindings=constantdict(kwargs),",
         "target": "pytato.function.FunctionDefinition.__call__"
       },
       {
@@ -848,7 +848,7 @@
         "column": 20,
         "message": "Missing positional argument \"function\" in call to \"Call\"",
         "offset": 0,
-        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "src": "call_site = Call(self, bindings=constantdict(kwargs),",
         "target": "pytato.function.FunctionDefinition.__call__"
       },
       {
@@ -856,7 +856,7 @@
         "column": 25,
         "message": "Argument 1 to \"Call\" has incompatible type \"FunctionDefinition\"; expected \"frozenset[Tag]\"",
         "offset": 0,
-        "src": "call_site = Call(self, bindings=immutabledict(kwargs),",
+        "src": "call_site = Call(self, bindings=constantdict(kwargs),",
         "target": "pytato.function.FunctionDefinition.__call__"
       },
       {
@@ -896,7 +896,7 @@
         "column": 38,
         "message": "Too few arguments for \"__getitem__\" of \"Call\"",
         "offset": 3,
-        "src": "return immutabledict({kw: call_site[kw] for kw in self.returns})",
+        "src": "return constantdict({kw: call_site[kw] for kw in self.returns})",
         "target": "pytato.function.FunctionDefinition.__call__"
       },
       {
@@ -904,7 +904,7 @@
         "column": 48,
         "message": "Invalid index type \"str\" for \"Call\"; expected type \"Call\"",
         "offset": 0,
-        "src": "return immutabledict({kw: call_site[kw] for kw in self.returns})",
+        "src": "return constantdict({kw: call_site[kw] for kw in self.returns})",
         "target": "pytato.function.FunctionDefinition.__call__"
       },
       {
@@ -1088,7 +1088,7 @@
       {
         "code": "arg-type",
         "column": 39,
-        "message": "Argument 2 to \"LoopyCall\" has incompatible type \"immutabledict[str, Array | int | integer[Any] | float | complex | inexact[Any, float | complex] | bool | numpy.bool[bool]]\"; expected \"TranslationUnit\"",
+        "message": "Argument 2 to \"LoopyCall\" has incompatible type \"constantdict[str, Array | int | integer[Any] | float | complex | inexact[Any, float | complex] | bool | numpy.bool[bool]]\"; expected \"TranslationUnit\"",
         "offset": 0,
         "src": "return LoopyCall(translation_unit, bindings_new, entrypoint,",
         "target": "pytato.loopy.call_loopy"
@@ -1834,9 +1834,9 @@
       {
         "code": "arg-type",
         "column": 20,
-        "message": "Argument 2 to \"Call\" has incompatible type \"immutabledict[Never, Never]\"; expected \"FunctionDefinition\"",
+        "message": "Argument 2 to \"Call\" has incompatible type \"constantdict[Never, Never]\"; expected \"FunctionDefinition\"",
         "offset": 1,
-        "src": "immutabledict({name: self.rec(bnd)",
+        "src": "constantdict({name: self.rec(bnd)",
         "target": "pytato.transform.CopyMapper.map_call"
       },
       {
@@ -1970,9 +1970,9 @@
       {
         "code": "arg-type",
         "column": 20,
-        "message": "Argument 2 to \"Call\" has incompatible type \"immutabledict[Never, Never]\"; expected \"FunctionDefinition\"",
+        "message": "Argument 2 to \"Call\" has incompatible type \"constantdict[Never, Never]\"; expected \"FunctionDefinition\"",
         "offset": 1,
-        "src": "immutabledict({name: self.rec(bnd, *args, **kwargs)",
+        "src": "constantdict({name: self.rec(bnd, *args, **kwargs)",
         "target": "pytato.transform.CopyMapperWithExtraArgs.map_call"
       },
       {

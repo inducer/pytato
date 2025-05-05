@@ -42,7 +42,7 @@ from typing import (
 )
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import Self
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -784,7 +784,7 @@ class CopyMapper(TransformMapper):
                      for s in situp)
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
-        bindings: Mapping[str, Array] = immutabledict({
+        bindings: Mapping[str, Array] = constantdict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
         return IndexLambda(expr=expr.expr,
@@ -892,7 +892,7 @@ class CopyMapper(TransformMapper):
                                  )
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
-        bindings: Mapping[Any, Any] = immutabledict(
+        bindings: Mapping[Any, Any] = constantdict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
@@ -945,11 +945,11 @@ class CopyMapper(TransformMapper):
         new_mapper = self.clone_for_callee(expr)
         new_returns = {name: new_mapper(ret)
                        for name, ret in expr.returns.items()}
-        return dataclasses.replace(expr, returns=immutabledict(new_returns))
+        return dataclasses.replace(expr, returns=constantdict(new_returns))
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         return Call(self.rec_function_definition(expr.function),
-                    immutabledict({name: self.rec(bnd)
+                    constantdict({name: self.rec(bnd)
                          for name, bnd in expr.bindings.items()}),
                     tags=expr.tags,
                     )
@@ -981,7 +981,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_index_lambda(self, expr: IndexLambda,
                          *args: P.args, **kwargs: P.kwargs) -> Array:
-        bindings: Mapping[str, Array] = immutabledict({
+        bindings: Mapping[str, Array] = constantdict({
                 name: self.rec(subexpr, *args, **kwargs)
                 for name, subexpr in sorted(expr.bindings.items())})
         return IndexLambda(expr=expr.expr,
@@ -1107,7 +1107,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: P.args, **kwargs: P.kwargs) -> LoopyCall:
-        bindings: Mapping[Any, Any] = immutabledict(
+        bindings: Mapping[Any, Any] = constantdict(
                     {name: (self.rec(subexpr, *args, **kwargs)
                            if isinstance(subexpr, Array)
                            else subexpr)
@@ -1169,7 +1169,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_call(self, expr: Call,
                  *args: P.args, **kwargs: P.kwargs) -> AbstractResultWithNamedArrays:
         return Call(self.rec_function_definition(expr.function, *args, **kwargs),
-                    immutabledict({name: self.rec(bnd, *args, **kwargs)
+                    constantdict({name: self.rec(bnd, *args, **kwargs)
                          for name, bnd in expr.bindings.items()}),
                     tags=expr.tags,
                     )
@@ -1890,7 +1890,7 @@ class MPMSMaterializer(Mapper[MPMSMaterializerAccumulator, Never, []]):
         new_expr = IndexLambda(expr=expr.expr,
                                shape=expr.shape,
                                dtype=expr.dtype,
-                               bindings=immutabledict({bnd_name: bnd.expr
+                               bindings=constantdict({bnd_name: bnd.expr
                                 for bnd_name, bnd in sorted(children_rec.items())}),
                                axes=expr.axes,
                                var_to_reduction_descr=expr.var_to_reduction_descr,

@@ -38,7 +38,7 @@ import dataclasses
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 from pytato.array import (
     Array,
@@ -231,7 +231,7 @@ class EinsumDistributiveLawMapper(
                 expr=expr.expr,
                 shape=expr.shape,
                 dtype=expr.dtype,
-                bindings=immutabledict({name: _verify_is_array(self.rec(bnd, None))
+                bindings=constantdict({name: _verify_is_array(self.rec(bnd, None))
                               for name, bnd in sorted(expr.bindings.items())}),
                 var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
@@ -251,10 +251,10 @@ class EinsumDistributiveLawMapper(
             else:
                 ctx = _EinsumDistributiveLawMapperContext(
                     expr.access_descriptors,
-                    immutabledict({iarg: arg
+                    constantdict({iarg: arg
                          for iarg, arg in enumerate(expr.args)
                          if iarg != distributive_law_descr.ioperand}),
-                    immutabledict(expr.redn_axis_to_redn_descr),
+                    constantdict(expr.redn_axis_to_redn_descr),
                     tags=expr.tags,
                     axes=expr.axes,
                 )
