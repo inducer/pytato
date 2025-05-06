@@ -164,15 +164,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         if new_name is None:
             new_name = self.var_name_gen("_pt_in")
         new_shape = self.rec_size_tuple(expr.shape)
-        if new_name is expr.name:
-            return self._ident_map_placeholder(expr, new_shape)
-        else:
-            return Placeholder(name=new_name,
-                    shape=new_shape,
-                    dtype=expr.dtype,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
+        return expr.replace_if_different(name=new_name, shape=new_shape)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         from pytato.target.loopy import LoopyTarget

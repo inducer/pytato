@@ -84,6 +84,7 @@ from pytato.array import (
     Placeholder,
     ShapeType,
     _dtype_any,
+    _NonDuplicatingReplaceMixin,
     array_dataclass,
 )
 
@@ -105,7 +106,7 @@ class ReturnType(enum.Enum):
 
 
 @array_dataclass()
-class FunctionDefinition(Taggable):
+class FunctionDefinition(Taggable, _NonDuplicatingReplaceMixin):
     r"""
     A function definition that represents its outputs as instances of
     :class:`~pytato.Array` with the inputs being

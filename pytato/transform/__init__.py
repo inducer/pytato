@@ -72,12 +72,8 @@ from pytato.array import (
     ShapeType,
     SizeParam,
     Stack,
+    _entries_are_identical,
     _SuppliedAxesAndTagsMixin,
-)
-from pytato.distributed.nodes import (
-    DistributedRecv,
-    DistributedSend,
-    DistributedSendRefHolder,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
@@ -86,6 +82,12 @@ from pytato.tags import ImplStored
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+
+    from pytato.distributed.nodes import (
+        DistributedRecv,
+        DistributedSend,
+        DistributedSendRefHolder,
+    )
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
@@ -568,309 +570,6 @@ def _is_mapper_created_duplicate(expr: CacheExprT, result: CacheExprT) -> bool:
                 strict=True)))
 
 
-@overload
-def _entries_are_identical(
-        a: Iterable[Any],
-        b: Iterable[Any]) -> bool:
-    ...
-
-
-@overload
-def _entries_are_identical(
-        a: Mapping[str, Any],
-        b: Mapping[str, Any]) -> bool:
-    ...
-
-
-def _entries_are_identical(
-        a: Iterable[Any] | Mapping[str, Any],
-        b: Iterable[Any] | Mapping[str, Any]) -> bool:
-    if isinstance(a, Mapping):
-        assert isinstance(b, Mapping)
-        return (
-            a.keys() == b.keys()
-            and all(
-                b_k is a_k
-                for a_k, b_k in zip(
-                    a.values(), b.values(), strict=True)))
-    else:
-        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
-
-
-class IdentityMappingHelperMixin:
-    def _ident_map_size_tuple(
-            self,
-            situp: ShapeType,
-            new_situp: ShapeType) -> ShapeType:
-        return situp if _entries_are_identical(new_situp, situp) else new_situp
-
-    def _ident_map_idx_tuple(
-            self,
-            situp: tuple[IndexExpr, ...],
-            new_situp: tuple[IndexExpr, ...]) -> tuple[IndexExpr, ...]:
-        return situp if _entries_are_identical(new_situp, situp) else new_situp
-
-    def _ident_map_index_lambda(
-            self,
-            expr: IndexLambda,
-            new_shape: ShapeType,
-            new_bindings: Mapping[str, Array],
-            ) -> IndexLambda:
-        if (
-                new_shape is expr.shape
-                and _entries_are_identical(new_bindings, expr.bindings)):
-            return expr
-        else:
-            # FIXME: Use dataclasses.replace? (Same for all other methods below)
-            return IndexLambda(expr=expr.expr,
-                    shape=new_shape,
-                    dtype=expr.dtype,
-                    bindings=new_bindings,
-                    axes=expr.axes,
-                    var_to_reduction_descr=expr.var_to_reduction_descr,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_placeholder(
-            self,
-            expr: Placeholder,
-            new_shape: ShapeType) -> Placeholder:
-        assert expr.name is not None
-        if new_shape is expr.shape:
-            return expr
-        else:
-            return Placeholder(name=expr.name,
-                    shape=new_shape,
-                    dtype=expr.dtype,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_stack(
-            self,
-            expr: Stack,
-            new_arrays: tuple[Array, ...]) -> Stack:
-        if _entries_are_identical(new_arrays, expr.arrays):
-            return expr
-        else:
-            return Stack(arrays=new_arrays, axis=expr.axis, axes=expr.axes,
-                    tags=expr.tags, non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_concatenate(
-            self,
-            expr: Concatenate,
-            new_arrays: tuple[Array, ...]) -> Concatenate:
-        if _entries_are_identical(new_arrays, expr.arrays):
-            return expr
-        else:
-            return Concatenate(arrays=new_arrays, axis=expr.axis,
-                               axes=expr.axes, tags=expr.tags,
-                               non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_roll(
-            self,
-            expr: Roll,
-            new_array: Array) -> Roll:
-        if new_array is expr.array:
-            return expr
-        else:
-            return Roll(array=new_array,
-                    shift=expr.shift,
-                    axis=expr.axis,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_axis_permutation(
-            self,
-            expr: AxisPermutation,
-            new_array: Array) -> AxisPermutation:
-        if new_array is expr.array:
-            return expr
-        else:
-            return AxisPermutation(array=new_array,
-                    axis_permutation=expr.axis_permutation,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_reshape(
-            self,
-            expr: Reshape,
-            new_array: Array,
-            new_newshape: ShapeType) -> Reshape:
-        if new_array is expr.array and new_newshape is expr.newshape:
-            return expr
-        else:
-            return Reshape(new_array,
-                           newshape=new_newshape,
-                           order=expr.order,
-                           axes=expr.axes,
-                           tags=expr.tags,
-                           non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_index_base(
-            self,
-            expr: IndexBase,
-            new_array: Array,
-            new_indices: tuple[IndexExpr, ...]) -> IndexBase:
-        if new_array is expr.array and new_indices is expr.indices:
-            return expr
-        else:
-            return type(expr)(new_array,
-                              indices=new_indices,
-                              axes=expr.axes,
-                              tags=expr.tags,
-                              non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_data_wrapper(
-            self,
-            expr: DataWrapper,
-            new_shape: ShapeType) -> DataWrapper:
-        if new_shape is expr.shape:
-            return expr
-        else:
-            return DataWrapper(
-                    data=expr.data,
-                    shape=new_shape,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_size_param(self, expr: SizeParam) -> SizeParam:
-        assert expr.name is not None
-        return expr
-
-    def _ident_map_einsum(
-            self,
-            expr: Einsum,
-            new_args: tuple[Array, ...]) -> Einsum:
-        if _entries_are_identical(new_args, expr.args):
-            return expr
-        else:
-            return Einsum(expr.access_descriptors,
-                          new_args,
-                          axes=expr.axes,
-                          redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                          tags=expr.tags,
-                          non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_named_array(
-            self,
-            expr: NamedArray,
-            new_container: AbstractResultWithNamedArrays) -> NamedArray:
-        if new_container is expr._container:
-            return expr
-        else:
-            return type(expr)(new_container,
-                              expr.name,
-                              axes=expr.axes,
-                              tags=expr.tags,
-                              non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_dict_of_named_arrays(
-            self,
-            expr: DictOfNamedArrays,
-            new_data: Mapping[str, Array]) -> DictOfNamedArrays:
-        if _entries_are_identical(new_data, expr._data):
-            return expr
-        else:
-            return DictOfNamedArrays(new_data, tags=expr.tags)
-
-    def _ident_map_loopy_call(
-            self,
-            expr: LoopyCall,
-            new_bindings: Mapping[str, Any]) -> LoopyCall:
-        if _entries_are_identical(new_bindings, expr.bindings):
-            return expr
-        else:
-            return LoopyCall(translation_unit=expr.translation_unit,
-                             bindings=new_bindings,
-                             entrypoint=expr.entrypoint,
-                             tags=expr.tags,
-                             )
-
-    def _ident_map_loopy_call_result(
-            self,
-            expr: LoopyCallResult,
-            new_container: LoopyCall) -> LoopyCallResult:
-        if new_container is expr._container:
-            return expr
-        else:
-            return LoopyCallResult(
-                    _container=new_container,
-                    name=expr.name,
-                    axes=expr.axes,
-                    tags=expr.tags,
-                    non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_distributed_send(
-            self,
-            expr: DistributedSend,
-            new_send_data: Array) -> DistributedSend:
-        if new_send_data is expr.data:
-            return expr
-        else:
-            return DistributedSend(
-                data=new_send_data,
-                dest_rank=expr.dest_rank,
-                comm_tag=expr.comm_tag)
-
-    def _ident_map_distributed_send_ref_holder(
-            self,
-            expr: DistributedSendRefHolder,
-            new_send_data: Array,
-            new_passthrough: Array) -> DistributedSendRefHolder:
-        new_send = self._ident_map_distributed_send(expr.send, new_send_data)
-        if new_send is expr.send and new_passthrough is expr.passthrough_data:
-            return expr
-        else:
-            return DistributedSendRefHolder(new_send, new_passthrough)
-
-    def _ident_map_distributed_recv(
-            self,
-            expr: DistributedRecv,
-            new_shape: ShapeType) -> DistributedRecv:
-        if new_shape is expr.shape:
-            return expr
-        else:
-            return DistributedRecv(
-                   src_rank=expr.src_rank, comm_tag=expr.comm_tag,
-                   shape=new_shape, dtype=expr.dtype, tags=expr.tags,
-                   axes=expr.axes, non_equality_tags=expr.non_equality_tags)
-
-    def _ident_map_function_definition(
-            self,
-            expr: FunctionDefinition,
-            new_returns: Mapping[str, Array]) -> FunctionDefinition:
-        if _entries_are_identical(new_returns, expr.returns):
-            return expr
-        else:
-            return dataclasses.replace(expr, returns=new_returns)
-
-    def _ident_map_call(
-            self,
-            expr: Call,
-            new_function: FunctionDefinition,
-            new_bindings: Mapping[str, Array]) -> Call:
-        if (
-                new_function is expr.function
-                and _entries_are_identical(new_bindings, expr.bindings)):
-            return expr
-        else:
-            return Call(new_function, new_bindings, tags=expr.tags)
-
-    def _ident_map_named_call_result(
-            self,
-            expr: NamedCallResult,
-            new_call: Call) -> NamedCallResult:
-        # This is OK because:
-        # 1) Call.__getitem__ is memoized
-        # 2) NamedCallResult isn't allowed to modify tags, etc. (they are
-        #    inherited from the call)
-        return new_call[expr.name]
-
-
 class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
     """
     Cache for :class:`TransformMapper` and :class:`TransformMapperWithExtraArgs`.
@@ -931,9 +630,7 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
         return result
 
 
-class TransformMapper(
-        CachedMapper[ArrayOrNames, FunctionDefinition, []],
-        IdentityMappingHelperMixin):
+class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
     other :class:`pytato.array.Array`\\ s.
 
@@ -1012,8 +709,7 @@ class TransformMapper(
 # {{{ TransformMapperWithExtraArgs
 
 class TransformMapperWithExtraArgs(
-        CachedMapper[ArrayOrNames, FunctionDefinition, P],
-        IdentityMappingHelperMixin):
+        CachedMapper[ArrayOrNames, FunctionDefinition, P]):
     """
     Similar to :class:`TransformMapper`, but each mapper method takes extra
     ``*args``, ``**kwargs`` that are propagated along a path by default.
@@ -1105,13 +801,13 @@ class CopyMapper(TransformMapper):
         new_situp = tuple(
             _verify_is_array(self.rec(s)) if isinstance(s, Array) else s
             for s in situp)
-        return self._ident_map_size_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     def rec_idx_tuple(self, situp: tuple[IndexExpr, ...]) -> tuple[IndexExpr, ...]:
         new_situp = tuple(
             _verify_is_array(self.rec(s)) if isinstance(s, Array) else s
             for s in situp)
-        return self._ident_map_idx_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         new_shape = self.rec_size_tuple(expr.shape)
@@ -1119,32 +815,33 @@ class CopyMapper(TransformMapper):
                 name: _verify_is_array(self.rec(subexpr))
                 # FIXME: Are these sorts still necessary?
                 for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_index_lambda(expr, new_shape, new_bindings)
+        return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
+        assert expr.name is not None
         new_shape = self.rec_size_tuple(expr.shape)
-        return self._ident_map_placeholder(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_stack(self, expr: Stack) -> Array:
         new_arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
-        return self._ident_map_stack(expr, new_arrays)
+        return expr.replace_if_different(arrays=new_arrays)
 
     def map_concatenate(self, expr: Concatenate) -> Array:
         new_arrays = tuple(_verify_is_array(self.rec(arr)) for arr in expr.arrays)
-        return self._ident_map_concatenate(expr, new_arrays)
+        return expr.replace_if_different(arrays=new_arrays)
 
     def map_roll(self, expr: Roll) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array))
-        return self._ident_map_roll(expr, new_ary)
+        return expr.replace_if_different(array=new_ary)
 
     def map_axis_permutation(self, expr: AxisPermutation) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array))
-        return self._ident_map_axis_permutation(expr, new_ary)
+        return expr.replace_if_different(array=new_ary)
 
     def _map_index_base(self, expr: IndexBase) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array))
         new_indices = self.rec_idx_tuple(expr.indices)
-        return self._ident_map_index_base(expr, new_ary, new_indices)
+        return expr.replace_if_different(array=new_ary, indices=new_indices)
 
     def map_basic_index(self, expr: BasicIndex) -> Array:
         return self._map_index_base(expr)
@@ -1161,54 +858,62 @@ class CopyMapper(TransformMapper):
 
     def map_data_wrapper(self, expr: DataWrapper) -> Array:
         new_shape = self.rec_size_tuple(expr.shape)
-        return self._ident_map_data_wrapper(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_size_param(self, expr: SizeParam) -> Array:
-        return self._ident_map_size_param(expr)
+        assert expr.name is not None
+        return expr
 
     def map_einsum(self, expr: Einsum) -> Array:
         new_args = tuple(_verify_is_array(self.rec(arg)) for arg in expr.args)
-        return self._ident_map_einsum(expr, new_args)
+        return expr.replace_if_different(args=new_args)
 
     def map_named_array(self, expr: NamedArray) -> Array:
         new_container = self.rec(expr._container)
         assert isinstance(new_container, AbstractResultWithNamedArrays)
-        return self._ident_map_named_array(expr, new_container)
+        return expr.replace_if_different(_container=new_container)
 
     def map_dict_of_named_arrays(self,
             expr: DictOfNamedArrays) -> DictOfNamedArrays:
         new_data = {
             key: _verify_is_array(self.rec(val.expr))
             for key, val in expr.items()}
-        return self._ident_map_dict_of_named_arrays(expr, new_data)
+        # FIXME: Doesn't work because __init__ argument is "data" but member
+        # is "_data"
+        # return expr.replace_if_different(_data=new_data)
+        if _entries_are_identical(new_data, expr._data):
+            return expr
+        else:
+            return DictOfNamedArrays(new_data, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         new_bindings: Mapping[str, ArrayOrScalar] = immutabledict(
                     {name: (_verify_is_array(self.rec(subexpr))
                             if isinstance(subexpr, Array) else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_loopy_call(expr, new_bindings)
+        return expr.replace_if_different(bindings=new_bindings)
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
         new_container = self.rec(expr._container)
         assert isinstance(new_container, LoopyCall)
-        return self._ident_map_loopy_call_result(expr, new_container)
+        return expr.replace_if_different(_container=new_container)
 
     def map_reshape(self, expr: Reshape) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array))
         new_newshape = self.rec_size_tuple(expr.newshape)
-        return self._ident_map_reshape(expr, new_ary, new_newshape)
+        return expr.replace_if_different(array=new_ary, newshape=new_newshape)
 
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> Array:
         new_send_data = _verify_is_array(self.rec(expr.send.data))
         new_passthrough = _verify_is_array(self.rec(expr.passthrough_data))
-        return self._ident_map_distributed_send_ref_holder(
-            expr, new_send_data, new_passthrough)
+        return expr.replace_if_different(
+            send=expr.send.replace_if_different(data=new_send_data),
+            passthrough_data=new_passthrough)
 
     def map_distributed_recv(self, expr: DistributedRecv) -> Array:
         new_shape = self.rec_size_tuple(expr.shape)
-        return self._ident_map_distributed_recv(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_function_definition(self,
                                 expr: FunctionDefinition) -> FunctionDefinition:
@@ -1218,19 +923,24 @@ class CopyMapper(TransformMapper):
         new_returns: Mapping[str, Array] = immutabledict({
             name: _verify_is_array(new_mapper(ret))
             for name, ret in expr.returns.items()})
-        return self._ident_map_function_definition(expr, new_returns)
+        return expr.replace_if_different(returns=new_returns)
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         new_function = self.rec_function_definition(expr.function)
         new_bindings: Mapping[str, Array] = immutabledict({
             name: _verify_is_array(self.rec(bnd))
             for name, bnd in expr.bindings.items()})
-        return self._ident_map_call(expr, new_function, new_bindings)
+        return expr.replace_if_different(
+            function=new_function, bindings=new_bindings)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         new_call = self.rec(expr._container)
         assert isinstance(new_call, Call)
-        return self._ident_map_named_call_result(expr, new_call)
+        # This is OK because:
+        # 1) Call.__getitem__ is memoized
+        # 2) NamedCallResult isn't allowed to modify tags, etc. (they are
+        #    inherited from the call)
+        return new_call[expr.name]
 
 
 class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
@@ -1249,7 +959,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
             if isinstance(s, Array)
             else s
             for s in situp)
-        return self._ident_map_size_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     def rec_idx_tuple(self, situp: tuple[IndexExpr, ...],
                       *args: P.args, **kwargs: P.kwargs
@@ -1259,7 +969,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
             if isinstance(s, Array)
             else s
             for s in situp)
-        return self._ident_map_idx_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     def map_index_lambda(self, expr: IndexLambda,
                          *args: P.args, **kwargs: P.kwargs) -> Array:
@@ -1267,40 +977,40 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: self.rec(subexpr, *args, **kwargs)
                 for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_index_lambda(expr, new_shape, new_bindings)
+        return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_placeholder(self,
                         expr: Placeholder, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert expr.name is not None
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
-        return self._ident_map_placeholder(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_stack(self, expr: Stack, *args: P.args, **kwargs: P.kwargs) -> Array:
         new_arrays: tuple[Array, ...] = tuple(
             _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
-        return self._ident_map_stack(expr, new_arrays)
+        return expr.replace_if_different(arrays=new_arrays)
 
     def map_concatenate(self,
                         expr: Concatenate, *args: P.args, **kwargs: P.kwargs) -> Array:
         new_arrays: tuple[Array, ...] = tuple(
             _verify_is_array(self.rec(arr, *args, **kwargs)) for arr in expr.arrays)
-        return self._ident_map_concatenate(expr, new_arrays)
+        return expr.replace_if_different(arrays=new_arrays)
 
     def map_roll(self, expr: Roll, *args: P.args, **kwargs: P.kwargs) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array, *args, **kwargs))
-        return self._ident_map_roll(expr, new_ary)
+        return expr.replace_if_different(array=new_ary)
 
     def map_axis_permutation(self, expr: AxisPermutation,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array, *args, **kwargs))
-        return self._ident_map_axis_permutation(expr, new_ary)
+        return expr.replace_if_different(array=new_ary)
 
     def _map_index_base(self,
                         expr: IndexBase, *args: P.args, **kwargs: P.kwargs) -> Array:
         assert isinstance(expr, _SuppliedAxesAndTagsMixin)
         new_ary = _verify_is_array(self.rec(expr.array, *args, **kwargs))
         new_indices = self.rec_idx_tuple(expr.indices, *args, **kwargs)
-        return self._ident_map_index_base(expr, new_ary, new_indices)
+        return expr.replace_if_different(array=new_ary, indices=new_indices)
 
     def map_basic_index(self,
                         expr: BasicIndex, *args: P.args, **kwargs: P.kwargs) -> Array:
@@ -1322,22 +1032,23 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_data_wrapper(self, expr: DataWrapper,
                          *args: P.args, **kwargs: P.kwargs) -> Array:
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
-        return self._ident_map_data_wrapper(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_size_param(self,
                        expr: SizeParam, *args: P.args, **kwargs: P.kwargs) -> Array:
-        return self._ident_map_size_param(expr)
+        assert expr.name is not None
+        return expr
 
     def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> Array:
         new_args: tuple[Array, ...] = tuple(
             _verify_is_array(self.rec(arg, *args, **kwargs)) for arg in expr.args)
-        return self._ident_map_einsum(expr, new_args)
+        return expr.replace_if_different(args=new_args)
 
     def map_named_array(self,
                         expr: NamedArray, *args: P.args, **kwargs: P.kwargs) -> Array:
         new_container = self.rec(expr._container, *args, **kwargs)
         assert isinstance(new_container, AbstractResultWithNamedArrays)
-        return self._ident_map_named_array(expr, new_container)
+        return expr.replace_if_different(_container=new_container)
 
     def map_dict_of_named_arrays(self,
                 expr: DictOfNamedArrays, *args: P.args, **kwargs: P.kwargs
@@ -1345,7 +1056,13 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_data = {
             key: _verify_is_array(self.rec(val.expr, *args, **kwargs))
             for key, val in expr.items()}
-        return self._ident_map_dict_of_named_arrays(expr, new_data)
+        # FIXME: Doesn't work because __init__ argument is "data" but member
+        # is "_data"
+        # return expr.replace_if_different(_data=new_data)
+        if _entries_are_identical(new_data, expr._data):
+            return expr
+        else:
+            return DictOfNamedArrays(new_data, tags=expr.tags)
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: P.args, **kwargs: P.kwargs) -> LoopyCall:
@@ -1354,32 +1071,33 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                            if isinstance(subexpr, Array)
                            else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_loopy_call(expr, new_bindings)
+        return expr.replace_if_different(bindings=new_bindings)
 
     def map_loopy_call_result(self, expr: LoopyCallResult,
                               *args: P.args, **kwargs: P.kwargs) -> Array:
         new_container = self.rec(expr._container, *args, **kwargs)
         assert isinstance(new_container, LoopyCall)
-        return self._ident_map_loopy_call_result(expr, new_container)
+        return expr.replace_if_different(_container=new_container)
 
     def map_reshape(self, expr: Reshape,
                     *args: P.args, **kwargs: P.kwargs) -> Array:
         new_ary = _verify_is_array(self.rec(expr.array, *args, **kwargs))
         new_newshape = self.rec_size_tuple(expr.newshape, *args, **kwargs)
-        return self._ident_map_reshape(expr, new_ary, new_newshape)
+        return expr.replace_if_different(array=new_ary, newshape=new_newshape)
 
     def map_distributed_send_ref_holder(self, expr: DistributedSendRefHolder,
                                         *args: P.args, **kwargs: P.kwargs) -> Array:
         new_send_data = _verify_is_array(self.rec(expr.send.data, *args, **kwargs))
         new_passthrough = _verify_is_array(
             self.rec(expr.passthrough_data, *args, **kwargs))
-        return self._ident_map_distributed_send_ref_holder(
-            expr, new_send_data, new_passthrough)
+        return expr.replace_if_different(
+            send=expr.send.replace_if_different(data=new_send_data),
+            passthrough_data=new_passthrough)
 
     def map_distributed_recv(self, expr: DistributedRecv,
                              *args: P.args, **kwargs: P.kwargs) -> Array:
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
-        return self._ident_map_distributed_recv(expr, new_shape)
+        return expr.replace_if_different(shape=new_shape)
 
     def map_function_definition(
                 self, expr: FunctionDefinition,
@@ -1395,13 +1113,18 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_bindings: Mapping[str, Array] = immutabledict({
             name: _verify_is_array(self.rec(bnd, *args, **kwargs))
             for name, bnd in expr.bindings.items()})
-        return self._ident_map_call(expr, new_function, new_bindings)
+        return expr.replace_if_different(
+            function=new_function, bindings=new_bindings)
 
     def map_named_call_result(self, expr: NamedCallResult,
                               *args: P.args, **kwargs: P.kwargs) -> Array:
         new_call = self.rec(expr._container, *args, **kwargs)
         assert isinstance(new_call, Call)
-        return self._ident_map_named_call_result(expr, new_call)
+        # This is OK because:
+        # 1) Call.__getitem__ is memoized
+        # 2) NamedCallResult isn't allowed to modify tags, etc. (they are
+        #    inherited from the call)
+        return new_call[expr.name]
 
 # }}}
 
@@ -2155,8 +1878,7 @@ def _materialize_if_mpms(expr: Array,
 
 
 class MPMSMaterializer(
-        CachedMapper[MPMSMaterializerAccumulator, Never, []],
-        IdentityMappingHelperMixin):
+        CachedMapper[MPMSMaterializerAccumulator, Never, []]):
     """
     See :func:`materialize_with_mpms` for an explanation.
 
@@ -2220,7 +1942,7 @@ class MPMSMaterializer(
             bnd_name: bnd.expr
             for bnd_name, bnd in children_rec.items()})
         return _materialize_if_mpms(
-            self._ident_map_index_lambda(expr, expr.shape, new_children),
+            expr.replace_if_different(bindings=new_children),
             self.nsuccessors[expr],
             children_rec.values())
 
@@ -2228,7 +1950,7 @@ class MPMSMaterializer(
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_arrays = tuple(ary.expr for ary in rec_arrays)
         return _materialize_if_mpms(
-            self._ident_map_stack(expr, new_arrays),
+            expr.replace_if_different(arrays=new_arrays),
             self.nsuccessors[expr],
             rec_arrays)
 
@@ -2236,14 +1958,14 @@ class MPMSMaterializer(
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_arrays = tuple(ary.expr for ary in rec_arrays)
         return _materialize_if_mpms(
-            self._ident_map_concatenate(expr, new_arrays),
+            expr.replace_if_different(arrays=new_arrays),
             self.nsuccessors[expr],
             rec_arrays)
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
-            self._ident_map_roll(expr, rec_array.expr),
+            expr.replace_if_different(array=rec_array.expr),
             self.nsuccessors[expr],
             (rec_array,))
 
@@ -2251,7 +1973,7 @@ class MPMSMaterializer(
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
-            self._ident_map_axis_permutation(expr, rec_array.expr),
+            expr.replace_if_different(array=rec_array.expr),
             self.nsuccessors[expr],
             (rec_array,))
 
@@ -2265,9 +1987,12 @@ class MPMSMaterializer(
                             else expr.indices[i]
                             for i in range(
                                 len(expr.indices)))
-        new_indices = self._ident_map_idx_tuple(expr.indices, new_indices)
+        new_indices = (
+            expr.indices
+            if _entries_are_identical(new_indices, expr.indices)
+            else new_indices)
         return _materialize_if_mpms(
-            self._ident_map_index_base(expr, rec_array.expr, new_indices),
+            expr.replace_if_different(array=rec_array.expr, indices=new_indices),
             self.nsuccessors[expr],
             (rec_array, *tuple(rec_indices.values())))
 
@@ -2278,7 +2003,7 @@ class MPMSMaterializer(
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
-            self._ident_map_reshape(expr, rec_array.expr, expr.newshape),
+            expr.replace_if_different(array=rec_array.expr),
             self.nsuccessors[expr],
             (rec_array,))
 
@@ -2286,7 +2011,7 @@ class MPMSMaterializer(
         rec_args = [self.rec(ary) for ary in expr.args]
         new_args = tuple(ary.expr for ary in rec_args)
         return _materialize_if_mpms(
-            self._ident_map_einsum(expr, new_args),
+            expr.replace_if_different(args=new_args),
             self.nsuccessors[expr],
             rec_args)
 
@@ -2305,8 +2030,9 @@ class MPMSMaterializer(
         rec_passthrough = self.rec(expr.passthrough_data)
         return MPMSMaterializerAccumulator(
             rec_passthrough.materialized_predecessors,
-            self._ident_map_distributed_send_ref_holder(
-                expr, rec_send_data.expr, rec_passthrough.expr))
+            expr.replace_if_different(
+                send=expr.send.replace_if_different(data=rec_send_data.expr),
+                passthrough_data=rec_passthrough.expr))
 
     def map_distributed_recv(self, expr: DistributedRecv
                              ) -> MPMSMaterializerAccumulator:

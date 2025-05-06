@@ -199,6 +199,7 @@ from typing import (
     Union,
     cast,
     dataclass_transform,
+    overload,
 )
 from warnings import warn
 
@@ -406,6 +407,52 @@ def _augment_array_dataclass(
 
     # }}}
 
+
+@overload
+def _entries_are_identical(
+        a: Iterable[Any],
+        b: Iterable[Any]) -> bool:
+    ...
+
+
+@overload
+def _entries_are_identical(
+        a: Mapping[str, Any],
+        b: Mapping[str, Any]) -> bool:
+    ...
+
+
+def _entries_are_identical(
+        a: Iterable[Any] | Mapping[str, Any],
+        b: Iterable[Any] | Mapping[str, Any]) -> bool:
+    if isinstance(a, Mapping):
+        assert isinstance(b, Mapping)
+        return (
+            a.keys() == b.keys()
+            and all(
+                b_k is a_k
+                for a_k, b_k in zip(
+                    a.values(), b.values(), strict=True)))
+    else:
+        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+
+
+class _NonDuplicatingReplaceMixin:
+    def replace_if_different(self, **kwargs: Any) -> Self:
+        diff_fields: Mapping[str, Any] = {}
+        for name, new_value in kwargs.items():
+            value = getattr(self, name)
+            # FIXME: Is this OK to do in general?
+            if isinstance(value, Iterable | Mapping):
+                if not _entries_are_identical(new_value, value):
+                    diff_fields[name] = new_value
+            elif new_value is not value:
+                diff_fields[name] = new_value
+        if diff_fields:
+            return dataclasses.replace(self, **diff_fields)
+        else:
+            return self
+
 # }}}
 
 
@@ -483,7 +530,7 @@ class ReductionDescriptor(Taggable):
 
 
 @array_dataclass()
-class Array(Taggable):
+class Array(Taggable, _NonDuplicatingReplaceMixin):
     r"""
     A base class (abstract interface + supplemental functionality) for lazily
     evaluating array expressions. The interface seeks to maximize :mod:`numpy`
@@ -931,7 +978,8 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
 
 
 @opt_frozen_dataclass(eq=False)
-class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
+class AbstractResultWithNamedArrays(
+        Mapping[str, NamedArray], Taggable, _NonDuplicatingReplaceMixin, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
     is determined by concrete subclasses of this class, e.g.

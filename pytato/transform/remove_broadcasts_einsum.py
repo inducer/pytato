@@ -121,20 +121,8 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]])
         assert len(new_args) == len(expr.args)
         assert len(new_access_descriptors) == len(expr.access_descriptors)
 
-        if all(
-                new_acc_descr is acc_descr
-                for acc_descr, new_acc_descr in zip(
-                    expr.access_descriptors,
-                    new_access_descriptors,
-                    strict=True)):
-            return self._ident_map_einsum(expr, tuple(new_args))
-        else:
-            return Einsum(tuple(new_access_descriptors),
-                          tuple(new_args),
-                          axes=expr.axes,
-                          redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
-                          tags=expr.tags,
-                          non_equality_tags=expr.non_equality_tags)
+        return expr.replace_if_different(
+            args=tuple(new_args), access_descriptors=tuple(new_access_descriptors))
 
 
 def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:

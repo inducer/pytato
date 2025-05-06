@@ -69,6 +69,7 @@ from pytato.array import (
     _get_created_at_tag,
     _get_default_axes,
     _get_default_tags,
+    _NonDuplicatingReplaceMixin,
     _SuppliedAxesAndTagsMixin,
     _SuppliedShapeAndDtypeMixin,
     array_dataclass,
@@ -82,7 +83,7 @@ CommTagType = Hashable
 # {{{ send
 
 @array_dataclass()
-class DistributedSend(Taggable):
+class DistributedSend(Taggable, _NonDuplicatingReplaceMixin):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
     of this type remain part of a DAG.

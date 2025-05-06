@@ -1065,9 +1065,7 @@ def test_created_at():
 
 # {{{ test_mapper_duplication_check
 
-class NonDuplicatingMapper(
-        pt.transform.TransformMapper,
-        pt.transform.IdentityMappingHelperMixin):
+class NonDuplicatingMapper(pt.transform.TransformMapper):
     def __init__(self) -> None:
         super().__init__(err_on_collision=False, err_on_created_duplicate=True)
 
@@ -1077,7 +1075,7 @@ class NonDuplicatingMapper(
         new_bindings: Mapping[str, pt.Array] = immutabledict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_index_lambda(expr, expr.shape, new_bindings)
+        return expr.replace_if_different(bindings=new_bindings)
 
     def map_placeholder(self, expr: pt.Placeholder) -> pt.Array:
         assert not any(isinstance(s, pt.Array) for s in expr.shape)

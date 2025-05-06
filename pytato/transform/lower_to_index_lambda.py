@@ -54,13 +54,13 @@ from pytato.array import (
     ShapeComponent,
     ShapeType,
     Stack,
+    _entries_are_identical,
     _get_einsum_access_descr_to_axis_len,
 )
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.scalar_expr import INT_CLASSES, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import (
-    IdentityMappingHelperMixin,
     Mapper,
     _verify_is_array,
 )
@@ -262,18 +262,18 @@ def _get_reshaped_indices(
     return sum(index_expressions, ())
 
 
-class ToIndexLambdaMixin(IdentityMappingHelperMixin):
+class ToIndexLambdaMixin:
     def rec_size_tuple(self, situp: ShapeType) -> ShapeType:
         new_situp = tuple(
             _verify_is_array(self.rec(s)) if isinstance(s, Array) else s
             for s in situp)
-        return self._ident_map_size_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     def rec_idx_tuple(self, situp: tuple[IndexExpr, ...]) -> tuple[IndexExpr, ...]:
         new_situp = tuple(
             _verify_is_array(self.rec(s)) if isinstance(s, Array) else s
             for s in situp)
-        return self._ident_map_idx_tuple(situp, new_situp)
+        return situp if _entries_are_identical(new_situp, situp) else new_situp
 
     if TYPE_CHECKING:
         def rec(
@@ -289,7 +289,7 @@ class ToIndexLambdaMixin(IdentityMappingHelperMixin):
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: _verify_is_array(self.rec(subexpr))
                 for name, subexpr in sorted(expr.bindings.items())})
-        return self._ident_map_index_lambda(expr, new_shape, new_bindings)
+        return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_stack(self, expr: Stack) -> IndexLambda:
         subscript = tuple(prim.Variable(f"_{i}")
