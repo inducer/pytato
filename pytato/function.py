@@ -68,7 +68,9 @@ from collections.abc import (
 )
 from functools import cached_property
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Self,
     TypeVar,
 )
 
@@ -84,7 +86,6 @@ from pytato.array import (
     Placeholder,
     ShapeType,
     _dtype_any,
-    _NonDuplicatingReplaceMixin,
     array_dataclass,
 )
 
@@ -106,7 +107,7 @@ class ReturnType(enum.Enum):
 
 
 @array_dataclass()
-class FunctionDefinition(Taggable, _NonDuplicatingReplaceMixin):
+class FunctionDefinition(Taggable):
     r"""
     A function definition that represents its outputs as instances of
     :class:`~pytato.Array` with the inputs being
@@ -164,6 +165,10 @@ class FunctionDefinition(Taggable, _NonDuplicatingReplaceMixin):
     if __debug__:
         def __post_init__(self) -> None:
             assert isinstance(self.returns, immutabledict)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:

@@ -55,7 +55,7 @@ THE SOFTWARE.
 
 import dataclasses
 from collections.abc import Hashable
-from typing import Any
+from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
@@ -69,7 +69,6 @@ from pytato.array import (
     _get_created_at_tag,
     _get_default_axes,
     _get_default_tags,
-    _NonDuplicatingReplaceMixin,
     _SuppliedAxesAndTagsMixin,
     _SuppliedShapeAndDtypeMixin,
     array_dataclass,
@@ -83,7 +82,7 @@ CommTagType = Hashable
 # {{{ send
 
 @array_dataclass()
-class DistributedSend(Taggable, _NonDuplicatingReplaceMixin):
+class DistributedSend(Taggable):
     """Class representing a distributed send operation.
     See :class:`DistributedSendRefHolder` for a way to ensure that nodes
     of this type remain part of a DAG.
@@ -113,6 +112,10 @@ class DistributedSend(Taggable, _NonDuplicatingReplaceMixin):
 
     def copy(self, **kwargs: Any) -> DistributedSend:
         return dataclasses.replace(self, **kwargs)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
 # }}}
 

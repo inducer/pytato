@@ -878,13 +878,7 @@ class CopyMapper(TransformMapper):
         new_data = {
             key: _verify_is_array(self.rec(val.expr))
             for key, val in expr.items()}
-        # FIXME: Doesn't work because __init__ argument is "data" but member
-        # is "_data"
-        # return expr.replace_if_different(_data=new_data)
-        if _entries_are_identical(new_data, expr._data):
-            return expr
-        else:
-            return DictOfNamedArrays(new_data, tags=expr.tags)
+        return expr.replace_if_different(data=new_data)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
         new_bindings: Mapping[str, ArrayOrScalar] = immutabledict(
@@ -1056,13 +1050,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_data = {
             key: _verify_is_array(self.rec(val.expr, *args, **kwargs))
             for key, val in expr.items()}
-        # FIXME: Doesn't work because __init__ argument is "data" but member
-        # is "_data"
-        # return expr.replace_if_different(_data=new_data)
-        if _entries_are_identical(new_data, expr._data):
-            return expr
-        else:
-            return DictOfNamedArrays(new_data, tags=expr.tags)
+        return expr.replace_if_different(data=new_data)
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: P.args, **kwargs: P.kwargs) -> LoopyCall:
