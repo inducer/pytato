@@ -729,11 +729,12 @@ class Array(Taggable):
 
     @property
     def T(self) -> Array:
-        return AxisPermutation(self,
-                               axis_permutation=tuple(range(self.ndim)[::-1]),
-                               tags=_get_default_tags(),
-                               axes=_get_default_axes(self.ndim),
-                               non_equality_tags=_get_created_at_tag())
+        return AxisPermutation(
+            array=self,
+            axis_permutation=tuple(range(self.ndim)[::-1]),
+            tags=_get_default_tags(),
+            axes=_get_default_axes(self.ndim),
+            non_equality_tags=_get_created_at_tag())
 
     def __eq__(self, other: Any) -> bool:
         if self is other:
@@ -1122,10 +1123,12 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __getitem__(self, name: str) -> NamedArray:
         if name not in self._data:
             raise KeyError(name)
-        return NamedArray(self, name,
-                          axes=self._data[name].axes,
-                          tags=self._data[name].tags,
-                          non_equality_tags=self._data[name].non_equality_tags)
+        return NamedArray(
+            _container=self,
+            name=name,
+            axes=self._data[name].axes,
+            tags=self._data[name].tags,
+            non_equality_tags=self._data[name].non_equality_tags)
 
     def __len__(self) -> int:
         return len(self._data)
@@ -1181,9 +1184,10 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
 
     .. automethod:: with_tagged_reduction
     """
-    expr: ScalarExpression
-    bindings: Mapping[str, Array]
-    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
+    expr: ScalarExpression = dataclasses.field(kw_only=True)
+    bindings: Mapping[str, Array] = dataclasses.field(kw_only=True)
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor] = \
+        dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1327,10 +1331,12 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     .. automethod:: with_tagged_reduction
     """
 
-    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
-    args: tuple[Array, ...]
+    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...] = \
+        dataclasses.field(kw_only=True)
+    args: tuple[Array, ...] = dataclasses.field(kw_only=True)
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
-                                     ReductionDescriptor]
+                                     ReductionDescriptor] = \
+        dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1490,7 +1496,9 @@ def _normalize_einsum_in_subscript(subscript: str,
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
             if "alpha" in match.groupdict():
-                normalized_indices.append(match.groupdict()["alpha"])
+                alpha = match.groupdict()["alpha"]
+                assert alpha is not None
+                normalized_indices.append(alpha)
             else:
                 assert "ellipsis" in match.groupdict()
                 raise NotImplementedError("Broadcasting in einsums not supported")
@@ -1536,8 +1544,10 @@ def _normalize_einsum_in_subscript(subscript: str,
 
         in_operand_axis_descrs.append(index_to_descr_dict[index_char])
 
-    index_to_axis_length = immutabledict(index_to_axis_length_dict)
-    index_to_descr = immutabledict(index_to_descr_dict)
+    index_to_axis_length: immutabledict[str, ShapeComponent] = \
+        immutabledict(index_to_axis_length_dict)
+    index_to_descr: immutabledict[str, EinsumAxisDescriptor] = \
+        immutabledict(index_to_descr_dict)
 
     return (tuple(in_operand_axis_descrs), index_to_descr, index_to_axis_length)
 
@@ -1600,7 +1610,8 @@ def einsum(subscripts: str, *operands: Array,
 
     # }}}
 
-    return Einsum(tuple(access_descriptors), operands,
+    return Einsum(access_descriptors=tuple(access_descriptors),
+                  args=operands,
                   tags=_get_default_tags(),
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
@@ -1660,8 +1671,8 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
 
         The axis along which the *arrays* are to be concatenated.
     """
-    arrays: tuple[Array, ...]
-    axis: int
+    arrays: tuple[Array, ...] = dataclasses.field(kw_only=True)
+    axis: int = dataclasses.field(kw_only=True)
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -1694,7 +1705,7 @@ class IndexRemappingBase(Array):
         The input :class:`~pytato.Array`
 
     """
-    array: Array
+    array: Array = dataclasses.field(kw_only=True)
 
     @property
     def dtype(self) -> np.dtype[Any]:
@@ -1717,8 +1728,8 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         Shift axis.
     """
-    shift: int
-    axis: int
+    shift: int = dataclasses.field(kw_only=True)
+    axis: int = dataclasses.field(kw_only=True)
 
     @property
     def shape(self) -> ShapeType:
@@ -1739,7 +1750,7 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         A permutation of the input axes.
     """
-    axis_permutation: tuple[int, ...]
+    axis_permutation: tuple[int, ...] = dataclasses.field(kw_only=True)
 
     @property
     def shape(self) -> ShapeType:
@@ -1771,8 +1782,8 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         Output layout order, either ``C`` or ``F``.
     """
-    newshape: ShapeType
-    order: str
+    newshape: ShapeType = dataclasses.field(kw_only=True)
+    order: str = dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1794,7 +1805,7 @@ class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
     .. attribute:: indices
     """
-    indices: tuple[IndexExpr, ...]
+    indices: tuple[IndexExpr, ...] = dataclasses.field(kw_only=True)
 
 
 @array_dataclass()
@@ -1990,8 +2001,8 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
         wrapped, a :class:`DataWrapper` instances compare equal to themselves
         (i.e. the very same instance).
     """
-    data: DataInterface
-    shape: ShapeType
+    data: DataInterface = dataclasses.field(kw_only=True)
+    shape: ShapeType = dataclasses.field(kw_only=True)
 
     @property
     def name(self) -> None:
@@ -2032,7 +2043,7 @@ class Placeholder(
 
     .. automethod:: __init__
     """
-    name: str
+    name: str = dataclasses.field(kw_only=True)
 
 # }}}
 
@@ -2167,10 +2178,13 @@ def roll(a: Array, shift: int, axis: int | None = None) -> Array:
     if shift == 0:
         return a
 
-    return Roll(a, shift, axis,
-                tags=_get_default_tags(),
-                non_equality_tags=_get_created_at_tag(),
-                axes=_get_default_axes(a.ndim))
+    return Roll(
+        array=a,
+        shift=shift,
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(a.ndim))
 
 
 def transpose(a: Array, axes: Sequence[int] | None = None) -> Array:
@@ -2190,10 +2204,12 @@ def transpose(a: Array, axes: Sequence[int] | None = None) -> Array:
     if set(axes) != set(range(a.ndim)):
         raise ValueError("repeated or out-of-bounds axes detected")
 
-    return AxisPermutation(a, tuple(axes),
-                           tags=_get_default_tags(),
-                           non_equality_tags=_get_created_at_tag(),
-                           axes=_get_default_axes(a.ndim))
+    return AxisPermutation(
+        array=a,
+        axis_permutation=tuple(axes),
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(a.ndim))
 
 
 def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -2225,10 +2241,12 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Stack(tuple(arrays), axis,
-                 tags=_get_default_tags(),
-                 non_equality_tags=_get_created_at_tag(),
-                 axes=_get_default_axes(arrays[0].ndim+1))
+    return Stack(
+        arrays=tuple(arrays),
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(arrays[0].ndim+1))
 
 
 def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -2261,10 +2279,12 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Concatenate(tuple(arrays), axis,
-                       tags=_get_default_tags(),
-                       non_equality_tags=_get_created_at_tag(),
-                       axes=_get_default_axes(arrays[0].ndim))
+    return Concatenate(
+        arrays=tuple(arrays),
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(arrays[0].ndim))
 
 
 def reshape(array: Array, newshape: int | Sequence[int],
@@ -2333,10 +2353,13 @@ def reshape(array: Array, newshape: int | Sequence[int],
         raise ValueError(f"cannot reshape array of size {array.size}"
                 f" into {newshape}")
 
-    return Reshape(array, tuple(newshape_explicit), order,
-                   tags=_get_default_tags(),
-                   non_equality_tags=_get_created_at_tag(),
-                   axes=_get_default_axes(len(newshape_explicit)))
+    return Reshape(
+        array=array,
+        newshape=tuple(newshape_explicit),
+        order=order,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(len(newshape_explicit)))
 
 
 # {{{ make_dict_of_named_arrays
@@ -2434,8 +2457,12 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),
-                       non_equality_tags=_get_created_at_tag(),)
+    return DataWrapper(
+        data=data,
+        shape=shape,
+        axes=axes,
+        tags=(tags | _get_default_tags()),
+        non_equality_tags=_get_created_at_tag(),)
 
 # }}}
 

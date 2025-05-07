@@ -611,30 +611,31 @@ def _index_into(
                for i_basic_idx in i_basic_indices):
             # non contiguous advanced indices
             return AdvancedIndexInNoncontiguousAxes(
-                ary,
-                tuple(normalized_indices),
+                array=ary,
+                indices=tuple(normalized_indices),
                 tags=tags,
                 non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
         else:
             return AdvancedIndexInContiguousAxes(
-                ary,
-                tuple(normalized_indices),
+                array=ary,
+                indices=tuple(normalized_indices),
                 tags=tags,
                 non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
     else:
         # basic indexing expression
-        return BasicIndex(ary,
-                          tuple(normalized_indices),
-                          tags=tags,
-                          non_equality_tags=non_equality_tags,
-                          axes=_get_default_axes(
-                              len([idx
-                                   for idx in normalized_indices
-                                   if isinstance(idx, NormalizedSlice)])))
+        return BasicIndex(
+            array=ary,
+            indices=tuple(normalized_indices),
+            tags=tags,
+            non_equality_tags=non_equality_tags,
+            axes=_get_default_axes(
+                len([idx
+                     for idx in normalized_indices
+                     if isinstance(idx, NormalizedSlice)])))
 
 # }}}
 
