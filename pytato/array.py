@@ -278,13 +278,12 @@ def normalize_shape(
 
         return s
 
-    import collections
     from numbers import Number
 
     if isinstance(shape, Array | Number):
         shape = shape,
 
-    assert isinstance(shape, collections.abc.Sequence)
+    assert isinstance(shape, Sequence)
     return tuple(normalize_shape_component(s) for s in shape)
 
 # }}}
