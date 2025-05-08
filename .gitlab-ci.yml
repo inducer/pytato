@@ -54,14 +54,14 @@ Ruff:
   except:
   - tags
 
-Mypy:
+BasedPyright:
   script: |
     curl -L -O https://tiker.net/ci-support-v0
     . ./ci-support-v0
     export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
     build_py_project_in_venv
-    python -m pip install basedmypy mpi4py
-    ./run-mypy.sh
+    python -m pip install basedpyright mpi4py pytest
+    basedpyright
   tags:
   - python3
   except:
