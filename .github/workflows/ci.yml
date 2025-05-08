@@ -48,8 +48,7 @@ jobs:
                 build_py_project_in_conda_env
                 run_pylint "$(basename $GITHUB_REPOSITORY)" test/test_*.py examples
 
-    mypy:
-        name: Mypy
+    basedpyright:
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v4
@@ -63,8 +62,9 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
                 build_py_project_in_conda_env
-                python -m pip install basedmypy
-                ./run-mypy.sh
+                python -m pip install pytest
+                python -m pip install basedpyright
+                basedpyright
 
     pytest:
         name: Conda Pytest
