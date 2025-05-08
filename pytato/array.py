@@ -205,7 +205,7 @@ from warnings import warn
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
@@ -536,6 +536,7 @@ class Axis(Taggable):
     """
     tags: frozenset[Tag]
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
         return dataclasses.replace(self, tags=tags)
 
@@ -548,6 +549,7 @@ class ReductionDescriptor(Taggable):
     """
     tags: frozenset[Tag]
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
         return dataclasses.replace(self, tags=tags)
 
@@ -735,6 +737,7 @@ class Array(Taggable):
                                axes=_get_default_axes(self.ndim),
                                non_equality_tags=_get_created_at_tag())
 
+    @override
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
@@ -744,6 +747,7 @@ class Array(Taggable):
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
+    @override
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
@@ -938,6 +942,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
                                                     hash=False,
                                                     default=frozenset())
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> Self:
         return dataclasses.replace(self, tags=tags)
 
@@ -967,6 +972,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     name: str
 
     # type-ignore reason: `copy` signature incompatible with super-class
+    @override
     def copy(self, *,  # type: ignore[override]
              container: AbstractResultWithNamedArrays | None = None,
              name: str | None = None,
@@ -996,17 +1002,18 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
             raise TypeError("only permitted when container is a DictOfNamedArrays")
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.expr.shape
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.expr.dtype
 
 
 @opt_frozen_dataclass(eq=False)
-class AbstractResultWithNamedArrays(
-        Mapping[str, NamedArray], Taggable, ABC):
+class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     r"""An abstract array computation that results in multiple :class:`Array`\ s,
     each named. The way in which the values of these arrays are computed
     is determined by concrete subclasses of this class, e.g.
@@ -1049,17 +1056,21 @@ class AbstractResultWithNamedArrays(
             return self
 
     @abstractmethod
+    @override
     def __contains__(self, name: object) -> bool:
         pass
 
     @abstractmethod
+    @override
     def __getitem__(self, name: str) -> NamedArray:
         pass
 
     @abstractmethod
+    @override
     def __len__(self) -> int:
         pass
 
+    @override
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
@@ -1070,6 +1081,7 @@ class AbstractResultWithNamedArrays(
         return EqualityComparer()(self, other)
 
     @abstractmethod
+    @override
     def keys(self) -> KeysView[str]:
         """Return a :class:`KeysView` of the names of the named arrays."""
         pass
@@ -1100,9 +1112,11 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
         object.__setattr__(self, "_data", data)
         object.__setattr__(self, "tags", tags)
 
+    @override
     def __hash__(self) -> int:
         return hash((frozenset(self._data.items()), self.tags))
 
+    @override
     def replace_if_different(
             self, *, data: Mapping[str, Array] | None = None, **kwargs: Any) -> Self:
         new_self = super().replace_if_different(**kwargs)
@@ -1115,6 +1129,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             new_self = type(self)(data=data, tags=new_self.tags)
         return new_self
 
+    @override
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
@@ -1127,17 +1142,21 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
                           tags=self._data[name].tags,
                           non_equality_tags=self._data[name].non_equality_tags)
 
+    @override
     def __len__(self) -> int:
         return len(self._data)
 
+    @override
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
+    @override
     def __repr__(self) -> str:
         return f"DictOfNamedArrays(tags={self.tags!r}, data={self._data!r})"
 
     # Note: items() and values() are not implemented here, they go through
     # __iter__()/__getitem__() above.
+    @override
     def keys(self) -> KeysView[str]:
         return self._data.keys()
 
@@ -1633,10 +1652,12 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
     axis: int
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
+    @override
     def shape(self) -> ShapeType:
         result = list(self.arrays[0].shape)
         result.insert(self.axis, len(self.arrays))
@@ -1664,10 +1685,12 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
     axis: int
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
+    @override
     def shape(self) -> ShapeType:
         # See https://github.com/python/typeshed/issues/7739
         common_axis_len = sum(ary.shape[self.axis]  # type: ignore[misc]
@@ -1697,6 +1720,7 @@ class IndexRemappingBase(Array):
     array: Array
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.array.dtype
 
@@ -1721,6 +1745,7 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     axis: int
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.array.shape
 
@@ -1742,6 +1767,7 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     axis_permutation: tuple[int, ...]
 
     @property
+    @override
     def shape(self) -> ShapeType:
         result = []
         base_shape = self.array.shape
@@ -1775,10 +1801,12 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     order: str
 
     if __debug__:
+        @override
         def __post_init__(self) -> None:
             super().__post_init__()
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.newshape
 
@@ -1805,6 +1833,7 @@ class BasicIndex(IndexBase):
     """
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert all(isinstance(idx, (NormalizedSlice, *INT_CLASSES))
@@ -1830,6 +1859,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
     _mapper_method: ClassVar[str] = "map_contiguous_advanced_index"
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert any(isinstance(idx, Array) for idx in self.indices)
@@ -1878,6 +1908,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
     _mapper_method: ClassVar[str] = "map_non_contiguous_advanced_index"
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         from pytato.utils import (
@@ -1997,18 +2028,21 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
     def name(self) -> None:
         return None
 
+    @override
     def _is_eq_valid(self) -> bool:
         # we override __hash__ as hashing DataInterface is impractical
         # => promise the __post_init__ that the change was intentional
         #    and valid by returning True
         return True
 
+    @override
     def __hash__(self) -> int:
         # It would be better to hash the data, but we have no way of getting to
         # it.
         return id(self)
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
@@ -2055,10 +2089,12 @@ class SizeParam(
     axes: AxesT = dataclasses.field(kw_only=True, default=())
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return ()
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
 
