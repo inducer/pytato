@@ -34,7 +34,7 @@ dependencies = [
     "bidict",
     "immutabledict",
     "loopy>=2020.2",
-    "pytools>=2024.1.21",
+    "pytools>=2025.1.5",
     "pymbolic>=2024.2",
     "typing_extensions>=4",
     "orderedsets",
@@ -142,6 +142,27 @@ module = [
 ]
 # We'll be getting rid of it, no point in fixing it.
 ignore_errors = true
+
+
+[tool.basedpyright]
+reportImplicitStringConcatenation = "none"
+reportUnnecessaryIsInstance = "none"
+reportUnusedCallResult = "none"
+reportExplicitAny = "none"
+
+# This reports even cycles that are qualified by 'if TYPE_CHECKING'. Not what
+# we care about at this moment.
+# https://github.com/microsoft/pyright/issues/746
+reportImportCycles = "none"
+
+pythonVersion = "3.10"
+pythonPlatform = "All"
+
+ignore = [
+    # We'll be getting rid of it, no point in fixing it.
+    "pytato/raising.py",
+]
+
 
 [tool.typos.default]
 extend-ignore-re = [
