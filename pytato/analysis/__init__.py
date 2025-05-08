@@ -54,7 +54,7 @@ from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapp
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    import pytools
+    import pytools.tag
 
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
     from pytato.loopy import LoopyCall
