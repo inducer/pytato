@@ -1109,7 +1109,7 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             tags = frozenset()
 
         object.__setattr__(self, "_data", data)
-        object.__setattr__(self, "tags", tags)
+        super().__init__(tags=tags)
 
     @override
     def __hash__(self) -> int:
