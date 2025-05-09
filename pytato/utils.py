@@ -25,7 +25,6 @@ THE SOFTWARE.
 from typing import (
     TYPE_CHECKING,
     Any,
-    Never,
     TypeVar,
     cast,
 )
@@ -33,6 +32,7 @@ from typing import (
 import islpy as isl
 import numpy as np
 from immutabledict import immutabledict
+from typing_extensions import Never
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Scalar

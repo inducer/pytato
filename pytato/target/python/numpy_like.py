@@ -31,7 +31,6 @@ import sys
 from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
-    Never,
     TypedDict,
     TypeVar,
     cast,
@@ -39,7 +38,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import NotRequired
+from typing_extensions import Never, NotRequired
 
 from pytools import UniqueNameGenerator
 

@@ -70,11 +70,11 @@ from functools import cached_property
 from typing import (
     TYPE_CHECKING,
     Any,
-    Self,
     TypeVar,
 )
 
 from immutabledict import immutabledict
+from typing_extensions import Self
 
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable

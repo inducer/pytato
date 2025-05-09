@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Any
+
+from typing_extensions import Never
 
 from pytools import UniqueNameGenerator
 
