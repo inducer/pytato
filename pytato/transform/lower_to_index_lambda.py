@@ -29,9 +29,10 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Never, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from immutabledict import immutabledict
+from typing_extensions import Never
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import operator
 import random
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from typing_extensions import Never
 
 from pytools.tag import Tag
 

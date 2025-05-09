@@ -55,9 +55,10 @@ THE SOFTWARE.
 
 import dataclasses
 from collections.abc import Hashable
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from typing_extensions import Self
 
 from pytools.tag import Tag, Taggable
 

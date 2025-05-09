@@ -72,13 +72,13 @@ from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
-    Never,
     TypeVar,
     cast,
 )
 
 from immutabledict import immutabledict
 from orderedsets import FrozenOrderedSet, OrderedSet
+from typing_extensions import Never
 
 from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator, memoize_method

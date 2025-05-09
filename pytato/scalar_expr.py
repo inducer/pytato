@@ -47,13 +47,12 @@ from collections.abc import Iterable, Mapping, Set
 from typing import (
     TYPE_CHECKING,
     Any,
-    Never,
     cast,
 )
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import TypeIs
+from typing_extensions import Never, TypeIs
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
