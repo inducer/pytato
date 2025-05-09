@@ -198,14 +198,13 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    dataclass_transform,
     overload,
 )
 from warnings import warn
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Self, override
+from typing_extensions import Self, dataclass_transform, override
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
@@ -693,7 +692,7 @@ class Array(Taggable):
         return dataclasses.replace(self, **kwargs)
 
     if TYPE_CHECKING:
-        def replace_if_different(self, **kwargs: Any) -> Self:
+        def replace_if_different(self, **kwargs: object) -> Self:
             return self
 
     @property

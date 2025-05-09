@@ -28,9 +28,10 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Never
+from typing import TYPE_CHECKING
 
 import islpy as isl
+from typing_extensions import Never
 
 import loopy as lp
 import loopy.symbolic as lp_symbolic

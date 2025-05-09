@@ -33,7 +33,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Generic,
-    Never,
     ParamSpec,
     TypeAlias,
     TypeVar,
@@ -43,7 +42,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Self
+from typing_extensions import Never, Self
 
 from pymbolic.mapper.optimize import optimize_mapper
 
