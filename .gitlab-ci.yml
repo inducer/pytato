@@ -34,17 +34,6 @@ Python 3 POCL Examples:
   except:
   - tags
 
-Pylint:
-  script:
-  - export PY_EXE=python3
-  - EXTRA_INSTALL="pyopencl mpi4py jax[cpu] pygments"
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
-  - . ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py examples
-  tags:
-  - python3
-  except:
-  - tags
-
 Ruff:
   script: |
     pipx install ruff
