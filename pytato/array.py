@@ -294,7 +294,10 @@ def normalize_shape(
 T = TypeVar("T")
 
 
-@dataclass_transform(eq_default=False, frozen_default=True)
+@dataclass_transform(
+                     eq_default=False,
+                     frozen_default=True,
+                     field_specifiers=(dataclasses.field,))
 def array_dataclass(*, hash: bool = True) -> Callable[[type[T]], type[T]]:
     def map_cls(cls: type[T]) -> type[T]:
         # Frozen dataclasses (empirically) have a ~20% speed penalty,
