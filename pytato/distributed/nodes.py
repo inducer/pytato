@@ -55,9 +55,10 @@ THE SOFTWARE.
 
 import dataclasses
 from collections.abc import Hashable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from typing_extensions import Self
 
 from pytools.tag import Tag, Taggable
 
@@ -112,6 +113,10 @@ class DistributedSend(Taggable):
 
     def copy(self, **kwargs: Any) -> DistributedSend:
         return dataclasses.replace(self, **kwargs)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
 # }}}
 

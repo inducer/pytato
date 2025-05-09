@@ -25,7 +25,6 @@ THE SOFTWARE.
 from typing import (
     TYPE_CHECKING,
     Any,
-    Never,
     TypeVar,
     cast,
 )
@@ -33,6 +32,7 @@ from typing import (
 import islpy as isl
 import numpy as np
 from immutabledict import immutabledict
+from typing_extensions import Never
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Scalar
@@ -340,8 +340,10 @@ def are_shape_components_equal(
     if isinstance(dim1, INT_CLASSES) and isinstance(dim2, INT_CLASSES):
         return dim1 == dim2
 
+    from pytato.transform import Deduplicator
     dim1_minus_dim2 = dim1 - dim2
     assert isinstance(dim1_minus_dim2, Array)
+    dim1_minus_dim2 = Deduplicator()(dim1_minus_dim2)
 
     from pytato.transform import InputGatherer
     inputs = InputGatherer()(dim1_minus_dim2)
@@ -415,8 +417,9 @@ def _is_non_negative(expr: ShapeComponent) -> Bool:
 
     assert isinstance(expr, Array) and expr.shape == ()
     from pytato.transform import InputGatherer
-    # type-ignore reason: passed Set[Optional[str]]; function expects Set[str]
-    space = _create_size_param_space({expr.name  # type: ignore[attr-defined]
+    # FIXME: This will run into trouble for data-dependent shape components, which
+    # may contain inputs other than Placeholders.
+    space = _create_size_param_space({cast("Placeholder", expr).name
                                       for expr in InputGatherer()(expr)})
     aff = ShapeToISLExpressionMapper(space)(expr)
 
@@ -609,30 +612,31 @@ def _index_into(
                for i_basic_idx in i_basic_indices):
             # non contiguous advanced indices
             return AdvancedIndexInNoncontiguousAxes(
-                ary,
-                tuple(normalized_indices),
+                array=ary,
+                indices=tuple(normalized_indices),
                 tags=tags,
                 non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
         else:
             return AdvancedIndexInContiguousAxes(
-                ary,
-                tuple(normalized_indices),
+                array=ary,
+                indices=tuple(normalized_indices),
                 tags=tags,
                 non_equality_tags=non_equality_tags,
                 axes=_get_default_axes(len(array_idx_shape)
                                        + len(i_basic_indices)))
     else:
         # basic indexing expression
-        return BasicIndex(ary,
-                          tuple(normalized_indices),
-                          tags=tags,
-                          non_equality_tags=non_equality_tags,
-                          axes=_get_default_axes(
-                              len([idx
-                                   for idx in normalized_indices
-                                   if isinstance(idx, NormalizedSlice)])))
+        return BasicIndex(
+            array=ary,
+            indices=tuple(normalized_indices),
+            tags=tags,
+            non_equality_tags=non_equality_tags,
+            axes=_get_default_axes(
+                len([idx
+                     for idx in normalized_indices
+                     if isinstance(idx, NormalizedSlice)])))
 
 # }}}
 

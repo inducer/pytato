@@ -28,9 +28,9 @@ THE SOFTWARE.
 import ast
 import os
 import sys
+from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
-    Never,
     TypedDict,
     TypeVar,
     cast,
@@ -38,7 +38,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import NotRequired
+from typing_extensions import Never, NotRequired
 
 from pytools import UniqueNameGenerator
 
@@ -78,7 +78,7 @@ from pytato.utils import are_shape_components_equal, get_einsum_specification
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable
 
     from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
 
@@ -546,12 +546,11 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                         extra_preambles: tuple[ast.stmt, ...],
                         colorize_show_code: bool | None = None,
                         ) -> BoundPythonProgram:
-    import collections
 
     from pytato.transform import InputGatherer
 
     if ((not isinstance(expr, DictOfNamedArrays))
-            and isinstance(expr, collections.abc.Mapping)):
+            and isinstance(expr, Mapping)):
         from pytato.array import make_dict_of_named_arrays
         expr = make_dict_of_named_arrays(dict(expr))
 

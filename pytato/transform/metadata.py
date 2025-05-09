@@ -44,13 +44,13 @@ import logging
 import re
 from typing import (
     TYPE_CHECKING,
-    Never,
     ParamSpec,
     TypeAlias,
     TypeVar,
 )
 
 from bidict import bidict
+from typing_extensions import Never
 
 import pymbolic.primitives as prim
 from pymbolic.typing import Expression

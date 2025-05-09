@@ -68,11 +68,13 @@ from collections.abc import (
 )
 from functools import cached_property
 from typing import (
+    TYPE_CHECKING,
     Any,
     TypeVar,
 )
 
 from immutabledict import immutabledict
+from typing_extensions import Self
 
 from pytools import memoize_method
 from pytools.tag import Tag, Taggable
@@ -163,6 +165,10 @@ class FunctionDefinition(Taggable):
     if __debug__:
         def __post_init__(self) -> None:
             assert isinstance(self.returns, immutabledict)
+
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: Any) -> Self:
+            return self
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
@@ -335,7 +341,8 @@ class Call(AbstractResultWithNamedArrays):
     @memoize_method
     def __getitem__(self, name: str) -> NamedCallResult:
         return NamedCallResult(
-            self, name,
+            _container=self,
+            name=name,
             axes=self.function.returns[name].axes,
             tags=self.function.returns[name].tags,
             non_equality_tags=self.function.returns[name].non_equality_tags)

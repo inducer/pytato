@@ -129,9 +129,9 @@ def _wrap_einsum_from_ctx(expr: Array,
             for iarg in range(len(ctx.access_descriptors))
         )
         return Einsum(
-            ctx.access_descriptors,
-            new_args,
-            ctx.redn_axis_to_redn_descr,
+            access_descriptors=ctx.access_descriptors,
+            args=new_args,
+            redn_axis_to_redn_descr=ctx.redn_axis_to_redn_descr,
             tags=ctx.tags,
             axes=ctx.axes
         )
@@ -263,9 +263,9 @@ class EinsumDistributiveLawMapper(
         else:
             assert isinstance(distributive_law_descr, DoNotDistribute)
             rec_expr = Einsum(
-                expr.access_descriptors,
-                tuple(_verify_is_array(self.rec(arg, None)) for arg in expr.args),
-                expr.redn_axis_to_redn_descr,
+                access_descriptors=expr.access_descriptors,
+                args=tuple(_verify_is_array(self.rec(arg, None)) for arg in expr.args),
+                redn_axis_to_redn_descr=expr.redn_axis_to_redn_descr,
                 tags=expr.tags,
                 axes=expr.axes
             )
@@ -275,53 +275,60 @@ class EinsumDistributiveLawMapper(
     def map_stack(self,
                   expr: Stack,
                   ctx: _EinsumDistributiveLawMapperContext | None) -> Array:
-        rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))
-                               for ary in expr.arrays),
-                         expr.axis,
-                         tags=expr.tags,
-                         axes=expr.axes)
+        rec_expr = Stack(
+            arrays=tuple(
+                _verify_is_array(self.rec(ary, None))
+                for ary in expr.arrays),
+            axis=expr.axis,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def map_concatenate(self,
                         expr: Concatenate,
                         ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))
-                                     for ary in expr.arrays),
-                               expr.axis,
-                               tags=expr.tags,
-                               axes=expr.axes)
+        rec_expr = Concatenate(
+            arrays=tuple(
+                _verify_is_array(self.rec(ary, None))
+                for ary in expr.arrays),
+            axis=expr.axis,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def map_roll(self,
                  expr: Roll,
                  ctx: _EinsumDistributiveLawMapperContext | None
                  ) -> Array:
-        rec_expr = Roll(_verify_is_array(self.rec(expr.array, None)),
-                        expr.shift,
-                        expr.axis,
-                        tags=expr.tags,
-                        axes=expr.axes)
+        rec_expr = Roll(
+            array=_verify_is_array(self.rec(expr.array, None)),
+            shift=expr.shift,
+            axis=expr.axis,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def map_axis_permutation(self,
                              expr: AxisPermutation,
                              ctx: _EinsumDistributiveLawMapperContext | None
                              ) -> Array:
-        rec_expr = AxisPermutation(_verify_is_array(self.rec(expr.array, None)),
-                                   expr.axis_permutation,
-                                   tags=expr.tags,
-                                   axes=expr.axes)
+        rec_expr = AxisPermutation(
+            array=_verify_is_array(self.rec(expr.array, None)),
+            axis_permutation=expr.axis_permutation,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def _map_index_base(self,
                         expr: IndexBase,
                         ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = type(expr)(_verify_is_array(self.rec(expr.array, None)),
-                              expr.indices,
-                              tags=expr.tags,
-                              axes=expr.axes)
+        rec_expr = type(expr)(
+            array=_verify_is_array(self.rec(expr.array, None)),
+            indices=expr.indices,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     map_basic_index = _map_index_base
@@ -332,11 +339,12 @@ class EinsumDistributiveLawMapper(
                     expr: Reshape,
                     ctx: _EinsumDistributiveLawMapperContext | None
                     ) -> Array:
-        rec_expr = Reshape(_verify_is_array(self.rec(expr.array, None)),
-                           expr.newshape,
-                           expr.order,
-                           tags=expr.tags,
-                           axes=expr.axes)
+        rec_expr = Reshape(
+            array=_verify_is_array(self.rec(expr.array, None)),
+            newshape=expr.newshape,
+            order=expr.order,
+            tags=expr.tags,
+            axes=expr.axes)
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
 

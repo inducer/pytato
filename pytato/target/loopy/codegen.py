@@ -28,11 +28,13 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Never
+from typing import TYPE_CHECKING
 
 import islpy as isl
+from typing_extensions import Never
 
 import loopy as lp
+import loopy.symbolic as lp_symbolic
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 
@@ -538,7 +540,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
 
         domains = []
 
-        def _get_sub_array_ref(array: Array, name: str) -> lp.symbolic.SubArrayRef:
+        def _get_sub_array_ref(array: Array, name: str) -> lp_symbolic.SubArrayRef:
             inames = tuple(
                     state.var_name_gen(f"_{name}_dim{d}")
                     for d in range(array.ndim))

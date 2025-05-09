@@ -198,13 +198,13 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    dataclass_transform,
+    overload,
 )
 from warnings import warn
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Self
+from typing_extensions import Self, dataclass_transform, override
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
@@ -277,13 +277,12 @@ def normalize_shape(
 
         return s
 
-    import collections
     from numbers import Number
 
     if isinstance(shape, Array | Number):
         shape = shape,
 
-    assert isinstance(shape, collections.abc.Sequence)
+    assert isinstance(shape, Sequence)
     return tuple(normalize_shape_component(s) for s in shape)
 
 # }}}
@@ -294,7 +293,10 @@ def normalize_shape(
 T = TypeVar("T")
 
 
-@dataclass_transform(eq_default=False, frozen_default=True)
+@dataclass_transform(
+                     eq_default=False,
+                     frozen_default=True,
+                     field_specifiers=(dataclasses.field,))
 def array_dataclass(*, hash: bool = True) -> Callable[[type[T]], type[T]]:
     def map_cls(cls: type[T]) -> type[T]:
         # Frozen dataclasses (empirically) have a ~20% speed penalty,
@@ -332,6 +334,10 @@ def _augment_array_dataclass(
 
     # {{{ hashing and hash caching
 
+    from pytools.codegen import remove_common_indentation
+
+    augment_code = ""
+
     if generate_hash:
         from dataclasses import fields
 
@@ -342,8 +348,7 @@ def _augment_array_dataclass(
 
         attr_tuple_hash = f"({attr_tuple_hash},)" if attr_tuple_hash else "()"
 
-        from pytools.codegen import remove_common_indentation
-        augment_code = remove_common_indentation(
+        augment_code += remove_common_indentation(
             f"""
             from dataclasses import fields
 
@@ -378,10 +383,47 @@ def _augment_array_dataclass(
             cls.__getstate__ = _dataclass_getstate
             cls.__setstate__ = _dataclass_setstate
             """)
-        exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-        exec(compile(augment_code,
-                     f"<dataclass augmentation code for {cls}>", "exec"),
-             exec_dict)
+
+    augment_code += "\n"
+    augment_code += remove_common_indentation(
+        """
+        from collections.abc import Iterable, Mapping
+        from dataclasses import replace
+
+        def _dataclass_sequence_or_mapping_entries_are_identical(a, b):
+            if isinstance(a, Mapping):
+                assert isinstance(b, Mapping)
+                return (
+                    a.keys() == b.keys()
+                    and all(
+                        b_k is a_k
+                        for a_k, b_k in zip(
+                            a.values(), b.values(), strict=True)))
+            else:
+                return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+
+        def _dataclass_replace_if_different(self, **kwargs):
+            diff_fields = {}
+            for name, new_value in kwargs.items():
+                value = getattr(self, name)
+                if isinstance(value, Iterable | Mapping):
+                    if not _dataclass_sequence_or_mapping_entries_are_identical(
+                            new_value, value):
+                        diff_fields[name] = new_value
+                elif new_value is not value:
+                    diff_fields[name] = new_value
+            if diff_fields:
+                return replace(self, **diff_fields)
+            else:
+                return self
+
+        cls.replace_if_different = _dataclass_replace_if_different
+        """)
+
+    exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
+    exec(compile(augment_code,
+                 f"<dataclass augmentation code for {cls}>", "exec"),
+         exec_dict)
 
     # }}}
 
@@ -405,6 +447,35 @@ def _augment_array_dataclass(
         mm_cls._mapper_method = intern(default_mapper_method_name)
 
     # }}}
+
+
+@overload
+def _entries_are_identical(
+        a: Iterable[Any],
+        b: Iterable[Any]) -> bool:
+    ...
+
+
+@overload
+def _entries_are_identical(
+        a: Mapping[str, Any],
+        b: Mapping[str, Any]) -> bool:
+    ...
+
+
+def _entries_are_identical(
+        a: Iterable[Any] | Mapping[str, Any],
+        b: Iterable[Any] | Mapping[str, Any]) -> bool:
+    if isinstance(a, Mapping):
+        assert isinstance(b, Mapping)
+        return (
+            a.keys() == b.keys()
+            and all(
+                b_k is a_k
+                for a_k, b_k in zip(
+                    a.values(), b.values(), strict=True)))
+    else:
+        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
 
 # }}}
 
@@ -466,9 +537,9 @@ class Axis(Taggable):
     """
     tags: frozenset[Tag]
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> Axis:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -479,9 +550,9 @@ class ReductionDescriptor(Taggable):
     """
     tags: frozenset[Tag]
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
-        from dataclasses import replace
-        return replace(self, tags=tags)
+        return dataclasses.replace(self, tags=tags)
 
 
 @array_dataclass()
@@ -620,6 +691,10 @@ class Array(Taggable):
     def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
         return dataclasses.replace(self, **kwargs)
 
+    if TYPE_CHECKING:
+        def replace_if_different(self, **kwargs: object) -> Self:
+            return self
+
     @property
     def size(self) -> ShapeComponent:
         from pytools import product
@@ -657,12 +732,14 @@ class Array(Taggable):
 
     @property
     def T(self) -> Array:
-        return AxisPermutation(self,
-                               axis_permutation=tuple(range(self.ndim)[::-1]),
-                               tags=_get_default_tags(),
-                               axes=_get_default_axes(self.ndim),
-                               non_equality_tags=_get_created_at_tag())
+        return AxisPermutation(
+            array=self,
+            axis_permutation=tuple(range(self.ndim)[::-1]),
+            tags=_get_default_tags(),
+            axes=_get_default_axes(self.ndim),
+            non_equality_tags=_get_created_at_tag())
 
+    @override
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
@@ -672,6 +749,7 @@ class Array(Taggable):
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
+    @override
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
@@ -833,10 +911,12 @@ class Array(Taggable):
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
-        new_axes = (*self.axes[:iaxis],
-                    self.axes[iaxis].tagged(tags),
-                    *self.axes[iaxis+1:])
-        return self.copy(axes=new_axes)
+        new_axis = self.axes[iaxis].tagged(tags)
+        if new_axis is not self.axes[iaxis]:
+            return self.copy(
+                axes=(*self.axes[:iaxis], new_axis, *self.axes[iaxis+1:]))
+        else:
+            return self
 
     @memoize_method
     def __repr__(self) -> str:
@@ -864,6 +944,7 @@ class _SuppliedAxesAndTagsMixin(Taggable):
                                                     hash=False,
                                                     default=frozenset())
 
+    @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> Self:
         return dataclasses.replace(self, tags=tags)
 
@@ -893,6 +974,7 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
     name: str
 
     # type-ignore reason: `copy` signature incompatible with super-class
+    @override
     def copy(self, *,  # type: ignore[override]
              container: AbstractResultWithNamedArrays | None = None,
              name: str | None = None,
@@ -922,10 +1004,12 @@ class NamedArray(_SuppliedAxesAndTagsMixin, Array):
             raise TypeError("only permitted when container is a DictOfNamedArrays")
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.expr.shape
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.expr.dtype
 
@@ -959,18 +1043,36 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
 
+    def replace_if_different(self, **kwargs: Any) -> Self:
+        diff_fields: Mapping[str, Any] = {}
+        for name, new_value in kwargs.items():
+            value = getattr(self, name)
+            if isinstance(value, Iterable | Mapping):
+                if not _entries_are_identical(new_value, value):
+                    diff_fields[name] = new_value
+            elif new_value is not value:
+                diff_fields[name] = new_value
+        if diff_fields:
+            return dataclasses.replace(self, **diff_fields)
+        else:
+            return self
+
     @abstractmethod
+    @override
     def __contains__(self, name: object) -> bool:
         pass
 
     @abstractmethod
+    @override
     def __getitem__(self, name: str) -> NamedArray:
         pass
 
     @abstractmethod
+    @override
     def __len__(self) -> int:
         pass
 
+    @override
     def __eq__(self, other: Any) -> bool:
         if self is other:
             return True
@@ -981,6 +1083,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         return EqualityComparer()(self, other)
 
     @abstractmethod
+    @override
     def keys(self) -> KeysView[str]:
         """Return a :class:`KeysView` of the names of the named arrays."""
         pass
@@ -1009,11 +1112,26 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
             tags = frozenset()
 
         object.__setattr__(self, "_data", data)
-        object.__setattr__(self, "tags", tags)
+        super().__init__(tags=tags)
 
+    @override
     def __hash__(self) -> int:
         return hash((frozenset(self._data.items()), self.tags))
 
+    @override
+    def replace_if_different(
+            self, *, data: Mapping[str, Array] | None = None, **kwargs: Any) -> Self:
+        new_self = super().replace_if_different(**kwargs)
+        if data is not None and not _entries_are_identical(data, new_self._data):
+            # FIXME: Would be better to use dataclasses.replace here, but currently
+            # gives an error:
+            #     TypeError: DictOfNamedArrays.__init__() got an unexpected keyword
+            #         argument '_data'
+            # new_self = dataclasses.replace(data=data)
+            new_self = type(self)(data=data, tags=new_self.tags)
+        return new_self
+
+    @override
     def __contains__(self, name: object) -> bool:
         return name in self._data
 
@@ -1021,22 +1139,28 @@ class DictOfNamedArrays(AbstractResultWithNamedArrays):
     def __getitem__(self, name: str) -> NamedArray:
         if name not in self._data:
             raise KeyError(name)
-        return NamedArray(self, name,
-                          axes=self._data[name].axes,
-                          tags=self._data[name].tags,
-                          non_equality_tags=self._data[name].non_equality_tags)
+        return NamedArray(
+            _container=self,
+            name=name,
+            axes=self._data[name].axes,
+            tags=self._data[name].tags,
+            non_equality_tags=self._data[name].non_equality_tags)
 
+    @override
     def __len__(self) -> int:
         return len(self._data)
 
+    @override
     def __iter__(self) -> Iterator[str]:
         return iter(self._data)
 
+    @override
     def __repr__(self) -> str:
         return f"DictOfNamedArrays(tags={self.tags!r}, data={self._data!r})"
 
     # Note: items() and values() are not implemented here, they go through
     # __iter__()/__getitem__() above.
+    @override
     def keys(self) -> KeysView[str]:
         return self._data.keys()
 
@@ -1080,9 +1204,10 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
 
     .. automethod:: with_tagged_reduction
     """
-    expr: ScalarExpression
-    bindings: Mapping[str, Array]
-    var_to_reduction_descr: Mapping[str, ReductionDescriptor]
+    expr: ScalarExpression = dataclasses.field(kw_only=True)
+    bindings: Mapping[str, Array] = dataclasses.field(kw_only=True)
+    var_to_reduction_descr: Mapping[str, ReductionDescriptor] = \
+        dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1114,20 +1239,22 @@ class IndexLambda(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, Array)
                 f" '{self.var_to_reduction_descr.keys()}',"
                 f" got '{reduction_variable}'.")
 
-        assert isinstance(self.var_to_reduction_descr, immutabledict)
-        new_var_to_redn_descr = dict(self.var_to_reduction_descr)
-        new_var_to_redn_descr[reduction_variable] = \
-            self.var_to_reduction_descr[reduction_variable].tagged(tags)
-
-        return type(self)(expr=self.expr,
-                          shape=self.shape,
-                          dtype=self.dtype,
-                          bindings=self.bindings,
-                          axes=self.axes,
-                          var_to_reduction_descr=immutabledict
-                            (new_var_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags)
+        new_redn_descr = self.var_to_reduction_descr[reduction_variable].tagged(tags)
+        if new_redn_descr is not self.var_to_reduction_descr[reduction_variable]:
+            assert isinstance(self.var_to_reduction_descr, immutabledict)
+            new_var_to_redn_descr = dict(self.var_to_reduction_descr)
+            new_var_to_redn_descr[reduction_variable] = new_redn_descr
+            return type(self)(expr=self.expr,
+                              shape=self.shape,
+                              dtype=self.dtype,
+                              bindings=self.bindings,
+                              axes=self.axes,
+                              var_to_reduction_descr=immutabledict
+                                (new_var_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags)
+        else:
+            return self
 
 # }}}
 
@@ -1160,6 +1287,34 @@ class EinsumReductionAxis(EinsumAxisDescriptor):
     correspond to indexing the array's axis as ``_r0`` in the expression.
     """
     dim: int
+
+
+def _get_einsum_access_descr_to_axis_len(
+        access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...],
+        args: tuple[Array, ...],
+        ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
+    from pytato.utils import are_shape_components_equal
+    descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
+
+    for access_descrs, arg in zip(access_descriptors,
+                                  args, strict=True):
+        assert arg.ndim == len(access_descrs)
+        for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
+            if descr in descr_to_axis_len:
+                seen_axis_len = descr_to_axis_len[descr]
+
+                if not are_shape_components_equal(seen_axis_len,
+                                                  arg_axis_len):
+                    if are_shape_components_equal(arg_axis_len, 1):
+                        # this axis would be broadcasted
+                        pass
+                    else:
+                        assert are_shape_components_equal(seen_axis_len, 1)
+                        descr_to_axis_len[descr] = arg_axis_len
+            else:
+                descr_to_axis_len[descr] = arg_axis_len
+
+    return immutabledict(descr_to_axis_len)
 
 
 @array_dataclass()
@@ -1196,10 +1351,12 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     .. automethod:: with_tagged_reduction
     """
 
-    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...]
-    args: tuple[Array, ...]
+    access_descriptors: tuple[tuple[EinsumAxisDescriptor, ...], ...] = \
+        dataclasses.field(kw_only=True)
+    args: tuple[Array, ...] = dataclasses.field(kw_only=True)
     redn_axis_to_redn_descr: Mapping[EinsumReductionAxis,
-                                     ReductionDescriptor]
+                                     ReductionDescriptor] = \
+        dataclasses.field(kw_only=True)
 
     if __debug__:
         def __post_init__(self) -> None:
@@ -1209,28 +1366,8 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
     @memoize_method
     def _access_descr_to_axis_len(self
                                   ) -> Mapping[EinsumAxisDescriptor, ShapeComponent]:
-        from pytato.utils import are_shape_components_equal
-        descr_to_axis_len: dict[EinsumAxisDescriptor, ShapeComponent] = {}
-
-        for access_descrs, arg in zip(self.access_descriptors,
-                                      self.args, strict=True):
-            assert arg.ndim == len(access_descrs)
-            for arg_axis_len, descr in zip(arg.shape, access_descrs, strict=True):
-                if descr in descr_to_axis_len:
-                    seen_axis_len = descr_to_axis_len[descr]
-
-                    if not are_shape_components_equal(seen_axis_len,
-                                                      arg_axis_len):
-                        if are_shape_components_equal(arg_axis_len, 1):
-                            # this axis would be broadcasted
-                            pass
-                        else:
-                            assert are_shape_components_equal(seen_axis_len, 1)
-                            descr_to_axis_len[descr] = arg_axis_len
-                else:
-                    descr_to_axis_len[descr] = arg_axis_len
-
-        return immutabledict(descr_to_axis_len)
+        return _get_einsum_access_descr_to_axis_len(
+            self.access_descriptors, self.args)
 
     @cached_property
     def shape(self) -> ShapeType:
@@ -1278,19 +1415,21 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
         # }}}
 
-        assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
-        new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
-        new_redn_axis_to_redn_descr[redn_axis] = \
-            self.redn_axis_to_redn_descr[redn_axis].tagged(tags)
-
-        return type(self)(access_descriptors=self.access_descriptors,
-                          args=self.args,
-                          axes=self.axes,
-                          redn_axis_to_redn_descr=immutabledict
-                            (new_redn_axis_to_redn_descr),
-                          tags=self.tags,
-                          non_equality_tags=self.non_equality_tags,
-                          )
+        new_redn_descr = self.redn_axis_to_redn_descr[redn_axis].tagged(tags)
+        if new_redn_descr is not self.redn_axis_to_redn_descr[redn_axis]:
+            assert isinstance(self.redn_axis_to_redn_descr, immutabledict)
+            new_redn_axis_to_redn_descr = dict(self.redn_axis_to_redn_descr)
+            new_redn_axis_to_redn_descr[redn_axis] = new_redn_descr
+            return type(self)(access_descriptors=self.access_descriptors,
+                              args=self.args,
+                              axes=self.axes,
+                              redn_axis_to_redn_descr=immutabledict
+                                (new_redn_axis_to_redn_descr),
+                              tags=self.tags,
+                              non_equality_tags=self.non_equality_tags,
+                              )
+        else:
+            return self
 
 
 EINSUM_FIRST_INDEX = re.compile(r"^\s*((?P<alpha>[a-zA-Z])|(?P<ellipsis>\.\.\.))\s*")
@@ -1377,7 +1516,9 @@ def _normalize_einsum_in_subscript(subscript: str,
         match = EINSUM_FIRST_INDEX.match(acc)
         if match:
             if "alpha" in match.groupdict():
-                normalized_indices.append(match.groupdict()["alpha"])
+                alpha = match.groupdict()["alpha"]
+                assert alpha is not None
+                normalized_indices.append(alpha)
             else:
                 assert "ellipsis" in match.groupdict()
                 raise NotImplementedError("Broadcasting in einsums not supported")
@@ -1423,8 +1564,10 @@ def _normalize_einsum_in_subscript(subscript: str,
 
         in_operand_axis_descrs.append(index_to_descr_dict[index_char])
 
-    index_to_axis_length = immutabledict(index_to_axis_length_dict)
-    index_to_descr = immutabledict(index_to_descr_dict)
+    index_to_axis_length: immutabledict[str, ShapeComponent] = \
+        immutabledict(index_to_axis_length_dict)
+    index_to_descr: immutabledict[str, EinsumAxisDescriptor] = \
+        immutabledict(index_to_descr_dict)
 
     return (tuple(in_operand_axis_descrs), index_to_descr, index_to_axis_length)
 
@@ -1487,7 +1630,8 @@ def einsum(subscripts: str, *operands: Array,
 
     # }}}
 
-    return Einsum(tuple(access_descriptors), operands,
+    return Einsum(access_descriptors=tuple(access_descriptors),
+                  args=operands,
                   tags=_get_default_tags(),
                   axes=_get_default_axes(len({descr
                                               for descr in index_to_descr.values()
@@ -1520,10 +1664,12 @@ class Stack(_SuppliedAxesAndTagsMixin, Array):
     axis: int
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
+    @override
     def shape(self) -> ShapeType:
         result = list(self.arrays[0].shape)
         result.insert(self.axis, len(self.arrays))
@@ -1547,14 +1693,16 @@ class Concatenate(_SuppliedAxesAndTagsMixin, Array):
 
         The axis along which the *arrays* are to be concatenated.
     """
-    arrays: tuple[Array, ...]
-    axis: int
+    arrays: tuple[Array, ...] = dataclasses.field(kw_only=True)
+    axis: int = dataclasses.field(kw_only=True)
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return _np_result_dtype(*(arr.dtype for arr in self.arrays))
 
     @property
+    @override
     def shape(self) -> ShapeType:
         # See https://github.com/python/typeshed/issues/7739
         common_axis_len = sum(ary.shape[self.axis]  # type: ignore[misc]
@@ -1581,9 +1729,10 @@ class IndexRemappingBase(Array):
         The input :class:`~pytato.Array`
 
     """
-    array: Array
+    array: Array = dataclasses.field(kw_only=True)
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.array.dtype
 
@@ -1604,10 +1753,11 @@ class Roll(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         Shift axis.
     """
-    shift: int
-    axis: int
+    shift: int = dataclasses.field(kw_only=True)
+    axis: int = dataclasses.field(kw_only=True)
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.array.shape
 
@@ -1626,9 +1776,10 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         A permutation of the input axes.
     """
-    axis_permutation: tuple[int, ...]
+    axis_permutation: tuple[int, ...] = dataclasses.field(kw_only=True)
 
     @property
+    @override
     def shape(self) -> ShapeType:
         result = []
         base_shape = self.array.shape
@@ -1658,14 +1809,16 @@ class Reshape(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
         Output layout order, either ``C`` or ``F``.
     """
-    newshape: ShapeType
-    order: str
+    newshape: ShapeType = dataclasses.field(kw_only=True)
+    order: str = dataclasses.field(kw_only=True)
 
     if __debug__:
+        @override
         def __post_init__(self) -> None:
             super().__post_init__()
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return self.newshape
 
@@ -1681,7 +1834,7 @@ class IndexBase(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
 
     .. attribute:: indices
     """
-    indices: tuple[IndexExpr, ...]
+    indices: tuple[IndexExpr, ...] = dataclasses.field(kw_only=True)
 
 
 @array_dataclass()
@@ -1692,6 +1845,7 @@ class BasicIndex(IndexBase):
     """
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert all(isinstance(idx, (NormalizedSlice, *INT_CLASSES))
@@ -1717,6 +1871,7 @@ class AdvancedIndexInContiguousAxes(IndexBase):
     _mapper_method: ClassVar[str] = "map_contiguous_advanced_index"
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         assert any(isinstance(idx, Array) for idx in self.indices)
@@ -1765,6 +1920,7 @@ class AdvancedIndexInNoncontiguousAxes(IndexBase):
     _mapper_method: ClassVar[str] = "map_non_contiguous_advanced_index"
 
     @property
+    @override
     def shape(self) -> ShapeType:
         assert len(self.indices) == self.array.ndim
         from pytato.utils import (
@@ -1877,25 +2033,28 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
         wrapped, a :class:`DataWrapper` instances compare equal to themselves
         (i.e. the very same instance).
     """
-    data: DataInterface
-    shape: ShapeType
+    data: DataInterface = dataclasses.field(kw_only=True)
+    shape: ShapeType = dataclasses.field(kw_only=True)
 
     @property
     def name(self) -> None:
         return None
 
+    @override
     def _is_eq_valid(self) -> bool:
         # we override __hash__ as hashing DataInterface is impractical
         # => promise the __post_init__ that the change was intentional
         #    and valid by returning True
         return True
 
+    @override
     def __hash__(self) -> int:
         # It would be better to hash the data, but we have no way of getting to
         # it.
         return id(self)
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return self.data.dtype
 
@@ -1919,7 +2078,7 @@ class Placeholder(
 
     .. automethod:: __init__
     """
-    name: str
+    name: str = dataclasses.field(kw_only=True)
 
 # }}}
 
@@ -1942,10 +2101,12 @@ class SizeParam(
     axes: AxesT = dataclasses.field(kw_only=True, default=())
 
     @property
+    @override
     def shape(self) -> ShapeType:
         return ()
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         return np.dtype(np.intp)
 
@@ -2054,10 +2215,13 @@ def roll(a: Array, shift: int, axis: int | None = None) -> Array:
     if shift == 0:
         return a
 
-    return Roll(a, shift, axis,
-                tags=_get_default_tags(),
-                non_equality_tags=_get_created_at_tag(),
-                axes=_get_default_axes(a.ndim))
+    return Roll(
+        array=a,
+        shift=shift,
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(a.ndim))
 
 
 def transpose(a: Array, axes: Sequence[int] | None = None) -> Array:
@@ -2077,10 +2241,12 @@ def transpose(a: Array, axes: Sequence[int] | None = None) -> Array:
     if set(axes) != set(range(a.ndim)):
         raise ValueError("repeated or out-of-bounds axes detected")
 
-    return AxisPermutation(a, tuple(axes),
-                           tags=_get_default_tags(),
-                           non_equality_tags=_get_created_at_tag(),
-                           axes=_get_default_axes(a.ndim))
+    return AxisPermutation(
+        array=a,
+        axis_permutation=tuple(axes),
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(a.ndim))
 
 
 def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -2112,10 +2278,12 @@ def stack(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Stack(tuple(arrays), axis,
-                 tags=_get_default_tags(),
-                 non_equality_tags=_get_created_at_tag(),
-                 axes=_get_default_axes(arrays[0].ndim+1))
+    return Stack(
+        arrays=tuple(arrays),
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(arrays[0].ndim+1))
 
 
 def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
@@ -2148,10 +2316,12 @@ def concatenate(arrays: Sequence[Array], axis: int = 0) -> Array:
     if not (0 <= axis <= arrays[0].ndim):
         raise ValueError("invalid axis")
 
-    return Concatenate(tuple(arrays), axis,
-                       tags=_get_default_tags(),
-                       non_equality_tags=_get_created_at_tag(),
-                       axes=_get_default_axes(arrays[0].ndim))
+    return Concatenate(
+        arrays=tuple(arrays),
+        axis=axis,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(arrays[0].ndim))
 
 
 def reshape(array: Array, newshape: int | Sequence[int],
@@ -2220,10 +2390,13 @@ def reshape(array: Array, newshape: int | Sequence[int],
         raise ValueError(f"cannot reshape array of size {array.size}"
                 f" into {newshape}")
 
-    return Reshape(array, tuple(newshape_explicit), order,
-                   tags=_get_default_tags(),
-                   non_equality_tags=_get_created_at_tag(),
-                   axes=_get_default_axes(len(newshape_explicit)))
+    return Reshape(
+        array=array,
+        newshape=tuple(newshape_explicit),
+        order=order,
+        tags=_get_default_tags(),
+        non_equality_tags=_get_created_at_tag(),
+        axes=_get_default_axes(len(newshape_explicit)))
 
 
 # {{{ make_dict_of_named_arrays
@@ -2321,8 +2494,12 @@ def make_data_wrapper(data: DataInterface,
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
 
-    return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),
-                       non_equality_tags=_get_created_at_tag(),)
+    return DataWrapper(
+        data=data,
+        shape=shape,
+        axes=axes,
+        tags=(tags | _get_default_tags()),
+        non_equality_tags=_get_created_at_tag(),)
 
 # }}}
 

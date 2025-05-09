@@ -34,17 +34,6 @@ Python 3 POCL Examples:
   except:
   - tags
 
-Pylint:
-  script:
-  - export PY_EXE=python3
-  - EXTRA_INSTALL="pyopencl mpi4py jax[cpu] pygments"
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-pylint.sh
-  - . ./prepare-and-run-pylint.sh ${CI_PROJECT_NAME} test/test_*.py examples
-  tags:
-  - python3
-  except:
-  - tags
-
 Ruff:
   script: |
     pipx install ruff
@@ -54,14 +43,14 @@ Ruff:
   except:
   - tags
 
-Mypy:
+BasedPyright:
   script: |
     curl -L -O https://tiker.net/ci-support-v0
     . ./ci-support-v0
     export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
     build_py_project_in_venv
-    python -m pip install basedmypy mpi4py
-    ./run-mypy.sh
+    python -m pip install basedpyright mpi4py pytest
+    basedpyright
   tags:
   - python3
   except:

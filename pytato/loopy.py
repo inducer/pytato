@@ -36,6 +36,7 @@ from typing import (
 import islpy as isl
 import numpy as np
 from immutabledict import immutabledict
+from typing_extensions import override
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -126,10 +127,12 @@ class LoopyCall(AbstractResultWithNamedArrays):
     def _entry_kernel(self) -> lp.LoopKernel:
         return self.translation_unit[self.entrypoint]
 
+    @override
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
                      self.entrypoint, self.tags))
 
+    @override
     def __contains__(self, name: object) -> bool:
         return name in self._result_names
 
@@ -149,13 +152,16 @@ class LoopyCall(AbstractResultWithNamedArrays):
                                                           .shape)),
                                tags=frozenset())
 
+    @override
     def __len__(self) -> int:
         return len(self._result_names)
 
+    @override
     def __iter__(self) -> Iterator[str]:
         return iter(self._result_names)
 
     # type-ignore-reason: AbstractResultWithNamedArrays returns a KeysView here
+    @override
     def keys(self) -> frozenset[str]:  # type: ignore[override]
         return self._result_names
 
@@ -169,10 +175,12 @@ class LoopyCallResult(NamedArray):
     _container: LoopyCall
 
     @property
+    @override
     def expr(self) -> Array:
         raise ValueError("Expressions for results of loopy functions aren't defined")
 
     @property
+    @override
     def shape(self) -> ShapeType:
         # pylint: disable=E1101
         # reason: (pylint doesn't respect the asserts)
@@ -183,6 +191,7 @@ class LoopyCallResult(NamedArray):
         return shape
 
     @property
+    @override
     def dtype(self) -> np.dtype[Any]:
         # pylint: disable=E1101
         # reason: (pylint doesn't respect the asserts)
