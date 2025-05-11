@@ -155,6 +155,12 @@ reportExplicitAny = "none"
 # https://github.com/microsoft/pyright/issues/746
 reportImportCycles = "none"
 
+# Some errors get flagged in CI, but not locally. This makes it awkward to
+# include those in the baseline, so they get ignored with 'pyright: ignore'.
+# Local runs now flag this as unnecessary. Downgrading to hint to avoid
+# circular complaints.
+reportUnnecessaryTypeIgnoreComment = "hint"
+
 pythonVersion = "3.10"
 pythonPlatform = "All"
 

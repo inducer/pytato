@@ -268,7 +268,9 @@ def substitute(expression: Expression,
     if variable_assignments is None:
         variable_assignments = {}
 
-    from pymbolic.mapper.substitutor import make_subst_func
+    from pymbolic.mapper.substitutor import (
+        make_subst_func,  # pyright: ignore[reportUnknownVariableType]
+    )
     return SubstitutionMapper(make_subst_func(variable_assignments))(expression)
 
 
