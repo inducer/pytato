@@ -132,7 +132,9 @@ def loopy_substitute(
             variable_assignments: Mapping[str, Expression]
         ) -> Expression:
     from loopy.symbolic import SubstitutionMapper
-    from pymbolic.mapper.substitutor import make_subst_func
+    from pymbolic.mapper.substitutor import (
+        make_subst_func,  # pyright: ignore[reportUnknownVariableType]
+    )
 
     # {{{ early exit for identity substitution
 

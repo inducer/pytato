@@ -426,7 +426,9 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     from loopy.kernel.array import ArrayBase
     from loopy.symbolic import get_dependencies as lpy_get_deps
-    from pymbolic.mapper.substitutor import make_subst_func
+    from pymbolic.mapper.substitutor import (
+        make_subst_func,  # pyright: ignore[reportUnknownVariableType]
+    )
     from pymbolic.primitives import is_expression
 
     from pytato.transform import SizeParamGatherer
