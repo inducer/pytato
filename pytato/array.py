@@ -1593,7 +1593,7 @@ def einsum(subscripts: str, *operands: Array,
 
     index_to_descr = _normalize_einsum_out_subscript(out_spec)
     index_to_axis_length: Mapping[str, ShapeComponent] = immutabledict()
-    access_descriptors = []
+    access_descriptors: list[tuple[EinsumAxisDescriptor, ...]] = []
 
     for in_spec, in_operand in zip(in_specs, operands, strict=True):
         access_descriptor, index_to_descr, index_to_axis_length = (
@@ -2341,7 +2341,7 @@ def reshape(array: Array, newshape: int | Sequence[int],
     if order.upper() not in ["F", "C"]:
         raise ValueError("order must be one of F or C")
 
-    newshape_explicit = []
+    newshape_explicit: list[ShapeComponent] = []
 
     for new_axislen in newshape:
         if not isinstance(new_axislen, INT_CLASSES):
