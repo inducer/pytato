@@ -12560,7 +12560,7 @@
                 }
             },
             {
-                "code": "reportAny",
+                "code": "reportUnknownVariableType",
                 "range": {
                     "startColumn": 40,
                     "endColumn": 51,
@@ -12584,7 +12584,7 @@
                 }
             },
             {
-                "code": "reportAny",
+                "code": "reportUnknownArgumentType",
                 "range": {
                     "startColumn": 34,
                     "endColumn": 47,
