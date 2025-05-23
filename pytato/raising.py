@@ -88,6 +88,12 @@ class BinaryOp(HighLevelOp):
 
 
 @dataclass(frozen=True, eq=True, repr=True)
+class ZerosLikeOp(HighLevelOp):
+    function: str
+    x: ArrayOrScalar
+
+
+@dataclass(frozen=True, eq=True, repr=True)
 class C99CallOp(HighLevelOp):
     function: str
     args: tuple[ArrayOrScalar, ...]
@@ -316,6 +322,17 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
                              _as_array_or_scalar(inner_expr.parameters,
                                                  expr.bindings,
                                                  expr.shape))
+        except UnknownIndexLambdaExpr:
+            pass
+
+    if (isinstance(inner_expr, p.Call)
+        and inner_expr.function.name == ("pytato.zero")):
+        try:
+            return ZerosLikeOp(
+                _as_array_or_scalar(
+                    inner_expr.parameters, expr.bindings, expr.shape
+                )
+            )
         except UnknownIndexLambdaExpr:
             pass
 

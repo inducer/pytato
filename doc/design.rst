@@ -94,6 +94,26 @@ Computation and Results
         <https://llvm.org/doxygen/classllvm_1_1User.html>`__, we often refer to
         the direct successors of a node by *users*.
 
+-   :func:`~pytato.zeros_like` (and similar) face some interesting conundrums
+    in the context of metadata propagation (a la :func:`~pytato.unify_axes_tags`).
+    A simple implementation would sever the connection between the original
+    array and the new one. Unfortunately, if new metadata is added to the
+    original array's axes during code generation, the new array will never
+    find out. ``0 * orig_ary`` is an apparently-simple way around this,
+    but with severe downsides: First, if NaNs occur in ``orig_ary``,
+    they will propagate to the new array. Second, and in part
+    as a consequence of the first, an actual dependency on the first
+    array is created, preventing it from being eliminated even if
+    otherwise unused.
+
+    The current design uses a slight tweak of the latter approach,
+    using a scalar function ``zero(...)`` that is guaranteed
+    to return zero irrespective of its input. This permits
+    the connection to the original array to be maintained for
+    as long as desired and then finally (and thoroughly) cleared
+    through :func:`~pytato.eliminate_dead_code`.
+
+
 Naming
 ------
 

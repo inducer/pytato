@@ -62,8 +62,9 @@ from pytato.array import (
     ShapeComponent,
     SizeParam,
     Stack,
+    shape_is_int_only,
 )
-from pytato.raising import BinaryOpType, C99CallOp
+from pytato.raising import BinaryOpType, C99CallOp, ZerosLikeOp
 from pytato.reductions import (
     AllReductionOperation,
     AnyReductionOperation,
@@ -315,6 +316,21 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                            args=[_rec_ary_or_constant(arg)
                                  for arg in hlo.args],
                            keywords=[])
+        elif isinstance(hlo, ZerosLikeOp):
+            rhs = ast.Call(
+                ast.Attribute(ast.Name(self.numpy_backend), "zeros"),
+                args=[ast.Tuple(elts=[
+                                ast.Constant(d)
+                                for d in shape_is_int_only(expr.shape)])],
+                keywords=[
+                    ast.keyword(
+                        arg="dtype",
+                        value=ast.Attribute(
+                            ast.Name(self.numpy), f"{expr.dtype.type.__name__}"
+                        ),
+                    )
+                ],
+            )
         elif isinstance(hlo, WhereOp):
             rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend),
                                          "where"),
