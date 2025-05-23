@@ -1600,6 +1600,33 @@ def test_unify_axes_tags():
 
     # }}}
 
+    # {{{ 5. zeros_like, ones_like
+
+    x = pt.make_placeholder("x", (10, 4))
+    x = x.with_tagged_axis(0, FooTag())
+    x = x.with_tagged_axis(1, BarTag())
+
+    y = pt.zeros_like(x)
+    z = pt.ones_like(x.T)
+    assert isinstance(y, pt.Array)
+    assert isinstance(z, pt.Array)
+
+    y_unified = pt.unify_axes_tags(y)
+    z_unified = pt.unify_axes_tags(z)
+    assert isinstance(y_unified, pt.Array)
+    assert isinstance(z_unified, pt.Array)
+
+    assert (y_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+    assert (y_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (z_unified.axes[0].tags_of_type(TestlibTag)
+            == frozenset([BarTag()]))
+    assert (z_unified.axes[1].tags_of_type(TestlibTag)
+            == frozenset([FooTag()]))
+
+    # }}}
+
     # {{ Reduction Operations with IndexLambda
     # {{{ Reduce on outside of scalar expression
 
