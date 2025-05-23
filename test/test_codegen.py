@@ -2123,6 +2123,28 @@ def test_forcevalueargtag(ctx_factory: cl.CtxFactory):
     np.testing.assert_allclose(pt_out.get(), 4+42)
 
 
+def test_zeros_like(ctx_factory):
+    from numpy.random import default_rng
+    rng = default_rng(seed=0)
+
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    x = pt.make_placeholder("x", (10, 4))
+    x_in = rng.random(size=(10, 4))
+    zero = pt.zeros_like(x)
+    one = pt.ones_like(x)
+    assert isinstance(zero, pt.Array)
+    assert isinstance(one, pt.Array)
+
+    prg = pt.generate_loopy({"zero": zero, "one": one})
+    _, pt_out = prg(cq, x=x_in)
+    np.testing.assert_allclose(pt_out["zero"], 0)
+    np.testing.assert_allclose(pt_out["one"], 1)
+    assert zero.shape == x.shape
+    assert one.shape == x.shape
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
