@@ -739,6 +739,11 @@ class InlinedExpressionGenMapper(
             assert isinstance(pars, tuple)
             return prim.Call(prim.Variable(name_in_loopy), pars)
 
+        if isinstance(expr.function, prim.Variable) and (
+                expr.function.name == "pytato.zero"):
+            # traversing self.rec for the bindings is not needed.
+            return 0
+
         return super().map_call(expr, prstnt_ctx, local_ctx)
 
     def map_reduce(self, expr: scalar_expr.Reduce,

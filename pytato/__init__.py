@@ -123,12 +123,14 @@ from pytato.cmath import (
     isnan,
     log,
     log10,
+    ones_like,
     real,
     sin,
     sinh,
     sqrt,
     tan,
     tanh,
+    zeros_like,
 )
 from pytato.distributed.execute import (
     execute_distributed_partition,
@@ -259,6 +261,7 @@ __all__ = (
     "not_equal",
     "number_distributed_tags",
     "ones",
+    "ones_like",
     "pad",
     "prod",
     "real",
@@ -288,4 +291,5 @@ __all__ = (
     "verify_distributed_partition",
     "where",
     "zeros",
+    "zeros_like",
 )
