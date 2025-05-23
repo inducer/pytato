@@ -52,6 +52,8 @@ __doc__ = """
 .. autofunction:: isnan
 .. autofunction:: real
 .. autofunction:: imag
+.. autofunction:: zeros_like
+.. autofunction:: ones_like
 """
 
 # }}}
@@ -68,6 +70,7 @@ from pymbolic import Scalar, var
 from pytato.array import (
     Array,
     ArrayOrScalar,
+    ConvertibleToShape,
     IndexLambda,
     _dtype_any,
     _get_created_at_tag,
@@ -84,7 +87,8 @@ if TYPE_CHECKING:
 def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
                           func_name: str,
                           ret_dtype: _dtype_any | None = None,
-                          np_func_name: str | None = None
+                          np_func_name: str | None = None,
+                          pt_namespace: str = "c99."
                           ) -> ArrayOrScalar:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         if np_func_name is None:
@@ -127,7 +131,7 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
     assert ret_dtype is not None
 
     return IndexLambda(
-        expr=prim.Call(var(f"pytato.c99.{func_name}"),
+        expr=prim.Call(var(f"pytato.{pt_namespace}{func_name}"),
                   tuple(sym_args)),
         shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
         tags=_get_default_tags(),
@@ -242,5 +246,43 @@ def imag(x: ArrayOrScalar) -> ArrayOrScalar:
             import pytato as pt
             return pt.zeros(x.shape, dtype=x_dtype)
     return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
+
+
+def zeros_like(
+    a: ArrayOrScalar,
+    dtype: _dtype_any | None = None,
+    shape: ConvertibleToShape | None = None,
+) -> ArrayOrScalar:
+    """
+    Returns on array of zeros with the same shape and type as given array.
+
+    :param dtype: Overrides the dtype of *a*.
+    :param shape: Overrides the shape of *a*.
+    """
+    if shape is not None:
+        # TODO: a different shape could lead to additional dimensions,
+        raise NotImplementedError("Only shape=None supported (for now).")
+    from pytato.utils import get_common_dtype_of_ary_or_scalars
+
+    return _apply_elem_wise_func(
+        (a,),
+        "zero",
+        ret_dtype=dtype or get_common_dtype_of_ary_or_scalars((a,)),
+        pt_namespace="",
+    )
+
+
+def ones_like(
+    a: ArrayOrScalar,
+    dtype: _dtype_any | None = None,
+    shape: ConvertibleToShape | None = None,
+) -> ArrayOrScalar:
+    """
+    Returns on array of ones with the same shape and type as given array.
+
+    :param dtype: Overrides the dtype of the
+    """
+    return zeros_like(a, dtype, shape) + 1
+
 
 # vim: fdm=marker
