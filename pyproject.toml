@@ -179,20 +179,16 @@ ignore = [
     "pytato/raising.py",
 ]
 
-
 [[tool.basedpyright.executionEnvironments]]
 root = "test"
-reportUnknownArgumentType = "none"
-reportUnknownVariableType = "none"
-reportMissingParameterType = "none"
-reportAttributeAccessIssue = "none"
-reportMissingImports = "none"
-reportArgumentType = "hint"
-reportUnknownMemberType = "hint"
+reportUnknownArgumentType = "hint"
 reportUnknownParameterType = "hint"
-reportAny = "none"
-reportPrivateUsage = "hint"
-reportUnusedParameter = "hint"
+reportUnknownVariableType = "hint"
+reportUnknownMemberType = "hint"
+reportMissingParameterType = "hint"
+reportAny = "hint"
+reportArgumentType = "hint"
+reportAttributeAccessIssue = "hint"
 
 [[tool.basedpyright.executionEnvironments]]
 root = "examples"
