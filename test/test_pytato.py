@@ -1998,6 +1998,14 @@ def test_pickling_hash():
     # }}}
 
 
+def test_eliminate_dead_code_removes_pt_zero():
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    expr1 = pt.tan(pt.zeros_like(x).T)
+    expr2 = pt.tan(pt.zeros(x.shape, x.dtype).T)
+    assert expr1 != expr2
+    assert pt.eliminate_dead_code(expr1) == expr2
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:
