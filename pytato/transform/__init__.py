@@ -128,6 +128,7 @@ __doc__ = """
 .. automodule:: pytato.transform.remove_broadcasts_einsum
 .. automodule:: pytato.transform.einsum_distributive_law
 .. automodule:: pytato.transform.metadata
+.. automodule:: pytato.transform.dead_code_elimination
 
 .. currentmodule:: pytato.transform
 
