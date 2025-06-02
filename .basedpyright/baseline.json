@@ -27072,14 +27072,6 @@
             {
                 "code": "reportUnknownParameterType",
                 "range": {
-                    "startColumn": 8,
-                    "endColumn": 16,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownParameterType",
-                "range": {
                     "startColumn": 17,
                     "endColumn": 23,
                     "lineCount": 1
