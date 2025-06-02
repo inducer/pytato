@@ -743,6 +743,14 @@ def find_distributed_partition(
     import mpi4py.MPI as MPI
 
     from pytato.transform import SubsetDependencyMapper
+    from pytato.transform.dead_code_elimination import eliminate_dead_code
+
+    # Eliminate dead-code to prevent from unnecessary communication arising
+    # from the unused sub-expressions.
+    outputs_ = eliminate_dead_code(outputs)
+    assert isinstance(outputs_, DictOfNamedArrays)
+    outputs = outputs_
+    del outputs_
 
     local_rank = mpi_communicator.rank
 
