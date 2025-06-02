@@ -2378,7 +2378,7 @@ def reshape(array: Array, newshape: int | Sequence[int],
 
 # {{{ make_dict_of_named_arrays
 
-def make_dict_of_named_arrays(data: dict[str, Array], *,
+def make_dict_of_named_arrays(data: Mapping[str, Array], *,
                               tags: frozenset[Tag] = frozenset()
                               ) -> DictOfNamedArrays:
     """Make a :class:`DictOfNamedArrays` object.

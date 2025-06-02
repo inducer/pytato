@@ -1985,7 +1985,7 @@ def test_nested_function_calls(ctx_factory):
         foo_x_y = tracer(partial(foo, tracer), x, y, identifier="foo")
         return foo_x_y * x * y
 
-    def call_bar(tracer, x, y):
+    def call_bar(tracer, x, y) -> pt.Array:
         return tracer(partial(bar, tracer), x, y, identifier="bar")
 
     x1_np, y1_np = rng.random((2, 13, 29))
