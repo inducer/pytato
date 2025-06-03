@@ -90,8 +90,12 @@ if TYPE_CHECKING:
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
+# FIXME: Deprecate?
 MappedT = TypeVar("MappedT",
                   Array, AbstractResultWithNamedArrays, ArrayOrNames)
+ArrayT = TypeVar("ArrayT", bound=Array)
+NamesT = TypeVar("NamesT", bound=AbstractResultWithNamedArrays)
+FunctionT = TypeVar("FunctionT", bound=FunctionDefinition)
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = frozenset[Array]
 
@@ -115,6 +119,7 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
+.. autofunction:: deduplicate
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
@@ -148,6 +153,21 @@ Internal stuff that is only here because the documentation tool wants it
 .. class:: MappedT
 
     A type variable representing the input type of a :class:`Mapper`.
+
+.. class:: ArrayT
+
+    A type variable representing a transformation input deriving from
+    :class:`pytato.Array`.
+
+.. class:: NamesT
+
+    A type variable representing a transformation input deriving from
+    :class:`pytato.AbstractResultWithNamedArrays`.
+
+.. class:: FunctionT
+
+    A type variable representing a transformation input deriving from
+    :class:`pytato.function.FunctionDefinition`.
 
 .. class:: ResultT
 
@@ -1116,7 +1136,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 # }}}
 
 
-# {{{ Deduplicator
+# {{{ deduplicate
 
 class Deduplicator(CopyMapper):
     """Removes duplicate nodes from an expression."""
@@ -1134,6 +1154,41 @@ class Deduplicator(CopyMapper):
         return type(self)(
             _function_cache=cast(
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+
+
+@overload
+def deduplicate(expr: ArrayT) -> ArrayT:
+    ...
+
+
+@overload
+def deduplicate(expr: NamesT) -> NamesT:
+    ...
+
+
+@overload
+def deduplicate(expr: FunctionT) -> FunctionT:
+    ...
+
+
+def deduplicate(
+        expr: ArrayT | NamesT | FunctionT) -> ArrayT | NamesT | FunctionT:
+    """
+    Remove duplicate nodes from an expression.
+
+    .. note::
+
+        Does not remove distinct instances of data wrappers that point to the same
+        data (as they will not hash the same). For a utility that does that, see
+        :func:`deduplicate_data_wrappers`.
+    """
+    result = Deduplicator()(expr)
+    if isinstance(expr, Array):
+        return cast("ArrayT", result)
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return cast("NamesT", result)
+    else:
+        return cast("FunctionT", result)
 
 # }}}
 
@@ -2061,9 +2116,33 @@ def get_dependencies(expr: DictOfNamedArrays) -> dict[str, frozenset[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 
-def map_and_copy(expr: MappedT,
+@overload
+def map_and_copy(
+        expr: Array,
+        map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+        ) -> Array:
+    ...
+
+
+@overload
+def map_and_copy(
+        expr: AbstractResultWithNamedArrays,
+        map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+        ) -> AbstractResultWithNamedArrays:
+    ...
+
+
+@overload
+def map_and_copy(
+        expr: FunctionT,
+        map_fn: Callable[[ArrayOrNames], ArrayOrNames]
+        ) -> FunctionT:
+    ...
+
+
+def map_and_copy(expr: ArrayOrNames | FunctionT,
                  map_fn: Callable[[ArrayOrNames], ArrayOrNames]
-                 ) -> MappedT:
+                 ) -> ArrayOrNames | FunctionT:
     """
     Returns a copy of *expr* with every array expression reachable from *expr*
     mapped via *map_fn*.
@@ -2073,10 +2152,23 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
+    return CachedMapAndCopyMapper(map_fn)(expr)
 
 
+@overload
+def materialize_with_mpms(expr: ArrayT) -> ArrayT:
+    ...
+
+
+# get_num_tags_of_type doesn't support Call yet, so this has to be DictOfNamedArrays
+# only for now
+@overload
 def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+    ...
+
+
+def materialize_with_mpms(
+        expr: ArrayT | DictOfNamedArrays) -> ArrayT | DictOfNamedArrays:
     r"""
     Materialize nodes in *expr* with MPMS materialization strategy.
     MPMS stands for Multiple-Predecessors, Multiple-Successors.
@@ -2128,19 +2220,25 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     """
     from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
-    new_data = {}
-    for name, ary in expr.items():
-        new_data[name] = materializer(ary.expr).expr
 
-    res = DictOfNamedArrays(new_data, tags=expr.tags)
+    def log_msg(res: Array | DictOfNamedArrays) -> None:
+        from pytato import DEBUG_ENABLED
+        if DEBUG_ENABLED:
+            transform_logger.info("materialize_with_mpms: materialized "
+                f"{get_num_tags_of_type(res, ImplStored)} out of "
+                f"{get_num_nodes(res)} nodes")
 
-    from pytato import DEBUG_ENABLED
-    if DEBUG_ENABLED:
-        transform_logger.info("materialize_with_mpms: materialized "
-            f"{get_num_tags_of_type(res, ImplStored)} out of "
-            f"{get_num_nodes(res)} nodes")
-
-    return res
+    if isinstance(expr, Array):
+        res = materializer(expr).expr
+        log_msg(res)
+        return cast("ArrayT", res)
+    else:
+        new_data: dict[str, Array] = {}
+        for name, ary in expr.items():
+            new_data[name] = materializer(ary.expr).expr
+        res = expr.replace_if_different(data=new_data)
+        log_msg(res)
+        return res
 
 # }}}
 
@@ -2408,8 +2506,24 @@ class DataWrapperDeduplicator(CopyMapper):
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
 
-def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
-    """For the expression graph given as *array_or_names*, replace all
+@overload
+def deduplicate_data_wrappers(expr: ArrayT) -> ArrayT:
+    ...
+
+
+@overload
+def deduplicate_data_wrappers(expr: NamesT) -> NamesT:
+    ...
+
+
+@overload
+def deduplicate_data_wrappers(expr: FunctionT) -> FunctionT:
+    ...
+
+
+def deduplicate_data_wrappers(
+        expr: ArrayT | NamesT | FunctionT) -> ArrayT | NamesT | FunctionT:
+    """For the expression graph given as *expr*, replace all
     :class:`pytato.array.DataWrapper` instances containing identical data
     with a single instance.
 
@@ -2427,7 +2541,12 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
         job of deduplication.
     """
     dedup = DataWrapperDeduplicator()
-    array_or_names = dedup(array_or_names)
+    if isinstance(expr, Array):
+        expr = cast("ArrayT", dedup(expr))
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        expr = cast("NamesT", dedup(expr))
+    else:
+        expr = cast("FunctionT", dedup(expr))
 
     if dedup.data_wrappers_encountered:
         transform_logger.debug("data wrapper de-duplication: "
@@ -2438,7 +2557,7 @@ def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
                                    dedup.data_wrappers_encountered
                                    - len(dedup.data_wrapper_cache)))
 
-    return array_or_names
+    return expr
 
 # }}}
 

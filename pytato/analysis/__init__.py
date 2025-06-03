@@ -29,7 +29,7 @@ THE SOFTWARE.
 from typing import TYPE_CHECKING, Any, overload
 
 from orderedsets import FrozenOrderedSet
-from typing_extensions import Never, Self
+from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
@@ -48,7 +48,12 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CombineMapper,
+    Mapper,
+)
 
 
 if TYPE_CHECKING:
@@ -84,10 +89,10 @@ __doc__ = """
 
 # {{{ NUserCollector
 
-class NUserCollector(Mapper[None, None, []]):
+class NUserCollector(Mapper[None, Never, []]):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records the number of
-    times an array expression is a direct dependency of other nodes.
+    times an array expression is a direct dependency of other array nodes.
 
     .. note::
 
@@ -102,6 +107,7 @@ class NUserCollector(Mapper[None, None, []]):
         self._visited_ids: set[int] = set()
         self.nusers: dict[Array, int] = defaultdict(lambda: 0)
 
+    @override
     def rec(self, expr: ArrayOrNames) -> None:
         # See CachedWalkMapper.rec on why we chose id(x) as the cache key.
 
@@ -211,15 +217,13 @@ class NUserCollector(Mapper[None, None, []]):
 # }}}
 
 
-def get_nusers(outputs: Array | DictOfNamedArrays) -> Mapping[Array, int]:
+def get_nusers(expr: ArrayOrNames) -> Mapping[Array, int]:
     """
-    For the DAG *outputs*, returns the mapping from each node to the number of
-    nodes using its value within the DAG given by *outputs*.
+    For the expression *expr*, returns the mapping from each array node to the
+    number of array nodes using its value within the DAG given by *expr*.
     """
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
     nuser_collector = NUserCollector()
-    nuser_collector(outputs)
+    nuser_collector(expr)
     return nuser_collector.nusers
 
 
@@ -473,6 +477,7 @@ class NodeCountMapper(CachedWalkMapper[[]]):
 
     .. autoattribute:: expr_type_counts
     .. autoattribute:: count_duplicates
+    .. autoattribute:: count_dict
 
        Dictionary mapping node types to number of nodes of that type.
     """
@@ -480,75 +485,96 @@ class NodeCountMapper(CachedWalkMapper[[]]):
     def __init__(
             self,
             count_duplicates: bool = False,
+            count_dict: bool = False,
             _visited_functions: set[Any] | None = None,
             ) -> None:
         super().__init__(_visited_functions=_visited_functions)
 
         from collections import defaultdict
         self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
-        self.count_duplicates = count_duplicates
+        self.count_duplicates: bool = count_duplicates
+        self.count_dict: bool = count_dict
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
+    @override
     def get_function_definition_cache_key(
             self, expr: FunctionDefinition) -> int | FunctionDefinition:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
+    @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
             count_duplicates=self.count_duplicates,
+            count_dict=self.count_dict,
             _visited_functions=self._visited_functions)
 
+    @override
     def post_visit(self, expr: Any) -> None:
-        if not isinstance(expr, DictOfNamedArrays):
+        if not isinstance(expr, DictOfNamedArrays) or self.count_dict:
             self.expr_type_counts[type(expr)] += 1
+
+    @override
+    def map_call(self, expr: Call) -> None:
+        raise NotImplementedError(
+            "NodeCountMapper doesn't support function calls yet.")
 
 
 def get_node_type_counts(
-        outputs: Array | DictOfNamedArrays,
-        count_duplicates: bool = False
+        expr: ArrayOrNames | FunctionDefinition,
+        count_duplicates: bool = False,
+        count_dict: bool | None = None
         ) -> dict[type[Any], int]:
     """
-    Returns a dictionary mapping node types to node count for that type
-    in DAG *outputs*.
+    Returns a dictionary mapping node types to node count for that type in *expr*.
 
-    Instances of `DictOfNamedArrays` are excluded from counting.
+    Instances of `DictOfNamedArrays` are excluded from counting unless *count_dict*
+    is set to `True`.
     """
+    if count_dict is None:
+        # This function doesn't call normalize_outputs anymore, so there's no real
+        # reason to exclude DictOfNamedArrays
+        from warnings import warn
+        warn(
+            "The default value of 'count_dict' will change "
+            "from False to True in Q4 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_dict = False
 
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
-    ncm = NodeCountMapper(count_duplicates)
-    ncm(outputs)
+    ncm = NodeCountMapper(count_duplicates, count_dict)
+    ncm(expr)
 
     return ncm.expr_type_counts
 
 
 def get_num_nodes(
-        outputs: Array | DictOfNamedArrays,
-        count_duplicates: bool | None = None
+        expr: ArrayOrNames | FunctionDefinition,
+        count_duplicates: bool = False,
+        count_dict: bool | None = None
         ) -> int:
     """
-    Returns the number of nodes in DAG *outputs*.
-    Instances of `DictOfNamedArrays` are excluded from counting.
+    Returns the number of nodes in *expr*.
+    Instances of `DictOfNamedArrays` are excluded from counting unless *count_dict*
+    is set to `True`.
     """
-    if count_duplicates is None:
+    if count_dict is None:
+        # This function doesn't call normalize_outputs anymore, so there's no real
+        # reason to exclude DictOfNamedArrays
         from warnings import warn
         warn(
-            "The default value of 'count_duplicates' will change "
-            "from True to False in 2025. "
+            "The default value of 'count_dict' will change "
+            "from False to True in Q4 2025. "
             "For now, pass the desired value explicitly.",
             DeprecationWarning, stacklevel=2)
-        count_duplicates = True
+        count_dict = False
 
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
-    ncm = NodeCountMapper(count_duplicates)
-    ncm(outputs)
+    ncm = NodeCountMapper(count_duplicates, count_dict)
+    ncm(expr)
 
     return sum(ncm.expr_type_counts.values())
 
@@ -566,36 +592,55 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
     that equal `x`.
 
     .. autoattribute:: expr_multiplicity_counts
+    .. autoattribute:: count_dict
     """
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+    def __init__(
+            self,
+            count_dict: bool = False,
+            _visited_functions: set[Any] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
 
         from collections import defaultdict
-        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
+        self.expr_multiplicity_counts: \
+            dict[ArrayOrNames | FunctionDefinition, int] = defaultdict(int)
+        self.count_dict: bool = count_dict
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
+    @override
     def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
+    @override
     def post_visit(self, expr: Any) -> None:
-        if not isinstance(expr, DictOfNamedArrays):
+        if not isinstance(expr, DictOfNamedArrays) or self.count_dict:
             self.expr_multiplicity_counts[expr] += 1
 
 
 def get_node_multiplicities(
-        outputs: Array | DictOfNamedArrays) -> dict[Array, int]:
+        expr: ArrayOrNames | FunctionDefinition, *,
+        count_dict: bool | None = None
+        ) -> dict[ArrayOrNames | FunctionDefinition, int]:
     """
     Returns the multiplicity per `expr`.
     """
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
+    if count_dict is None:
+        # This function doesn't call normalize_outputs anymore, so there's no real
+        # reason to exclude DictOfNamedArrays
+        from warnings import warn
+        warn(
+            "The default value of 'count_dict' will change "
+            "from False to True in Q4 2025. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_dict = False
 
-    nmm = NodeMultiplicityMapper()
-    nmm(outputs)
+    nmm = NodeMultiplicityMapper(count_dict)
+    nmm(expr)
 
     return nmm.expr_multiplicity_counts
 
@@ -616,14 +661,17 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
 
     def __init__(self, _visited_functions: set[Any] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
-        self.count = 0
+        self.count: int = 0
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    @override
     def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         return id(expr)
 
+    @override
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
@@ -635,19 +683,17 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
 
         self.post_visit(expr)
 
+    @override
     def post_visit(self, expr: Any) -> None:
         if isinstance(expr, Call):
             self.count += 1
 
 
-def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
-    """Returns the number of nodes in DAG *outputs*."""
-
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
+def get_num_call_sites(expr: ArrayOrNames | FunctionDefinition) -> int:
+    """Returns the number of :class:`pytato.function.Call` nodes in *expr*."""
 
     cscm = CallSiteCountMapper()
-    cscm(outputs)
+    cscm(expr)
 
     return cscm.count
 
@@ -674,9 +720,11 @@ class TagCountMapper(CombineMapper[int, Never]):
             tag_types = frozenset(tag_types)
         self._tag_types = tag_types
 
+    @override
     def combine(self, *args: int) -> int:
         return sum(args)
 
+    @override
     def rec(self, expr: ArrayOrNames) -> int:
         inputs = self._make_cache_inputs(expr)
         try:
@@ -700,14 +748,14 @@ class TagCountMapper(CombineMapper[int, Never]):
 
 
 def get_num_tags_of_type(
-        outputs: Array | DictOfNamedArrays,
+        expr: Array | DictOfNamedArrays,
         tag_types: type[pytools.tag.Tag] | Iterable[type[pytools.tag.Tag]]) -> int:
-    """Returns the number of nodes in DAG *outputs* that are tagged with
-    all the tag types in *tag_types*."""
+    """Returns the number of nodes in *expr* that are tagged with all the tag types
+    in *tag_types*."""
 
     tcm = TagCountMapper(tag_types)
 
-    return tcm(outputs)
+    return tcm(expr)
 
 # }}}
 

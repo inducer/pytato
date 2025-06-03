@@ -30,7 +30,7 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, overload
 
 from typing_extensions import Self
 
@@ -44,10 +44,13 @@ from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.tags import InlineCallTag
 from pytato.transform import (
     ArrayOrNames,
+    ArrayT,
     CopyMapper,
-    Deduplicator,
+    FunctionT,
+    NamesT,
     TransformMapperCache,
     _verify_is_array,
+    deduplicate,
 )
 
 
@@ -151,15 +154,61 @@ class InlineMarker(CopyMapper):
         return super().map_call(expr).tagged(InlineCallTag())
 
 
-def inline_calls(expr: ArrayOrNames) -> ArrayOrNames:
+@overload
+def inline_calls(expr: ArrayT) -> ArrayT:
+    ...
+
+
+@overload
+def inline_calls(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+    ...
+
+
+@overload
+def inline_calls(expr: AbstractResultWithNamedArrays) -> AbstractResultWithNamedArrays:
+    ...
+
+
+@overload
+def inline_calls(expr: FunctionT) -> FunctionT:
+    ...
+
+
+def inline_calls(
+        expr: ArrayT | DictOfNamedArrays | AbstractResultWithNamedArrays | FunctionT
+        ) -> ArrayT | DictOfNamedArrays | AbstractResultWithNamedArrays | FunctionT:
     """
     Returns a copy of *expr* with call sites tagged with
     :class:`pytato.tags.InlineCallTag` inlined into the expression graph.
     """
-    return Deduplicator()(Inliner()(expr))
+    result = Inliner()(expr)
+    if isinstance(expr, Array):
+        return deduplicate(cast("ArrayT", result))
+    elif isinstance(expr, DictOfNamedArrays):
+        return deduplicate(cast("DictOfNamedArrays", result))
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return deduplicate(cast("AbstractResultWithNamedArrays", result))
+    else:
+        return deduplicate(cast("FunctionT", result))
 
 
-def tag_all_calls_to_be_inlined(expr: ArrayOrNames) -> ArrayOrNames:
+@overload
+def tag_all_calls_to_be_inlined(expr: ArrayT) -> ArrayT:
+    ...
+
+
+@overload
+def tag_all_calls_to_be_inlined(expr: NamesT) -> NamesT:
+    ...
+
+
+@overload
+def tag_all_calls_to_be_inlined(expr: FunctionT) -> FunctionT:
+    ...
+
+
+def tag_all_calls_to_be_inlined(
+        expr: ArrayT | NamesT | FunctionT) -> ArrayT | NamesT | FunctionT:
     """
     Returns a copy of *expr* with all reachable instances of
     :class:`pytato.function.Call` nodes tagged with
@@ -171,7 +220,13 @@ def tag_all_calls_to_be_inlined(expr: ArrayOrNames) -> ArrayOrNames:
        use :func:`tag_all_calls_to_be_inlined` on this routine's
        output.
     """
-    return InlineMarker()(expr)
+    result = InlineMarker()(expr)
+    if isinstance(expr, Array):
+        return cast("ArrayT", result)
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return cast("NamesT", result)
+    else:
+        return cast("FunctionT", result)
 
 # }}}
 

@@ -158,6 +158,7 @@ from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target.python.jax import generate_jax
+from pytato.transform import deduplicate
 from pytato.transform.calls import inline_calls, tag_all_calls_to_be_inlined
 from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.transform.metadata import unify_axes_tags
@@ -218,6 +219,7 @@ __all__ = (
     "conj",
     "cos",
     "cosh",
+    "deduplicate",
     "dot",
     "dtype",
     "einsum",
