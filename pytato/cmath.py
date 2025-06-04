@@ -145,6 +145,8 @@ def _get_dtype(x: ArrayOrScalar) -> _dtype_any:
         return np.dtype(type(x))
 
 
+# FIXME: Overload these instead of returning union type?
+
 def abs(x: ArrayOrScalar) -> ArrayOrScalar:
     x_dtype = _get_dtype(x)
     if x_dtype.kind == "c":
