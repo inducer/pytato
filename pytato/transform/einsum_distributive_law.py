@@ -209,19 +209,19 @@ class EinsumDistributiveLawMapper(
                     _verify_is_array(self.rec(hlo.x1, ctx))
                     - _verify_is_array(self.rec(hlo.x2, ctx)))
             elif hlo.binary_op == BinaryOpType.MULT:
-                if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
+                if isinstance(hlo.x1, Array) and not isinstance(hlo.x2, Array):
                     # https://github.com/python/mypy/issues/16499
                     return _verify_is_array(self.rec(hlo.x1, ctx)) * hlo.x2  # type: ignore[no-any-return]
                 else:
-                    assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
+                    assert isinstance(hlo.x2, Array) and not isinstance(hlo.x1, Array)
                     # https://github.com/python/mypy/issues/16499
                     return hlo.x1 * _verify_is_array(self.rec(hlo.x2, ctx))  # type: ignore[no-any-return]
             elif hlo.binary_op == BinaryOpType.TRUEDIV:
-                if isinstance(hlo.x1, Array) and np.isscalar(hlo.x2):
+                if isinstance(hlo.x1, Array) and not isinstance(hlo.x2, Array):
                     # https://github.com/python/mypy/issues/16499
                     return _verify_is_array(self.rec(hlo.x1, ctx)) / hlo.x2  # type: ignore[no-any-return]
                 else:
-                    assert isinstance(hlo.x2, Array) and np.isscalar(hlo.x1)
+                    assert isinstance(hlo.x2, Array) and not isinstance(hlo.x1, Array)
                     # https://github.com/python/mypy/issues/16499
                     return hlo.x1 / _verify_is_array(self.rec(hlo.x2, ctx))  # type: ignore[no-any-return]
             else:

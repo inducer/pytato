@@ -186,7 +186,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from functools import cached_property, partialmethod
+from functools import cached_property
 from sys import intern
 from types import EllipsisType
 from typing import (
@@ -494,7 +494,7 @@ def _np_result_dtype(
     return np.result_type(*arrays_and_dtypes)
 
 
-def _truediv_result_type(*dtypes: DtypeOrPyScalarType) -> np.dtype[Any]:
+def _truediv_result_type(*dtypes: ArrayOrScalar) -> np.dtype[Any]:
     dtype = _np_result_dtype(*dtypes)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
     # pylint: disable=no-member
@@ -707,7 +707,7 @@ class Array(Taggable):
         return self.shape[0]
 
     def __getitem__(self,
-                    slice_spec: (ConvertibleToIndexExpr
+                    index: (ConvertibleToIndexExpr
                         | tuple[ConvertibleToIndexExpr, ...])
                     ) -> Array:
         """
@@ -716,13 +716,13 @@ class Array(Taggable):
             Out-of-bounds accesses via :class:`Array` indices are undefined
             behavior and may pass silently.
         """
-        if not isinstance(slice_spec, tuple):
-            slice_spec = (slice_spec,)
+        if not isinstance(index, tuple):
+            index = (index,)
 
         from pytato.utils import _index_into
         return _index_into(
             self,
-            slice_spec,
+            index,
             tags=_get_default_tags(),
             non_equality_tags=_get_created_at_tag())
 
@@ -759,7 +759,8 @@ class Array(Taggable):
             first, second = second, first
         return matmul(first, second)
 
-    __rmatmul__ = partialmethod(__matmul__, reverse=True)
+    def __rmatmul__(self, other: Array) -> Array:
+        return self.__matmul__(other, reverse=True)
 
     def _binary_op(
                 self,
@@ -823,37 +824,79 @@ class Array(Taggable):
                 non_equality_tags=_get_created_at_tag(),
                 var_to_reduction_descr=immutabledict())
 
-    __mul__ = partialmethod(_binary_op, operator.mul)
-    __rmul__ = partialmethod(_binary_op, operator.mul, reverse=True)
+    # Don't change these to partialmethod (pyright doesn't know how to deal with it,
+    # so it gets confused when pytato arrays are used with the array protocol type
+    # in arraycontext)
 
-    __add__ = partialmethod(_binary_op, operator.add)
-    __radd__ = partialmethod(_binary_op, operator.add, reverse=True)
+    def __add__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.add, other)
 
-    __sub__ = partialmethod(_binary_op, operator.sub)
-    __rsub__ = partialmethod(_binary_op, operator.sub, reverse=True)
+    def __radd__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.add, other, reverse=True)
 
-    __floordiv__ = partialmethod(_binary_op, operator.floordiv)
-    __rfloordiv__ = partialmethod(_binary_op, operator.floordiv, reverse=True)
+    def __mul__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.mul, other)
 
-    __truediv__ = partialmethod(_binary_op, operator.truediv,
+    def __rmul__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.mul, other, reverse=True)
+
+    def __sub__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.sub, other)
+
+    def __rsub__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.sub, other, reverse=True)
+
+    def __floordiv__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.floordiv, other)
+
+    def __rfloordiv__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.floordiv, other, reverse=True)
+
+    def __truediv__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(
+            operator.truediv,
+            other,
             get_result_type=_truediv_result_type)
-    __rtruediv__ = partialmethod(_binary_op, operator.truediv,
-            get_result_type=_truediv_result_type, reverse=True)
 
-    __mod__ = partialmethod(_binary_op, operator.mod)
-    __rmod__ = partialmethod(_binary_op, operator.mod, reverse=True)
+    def __rtruediv__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(
+            operator.truediv,
+            other,
+            get_result_type=_truediv_result_type,
+            reverse=True)
 
-    __pow__ = partialmethod(_binary_op, operator.pow, is_pow=True)
-    __rpow__ = partialmethod(_binary_op, operator.pow, reverse=True, is_pow=True)
+    def __mod__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.mod, other)
 
-    __neg__ = partialmethod(_unary_op, operator.neg)
+    def __rmod__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.mod, other, reverse=True)
 
-    __and__ = partialmethod(_binary_op, operator.and_)
-    __rand__ = partialmethod(_binary_op, operator.and_, reverse=True)
-    __or__ = partialmethod(_binary_op, operator.or_)
-    __ror__ = partialmethod(_binary_op, operator.or_, reverse=True)
-    __xor__ = partialmethod(_binary_op, operator.xor)
-    __rxor__ = partialmethod(_binary_op, operator.xor, reverse=True)
+    def __pow__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.pow, other, is_pow=True)
+
+    def __rpow__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.pow, other, is_pow=True, reverse=True)
+
+    def __neg__(self) -> Array:
+        return self._unary_op(operator.neg)
+
+    def __and__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.and_, other)
+
+    def __rand__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.and_, other, reverse=True)
+
+    def __or__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.or_, other)
+
+    def __ror__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.or_, other, reverse=True)
+
+    def __xor__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.xor, other)
+
+    def __rxor__(self, other: ArrayOrScalar) -> Array:
+        return self._binary_op(operator.xor, other, reverse=True)
 
     def conj(self) -> ArrayOrScalar:
         import pytato as pt
