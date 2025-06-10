@@ -10,7 +10,7 @@ a = pt.make_placeholder(name="a", shape=(n, n), dtype=np.float64)
 
 a2a = a@(2*a)
 aat = a@a.T
-result = pt.DictOfNamedArrays({"a2a": a2a, "aat": aat})
+result = pt.make_dict_of_named_arrays({"a2a": a2a, "aat": aat})
 
 
 # {{{ execute with loopy/pyopencl
