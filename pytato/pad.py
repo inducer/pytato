@@ -130,7 +130,7 @@ def _normalize_pad_width(
 
 
 def pad(array: Array,
-        pad_width: Integer | Sequence[Integer],
+        pad_width: int | Sequence[int],
         mode: str = "constant",
         **kwargs: Any) -> Array:
     r"""

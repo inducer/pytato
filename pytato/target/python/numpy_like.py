@@ -78,6 +78,7 @@ from pytato.utils import are_shape_components_equal, get_einsum_specification
 
 
 if TYPE_CHECKING:
+    from ast import _ConstantValue  # pyright: ignore[reportPrivateUsage]
     from collections.abc import Callable, Iterable
 
     from pytato.target.python import BoundPythonProgram, NumpyLikePythonTarget
@@ -125,6 +126,10 @@ def first_true(iterable: Iterable[T], default: T,
     # first_true([a,b,c], x) --> a or b or c or x
     # first_true([a,b], x, f) --> a if f(a) else b if f(b) else x
     return next(filter(pred, iterable), default)
+
+
+def _constant(value: object) -> ast.Constant:
+    return ast.Constant(cast("_ConstantValue", value))
 
 
 def _is_slice_trivial(slice_: NormalizedSlice,
@@ -217,11 +222,11 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                     # generates code like: `np.float64("nan")`.
                     return ast.Call(
                         func=ast.Attribute(value=ast.Name(self.numpy),
-                                           attr=e_np.dtype.name),
-                        args=[ast.Constant(value="nan")],
+                                           attr=cast("str", e_np.dtype.name)),
+                        args=[_constant(value="nan")],
                         keywords=[])
                 else:
-                    return ast.Constant(e)
+                    return _constant(e)
 
         if isinstance(hlo, FullOp):
             if hlo.fill_value == 1:
@@ -229,14 +234,14 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                     rhs = ast.Call(
                         ast.Attribute(ast.Name(self.numpy_backend),
                                       "ones"),
-                        args=[ast.Tuple(elts=[ast.Constant(d)
+                        args=[ast.Tuple(elts=[_constant(d)
                                               for d in expr.shape])],
                         keywords=[])
                 else:
                     rhs = ast.Call(
                         ast.Attribute(ast.Name(self.numpy_backend),
                                       "ones"),
-                        args=[ast.Tuple(elts=[ast.Constant(d)
+                        args=[ast.Tuple(elts=[_constant(d)
                                               for d in expr.shape])],
                         keywords=[ast.keyword(
                             arg="dtype",
@@ -248,14 +253,14 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                     rhs = ast.Call(
                         ast.Attribute(ast.Name(self.numpy_backend),
                                       "zeros"),
-                        args=[ast.Tuple(elts=[ast.Constant(d)
+                        args=[ast.Tuple(elts=[_constant(d)
                                               for d in expr.shape])],
                         keywords=[])
                 else:
                     rhs = ast.Call(
                         ast.Attribute(ast.Name(self.numpy_backend),
                                       "zeros"),
-                        args=[ast.Tuple(elts=[ast.Constant(d)
+                        args=[ast.Tuple(elts=[_constant(d)
                                               for d in expr.shape])],
                         keywords=[ast.keyword(
                             arg="dtype",
@@ -266,7 +271,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                 rhs = ast.Call(
                     ast.Attribute(ast.Name(self.numpy_backend),
                                   "full"),
-                    args=[ast.Tuple(elts=[ast.Constant(d)
+                    args=[ast.Tuple(elts=[_constant(d)
                                           for d in expr.shape]),
                           _rec_ary_or_constant(hlo.fill_value),
                           ],
@@ -324,7 +329,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
             rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend),
                                          "broadcast_to"),
                            args=[ast.Name(self.rec(hlo.x)),
-                                 ast.Tuple(elts=[ast.Constant(d)
+                                 ast.Tuple(elts=[_constant(d)
                                                  for d in expr.shape])],
                            keywords=[])
         elif isinstance(hlo, ReduceOp):
@@ -339,9 +344,9 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
             else:
                 if len(hlo.axes) == 1:
                     axis, = hlo.axes.keys()
-                    axis_ast: ast.expr = ast.Constant(axis)
+                    axis_ast: ast.expr = _constant(axis)
                 else:
-                    axis_ast = ast.Tuple(elts=[ast.Constant(e)
+                    axis_ast = ast.Tuple(elts=[_constant(e)
                                                for e in sorted(hlo.axes.keys())])
                 rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend),
                                              np_fn_name),
@@ -366,7 +371,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                        args=[ast.List([ast.Name(id_)
                                        for id_ in rec_ids])],
                        keywords=[ast.keyword(arg="axis",
-                                             value=ast.Constant(expr.axis))])
+                                             value=_constant(expr.axis))])
 
         return self._record_line_and_return_lhs(lhs, rhs)
 
@@ -379,7 +384,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                        args=[ast.List([ast.Name(id_)
                                        for id_ in rec_ids])],
                        keywords=[ast.keyword(arg="axis",
-                                             value=ast.Constant(expr.axis))])
+                                             value=_constant(expr.axis))])
 
         return self._record_line_and_return_lhs(lhs, rhs)
 
@@ -389,9 +394,9 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                        args=[ast.Name(self.rec(expr.array)),
                              ],
                        keywords=[ast.keyword(arg="shift",
-                                             value=ast.Constant(expr.shift)),
+                                             value=_constant(expr.shift)),
                                  ast.keyword(arg="axis",
-                                             value=ast.Constant(expr.axis))])
+                                             value=_constant(expr.axis))])
 
         return self._record_line_and_return_lhs(lhs, rhs)
 
@@ -404,7 +409,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                            args=[ast.Name(self.rec(expr.array))],
                            keywords=[ast.keyword(
                                arg="axes",
-                               value=ast.List(elts=[ast.Constant(a)
+                               value=ast.List(elts=[_constant(a)
                                                     for a in expr.axis_permutation]))
                                      ])
 
@@ -427,7 +432,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
 
         def _rec_idx(idx: IndexExpr, dim: ShapeComponent) -> ast.expr:
             if isinstance(idx, int):
-                return ast.Constant(idx)
+                return _constant(idx)
             elif isinstance(idx, NormalizedSlice):
                 step = idx.step if idx.step != 1 else None
                 if idx.step > 0:
@@ -458,13 +463,13 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                 kwargs: SliceKwargs = {}
                 if step is not None:
                     assert isinstance(step, int)
-                    kwargs["step"] = ast.Constant(step)
+                    kwargs["step"] = _constant(step)
                 if start is not None:
                     assert isinstance(start, int)
-                    kwargs["lower"] = ast.Constant(start)
+                    kwargs["lower"] = _constant(start)
                 if stop is not None:
                     assert isinstance(stop, int)
-                    kwargs["upper"] = ast.Constant(stop)
+                    kwargs["upper"] = _constant(stop)
 
                 return ast.Slice(**kwargs)
             else:
@@ -500,7 +505,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
         lhs = self.vng("_pt_tmp")
         args = [ast.Name(self.rec(arg)) for arg in expr.args]
         rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend), "einsum"),
-                        args=[ast.Constant(get_einsum_specification(expr)),
+                        args=[_constant(get_einsum_specification(expr)),
                               *args],
                        keywords=[],
                        )
@@ -513,7 +518,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
             raise NotImplementedError("Non-integral reshapes.")
         rhs = ast.Call(ast.Attribute(ast.Name(self.numpy_backend), "reshape"),
                         args=[ast.Name(self.rec(expr.array)),
-                              ast.Tuple(elts=[ast.Constant(d)
+                              ast.Tuple(elts=[_constant(d)
                                               for d in expr.shape])],
                        keywords=[],
                        )
@@ -530,7 +535,7 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
         keys: list[expr_t | None] = []
         values: list[expr_t] = []
         for name, subexpr in sorted(expr._data.items()):
-            keys.append(ast.Constant(name))
+            keys.append(_constant(name))
             values.append(ast.Name(self.rec(subexpr)))
 
         rhs = ast.Dict(keys=keys, values=values)

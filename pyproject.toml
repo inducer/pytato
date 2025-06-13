@@ -178,6 +178,30 @@ ignore = [
 ]
 
 
+[[tool.basedpyright.executionEnvironments]]
+root = "test"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportMissingParameterType = "none"
+reportAttributeAccessIssue = "none"
+reportMissingImports = "none"
+reportArgumentType = "hint"
+reportUnknownMemberType = "hint"
+reportUnknownParameterType = "hint"
+reportAny = "none"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "examples"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportMissingParameterType = "none"
+reportAttributeAccessIssue = "none"
+reportMissingImports = "none"
+reportArgumentType = "hint"
+reportUnknownMemberType = "hint"
+reportUnknownParameterType = "hint"
+reportAny = "none"
+
 [tool.typos.default]
 extend-ignore-re = [
   "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"

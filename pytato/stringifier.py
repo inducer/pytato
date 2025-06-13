@@ -109,7 +109,8 @@ class Reprifier(Mapper[str, str, [int]]):
         elif isinstance(expr, frozenset | set):
             return "{" + ", ".join(self.rec(el, depth) for el in expr) + "}"
         elif isinstance(expr, np.dtype):
-            return f"'{expr.name}'"
+            dtype_name = cast("str", expr.name)
+            return f"'{dtype_name}'"
         else:
             return repr(expr)
 

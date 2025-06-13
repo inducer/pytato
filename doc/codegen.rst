@@ -12,3 +12,12 @@ Generic target support
 ----------------------
 
 .. automodule:: pytato.target
+
+References
+----------
+
+.. currentmodule:: cl_array
+
+.. class:: Allocator
+
+    See :class:`pyopencl.array.Allocator`.

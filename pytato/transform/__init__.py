@@ -2366,7 +2366,7 @@ class DataWrapperDeduplicator(CopyMapper):
 
             if isinstance(ary, CLArray):
                 base_data = ary.base_data
-                if isinstance(ary.base_data, MemoryObjectHolder):
+                if isinstance(base_data, MemoryObjectHolder):
                     ptr = base_data.int_ptr
                 elif SVMPointer is not None and isinstance(base_data, SVMPointer):
                     ptr = base_data.svm_ptr
