@@ -60,7 +60,7 @@ from pytato.scalar_expr import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from pymbolic.typing import ArithmeticExpression, Expression, Integer
 
@@ -338,8 +338,8 @@ def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
     return aff_to_expr(aff)
 
 
-def solve_constraints(variables: Iterable[str],
-                      parameters: Iterable[str],
+def solve_constraints(variables: Sequence[str],
+                      parameters: Sequence[str],
                       constraints: Sequence[tuple[ArithmeticExpression,
                                                   ArithmeticExpression]],
 
@@ -520,10 +520,10 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
     # }}}
 
-    solutions = solve_constraints(variables={_lp_var_to_global_namespace(var)
-                                             for var in lp_size_params},
-                                  parameters={_pt_var_to_global_namespace(var.name)
-                                              for var in pt_size_params},
+    solutions = solve_constraints(variables=list({_lp_var_to_global_namespace(var)
+                                             for var in lp_size_params}),
+                                  parameters=list({_pt_var_to_global_namespace(var.name)
+                                              for var in pt_size_params}),
                                   constraints=constraints)
 
     as_pt_size_param = EvaluationMapper({_pt_var_to_global_namespace(arg.name): arg

@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     import pyopencl
+    import pyopencl.array as cl_array
 
 
 class ImplSubstitution(ImplementationStrategy):
@@ -176,7 +177,7 @@ class BoundPyOpenCLProgram(BoundProgram):
     def _get_processed_bound_arguments(
                 self,
                 queue: pyopencl.CommandQueue,
-                allocator: Callable[[int], pyopencl.MemoryObject] | None,
+                allocator: cl_array.Allocator | None,
             ) -> Mapping[str, Any]:
         import pyopencl.array as cla
 
@@ -216,7 +217,8 @@ class BoundPyOpenCLProgram(BoundProgram):
                    for arg in self.bound_arguments.values())
 
     def __call__(self, queue: pyopencl.CommandQueue,  # type: ignore[no-untyped-def,no-any-unimported]
-                 allocator=None, wait_for=None, out_host: bool | None = None,
+                 allocator: cl_array.Allocator | None = None,
+                 wait_for: pyopencl.WaitList = None, out_host: bool | None = None,
                  **kwargs: Any) -> Any:
         """Convenience function for launching a :mod:`pyopencl` computation."""
 

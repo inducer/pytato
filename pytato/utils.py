@@ -423,8 +423,7 @@ def _is_non_negative(expr: ShapeComponent) -> Bool:
                                       for expr in InputGatherer()(expr)})
     aff = ShapeToISLExpressionMapper(space)(expr)
 
-    # type-ignore because islpy is not typed yet
-    return (aff.ge_set(aff * 0) >= _get_size_params_assumptions_bset(space))  # type: ignore[no-any-return]
+    return aff.ge_set(aff * 0) >= _get_size_params_assumptions_bset(space).to_set()
 
 
 def _is_non_positive(expr: ShapeComponent) -> Bool:
@@ -485,7 +484,9 @@ def _normalize_slice(slice_: slice,
 
 
 def _normalized_slice_len(slice_: NormalizedSlice) -> ShapeComponent:
-    start, stop, step = slice_.start, slice_.stop, slice_.step
+    start, stop, step = cast(
+                "tuple[int, int, int]",
+                (slice_.start, slice_.stop, slice_.step))
 
     if step > 0:
         if _is_non_negative(stop - start):
