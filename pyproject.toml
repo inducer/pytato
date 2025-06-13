@@ -48,6 +48,14 @@ include = [
     "/pytato",
 ]
 
+exclude = [
+  "/.git*",
+  "/doc/_build",
+  "/.editorconfig",
+  "/run-*.sh",
+  "/.basedpyright",
+]
+
 [tool.ruff.lint]
 preview = true
 extend-select = [
