@@ -30,17 +30,16 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-import islpy as isl
+import loopy.symbolic as lp_symbolic
+import pymbolic.primitives as prim
 from typing_extensions import Never
 
 import loopy as lp
-import loopy.symbolic as lp_symbolic
-import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpression, var
-
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
+from pymbolic import ArithmeticExpression, var
 from pytato.array import (
+    AbstractResultWithNamedArrays,
     Array,
     DataWrapper,
     DictOfNamedArrays,
@@ -74,6 +73,8 @@ from pytato.tags import (
 )
 from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
+
+import islpy as isl
 
 
 if TYPE_CHECKING:
@@ -1036,7 +1037,7 @@ def get_initial_codegen_state(target: LoopyTarget,
 
 # {{{ generate_loopy
 
-def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],
+def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Array],
                    target: LoopyTarget | None = None,
                    options: lp.Options | None = None,
                    *,

@@ -640,7 +640,7 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
             self.count += 1
 
 
-def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
+def get_num_call_sites(outputs: ArrayOrNames) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
     from pytato.codegen import normalize_outputs
