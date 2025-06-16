@@ -42,7 +42,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Never, Self
+from typing_extensions import Never, Self, override
 
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -91,7 +91,10 @@ if TYPE_CHECKING:
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
 MappedT = TypeVar("MappedT",
-                  Array, AbstractResultWithNamedArrays, ArrayOrNames)
+                  Array, AbstractResultWithNamedArrays, DictOfNamedArrays)
+ArrayOrNamesOrFunctionDefTc = TypeVar("ArrayOrNamesOrFunctionDefTc",
+                  Array, AbstractResultWithNamedArrays, DictOfNamedArrays,
+                  FunctionDefinition)
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = frozenset[Array]
 
@@ -701,6 +704,26 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             err_on_collision=function_cache.err_on_collision,
             err_on_created_duplicate=function_cache.err_on_created_duplicate,
             _function_cache=function_cache)
+
+    @override
+    # This overrides incompatibly on purpose, in order to convey stronger
+    # guarantees. We're not trying to be very mapper-polymorphic, so
+    # IMO this inconsistency is "worth it(tm)". -AK, 2025-06-16
+    def __call__(  # pyright: ignore[reportIncompatibleMethodOverride]
+            self,
+            expr: ArrayOrNamesOrFunctionDefTc,
+            ) -> ArrayOrNamesOrFunctionDefTc:
+        """Handle the mapping of *expr*."""
+        if isinstance(expr, Array):
+            return cast("Array", self.rec(expr))
+        elif isinstance(expr, AbstractResultWithNamedArrays):
+            return cast("AbstractResultWithNamedArrays", self.rec(expr))
+        elif isinstance(expr, FunctionDefinition):
+            return self.rec_function_definition(expr)
+        else:
+            raise ForeignObjectError(
+                f"{type(self).__name__} encountered invalid foreign "
+                f"object: {expr!r}") from None
 
 # }}}
 
@@ -2076,7 +2099,7 @@ def map_and_copy(expr: MappedT,
     return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
 
 
-def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+def materialize_with_mpms(expr: MappedT) -> MappedT:
     r"""
     Materialize nodes in *expr* with MPMS materialization strategy.
     MPMS stands for Multiple-Predecessors, Multiple-Successors.
@@ -2128,19 +2151,8 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     """
     from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
-    new_data = {}
-    for name, ary in expr.items():
-        new_data[name] = materializer(ary.expr).expr
-
-    res = DictOfNamedArrays(new_data, tags=expr.tags)
-
-    from pytato import DEBUG_ENABLED
-    if DEBUG_ENABLED:
-        transform_logger.info("materialize_with_mpms: materialized "
-            f"{get_num_tags_of_type(res, ImplStored)} out of "
-            f"{get_num_nodes(res)} nodes")
-
-    return res
+    # FIXME??
+    return materializer(expr).expr
 
 # }}}
 

@@ -10,10 +10,6 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
-from typing_extensions import TypeIs
-
 
 __copyright__ = """Copyright (C) 2020 Matt Wala"""
 
@@ -38,15 +34,15 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from immutabledict import immutabledict
+from pymbolic.mapper.optimize import optimize_mapper
+from typing_extensions import TypeIs
 
 import loopy as lp
-from pymbolic.mapper.optimize import optimize_mapper
-from pytools import UniqueNameGenerator
-
 from pytato.array import (
+    AbstractResultWithNamedArrays,
     Array,
     DataInterface,
     DataWrapper,
@@ -66,6 +62,7 @@ from pytato.transform import (
     TransformMapperCache,
 )
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
+from pytools import UniqueNameGenerator
 
 
 if TYPE_CHECKING:
@@ -241,7 +238,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
 
 def normalize_outputs(
-            result: Array | DictOfNamedArrays | dict[str, Array]
+            result: Array | AbstractResultWithNamedArrays | dict[str, Array]
         ) -> DictOfNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
@@ -249,16 +246,15 @@ def normalize_outputs(
 
     :param result: Outputs of the computation.
     """
-    if not isinstance(result, Array | DictOfNamedArrays | dict):
+    if not isinstance(result, Array | AbstractResultWithNamedArrays | dict):
         raise TypeError("outputs of the computation should be "
-                "either an Array or a DictOfNamedArrays")
+                "either an Array or a AbstractResultWithNamedArrays")
 
     if isinstance(result, Array):
         outputs = make_dict_of_named_arrays({"_pt_out": result})
     elif isinstance(result, dict):
         outputs = make_dict_of_named_arrays(result)
     else:
-        assert isinstance(result, DictOfNamedArrays)
         outputs = result
 
     return outputs
