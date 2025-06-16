@@ -35,12 +35,13 @@ THE SOFTWARE.
 
 
 import dataclasses
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, overload
 
 import numpy as np
 from immutabledict import immutabledict
 
 from pytato.array import (
+    AbstractResultWithNamedArrays,
     Array,
     AxesT,
     AxisPermutation,
@@ -59,7 +60,8 @@ from pytato.array import (
 from pytato.transform import (
     ArrayOrNames,
     CacheKeyT,
-    MappedT,
+    FunctionT,
+    NamesT,
     TransformMapperWithExtraArgs,
     _verify_is_array,
 )
@@ -156,7 +158,7 @@ class EinsumDistributiveLawMapper(
     Primary mapper for :func:`apply_distributive_property_to_einsums`.
     """
     def __init__(self,
-                 how_to_distribute: Callable[[Array],
+                 how_to_distribute: Callable[[Einsum],
                                              EinsumDistributiveLawDescriptor]
                  ) -> None:
         super().__init__()
@@ -340,10 +342,34 @@ class EinsumDistributiveLawMapper(
         return _wrap_einsum_from_ctx(rec_expr, ctx)
 
 
+@overload
 def apply_distributive_property_to_einsums(
-    expr: MappedT,
-    how_to_distribute: Callable[[Array], EinsumDistributiveLawDescriptor]
-) -> MappedT:
+    expr: Array,
+    how_to_distribute: Callable[[Einsum], EinsumDistributiveLawDescriptor]
+) -> Array:
+    ...
+
+
+@overload
+def apply_distributive_property_to_einsums(
+    expr: NamesT,
+    how_to_distribute: Callable[[Einsum], EinsumDistributiveLawDescriptor]
+) -> NamesT:
+    ...
+
+
+@overload
+def apply_distributive_property_to_einsums(
+    expr: FunctionT,
+    how_to_distribute: Callable[[Einsum], EinsumDistributiveLawDescriptor]
+) -> FunctionT:
+    ...
+
+
+def apply_distributive_property_to_einsums(
+    expr: Array | NamesT | FunctionT,
+    how_to_distribute: Callable[[Einsum], EinsumDistributiveLawDescriptor]
+) -> Array | NamesT | FunctionT:
     """
     Returns a copy of *expr* after applying distributive law for einstein
     summation nodes in the expression graph.
@@ -377,4 +403,10 @@ def apply_distributive_property_to_einsums(
         True
     """
     mapper = EinsumDistributiveLawMapper(how_to_distribute)
-    return cast("MappedT", mapper(expr, None))
+    result = mapper(expr, None)
+    if isinstance(expr, Array):
+        return cast("Array", result)
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return cast("NamesT", result)
+    else:
+        return cast("FunctionT", result)

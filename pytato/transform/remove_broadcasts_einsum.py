@@ -28,15 +28,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, overload
 
-from pytato.array import Array, Einsum, EinsumAxisDescriptor
+from pytato.array import (
+    AbstractResultWithNamedArrays,
+    Array,
+    Einsum,
+    EinsumAxisDescriptor,
+)
 from pytato.transform import (
     ArrayOrNames,
     CacheKeyT,
     CopyMapperWithExtraArgs,
-    MappedT,
+    FunctionT,
     Mapper,
+    NamesT,
     _verify_is_array,
 )
 from pytato.utils import are_shape_components_equal
@@ -125,7 +131,23 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]])
             args=tuple(new_args), access_descriptors=tuple(new_access_descriptors))
 
 
-def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
+@overload
+def rewrite_einsums_with_no_broadcasts(expr: Array) -> Array:
+    ...
+
+
+@overload
+def rewrite_einsums_with_no_broadcasts(expr: NamesT) -> NamesT:
+    ...
+
+
+@overload
+def rewrite_einsums_with_no_broadcasts(expr: FunctionT) -> FunctionT:
+    ...
+
+
+def rewrite_einsums_with_no_broadcasts(
+        expr: Array | NamesT | FunctionT) -> Array | NamesT | FunctionT:
     """
     Rewrites all instances of :class:`~pytato.array.Einsum` in *expr* such that the
     einsum expressions avoid broadcasting axes of its operands. We do
@@ -152,6 +174,12 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return cast("MappedT", mapper(expr, ()))
+    result = mapper(expr, ())
+    if isinstance(expr, Array):
+        return cast("Array", result)
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return cast("NamesT", result)
+    else:
+        return cast("FunctionT", result)
 
 # vim:fdm=marker

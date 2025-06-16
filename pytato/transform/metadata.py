@@ -47,6 +47,8 @@ from typing import (
     ParamSpec,
     TypeAlias,
     TypeVar,
+    cast,
+    overload,
 )
 
 from bidict import bidict
@@ -79,7 +81,15 @@ from pytato.scalar_expr import (
     IDX_LAMBDA_AXIS_INDEX,
     CombineMapper,
 )
-from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
+from pytato.transform import (
+    ArrayOrNames,
+    ArrayT,
+    CopyMapper,
+    FunctionT,
+    Mapper,
+    NamesT,
+    TransformMapperCache,
+)
 from pytato.transform.lower_to_index_lambda import to_index_lambda
 
 
@@ -529,14 +539,50 @@ class AxisIgnoredForPropagationTag(Tag):
     pass
 
 
+@overload
 def unify_axes_tags(
-        expr: ArrayOrNames,
+        expr: ArrayT,
         *,
         tag_t: type[Tag] = Tag,
         equations_collector_t: type[
             AxesTagsEquationCollector] = AxesTagsEquationCollector,
         unify_redn_descrs: bool = True,
-) -> ArrayOrNames:
+) -> ArrayT:
+    ...
+
+
+@overload
+def unify_axes_tags(
+        expr: NamesT,
+        *,
+        tag_t: type[Tag] = Tag,
+        equations_collector_t: type[
+            AxesTagsEquationCollector] = AxesTagsEquationCollector,
+        unify_redn_descrs: bool = True,
+) -> NamesT:
+    ...
+
+
+@overload
+def unify_axes_tags(
+        expr: FunctionT,
+        *,
+        tag_t: type[Tag] = Tag,
+        equations_collector_t: type[
+            AxesTagsEquationCollector] = AxesTagsEquationCollector,
+        unify_redn_descrs: bool = True,
+) -> FunctionT:
+    ...
+
+
+def unify_axes_tags(
+        expr: ArrayT | NamesT | FunctionT,
+        *,
+        tag_t: type[Tag] = Tag,
+        equations_collector_t: type[
+            AxesTagsEquationCollector] = AxesTagsEquationCollector,
+        unify_redn_descrs: bool = True,
+) -> ArrayT | NamesT | FunctionT:
     r"""
     Returns a copy of *expr* with tags of type *tag_t* propagated along the
     array operations with the tags propagation semantics implemented in
@@ -600,8 +646,14 @@ def unify_axes_tags(
                 set()
             ).add(tag)
 
-    return AxisTagAttacher(axis_to_solved_tags,
-                           tag_corresponding_redn_descr=unify_redn_descrs,
-                           )(expr)
+    result = AxisTagAttacher(
+        axis_to_solved_tags,
+        tag_corresponding_redn_descr=unify_redn_descrs)(expr)
+    if isinstance(expr, Array):
+        return cast("ArrayT", result)
+    elif isinstance(expr, AbstractResultWithNamedArrays):
+        return cast("NamesT", result)
+    else:
+        return cast("FunctionT", result)
 
 # vim: fdm=marker
