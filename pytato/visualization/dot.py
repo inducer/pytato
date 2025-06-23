@@ -563,7 +563,7 @@ def _gather_partition_node_information(
 # }}}
 
 
-def get_dot_graph(result: Array | DictOfNamedArrays) -> str:
+def get_dot_graph(result: ArrayOrNames) -> str:
     r"""Return a string in the `dot <https://graphviz.org>`_ language depicting the
     graph of the computation of *result*.
 
@@ -571,7 +571,10 @@ def get_dot_graph(result: Array | DictOfNamedArrays) -> str:
         :func:`pytato.generate_loopy`).
     """
 
-    outputs: DictOfNamedArrays = normalize_outputs(result)
+    outputs = normalize_outputs(result)
+
+    # FIXME: What to do if outputs is not a DictOfNamedArrays?
+    assert isinstance(outputs, DictOfNamedArrays)
 
     return get_dot_graph_from_partition(
             DistributedGraphPartition(

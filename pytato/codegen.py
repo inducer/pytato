@@ -37,10 +37,12 @@ import dataclasses
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from immutabledict import immutabledict
-from pymbolic.mapper.optimize import optimize_mapper
 from typing_extensions import TypeIs
 
 import loopy as lp
+from pymbolic.mapper.optimize import optimize_mapper
+from pytools import UniqueNameGenerator
+
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
@@ -62,7 +64,6 @@ from pytato.transform import (
     TransformMapperCache,
 )
 from pytato.transform.lower_to_index_lambda import ToIndexLambdaMixin
-from pytools import UniqueNameGenerator
 
 
 if TYPE_CHECKING:
@@ -238,18 +239,14 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
 
 
 def normalize_outputs(
-            result: Array | AbstractResultWithNamedArrays | dict[str, Array]
-        ) -> DictOfNamedArrays:
+            result: ArrayOrNames | dict[str, Array]
+        ) -> AbstractResultWithNamedArrays:
     """Convert outputs of a computation to the canonical form.
 
     Performs a conversion to :class:`~pytato.DictOfNamedArrays` if necessary.
 
     :param result: Outputs of the computation.
     """
-    if not isinstance(result, Array | AbstractResultWithNamedArrays | dict):
-        raise TypeError("outputs of the computation should be "
-                "either an Array or a AbstractResultWithNamedArrays")
-
     if isinstance(result, Array):
         outputs = make_dict_of_named_arrays({"_pt_out": result})
     elif isinstance(result, dict):

@@ -30,14 +30,16 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-import loopy.symbolic as lp_symbolic
-import pymbolic.primitives as prim
+import islpy as isl
 from typing_extensions import Never
 
 import loopy as lp
+import loopy.symbolic as lp_symbolic
+import pymbolic.primitives as prim
+from pymbolic import ArithmeticExpression, var
+
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
-from pymbolic import ArithmeticExpression, var
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
@@ -73,8 +75,6 @@ from pytato.tags import (
 )
 from pytato.target.loopy import ImplSubstitution, LoopyPyOpenCLTarget, LoopyTarget
 from pytato.transform import Mapper
-
-import islpy as isl
 
 
 if TYPE_CHECKING:
@@ -1084,7 +1084,7 @@ def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Arr
     """
 
     result_is_dict = isinstance(result, dict | DictOfNamedArrays)
-    orig_outputs: DictOfNamedArrays = normalize_outputs(result)
+    orig_outputs: AbstractResultWithNamedArrays = normalize_outputs(result)
 
     del result
 
@@ -1097,6 +1097,11 @@ def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Arr
         target = LoopyPyOpenCLTarget()
 
     assert isinstance(target, LoopyTarget)
+
+    # FIXME: What to do with all of the code below if orig_outputs is not a
+    # DictOfNamedArrays?
+    if not isinstance(orig_outputs, DictOfNamedArrays):
+        raise NotImplementedError
 
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs

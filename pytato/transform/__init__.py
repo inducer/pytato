@@ -718,12 +718,8 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             return cast("Array", self.rec(expr))
         elif isinstance(expr, AbstractResultWithNamedArrays):
             return cast("AbstractResultWithNamedArrays", self.rec(expr))
-        elif isinstance(expr, FunctionDefinition):
-            return self.rec_function_definition(expr)
         else:
-            raise ForeignObjectError(
-                f"{type(self).__name__} encountered invalid foreign "
-                f"object: {expr!r}") from None
+            return self.rec_function_definition(expr)
 
 # }}}
 
@@ -1798,7 +1794,7 @@ class MPMSMaterializerAccumulator:
     (i.e. the expression with tags for materialization applied).
     """
     materialized_predecessors: frozenset[Array]
-    expr: Array
+    expr: ArrayOrNames
 
 
 class MPMSMaterializerCache(
@@ -1942,8 +1938,21 @@ class MPMSMaterializer(
     map_size_param = _map_input_base
 
     def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        raise NotImplementedError("only LoopyCallResult named array"
-                                  " supported for now.")
+        # FIXME: Think about this more (see comment in NUserCollector.map_named_array)
+        if isinstance(expr._container, DictOfNamedArrays):
+            rec_container = self.rec(expr._container)
+            assert isinstance(rec_container.expr, DictOfNamedArrays)
+            new_expr = rec_container.expr[expr.name]
+            if new_expr.tags_of_type(ImplStored):
+                return MPMSMaterializerAccumulator(frozenset({new_expr}), new_expr)
+            else:
+                return MPMSMaterializerAccumulator(
+                    rec_container.materialized_predecessors,
+                    new_expr)
+        else:
+            raise NotImplementedError(
+                "NamedArray instance has unrecognized container type "
+                f"{type(expr._container).__name__}.")
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
@@ -2027,7 +2036,20 @@ class MPMSMaterializer(
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
                                  ) -> MPMSMaterializerAccumulator:
-        raise NotImplementedError
+        # FIXME: Think about this more (see comment in NUserCollector.map_named_array)
+        rec_data: dict[str, MPMSMaterializerAccumulator] = {
+            name: self.rec(ary) for name, ary in expr._data.items()}
+        new_data: dict[str, Array] = {
+            name: _verify_is_array(ary.expr) for name, ary in rec_data.items()}
+
+        from functools import reduce
+        return MPMSMaterializerAccumulator(
+            reduce(
+                frozenset.union,
+                (ary.materialized_predecessors
+                 for ary in rec_data.values()),
+                frozenset()),
+            expr.replace_if_different(data=new_data))
 
     def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
         # loopy call result is always materialized
@@ -2096,7 +2118,7 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
+    return CachedMapAndCopyMapper(map_fn)(expr)
 
 
 def materialize_with_mpms(expr: MappedT) -> MappedT:
@@ -2151,8 +2173,17 @@ def materialize_with_mpms(expr: MappedT) -> MappedT:
     """
     from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
-    # FIXME??
-    return materializer(expr).expr
+
+    res = materializer(expr).expr
+    assert isinstance(res, type(expr))
+
+    from pytato import DEBUG_ENABLED
+    if DEBUG_ENABLED:
+        transform_logger.info("materialize_with_mpms: materialized "
+            f"{get_num_tags_of_type(res, ImplStored)} out of "
+            f"{get_num_nodes(res)} nodes")
+
+    return res
 
 # }}}
 
