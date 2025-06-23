@@ -90,7 +90,7 @@ if TYPE_CHECKING:
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
-MappedT = TypeVar("MappedT",
+ArrayOrNamesTc = TypeVar("ArrayOrNamesTc",
                   Array, AbstractResultWithNamedArrays, DictOfNamedArrays)
 ArrayOrNamesOrFunctionDefTc = TypeVar("ArrayOrNamesOrFunctionDefTc",
                   Array, AbstractResultWithNamedArrays, DictOfNamedArrays,
@@ -2103,9 +2103,9 @@ def get_dependencies(expr: DictOfNamedArrays) -> dict[str, frozenset[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 
-def map_and_copy(expr: MappedT,
+def map_and_copy(expr: ArrayOrNamesTc,
                  map_fn: Callable[[ArrayOrNames], ArrayOrNames]
-                 ) -> MappedT:
+                 ) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* with every array expression reachable from *expr*
     mapped via *map_fn*.
@@ -2118,7 +2118,7 @@ def map_and_copy(expr: MappedT,
     return CachedMapAndCopyMapper(map_fn)(expr)
 
 
-def materialize_with_mpms(expr: MappedT) -> MappedT:
+def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     r"""
     Materialize nodes in *expr* with MPMS materialization strategy.
     MPMS stands for Multiple-Predecessors, Multiple-Successors.

@@ -44,9 +44,9 @@ from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.tags import InlineCallTag
 from pytato.transform import (
     ArrayOrNames,
+    ArrayOrNamesTc,
     CopyMapper,
     Deduplicator,
-    MappedT,
     TransformMapperCache,
     _verify_is_array,
 )
@@ -152,7 +152,7 @@ class InlineMarker(CopyMapper):
         return super().map_call(expr).tagged(InlineCallTag())
 
 
-def inline_calls(expr: MappedT) -> MappedT:
+def inline_calls(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* with call sites tagged with
     :class:`pytato.tags.InlineCallTag` inlined into the expression graph.
@@ -160,7 +160,7 @@ def inline_calls(expr: MappedT) -> MappedT:
     return Deduplicator()(Inliner()(expr))
 
 
-def tag_all_calls_to_be_inlined(expr: MappedT) -> MappedT:
+def tag_all_calls_to_be_inlined(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* with all reachable instances of
     :class:`pytato.function.Call` nodes tagged with

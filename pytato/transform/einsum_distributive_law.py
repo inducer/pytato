@@ -58,8 +58,8 @@ from pytato.array import (
 )
 from pytato.transform import (
     ArrayOrNames,
+    ArrayOrNamesTc,
     CacheKeyT,
-    MappedT,
     TransformMapperWithExtraArgs,
     _verify_is_array,
 )
@@ -341,9 +341,9 @@ class EinsumDistributiveLawMapper(
 
 
 def apply_distributive_property_to_einsums(
-    expr: MappedT,
+    expr: ArrayOrNamesTc,
     how_to_distribute: Callable[[Array], EinsumDistributiveLawDescriptor]
-) -> MappedT:
+) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* after applying distributive law for einstein
     summation nodes in the expression graph.
@@ -377,4 +377,4 @@ def apply_distributive_property_to_einsums(
         True
     """
     mapper = EinsumDistributiveLawMapper(how_to_distribute)
-    return cast("MappedT", mapper(expr, None))
+    return cast("ArrayOrNamesTc", mapper(expr, None))
