@@ -79,7 +79,13 @@ from pytato.scalar_expr import (
     IDX_LAMBDA_AXIS_INDEX,
     CombineMapper,
 )
-from pytato.transform import ArrayOrNames, CopyMapper, Mapper, TransformMapperCache
+from pytato.transform import (
+    ArrayOrNames,
+    ArrayOrNamesOrFunctionDefTc,
+    CopyMapper,
+    Mapper,
+    TransformMapperCache,
+)
 from pytato.transform.lower_to_index_lambda import to_index_lambda
 
 
@@ -530,13 +536,13 @@ class AxisIgnoredForPropagationTag(Tag):
 
 
 def unify_axes_tags(
-        expr: ArrayOrNames,
+        expr: ArrayOrNamesOrFunctionDefTc,
         *,
         tag_t: type[Tag] = Tag,
         equations_collector_t: type[
             AxesTagsEquationCollector] = AxesTagsEquationCollector,
         unify_redn_descrs: bool = True,
-) -> ArrayOrNames:
+) -> ArrayOrNamesOrFunctionDefTc:
     r"""
     Returns a copy of *expr* with tags of type *tag_t* propagated along the
     array operations with the tags propagation semantics implemented in

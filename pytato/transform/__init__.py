@@ -2042,13 +2042,10 @@ class MPMSMaterializer(
         new_data: dict[str, Array] = {
             name: _verify_is_array(ary.expr) for name, ary in rec_data.items()}
 
-        from functools import reduce
+        from loopy.typing import fset_union
         return MPMSMaterializerAccumulator(
-            reduce(
-                frozenset.union,
-                (ary.materialized_predecessors
-                 for ary in rec_data.values()),
-                frozenset()),
+            fset_union(
+                ary.materialized_predecessors for ary in rec_data.values()),
             expr.replace_if_different(data=new_data))
 
     def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
@@ -2451,7 +2448,9 @@ class DataWrapperDeduplicator(CopyMapper):
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
 
-def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
+def deduplicate_data_wrappers(
+            array_or_names: ArrayOrNamesOrFunctionDefTc
+        ) -> ArrayOrNamesOrFunctionDefTc:
     """For the expression graph given as *array_or_names*, replace all
     :class:`pytato.array.DataWrapper` instances containing identical data
     with a single instance.
