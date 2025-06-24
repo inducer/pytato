@@ -947,14 +947,18 @@ class Array(Taggable):
         # expected "Union[int, Sequence[int]]"
         return pt.reshape(self, shape, order=order)  # type: ignore[arg-type]
 
-    def all(self, axis: int = 0) -> ArrayOrScalar:
+    def all(self,
+                axis: int | tuple[int, ...] | None = None,
+            ) -> ArrayOrScalar:
         """
         Equivalent to :func:`pytato.all`.
         """
         import pytato as pt
         return pt.all(self, axis)
 
-    def any(self, axis: int = 0) -> ArrayOrScalar:
+    def any(self,
+                axis: int | tuple[int, ...] | None = None,
+            ) -> ArrayOrScalar:
         """
         Equivalent to :func:`pytato.any`.
         """
