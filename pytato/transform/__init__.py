@@ -119,6 +119,7 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autofunction:: copy_dict_of_named_arrays
+.. autofunction:: deduplicate
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: materialize_with_mpms
@@ -1135,7 +1136,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 # }}}
 
 
-# {{{ Deduplicator
+# {{{ deduplicate
 
 class Deduplicator(CopyMapper):
     """Removes duplicate nodes from an expression."""
@@ -1153,6 +1154,20 @@ class Deduplicator(CopyMapper):
         return type(self)(
             _function_cache=cast(
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+
+
+def deduplicate(
+        expr: ArrayOrNamesOrFunctionDefTc
+        ) -> ArrayOrNamesOrFunctionDefTc:
+    """
+    Remove duplicate nodes from an expression.
+
+    .. note::
+        Does not remove distinct instances of data wrappers that point to the same
+        data (as they will not hash the same). For a utility that does that, see
+        :func:`deduplicate_data_wrappers`.
+    """
+    return Deduplicator()(expr)
 
 # }}}
 

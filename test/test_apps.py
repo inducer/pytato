@@ -39,7 +39,7 @@ from pyopencl.tools import (  # noqa: F401
 from pytools.tag import Tag, tag_dataclass
 
 import pytato as pt
-from pytato.transform import CopyMapper, Deduplicator, WalkMapper
+from pytato.transform import CopyMapper, WalkMapper, deduplicate
 
 
 # {{{ Trace an FFT
@@ -138,7 +138,7 @@ def test_trace_fft(ctx_factory: cl.CtxFactory):
             wrap_intermediate_with_level=(
                 lambda level, ary: ary.tagged(FFTIntermediate(level))))
 
-    result = Deduplicator()(result)
+    result = deduplicate(result)
     fft_vec_gatherer = FFTVectorGatherer(n)
     fft_vec_gatherer(result)
 

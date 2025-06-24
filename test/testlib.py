@@ -161,7 +161,7 @@ _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
 def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
         def dedup(expr: Array) -> Array:
-            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+            return pt.transform._verify_is_array(pt.transform.deduplicate(expr))
 
     else:
         def dedup(expr: Array) -> Array:
@@ -252,7 +252,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
     """
     if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
         def dedup(expr: Array) -> Array:
-            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+            return pt.transform._verify_is_array(pt.transform.deduplicate(expr))
 
     else:
         def dedup(expr: Array) -> Array:

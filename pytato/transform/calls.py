@@ -46,9 +46,9 @@ from pytato.transform import (
     ArrayOrNames,
     ArrayOrNamesTc,
     CopyMapper,
-    Deduplicator,
     TransformMapperCache,
     _verify_is_array,
+    deduplicate,
 )
 
 
@@ -157,7 +157,7 @@ def inline_calls(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     Returns a copy of *expr* with call sites tagged with
     :class:`pytato.tags.InlineCallTag` inlined into the expression graph.
     """
-    return Deduplicator()(Inliner()(expr))
+    return deduplicate(Inliner()(expr))
 
 
 def tag_all_calls_to_be_inlined(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
