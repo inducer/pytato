@@ -149,9 +149,15 @@ Internal stuff that is only here because the documentation tool wants it
 
 .. class:: ArrayOrNames
 
-.. class:: MappedT
+.. class:: ArrayOrNamesTc
 
-    A type variable representing the input type of a :class:`Mapper`.
+    A type variable representing the input type of a :class:`Mapper`, excluding
+    functions.
+
+.. class:: ArrayOrNamesOrFunctionDefTc
+
+    A type variable representing the input type of a :class:`Mapper`, including
+    functions.
 
 .. class:: ResultT
 
