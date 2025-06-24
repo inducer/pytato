@@ -46,6 +46,12 @@ Cross-References for Other Documentation
     The type of the Python-builtin :data:`Ellipsis` object. (not otherwise
     documented)
 
+.. currentmodule:: prim
+
+.. class:: NaN
+
+    See :class:`pymbolic.primitives.NaN`.
+
 .. currentmodule:: loopy.kernel
 
 .. class:: LoopKernel

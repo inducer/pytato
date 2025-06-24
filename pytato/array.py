@@ -48,8 +48,14 @@ Array Interface
 .. autoclass:: DictOfNamedArrays
 .. autoclass:: AbstractResultWithNamedArrays
 
+.. currentmodule:: pytato.array
+
+.. autoclass:: ArrayOrScalarT
+
 NumPy-Like Interface
 --------------------
+
+.. currentmodule:: pytato
 
 These functions generally follow the interface of the corresponding functions in
 :mod:`numpy`, but not all NumPy features may be supported.
@@ -225,16 +231,23 @@ if TYPE_CHECKING:
 else:
     _dtype_any = np.dtype
 
+# {{{ typing helpers
+
 AxesT = tuple["Axis", ...]
 ArrayT = TypeVar("ArrayT", bound="Array")
 
+ArrayOrScalar: TypeAlias = "Array | Scalar"
+
+ArrayOrScalarT = TypeVar("ArrayOrScalarT", "Array", Scalar, ArrayOrScalar)
+
+ShapeComponent: TypeAlias = "Integer | Array"
+ShapeType: TypeAlias = tuple[ShapeComponent, ...]
+ConvertibleToShape: TypeAlias = "ShapeComponent | Sequence[ShapeComponent]"
+
+# }}}
+
 
 # {{{ shape
-
-ShapeComponent = Union[Integer, "Array"]
-ShapeType = tuple[ShapeComponent, ...]
-ConvertibleToShape = ShapeComponent | Sequence[ShapeComponent]
-
 
 def _check_identifier(s: str | None, optional: bool) -> bool:
     if s is None:
@@ -898,7 +911,7 @@ class Array(Taggable):
     def __rxor__(self, other: ArrayOrScalar) -> Array:
         return self._binary_op(operator.xor, other, reverse=True)
 
-    def conj(self) -> ArrayOrScalar:
+    def conj(self) -> Array:
         import pytato as pt
         return pt.conj(self)
 
@@ -913,12 +926,12 @@ class Array(Taggable):
         raise ValueError("The truth value of an array expression is undefined.")
 
     @property
-    def real(self) -> ArrayOrScalar:
+    def real(self) -> Array:
         import pytato as pt
         return pt.real(self)
 
     @property
-    def imag(self) -> ArrayOrScalar:
+    def imag(self) -> Array:
         import pytato as pt
         return pt.imag(self)
 
@@ -964,9 +977,6 @@ class Array(Taggable):
     def __repr__(self) -> str:
         from pytato.stringifier import Reprifier
         return Reprifier()(self)
-
-
-ArrayOrScalar: TypeAlias = Array | Scalar
 
 # }}}
 
@@ -2760,7 +2770,17 @@ def greater_equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
 
 # {{{ logical operations
 
-def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
+@overload
+def logical_or(x1: Scalar, x2: Scalar, /) -> bool: ...
+
+@overload
+def logical_or(x1: ArrayOrScalar, x2: Array, /) -> Array: ...
+
+@overload
+def logical_or(x1: Array, x2: ArrayOrScalar, /) -> Array: ...
+
+
+def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar, /) -> Array | bool:
     """
     Returns the element-wise logical OR of *x1* and *x2*.
     """
@@ -2776,6 +2796,16 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
                                      cast_to_result_dtype=False,
                                      is_pow=False,
                                      )  # type: ignore[return-value]
+
+
+@overload
+def logical_and(x1: Scalar, x2: Scalar, /) -> bool: ...
+
+@overload
+def logical_and(x1: ArrayOrScalar, x2: Array, /) -> Array: ...
+
+@overload
+def logical_and(x1: Array, x2: ArrayOrScalar, /) -> Array: ...
 
 
 def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
@@ -2890,8 +2920,7 @@ def maximum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
-                     # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.nan),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),
                      where(greater(x1, x2), x1, x2))
     else:
         return where(greater(x1, x2), x1, x2)
@@ -2909,8 +2938,7 @@ def minimum(x1: ArrayOrScalar, x2: ArrayOrScalar) -> ArrayOrScalar:
             or np.issubdtype(common_dtype, np.complexfloating)):
         from pytato.cmath import isnan
         return where(logical_or(isnan(x1), isnan(x2)),
-                     # I don't know why pylint thinks common_dtype is a tuple.
-                     common_dtype.type(np.nan),  # pylint: disable=no-member
+                     common_dtype.type(np.nan),
                      where(less(x1, x2), x1, x2))
     else:
         return where(less(x1, x2), x1, x2)
@@ -2924,7 +2952,7 @@ def make_index_lambda(
         expression: str | ScalarExpression,
         bindings: Mapping[str, Array],
         shape: ShapeType,
-        dtype: Any,
+        dtype: DTypeLike,
         var_to_reduction_descr: Mapping[str, ReductionDescriptor] | None = None
 ) -> IndexLambda:
     if isinstance(expression, str):
@@ -2966,7 +2994,7 @@ def make_index_lambda(
     return IndexLambda(expr=expression,
                        bindings=immutabledict(bindings),
                        shape=shape,
-                       dtype=dtype,
+                       dtype=np.dtype(dtype),
                        tags=_get_default_tags(),
                        non_equality_tags=_get_created_at_tag(),
                        axes=_get_default_axes(len(shape)),
