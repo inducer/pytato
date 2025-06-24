@@ -41,6 +41,7 @@ from pymbolic import ArithmeticExpression, var
 import pytato.reductions as red
 import pytato.scalar_expr as scalar_expr
 from pytato.array import (
+    AbstractResultWithNamedArrays,
     Array,
     DataWrapper,
     DictOfNamedArrays,
@@ -1036,7 +1037,7 @@ def get_initial_codegen_state(target: LoopyTarget,
 
 # {{{ generate_loopy
 
-def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],
+def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Array],
                    target: LoopyTarget | None = None,
                    options: lp.Options | None = None,
                    *,
@@ -1083,7 +1084,11 @@ def generate_loopy(result: Array | DictOfNamedArrays | dict[str, Array],
     """
 
     result_is_dict = isinstance(result, dict | DictOfNamedArrays)
-    orig_outputs: DictOfNamedArrays = normalize_outputs(result)
+    orig_outputs: AbstractResultWithNamedArrays = normalize_outputs(result)
+
+    if not isinstance(orig_outputs, DictOfNamedArrays):
+        raise NotImplementedError(
+            f"not implemented for {type(result).__name__}.")
 
     del result
 

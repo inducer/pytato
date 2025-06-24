@@ -811,7 +811,7 @@ def test_rec_get_user_nodes_linear_complexity():
                 assert expr.name == "x"
 
     expr, inp = construct_intestine_graph()
-    expr = pt.transform.Deduplicator()(expr)
+    expr = pt.transform.deduplicate(expr)
 
     result = pt.transform.rec_get_user_nodes(expr, inp)
     SubexprRecorder()(expr)
@@ -1036,7 +1036,7 @@ def test_created_at():
 
         old_tag = tag
 
-        res1_new = pt.transform.Deduplicator()(res1)
+        res1_new = pt.transform.deduplicate(res1)
 
         created_tag = frozenset({tag
                              for tag in res1_new.non_equality_tags
@@ -1255,7 +1255,7 @@ def test_tagcountmapper():
 
     out = make_random_dag(rdagc_pt).tagged(ExistentTag())
 
-    dag = pt.transform.Deduplicator()(pt.make_dict_of_named_arrays({"out": out}))
+    dag = pt.transform.deduplicate(pt.make_dict_of_named_arrays({"out": out}))
 
     # get_num_nodes() returns an extra DictOfNamedArrays node
     assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)

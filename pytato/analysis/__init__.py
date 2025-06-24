@@ -211,13 +211,11 @@ class NUserCollector(Mapper[None, None, []]):
 # }}}
 
 
-def get_nusers(outputs: Array | DictOfNamedArrays) -> Mapping[Array, int]:
+def get_nusers(outputs: ArrayOrNames) -> Mapping[Array, int]:
     """
-    For the DAG *outputs*, returns the mapping from each node to the number of
+    For the DAG *outputs*, returns the mapping from each array node to the number of
     nodes using its value within the DAG given by *outputs*.
     """
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
     nuser_collector = NUserCollector()
     nuser_collector(outputs)
     return nuser_collector.nusers
@@ -508,7 +506,7 @@ class NodeCountMapper(CachedWalkMapper[[]]):
 
 
 def get_node_type_counts(
-        outputs: Array | DictOfNamedArrays,
+        outputs: ArrayOrNames,
         count_duplicates: bool = False
         ) -> dict[type[Any], int]:
     """
@@ -518,9 +516,6 @@ def get_node_type_counts(
     Instances of `DictOfNamedArrays` are excluded from counting.
     """
 
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
     ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
 
@@ -528,7 +523,7 @@ def get_node_type_counts(
 
 
 def get_num_nodes(
-        outputs: Array | DictOfNamedArrays,
+        outputs: ArrayOrNames,
         count_duplicates: bool | None = None
         ) -> int:
     """
@@ -543,9 +538,6 @@ def get_num_nodes(
             "For now, pass the desired value explicitly.",
             DeprecationWarning, stacklevel=2)
         count_duplicates = True
-
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
 
     ncm = NodeCountMapper(count_duplicates)
     ncm(outputs)
@@ -586,14 +578,10 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
             self.expr_multiplicity_counts[expr] += 1
 
 
-def get_node_multiplicities(
-        outputs: Array | DictOfNamedArrays) -> dict[Array, int]:
+def get_node_multiplicities(outputs: ArrayOrNames) -> dict[Array, int]:
     """
     Returns the multiplicity per `expr`.
     """
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
     nmm = NodeMultiplicityMapper()
     nmm(outputs)
 
@@ -640,7 +628,7 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
             self.count += 1
 
 
-def get_num_call_sites(outputs: Array | DictOfNamedArrays) -> int:
+def get_num_call_sites(outputs: ArrayOrNames) -> int:
     """Returns the number of nodes in DAG *outputs*."""
 
     from pytato.codegen import normalize_outputs
@@ -700,7 +688,7 @@ class TagCountMapper(CombineMapper[int, Never]):
 
 
 def get_num_tags_of_type(
-        outputs: Array | DictOfNamedArrays,
+        outputs: ArrayOrNames,
         tag_types: type[pytools.tag.Tag] | Iterable[type[pytools.tag.Tag]]) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tag types in *tag_types*."""

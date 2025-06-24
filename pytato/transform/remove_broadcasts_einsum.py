@@ -33,9 +33,9 @@ from typing import TYPE_CHECKING, cast
 from pytato.array import Array, Einsum, EinsumAxisDescriptor
 from pytato.transform import (
     ArrayOrNames,
+    ArrayOrNamesTc,
     CacheKeyT,
     CopyMapperWithExtraArgs,
-    MappedT,
     Mapper,
     _verify_is_array,
 )
@@ -125,7 +125,7 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]])
             args=tuple(new_args), access_descriptors=tuple(new_access_descriptors))
 
 
-def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
+def rewrite_einsums_with_no_broadcasts(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     """
     Rewrites all instances of :class:`~pytato.array.Einsum` in *expr* such that the
     einsum expressions avoid broadcasting axes of its operands. We do
@@ -152,6 +152,6 @@ def rewrite_einsums_with_no_broadcasts(expr: MappedT) -> MappedT:
         alter its value.
     """
     mapper = EinsumWithNoBroadcastsRewriter()
-    return cast("MappedT", mapper(expr, ()))
+    return cast("ArrayOrNamesTc", mapper(expr, ()))
 
 # vim:fdm=marker

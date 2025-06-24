@@ -42,7 +42,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Never, Self
+from typing_extensions import Never, Self, override
 
 from pymbolic.mapper.optimize import optimize_mapper
 
@@ -90,8 +90,11 @@ if TYPE_CHECKING:
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
-MappedT = TypeVar("MappedT",
-                  Array, AbstractResultWithNamedArrays, ArrayOrNames)
+ArrayOrNamesTc = TypeVar("ArrayOrNamesTc",
+                  Array, AbstractResultWithNamedArrays, DictOfNamedArrays)
+ArrayOrNamesOrFunctionDefTc = TypeVar("ArrayOrNamesOrFunctionDefTc",
+                  Array, AbstractResultWithNamedArrays, DictOfNamedArrays,
+                  FunctionDefinition)
 IndexOrShapeExpr = TypeVar("IndexOrShapeExpr")
 R = frozenset[Array]
 
@@ -116,6 +119,7 @@ __doc__ = """
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
 .. autofunction:: copy_dict_of_named_arrays
+.. autofunction:: deduplicate
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: materialize_with_mpms
@@ -145,9 +149,15 @@ Internal stuff that is only here because the documentation tool wants it
 
 .. class:: ArrayOrNames
 
-.. class:: MappedT
+.. class:: ArrayOrNamesTc
 
-    A type variable representing the input type of a :class:`Mapper`.
+    A type variable representing the input type of a :class:`Mapper`, excluding
+    functions.
+
+.. class:: ArrayOrNamesOrFunctionDefTc
+
+    A type variable representing the input type of a :class:`Mapper`, including
+    functions.
 
 .. class:: ResultT
 
@@ -702,6 +712,22 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
             err_on_created_duplicate=function_cache.err_on_created_duplicate,
             _function_cache=function_cache)
 
+    @override
+    # This overrides incompatibly on purpose, in order to convey stronger
+    # guarantees. We're not trying to be very mapper-polymorphic, so
+    # IMO this inconsistency is "worth it(tm)". -AK, 2025-06-16
+    def __call__(  # pyright: ignore[reportIncompatibleMethodOverride]
+            self,
+            expr: ArrayOrNamesOrFunctionDefTc,
+            ) -> ArrayOrNamesOrFunctionDefTc:
+        """Handle the mapping of *expr*."""
+        if isinstance(expr, Array):
+            return cast("Array", self.rec(expr))
+        elif isinstance(expr, AbstractResultWithNamedArrays):
+            return cast("AbstractResultWithNamedArrays", self.rec(expr))
+        else:
+            return self.rec_function_definition(expr)
+
 # }}}
 
 
@@ -1116,7 +1142,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 # }}}
 
 
-# {{{ Deduplicator
+# {{{ deduplicate
 
 class Deduplicator(CopyMapper):
     """Removes duplicate nodes from an expression."""
@@ -1134,6 +1160,20 @@ class Deduplicator(CopyMapper):
         return type(self)(
             _function_cache=cast(
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
+
+
+def deduplicate(
+        expr: ArrayOrNamesOrFunctionDefTc
+        ) -> ArrayOrNamesOrFunctionDefTc:
+    """
+    Remove duplicate nodes from an expression.
+
+    .. note::
+        Does not remove distinct instances of data wrappers that point to the same
+        data (as they will not hash the same). For a utility that does that, see
+        :func:`deduplicate_data_wrappers`.
+    """
+    return Deduplicator()(expr)
 
 # }}}
 
@@ -2061,9 +2101,9 @@ def get_dependencies(expr: DictOfNamedArrays) -> dict[str, frozenset[Array]]:
     return {name: dep_mapper(val.expr) for name, val in expr.items()}
 
 
-def map_and_copy(expr: MappedT,
+def map_and_copy(expr: ArrayOrNamesTc,
                  map_fn: Callable[[ArrayOrNames], ArrayOrNames]
-                 ) -> MappedT:
+                 ) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* with every array expression reachable from *expr*
     mapped via *map_fn*.
@@ -2073,10 +2113,10 @@ def map_and_copy(expr: MappedT,
         Uses :class:`CachedMapAndCopyMapper` under the hood and because of its
         caching nature each node is mapped exactly once.
     """
-    return cast("MappedT", CachedMapAndCopyMapper(map_fn)(expr))
+    return CachedMapAndCopyMapper(map_fn)(expr)
 
 
-def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
+def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     r"""
     Materialize nodes in *expr* with MPMS materialization strategy.
     MPMS stands for Multiple-Predecessors, Multiple-Successors.
@@ -2128,11 +2168,18 @@ def materialize_with_mpms(expr: DictOfNamedArrays) -> DictOfNamedArrays:
     """
     from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
-    new_data = {}
-    for name, ary in expr.items():
-        new_data[name] = materializer(ary.expr).expr
 
-    res = DictOfNamedArrays(new_data, tags=expr.tags)
+    if isinstance(expr, Array):
+        res = materializer(expr).expr
+        assert isinstance(res, Array)
+    elif isinstance(expr, DictOfNamedArrays):
+        res = expr.replace_if_different(
+            data={
+                name: _verify_is_array(materializer(ary).expr)
+                for name, ary, in expr._data.items()})
+        assert isinstance(res, DictOfNamedArrays)
+    else:
+        raise NotImplementedError("not implemented for {type(expr).__name__}.")
 
     from pytato import DEBUG_ENABLED
     if DEBUG_ENABLED:
@@ -2408,7 +2455,9 @@ class DataWrapperDeduplicator(CopyMapper):
                 "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
 
 
-def deduplicate_data_wrappers(array_or_names: ArrayOrNames) -> ArrayOrNames:
+def deduplicate_data_wrappers(
+            array_or_names: ArrayOrNamesOrFunctionDefTc
+        ) -> ArrayOrNamesOrFunctionDefTc:
     """For the expression graph given as *array_or_names*, replace all
     :class:`pytato.array.DataWrapper` instances containing identical data
     with a single instance.

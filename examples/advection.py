@@ -156,7 +156,7 @@ def test_advection_convergence(order, flux_type):
         op = AdvectionOperator(discr, c=1, flux_type=flux_type,
                                dg_ops=dg_ops)
         result = op.apply(u)
-        result = pt.transform.Deduplicator()(result)
+        result = pt.transform.deduplicate(result)
 
         prog = pt.generate_loopy(result, cl_device=queue.device)
 

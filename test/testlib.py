@@ -161,7 +161,7 @@ _BINOPS = [operator.add, operator.sub, operator.mul, operator.truediv,
 def make_random_dag_inner(rdagc: RandomDAGContext) -> Any:
     if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
         def dedup(expr: Array) -> Array:
-            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+            return pt.transform._verify_is_array(pt.transform.deduplicate(expr))
 
     else:
         def dedup(expr: Array) -> Array:
@@ -252,7 +252,7 @@ def make_random_dag(rdagc: RandomDAGContext) -> Any:
     """
     if not rdagc.use_numpy and not rdagc.allow_duplicate_nodes:
         def dedup(expr: Array) -> Array:
-            return pt.transform._verify_is_array(pt.transform.Deduplicator()(expr))
+            return pt.transform._verify_is_array(pt.transform.deduplicate(expr))
 
     else:
         def dedup(expr: Array) -> Array:
@@ -303,8 +303,6 @@ def get_random_pt_dag(seed: int,
     if additional_generators is None:
         additional_generators = []
 
-    from typing import cast
-
     from testlib import RandomDAGContext, make_random_dag
 
     rdagc_comm = RandomDAGContext(np.random.default_rng(seed=seed),
@@ -325,8 +323,7 @@ def get_random_pt_dag(seed: int,
             else:
                 return expr
 
-        dag = cast("pt.DictOfNamedArrays",
-                   pt.transform.map_and_copy(dag, make_dws_placeholder))
+        dag = pt.transform.map_and_copy(dag, make_dws_placeholder)
 
     return dag
 
