@@ -27,7 +27,6 @@ THE SOFTWARE.
 """
 
 import sys
-from typing import cast
 
 import numpy as np
 
@@ -91,7 +90,7 @@ def test_apply_einsum_distributive_law_1():
     assert (
         y_transformed == (
             7 * (A1 @ (2*x1-3*x2))
-            + 8 * (cast("pt.Array", pt.sin(A2)) @ (2*x1-3*x2))))
+            + 8 * (pt.sin(A2) @ (2*x1-3*x2))))
 
 
 def test_apply_einsum_distributive_law_2():

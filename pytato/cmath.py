@@ -63,11 +63,12 @@ import numpy as np
 from immutabledict import immutabledict
 
 import pymbolic.primitives as prim
-from pymbolic import Scalar, var
+from pymbolic import var
 
 from pytato.array import (
     Array,
     ArrayOrScalar,
+    ArrayOrScalarT,
     IndexLambda,
     _dtype_any,
     _get_created_at_tag,
@@ -81,17 +82,17 @@ if TYPE_CHECKING:
     from pymbolic.typing import Expression
 
 
-def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
+def _apply_elem_wise_func(inputs: tuple[ArrayOrScalarT, ...],
                           func_name: str,
                           ret_dtype: _dtype_any | None = None,
                           np_func_name: str | None = None
-                          ) -> ArrayOrScalar:
+                          ) -> ArrayOrScalarT:
     if all(isinstance(x, SCALAR_CLASSES) for x in inputs):
         if np_func_name is None:
             np_func_name = func_name
 
         np_func = getattr(np, np_func_name)
-        return cast("ArrayOrScalar", np_func(*inputs))
+        return cast("ArrayOrScalarT", np_func(*inputs))
 
     if not inputs:
         raise ValueError("at least one argument must be present")
@@ -126,7 +127,7 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
     assert shape is not None
     assert ret_dtype is not None
 
-    return IndexLambda(
+    return cast("ArrayOrScalarT", IndexLambda(
         expr=prim.Call(var(f"pytato.c99.{func_name}"),
                   tuple(sym_args)),
         shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
@@ -134,7 +135,7 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalar, ...],
         non_equality_tags=_get_created_at_tag(stacklevel=2),
         axes=_get_default_axes(len(shape)),
         var_to_reduction_descr=immutabledict(),
-    )
+    ))
 
 
 def _get_dtype(x: ArrayOrScalar) -> _dtype_any:
@@ -147,7 +148,7 @@ def _get_dtype(x: ArrayOrScalar) -> _dtype_any:
 
 # FIXME: Overload these instead of returning union type?
 
-def abs(x: ArrayOrScalar) -> ArrayOrScalar:
+def abs(x: ArrayOrScalarT) -> ArrayOrScalarT:
     x_dtype = _get_dtype(x)
     if x_dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
@@ -157,73 +158,73 @@ def abs(x: ArrayOrScalar) -> ArrayOrScalar:
     return _apply_elem_wise_func((x,), "abs", ret_dtype=result_dtype)
 
 
-def sqrt(x: ArrayOrScalar) -> ArrayOrScalar:
+def sqrt(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "sqrt")
 
 
-def sin(x: ArrayOrScalar) -> ArrayOrScalar:
+def sin(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "sin")
 
 
-def cos(x: ArrayOrScalar) -> ArrayOrScalar:
+def cos(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "cos")
 
 
-def tan(x: ArrayOrScalar) -> ArrayOrScalar:
+def tan(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "tan")
 
 
-def arcsin(x: ArrayOrScalar) -> ArrayOrScalar:
+def arcsin(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "asin", np_func_name="arcsin")
 
 
-def arccos(x: ArrayOrScalar) -> ArrayOrScalar:
+def arccos(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "acos", np_func_name="arccos")
 
 
-def arctan(x: ArrayOrScalar) -> ArrayOrScalar:
+def arctan(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "atan", np_func_name="arctan")
 
 
-def conj(x: ArrayOrScalar) -> ArrayOrScalar:
+def conj(x: ArrayOrScalarT) -> ArrayOrScalarT:
     if _get_dtype(x).kind != "c":
         return x
     return _apply_elem_wise_func((x,), "conj")
 
 
-def arctan2(y: ArrayOrScalar, x: ArrayOrScalar) -> ArrayOrScalar:
+def arctan2(y: ArrayOrScalarT, x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((y, x), "atan2", np_func_name="arctan2")
 
 
-def sinh(x: ArrayOrScalar) -> ArrayOrScalar:
+def sinh(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "sinh")
 
 
-def cosh(x: ArrayOrScalar) -> ArrayOrScalar:
+def cosh(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "cosh")
 
 
-def tanh(x: ArrayOrScalar) -> ArrayOrScalar:
+def tanh(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "tanh")
 
 
-def exp(x: ArrayOrScalar) -> ArrayOrScalar:
+def exp(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "exp")
 
 
-def log(x: ArrayOrScalar) -> ArrayOrScalar:
+def log(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "log")
 
 
-def log10(x: ArrayOrScalar) -> ArrayOrScalar:
+def log10(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "log10")
 
 
-def isnan(x: ArrayOrScalar) -> ArrayOrScalar:
+def isnan(x: ArrayOrScalarT) -> ArrayOrScalarT:
     return _apply_elem_wise_func((x,), "isnan", np.dtype(np.int32))
 
 
-def real(x: ArrayOrScalar) -> ArrayOrScalar:
+def real(x: ArrayOrScalarT) -> ArrayOrScalarT:
     x_dtype = _get_dtype(x)
     if x_dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
@@ -232,17 +233,17 @@ def real(x: ArrayOrScalar) -> ArrayOrScalar:
     return _apply_elem_wise_func((x,), "real", ret_dtype=result_dtype)
 
 
-def imag(x: ArrayOrScalar) -> ArrayOrScalar:
+def imag(x: ArrayOrScalarT) -> ArrayOrScalarT:
     x_dtype = _get_dtype(x)
     if x_dtype.kind == "c":
         result_dtype = np.empty(0, dtype=x_dtype).real.dtype
     else:
         if np.isscalar(x):
-            return cast("Scalar", x_dtype.type(0))
+            return cast("ArrayOrScalarT", x_dtype.type(0))
         else:
             assert isinstance(x, Array)
             import pytato as pt
-            return pt.zeros(x.shape, dtype=x_dtype)
+            return cast("ArrayOrScalarT", pt.zeros(x.shape, dtype=x_dtype))
     return _apply_elem_wise_func((x,), "imag", ret_dtype=result_dtype)
 
 # vim: fdm=marker
