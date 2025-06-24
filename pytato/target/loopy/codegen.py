@@ -1086,6 +1086,10 @@ def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Arr
     result_is_dict = isinstance(result, dict | DictOfNamedArrays)
     orig_outputs: AbstractResultWithNamedArrays = normalize_outputs(result)
 
+    if not isinstance(orig_outputs, DictOfNamedArrays):
+        raise NotImplementedError(
+            f"not implemented for {type(result).__name__}.")
+
     del result
 
     if cl_device is not None:
@@ -1097,11 +1101,6 @@ def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Arr
         target = LoopyPyOpenCLTarget()
 
     assert isinstance(target, LoopyTarget)
-
-    # FIXME: What to do with all of the code below if orig_outputs is not a
-    # DictOfNamedArrays?
-    if not isinstance(orig_outputs, DictOfNamedArrays):
-        raise NotImplementedError
 
     preproc_result = preprocess(orig_outputs, target)
     outputs = preproc_result.outputs

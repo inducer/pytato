@@ -573,8 +573,8 @@ def get_dot_graph(result: ArrayOrNames) -> str:
 
     outputs = normalize_outputs(result)
 
-    # FIXME: What to do if outputs is not a DictOfNamedArrays?
-    assert isinstance(outputs, DictOfNamedArrays)
+    if not isinstance(outputs, DictOfNamedArrays):
+        raise NotImplementedError(f"not implemented for {type(result).__name__}.")
 
     return get_dot_graph_from_partition(
             DistributedGraphPartition(

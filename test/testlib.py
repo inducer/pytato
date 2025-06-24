@@ -323,8 +323,7 @@ def get_random_pt_dag(seed: int,
             else:
                 return expr
 
-        dag = pt.transform.map_and_copy(
-                                        dag, make_dws_placeholder)
+        dag = pt.transform.map_and_copy(dag, make_dws_placeholder)
 
     return dag
 
