@@ -126,7 +126,7 @@ def make_fft_realization_mapper(fft_vec_gatherer):
     return FFTRealizationMapper(old_array_to_new_array)
 
 
-def test_trace_fft(ctx_factory):
+def test_trace_fft(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
