@@ -222,11 +222,13 @@ from pytato.scalar_expr import (
     INT_CLASSES,
     SCALAR_CLASSES,
     ScalarExpression,
+    TypeCast,
     get_reduction_induction_variables,
 )
 
 
 if TYPE_CHECKING:
+    from numpy.typing import DTypeLike
     _dtype_any = np.dtype[Any]
 else:
     _dtype_any = np.dtype
@@ -934,6 +936,23 @@ class Array(Taggable):
     def imag(self) -> Array:
         import pytato as pt
         return pt.imag(self)
+
+    def astype(self, dtype: DTypeLike) -> Array:
+        dtype = np.dtype(dtype)
+        if self.dtype.kind in ["f", "c"] and dtype.kind in ["i", "u"]:
+            raise NotImplementedError("numpy-like overflow behavior in float-to-int")
+        if self.dtype.kind == "c" and dtype.kind in ["i", "u", "f"]:
+            raise NotImplementedError("complex-to-real casts fail in loopy")
+
+        from pymbolic import var
+        return make_index_lambda(
+            TypeCast(dtype, var("in_0")[
+                         tuple(var(f"_{i}") for i in range(self.ndim))
+                     ]),
+            bindings={"in_0": self},
+            shape=self.shape,
+            dtype=dtype,
+        )
 
     def reshape(self, *shape: int | Sequence[int], order: str = "C") -> Array:
         import pytato as pt

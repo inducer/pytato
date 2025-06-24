@@ -401,7 +401,7 @@ def test_binary_logic(ctx_factory: cl.CtxFactory, which):
 
 
 @pytest.mark.parametrize("which", ("neg", "pos"))
-def test_unary_arith(ctx_factory: cl.CtxFactory, which):
+def test_unary_arith(ctx_factory: cl.CtxFactory, which: str):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -424,6 +424,38 @@ def test_unary_arith(ctx_factory: cl.CtxFactory, which):
 
         assert out.dtype == out_ref.dtype
         assert np.array_equal(out, out_ref)
+
+
+def test_astype(ctx_factory: cl.CtxFactory):
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+
+    for from_dtype in ARITH_DTYPES:
+        from_dtype = np.dtype(from_dtype)
+        x_orig = np.array(
+                        [1, 2.3333333333333333333333,
+                            3.3333333333333333333333333j, 4, 5,
+                            -234743, 23984723984720394872],
+                        dtype=np.complex128,
+                        ).astype(from_dtype)
+
+        x_orig_sym = pt.make_data_wrapper(x_orig)
+
+        for to_dtype in ARITH_DTYPES:
+            to_dtype = np.dtype(to_dtype)
+
+            print(from_dtype, to_dtype)
+            x = x_orig.astype(to_dtype)
+            try:
+                x_sym = x_orig_sym.astype(to_dtype)
+            except NotImplementedError:
+                continue
+
+            prog = pt.generate_loopy(x_sym)
+
+            _, (x_sym_eval,) = prog(queue)
+
+            assert np.array_equal(x, x_sym_eval)
 
 
 def generate_test_slices_for_dim(dim_bound):
