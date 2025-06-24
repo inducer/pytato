@@ -1794,7 +1794,7 @@ class MPMSMaterializerAccumulator:
     (i.e. the expression with tags for materialization applied).
     """
     materialized_predecessors: frozenset[Array]
-    expr: ArrayOrNames
+    expr: Array
 
 
 class MPMSMaterializerCache(
@@ -1938,21 +1938,8 @@ class MPMSMaterializer(
     map_size_param = _map_input_base
 
     def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        # FIXME: Think about this more (see comment in NUserCollector.map_named_array)
-        if isinstance(expr._container, DictOfNamedArrays):
-            rec_container = self.rec(expr._container)
-            assert isinstance(rec_container.expr, DictOfNamedArrays)
-            new_expr = rec_container.expr[expr.name]
-            if new_expr.tags_of_type(ImplStored):
-                return MPMSMaterializerAccumulator(frozenset({new_expr}), new_expr)
-            else:
-                return MPMSMaterializerAccumulator(
-                    rec_container.materialized_predecessors,
-                    new_expr)
-        else:
-            raise NotImplementedError(
-                "NamedArray instance has unrecognized container type "
-                f"{type(expr._container).__name__}.")
+        raise NotImplementedError("only LoopyCallResult named array"
+                                  " supported for now.")
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
@@ -2036,17 +2023,7 @@ class MPMSMaterializer(
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
                                  ) -> MPMSMaterializerAccumulator:
-        # FIXME: Think about this more (see comment in NUserCollector.map_named_array)
-        rec_data: dict[str, MPMSMaterializerAccumulator] = {
-            name: self.rec(ary) for name, ary in expr._data.items()}
-        new_data: dict[str, Array] = {
-            name: _verify_is_array(ary.expr) for name, ary in rec_data.items()}
-
-        from loopy.typing import fset_union
-        return MPMSMaterializerAccumulator(
-            fset_union(
-                ary.materialized_predecessors for ary in rec_data.values()),
-            expr.replace_if_different(data=new_data))
+        raise NotImplementedError
 
     def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
         # loopy call result is always materialized
@@ -2171,8 +2148,17 @@ def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
     materializer = MPMSMaterializer(get_nusers(expr))
 
-    res = materializer(expr).expr
-    assert isinstance(res, type(expr))
+    if isinstance(expr, Array):
+        res = materializer(expr).expr
+        assert isinstance(res, Array)
+    elif isinstance(expr, DictOfNamedArrays):
+        res = expr.replace_if_different(
+            data={
+                name: _verify_is_array(materializer(ary).expr)
+                for name, ary, in expr._data.items()})
+        assert isinstance(res, DictOfNamedArrays)
+    else:
+        raise NotImplementedError("not implemented for {type(expr).__name__}.")
 
     from pytato import DEBUG_ENABLED
     if DEBUG_ENABLED:

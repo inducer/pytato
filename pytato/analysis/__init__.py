@@ -148,10 +148,6 @@ class NUserCollector(Mapper[None, None, []]):
                 self.rec(dim)
 
     def map_named_array(self, expr: NamedArray) -> None:
-        # FIXME: Should a use of a NamedArray (that is part of a DictOfNamedArrays)
-        # count as a use of the underlying array? Not doing so may prevent
-        # materialization, as at present the underlying array will not count as
-        # being used, regardless of how many times the named array is used
         self.rec(expr._container)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
