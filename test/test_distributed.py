@@ -85,7 +85,7 @@ def test_distributed_execution_basic():
     run_test_with_mpi(2, _do_test_distributed_execution_basic)
 
 
-def _do_test_distributed_execution_basic(ctx_factory):
+def _do_test_distributed_execution_basic(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
 
@@ -252,7 +252,7 @@ class _RandomDAGTag:
     pass
 
 
-def _do_test_distributed_execution_random_dag(ctx_factory):
+def _do_test_distributed_execution_random_dag(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
 
@@ -353,7 +353,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory):
 
 # {{{ test DAG with no comm nodes
 
-def _test_dag_with_no_comm_nodes_inner(ctx_factory):
+def _test_dag_with_no_comm_nodes_inner(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -390,7 +390,7 @@ def test_dag_with_no_comm_nodes():
 
 # {{{ test DAG with duplicated output arrays
 
-def _test_dag_with_duplicated_output_arrays_inner(ctx_factory):
+def _test_dag_with_duplicated_output_arrays_inner(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -426,7 +426,7 @@ def test_dag_with_duplicated_output_arrays():
 
 # {{{ test DAG with a receive as an output
 
-def _test_dag_with_recv_as_output_inner(ctx_factory):
+def _test_dag_with_recv_as_output_inner(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -473,7 +473,8 @@ def test_dag_with_recv_as_output():
 
 # {{{ test DAG with a materialized array promoted to a part output
 
-def _test_dag_with_materialized_array_promoted_to_part_output_inner(ctx_factory):
+def _test_dag_with_materialized_array_promoted_to_part_output_inner(
+            ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -541,7 +542,7 @@ def test_dag_with_materialized_array_promoted_to_part_output():
 
 # {{{ test DAG with multiple send nodes per sent array
 
-def _test_dag_with_multiple_send_nodes_per_sent_array_inner(ctx_factory):
+def _test_dag_with_multiple_send_nodes_per_sent_array_inner(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -595,7 +596,7 @@ def test_dag_with_multiple_send_nodes_per_sent_array():
 
 # {{{ test DAG with periodic communication
 
-def _test_dag_with_periodic_communication_inner(ctx_factory):
+def _test_dag_with_periodic_communication_inner(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     from numpy.random import default_rng
     comm = MPI.COMM_WORLD
@@ -656,7 +657,7 @@ def test_dag_with_periodic_communication(num_ranks):
 
 # {{{ test deterministic partitioning
 
-def _gather_random_dist_partitions(ctx_factory):
+def _gather_random_dist_partitions(ctx_factory: cl.CtxFactory):
     import mpi4py.MPI as MPI
 
     comm = MPI.COMM_WORLD
@@ -709,7 +710,7 @@ def test_kaushik_mwe():
     run_test_with_mpi(2, _do_test_kaushik_mwe)
 
 
-def _do_test_kaushik_mwe(ctx_factory):
+def _do_test_kaushik_mwe(ctx_factory: cl.CtxFactory):
     # from https://github.com/inducer/pytato/pull/393#issuecomment-1324642248
     from mpi4py import MPI
 
@@ -765,7 +766,7 @@ def test_verify_distributed_partition():
     run_test_with_mpi(2, _do_verify_distributed_partition)
 
 
-def _do_verify_distributed_partition(ctx_factory):
+def _do_verify_distributed_partition(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
     from pytato.distributed.verify import (
@@ -874,7 +875,7 @@ class FooTag2:
     pass
 
 
-def test_number_symbolic_tags_bare_classes(ctx_factory):
+def test_number_symbolic_tags_bare_classes(ctx_factory: cl.CtxFactory):
     from mpi4py import MPI  # pylint: disable=import-error
     comm = MPI.COMM_WORLD
     from pytato.distributed.nodes import make_distributed_recv, staple_distributed_send

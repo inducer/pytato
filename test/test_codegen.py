@@ -50,7 +50,7 @@ from pyopencl.tools import (  # noqa
 import pytato as pt
 
 
-def test_basic_codegen(ctx_factory):
+def test_basic_codegen(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -61,7 +61,7 @@ def test_basic_codegen(ctx_factory):
     assert (out == x_in * x_in).all()
 
 
-def test_ctx_bound_execution(ctx_factory):
+def test_ctx_bound_execution(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -74,7 +74,7 @@ def test_ctx_bound_execution(ctx_factory):
     assert (out.get() == x_in * x_in).all()
 
 
-def test_named_clash(ctx_factory):
+def test_named_clash(ctx_factory: cl.CtxFactory):
     x = pt.make_placeholder("x", (5,), np.int64)
 
     from pytato.tags import ImplStored, Named
@@ -86,7 +86,7 @@ def test_named_clash(ctx_factory):
         pt.generate_loopy(expr)
 
 
-def test_scalar_placeholder(ctx_factory):
+def test_scalar_placeholder(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -99,7 +99,7 @@ def test_scalar_placeholder(ctx_factory):
 
 # https://github.com/inducer/pytato/issues/15
 @pytest.mark.xfail  # shape inference solver: not yet implemented
-def test_size_param(ctx_factory):
+def test_size_param(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -113,7 +113,7 @@ def test_size_param(ctx_factory):
 
 @pytest.mark.parametrize("x1_ndim", (1, 2))
 @pytest.mark.parametrize("x2_ndim", (1, 2))
-def test_matmul_basic(ctx_factory, x1_ndim, x2_ndim):
+def test_matmul_basic(ctx_factory: cl.CtxFactory, x1_ndim, x2_ndim):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -153,7 +153,7 @@ def _do_matmul(x1_shape, x2_shape, queue):
 
 @pytest.mark.parametrize("x1_shape", ((7,),))
 @pytest.mark.parametrize("x2_shape", ((7,), (7, 3), (7, 7, 4), (7, 7, 7, 9)))
-def test_matmul_dimone(ctx_factory, x1_shape, x2_shape):
+def test_matmul_dimone(ctx_factory: cl.CtxFactory, x1_shape, x2_shape):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -162,14 +162,14 @@ def test_matmul_dimone(ctx_factory, x1_shape, x2_shape):
 
 @pytest.mark.parametrize("x1_shape", ((9, 7, 11, 4), (9, 7, 1, 4), (7, 4)))
 @pytest.mark.parametrize("x2_shape", ((7, 4, 5), (7, 4, 3)))
-def test_matmul_higherdim(ctx_factory, x1_shape, x2_shape):
+def test_matmul_higherdim(ctx_factory: cl.CtxFactory, x1_shape, x2_shape):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     _do_matmul(x1_shape, x2_shape, queue)
 
 
-def test_data_wrapper(ctx_factory):
+def test_data_wrapper(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -189,7 +189,7 @@ def test_data_wrapper(ctx_factory):
     assert (x_out == x_in).all()
 
 
-def test_codegen_with_DictOfNamedArrays(ctx_factory):
+def test_codegen_with_DictOfNamedArrays(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -210,7 +210,7 @@ def test_codegen_with_DictOfNamedArrays(ctx_factory):
 
 @pytest.mark.parametrize("shift", (-1, 1, 0, -20, 20))
 @pytest.mark.parametrize("axis", (0, 1))
-def test_roll(ctx_factory, shift, axis):
+def test_roll(ctx_factory: cl.CtxFactory, shift, axis):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -226,7 +226,7 @@ def test_roll(ctx_factory, shift, axis):
 @pytest.mark.parametrize("axes", (
     (), (0, 1), (1, 0),
     (0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)))
-def test_axis_permutation(ctx_factory, axes):
+def test_axis_permutation(ctx_factory: cl.CtxFactory, axes):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -242,7 +242,7 @@ def test_axis_permutation(ctx_factory, axes):
     assert_allclose_to_numpy(pt.transpose(x, axes), queue)
 
 
-def test_transpose(ctx_factory):
+def test_transpose(ctx_factory: cl.CtxFactory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -271,7 +271,7 @@ def reverse_args(f):
                                    "greater", "greater_equal", "logical_and",
                                    "logical_or"))
 @pytest.mark.parametrize("reverse", (False, True))
-def test_scalar_array_binary_arith(ctx_factory, which, reverse):
+def test_scalar_array_binary_arith(ctx_factory: cl.CtxFactory, which, reverse):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -325,7 +325,7 @@ def test_scalar_array_binary_arith(ctx_factory, which, reverse):
                                    "greater", "greater_equal", "logical_or",
                                    "logical_and"))
 @pytest.mark.parametrize("reverse", (False, True))
-def test_array_array_binary_arith(ctx_factory, which, reverse):
+def test_array_array_binary_arith(ctx_factory: cl.CtxFactory, which, reverse):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     not_valid_in_complex = which in ["equal", "not_equal", "less", "less_equal",
@@ -377,7 +377,7 @@ def test_array_array_binary_arith(ctx_factory, which, reverse):
 
 
 @pytest.mark.parametrize("which", ("__and__", "__or__", "__xor__"))
-def test_binary_logic(ctx_factory, which):
+def test_binary_logic(ctx_factory: cl.CtxFactory, which):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -401,7 +401,7 @@ def test_binary_logic(ctx_factory, which):
 
 
 @pytest.mark.parametrize("which", ("neg", "pos"))
-def test_unary_arith(ctx_factory, which):
+def test_unary_arith(ctx_factory: cl.CtxFactory, which):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -441,7 +441,7 @@ def generate_test_slices(shape):
 
 
 @pytest.mark.parametrize("shape", [(3,), (2, 2), (1, 2, 1)])
-def test_slice(ctx_factory, shape):
+def test_slice(ctx_factory: cl.CtxFactory, shape):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -469,7 +469,7 @@ def test_slice(ctx_factory, shape):
 
 
 @pytest.mark.parametrize("input_dims", (1, 2, 3))
-def test_stack(ctx_factory, input_dims):
+def test_stack(ctx_factory: cl.CtxFactory, input_dims):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -487,7 +487,7 @@ def test_stack(ctx_factory, input_dims):
         assert_allclose_to_numpy(pt.stack((x, y), axis=axis), queue)
 
 
-def test_concatenate(ctx_factory):
+def test_concatenate(ctx_factory: cl.CtxFactory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -511,7 +511,7 @@ _SHAPES = [(36,), (3, 3, 4), (12, 3), (2, 2, 3, 3, 1), (4, 9), (9, 4)]
 @pytest.mark.parametrize("newshape", [
             *_SHAPES, (-1,), (-1, 6), (4, 9), (9, -1), (36, -1), 36])
 @pytest.mark.parametrize("order", ["C", "F"])
-def test_reshape(ctx_factory, oldshape, newshape, order):
+def test_reshape(ctx_factory: cl.CtxFactory, oldshape, newshape, order):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -539,7 +539,7 @@ def test_dict_of_named_array_codegen_avoids_recomputation():
     assert ("y" in knl.id_to_insn["z_store"].read_dependency_names())
 
 
-def test_dict_to_loopy_kernel(ctx_factory):
+def test_dict_to_loopy_kernel(ctx_factory: cl.CtxFactory):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -573,7 +573,7 @@ def test_only_deps_as_knl_args():
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
     "conj", "__abs__", "real", "imag"))
-def test_math_functions(ctx_factory, dtype, function_name):
+def test_math_functions(ctx_factory: cl.CtxFactory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -603,7 +603,7 @@ def test_math_functions(ctx_factory, dtype, function_name):
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("arctan2",))
-def test_binary_math_functions(ctx_factory, dtype, function_name):
+def test_binary_math_functions(ctx_factory: cl.CtxFactory, dtype, function_name):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -628,7 +628,7 @@ def test_binary_math_functions(ctx_factory, dtype, function_name):
 
 
 @pytest.mark.parametrize("dtype", (np.int32, np.int64, np.float32, np.float64))
-def test_full_zeros_ones(ctx_factory, dtype):
+def test_full_zeros_ones(ctx_factory: cl.CtxFactory, dtype):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -644,7 +644,7 @@ def test_full_zeros_ones(ctx_factory, dtype):
     assert (t == 2).all()
 
 
-def test_passing_bound_arguments_raises(ctx_factory):
+def test_passing_bound_arguments_raises(ctx_factory: cl.CtxFactory):
     queue = cl.CommandQueue(ctx_factory())
 
     x = pt.make_data_wrapper(np.ones(10), tags=frozenset([pt.tags.PrefixNamed("x")]))
@@ -663,7 +663,7 @@ def test_passing_bound_arguments_raises(ctx_factory):
                                             [(4, 1, 3), (1, 7, 1)],
                                             [(4, 1, 3), (1, p.Variable("n")+2, 1)],
                                            ))
-def test_broadcasting(ctx_factory, shape1, shape2):
+def test_broadcasting(ctx_factory: cl.CtxFactory, shape1, shape2):
     from numpy.random import default_rng
 
     from pymbolic.mapper.evaluator import evaluate
@@ -690,7 +690,7 @@ def test_broadcasting(ctx_factory, shape1, shape2):
 
 
 @pytest.mark.parametrize("which", ("maximum", "minimum"))
-def test_maximum_minimum(ctx_factory, which):
+def test_maximum_minimum(ctx_factory: cl.CtxFactory, which):
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -715,7 +715,7 @@ def test_maximum_minimum(ctx_factory, which):
     np.testing.assert_allclose(y, np_func(x1_in, x2_in), rtol=1e-6)
 
 
-def test_call_loopy(ctx_factory):
+def test_call_loopy(ctx_factory: cl.CtxFactory):
     from pytato.loopy import call_loopy
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -737,7 +737,7 @@ def test_call_loopy(ctx_factory):
     assert (z_out == 40*(x_in.sum(axis=1))).all()
 
 
-def test_call_loopy_with_same_callee_names(ctx_factory):
+def test_call_loopy_with_same_callee_names(ctx_factory: cl.CtxFactory):
     from pytato.loopy import call_loopy
 
     queue = cl.CommandQueue(ctx_factory())
@@ -767,7 +767,7 @@ def test_call_loopy_with_same_callee_names(ctx_factory):
     np.testing.assert_allclose(out_dict["nueve_u"], 9*u_in)
 
 
-def test_exprs_with_named_arrays(ctx_factory):
+def test_exprs_with_named_arrays(ctx_factory: cl.CtxFactory):
     queue = cl.CommandQueue(ctx_factory())
     x_in = np.random.rand(10, 4)
     x = pt.make_data_wrapper(x_in)
@@ -778,7 +778,7 @@ def test_exprs_with_named_arrays(ctx_factory):
     np.testing.assert_allclose(out, 42*x_in)
 
 
-def test_call_loopy_with_parametric_sizes(ctx_factory):
+def test_call_loopy_with_parametric_sizes(ctx_factory: cl.CtxFactory):
 
     x_in = np.random.rand(10, 4)
 
@@ -804,7 +804,7 @@ def test_call_loopy_with_parametric_sizes(ctx_factory):
     np.testing.assert_allclose(z_out, 42*(x_in.sum(axis=1)))
 
 
-def test_call_loopy_with_scalar_array_inputs(ctx_factory):
+def test_call_loopy_with_scalar_array_inputs(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     import loopy as lp
@@ -832,7 +832,7 @@ def test_call_loopy_with_scalar_array_inputs(ctx_factory):
 @pytest.mark.parametrize("axis", (None, 1, 0))
 @pytest.mark.parametrize("redn", ("sum", "amax", "amin", "prod", "all", "any"))
 @pytest.mark.parametrize("shape", [(2, 2), (1, 2, 1), (3, 4, 5)])
-def test_reductions(ctx_factory, axis, redn, shape):
+def test_reductions(ctx_factory: cl.CtxFactory, axis, redn, shape):
     queue = cl.CommandQueue(ctx_factory())
 
     from numpy.random import default_rng
@@ -889,7 +889,7 @@ def test_reductions(ctx_factory, axis, redn, shape):
                                              ("ij,ij->ij",  # broadcasting
                                               [(1, 3), (3, 1)]),
                                              ]))
-def test_einsum(ctx_factory, spec, argshapes):
+def test_einsum(ctx_factory: cl.CtxFactory, spec, argshapes):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
@@ -904,7 +904,7 @@ def test_einsum(ctx_factory, spec, argshapes):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_einsum_with_parameterized_shapes(ctx_factory):
+def test_einsum_with_parameterized_shapes(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -934,7 +934,8 @@ def test_einsum_with_parameterized_shapes(ctx_factory):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
+def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(
+            ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
@@ -949,7 +950,7 @@ def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(ctx_factory):
     np.testing.assert_allclose(out, 0)
 
 
-def test_call_loopy_shape_inference1(ctx_factory):
+def test_call_loopy_shape_inference1(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     import loopy as lp
@@ -981,7 +982,7 @@ def test_call_loopy_shape_inference1(ctx_factory):
                                              + np.arange(3)))
 
 
-def test_call_loopy_shape_inference2(ctx_factory):
+def test_call_loopy_shape_inference2(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     import loopy as lp
@@ -1021,7 +1022,7 @@ def test_call_loopy_shape_inference2(ctx_factory):
 @pytest.mark.parametrize("n", [4, 3, 5])
 @pytest.mark.parametrize("m", [2, 7, None])
 @pytest.mark.parametrize("k", [-2, -1, 0, 1, 2])
-def test_eye(ctx_factory, n, m, k):
+def test_eye(ctx_factory: cl.CtxFactory, n, m, k):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1034,7 +1035,7 @@ def test_eye(ctx_factory, n, m, k):
     np.testing.assert_allclose(out, np_eye)
 
 
-def test_arange(ctx_factory):
+def test_arange(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1096,7 +1097,7 @@ def test_arange(ctx_factory):
 @pytest.mark.parametrize("which,num_args", ([("maximum", 2),
                                              ("minimum", 2),
                                              ]))
-def test_pt_ops_on_scalar_args_computed_eagerly(ctx_factory, which, num_args):
+def test_pt_ops_on_scalar_args_computed_eagerly(which: str, num_args: int):
     from numpy.random import default_rng
     rng = default_rng()
     args = [rng.random() for _ in range(num_args)]
@@ -1113,7 +1114,7 @@ def test_pt_ops_on_scalar_args_computed_eagerly(ctx_factory, which, num_args):
                                               ((10, 5, 2, 7), (3, 7, 4))]))
 @pytest.mark.parametrize("a_dtype", [np.float32, np.complex64])
 @pytest.mark.parametrize("b_dtype", [np.float32, np.complex64])
-def test_dot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
+def test_dot(ctx_factory: cl.CtxFactory, a_shape, b_shape, a_dtype, b_dtype):
     from numpy.random import default_rng
     rng = default_rng()
     ctx = ctx_factory()
@@ -1144,7 +1145,7 @@ def test_dot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
                                               ((10, 4), (4, 10))]))
 @pytest.mark.parametrize("a_dtype", [np.float32, np.complex64])
 @pytest.mark.parametrize("b_dtype", [np.float32, np.complex64])
-def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
+def test_vdot(ctx_factory: cl.CtxFactory, a_shape, b_shape, a_dtype, b_dtype):
     from numpy.random import default_rng
     rng = default_rng()
     ctx = ctx_factory()
@@ -1171,7 +1172,7 @@ def test_vdot(ctx_factory, a_shape, b_shape, a_dtype, b_dtype):
     np.testing.assert_allclose(np_result, pt_result, rtol=1e-6)
 
 
-def test_reduction_adds_deps(ctx_factory):
+def test_reduction_adds_deps(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     ctx = ctx_factory()
@@ -1192,7 +1193,7 @@ def test_reduction_adds_deps(ctx_factory):
                                out_dict["z"])
 
 
-def test_broadcast_to(ctx_factory):
+def test_broadcast_to(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     ctx = ctx_factory()
@@ -1220,7 +1221,7 @@ def test_broadcast_to(ctx_factory):
                                    x_brdcst)
 
 
-def test_advanced_indexing_with_broadcasting(ctx_factory):
+def test_advanced_indexing_with_broadcasting(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     ctx = ctx_factory()
@@ -1256,7 +1257,7 @@ def test_advanced_indexing_with_broadcasting(ctx_factory):
     np.testing.assert_allclose(pt_out, x_in[idx1_in, ..., idx2_in])
 
 
-def test_advanced_indexing_fuzz(ctx_factory):
+def test_advanced_indexing_fuzz(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     ctx = ctx_factory()
@@ -1315,7 +1316,7 @@ def test_advanced_indexing_fuzz(ctx_factory):
                                             f" indices={pt_indices}"))
 
 
-def test_reshape_on_scalars(ctx_factory):
+def test_reshape_on_scalars(ctx_factory: cl.CtxFactory):
     # Reported by alexfikl
     # See https://github.com/inducer/pytato/issues/157
     from numpy.random import default_rng
@@ -1339,7 +1340,7 @@ def test_reshape_on_scalars(ctx_factory):
     assert_allclose_to_numpy(pt.reshape(x, (192, 168, 0, 1)), cq)
 
 
-def test_materialize_reduces_flops(ctx_factory):
+def test_materialize_reduces_flops(ctx_factory: cl.CtxFactory):
     x1 = pt.make_placeholder("x1", (10, 4), np.float64)
     x2 = pt.make_placeholder("x2", (10, 4), np.float64)
     x3 = pt.make_placeholder("x3", (10, 4), np.float64)
@@ -1365,7 +1366,7 @@ def test_materialize_reduces_flops(ctx_factory):
     assert good_flops == (bad_flops - 80)
 
 
-def test_named_temporaries(ctx_factory):
+def test_named_temporaries(ctx_factory: cl.CtxFactory):
     x = pt.make_placeholder("x", (10, 4), np.float32)
     y = pt.make_placeholder("y", (10, 4), np.float32)
     tmp1 = 2 * x + 3 * y
@@ -1394,7 +1395,7 @@ def test_named_temporaries(ctx_factory):
 
 
 @pytest.mark.parametrize("shape", [(1, 3, 1), (1, 1), (2, 2, 3)])
-def test_squeeze(ctx_factory, shape):
+def test_squeeze(ctx_factory: cl.CtxFactory, shape):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1408,7 +1409,7 @@ def test_squeeze(ctx_factory, shape):
     np.testing.assert_allclose(pt_result.shape, np_result)
 
 
-def test_random_dag_against_numpy(ctx_factory):
+def test_random_dag_against_numpy(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1439,7 +1440,7 @@ def test_random_dag_against_numpy(ctx_factory):
             assert np.allclose(pt_result["result"], ref_result)
 
 
-def test_assume_non_negative_indirect_address(ctx_factory):
+def test_assume_non_negative_indirect_address(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     from pytato.scalar_expr import WalkMapper
@@ -1546,7 +1547,7 @@ def test_array_tags_propagated_to_loopy():
                 .tags_of_type(BazTag))
 
 
-def test_scalars_are_typed(ctx_factory):
+def test_scalars_are_typed(ctx_factory: cl.CtxFactory):
     # See https://github.com/inducer/pytato/issues/246
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
@@ -1559,7 +1560,7 @@ def test_scalars_are_typed(ctx_factory):
     np.testing.assert_allclose(pt_out, np_out)
 
 
-def test_regression_reduction_in_conditional(ctx_factory):
+def test_regression_reduction_in_conditional(ctx_factory: cl.CtxFactory):
     # Regression test for https://github.com/inducer/pytato/pull/255
     # which was ultimately caused by https://github.com/inducer/loopy/issues/533
     # Reproducer from
@@ -1596,7 +1597,7 @@ def test_regression_reduction_in_conditional(ctx_factory):
     np.testing.assert_allclose(pt_result, np_result)
 
 
-def test_zero_size_cl_array_dedup(ctx_factory):
+def test_zero_size_cl_array_dedup(ctx_factory: cl.CtxFactory):
     # At pytato@0d8b909 this regression would fail as
     # 'deduplicate_data_wrappers' could not handle 0-long buffers
     import pyopencl.array as cla
@@ -1679,7 +1680,7 @@ def test_deterministic_codegen():
 # }}}
 
 
-def test_no_computation_for_empty_arrays(ctx_factory):
+def test_no_computation_for_empty_arrays(ctx_factory: cl.CtxFactory):
     # fails at faee1d2f4ffabed96e758a2c0fbd1b1fc1e78719
     import pyopencl.array as cla
 
@@ -1698,7 +1699,7 @@ def test_no_computation_for_empty_arrays(ctx_factory):
     assert not bprg.program.default_entrypoint.instructions
 
 
-def test_expand_dims(ctx_factory):
+def test_expand_dims(ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng
 
     ntests = 50
@@ -1727,7 +1728,7 @@ def test_expand_dims(ctx_factory):
             np.testing.assert_allclose(np_output, pt_output)
 
 
-def test_two_rolls(ctx_factory):
+def test_two_rolls(ctx_factory: cl.CtxFactory):
     # see https://github.com/inducer/pytato/issues/341
     cl_ctx = ctx_factory()
     cq = cl.CommandQueue(cl_ctx)
@@ -1742,7 +1743,7 @@ def test_two_rolls(ctx_factory):
     np.testing.assert_allclose(np_out, pt_out)
 
 
-def test_lp_substitution_result(ctx_factory):
+def test_lp_substitution_result(ctx_factory: cl.CtxFactory):
     from pytato.target.loopy import ImplSubstitution
 
     cl_ctx = ctx_factory()
@@ -1770,7 +1771,7 @@ def test_lp_substitution_result(ctx_factory):
     np.testing.assert_allclose(np.einsum("ij,j->i", 2*a_np, 3*x_np), pt_eval_out)
 
 
-def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
+def test_rewrite_einsums_with_no_broadcasts(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
@@ -1789,7 +1790,7 @@ def test_rewrite_einsums_with_no_broadcasts(ctx_factory):
     np.testing.assert_allclose(ref_out, out)
 
 
-def test_no_redundant_stores_with_impl_stored(ctx_factory):
+def test_no_redundant_stores_with_impl_stored(ctx_factory: cl.CtxFactory):
     # See <https://github.com/inducer/pytato/issues/415>
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
@@ -1806,7 +1807,8 @@ def test_no_redundant_stores_with_impl_stored(ctx_factory):
     np.testing.assert_allclose(prg(cq, x=x_np)[1][0], 2*x_np)
 
 
-def test_placeholders_do_not_diverge_after_removing_impl_stored(ctx_factory):
+def test_placeholders_do_not_diverge_after_removing_impl_stored(
+            ctx_factory: cl.CtxFactory):
     # Note: An earlier attempt at fixing
     # <https://github.com/inducer/pytato/issues/415> would create multiple
     # instances of placeholders in the graph leading to incoherent codes.
@@ -1847,7 +1849,7 @@ def _get_masking_array_for_test_pad(array, pad_widths):
     )
 
 
-def test_pad(ctx_factory):
+def test_pad(ctx_factory: cl.CtxFactory):
 
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
@@ -1912,7 +1914,7 @@ def test_pad(ctx_factory):
         np.testing.assert_allclose(np_out * mask_array, pt_out * mask_array)
 
 
-def test_function_call(ctx_factory, visualize=False):
+def test_function_call(ctx_factory: cl.CtxFactory, visualize=False):
     from functools import partial
     cl_ctx = ctx_factory()
     cq = cl.CommandQueue(cl_ctx)
@@ -1962,7 +1964,7 @@ def test_function_call(ctx_factory, visualize=False):
         np.testing.assert_allclose(outputs[key], expected[key])
 
 
-def test_nested_function_calls(ctx_factory):
+def test_nested_function_calls(ctx_factory: cl.CtxFactory):
     from functools import partial
 
     ctx = ctx_factory()
@@ -2008,7 +2010,7 @@ def test_nested_function_calls(ctx_factory):
         np.testing.assert_allclose(result_out[k], expect_out[k])
 
 
-def test_pow_arg_casting(ctx_factory):
+def test_pow_arg_casting(ctx_factory: cl.CtxFactory):
     # Check that pow() arguments are not typecast from int
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
@@ -2067,7 +2069,7 @@ def test_pow_arg_casting(ctx_factory):
                                 (float, np.float32, np.float64)
 
 
-def test_forcevalueargtag(ctx_factory):
+def test_forcevalueargtag(ctx_factory: cl.CtxFactory):
     ctx = ctx_factory()
     cq = cl.CommandQueue(ctx)
 
