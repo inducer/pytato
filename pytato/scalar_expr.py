@@ -52,7 +52,7 @@ from typing import (
 
 import numpy as np
 from immutabledict import immutabledict
-from typing_extensions import Never, TypeIs
+from typing_extensions import Never, TypeIs, override
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
@@ -180,6 +180,7 @@ class DependencyMapper(DependencyMapperBase[P]):
                          composite_leaves=composite_leaves)
         self.include_idx_lambda_indices = include_idx_lambda_indices
 
+    @override
     def map_variable(self,
                 expr: prim.Variable, *args: P.args, **kwargs: P.kwargs
             ) -> DependenciesT:
@@ -196,9 +197,12 @@ class DependencyMapper(DependencyMapperBase[P]):
             set().union(*(self.rec((lb, ub), *args, **kwargs)
                         for (lb, ub) in expr.bounds.values()))])
 
+    def map_type_cast(self, expr: TypeCast,
+            *args: P.args, **kwargs: P.kwargs) -> DependenciesT:
+        return self.rec(expr.inner_expr, *args, **kwargs)
+
 
 class EvaluationMapper(EvaluationMapperBase[ResultT]):
-
     def map_reduce(self, expr: Reduce) -> Never:
         # TODO: not trivial to evaluate symbolic reduction nodes
         raise NotImplementedError()
