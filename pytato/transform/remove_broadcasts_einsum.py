@@ -127,9 +127,9 @@ class EinsumWithNoBroadcastsRewriter(CopyMapperWithExtraArgs[[tuple[int, ...]]])
 
 def rewrite_einsums_with_no_broadcasts(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     """
-    Rewrites all instances of :class:`~pytato.array.Einsum` in *expr* such that the
+    Rewrites all instances of :class:`~pytato.Einsum` in *expr* such that the
     einsum expressions avoid broadcasting axes of its operands. We do
-    so by updating the :attr:`pytato.array.Einsum.access_descriptors` and slicing
+    so by updating the :attr:`pytato.Einsum.access_descriptors` and slicing
     the operands.
 
     .. testsetup::

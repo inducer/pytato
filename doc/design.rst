@@ -55,18 +55,18 @@ Computation and Results
     Such an expression marks the boundary between eager and lazy evaluation.
 
 -   :attr:`Array.shape` is required to be an affine expression in terms of the
-    instances of :class:`~pytato.array.SizeParam` in the computation graph. This
+    instances of :class:`~pytato.SizeParam` in the computation graph. This
     permits shape inference to use Presburger arithmetic, meaning that shape
     inference is always decidable.
 
 -   There is (deliberate) overlap in what various expression nodes can
     express, e.g.
 
-    -   Array reshaping can be expressed as a :class:`pytato.array.Reshape`
-        or as an :class:`pytato.array.IndexLambda`
+    -   Array reshaping can be expressed as a :class:`pytato.Reshape`
+        or as an :class:`pytato.IndexLambda`
 
-    -   Linear algebra operations can be expressed via :class:`pytato.array.Einsum`
-        or as an :class:`pytato.array.IndexLambda`
+    -   Linear algebra operations can be expressed via :class:`pytato.Einsum`
+        or as an :class:`pytato.IndexLambda`
 
     Expression capture (the "frontend") should use the "highest-level"
     (most abstract) node type available that captures the user-intended
@@ -78,13 +78,13 @@ Computation and Results
     strided slice, roll) are identified as potential candidates for being captured
     in their own high-level node vs. as an :class:`~pytato.array.IndexLambda`.
 
-    Operations that *can* be expressed as :class:`~pytato.array.IndexLambda`
+    Operations that *can* be expressed as :class:`~pytato.IndexLambda`
     without loss of information, *should* be expressed that way.
 
--   Every :class:`~pytato.array.Array` instance can be viewed a computation
-    graph, where the :class:`~pytato.array.Array` instances form the nodes of
+-   Every :class:`~pytato.Array` instance can be viewed a computation
+    graph, where the :class:`~pytato.Array` instances form the nodes of
     the graph and there is an edge between a node and the array it uses. Since
-    :class:`~pytato.array.Array` is an immutable type, the computation
+    :class:`~pytato.Array` is an immutable type, the computation
     computation graphs would belong to the class of Directed Acyclic Graphs
     (DAGs). We choose the direction of the edges in the DAG to resemble the one
     typically seen in a data-flow graph, i.e. the successors of a node are its
@@ -122,7 +122,7 @@ Naming
 
         A[(A > 0).tagged(CountNamed("mycount"))]
 
--   :class:`pytato.array.Placeholder` expressions, like all array expressions,
+-   :class:`pytato.Placeholder` expressions, like all array expressions,
     are considered read-only. When computation begins, the same
     actual memory may be supplied for multiple :term:`placeholder name`\ s,
     i.e. those arrays may alias.
@@ -136,7 +136,7 @@ Naming
 .. _reserved_identifier:
 
 Reserved Identifiers
---------------------
+^^^^^^^^^^^^^^^^^^^^
 
 -   Identifiers beginning with ``_pt_`` are reserved for internal use
     by :mod:`pytato`. Any such internal use must be drawn from one
@@ -151,7 +151,7 @@ Reserved Identifiers
     -   ``_pt_in``: The default name of an unnamed placeholder argument
 
     -   ``_pt_data``: Used to automatically generate identifiers for
-        names of :class:`~pytato.array.DataWrapper` arguments that are
+        names of :class:`~pytato.DataWrapper` arguments that are
         not supplied by the user.
 
     -   ``_pt_dist``: Used to automatically generate identifiers for
@@ -167,7 +167,7 @@ Reserved Identifiers
 
     -   Identifiers matching the regular expression ``_in[0-9]+``. They are used
         as automatically generated names (if required) in
-        :attr:`pytato.array.IndexLambda.bindings`.
+        :attr:`pytato.IndexLambda.bindings`.
 
 
 .. note::
@@ -255,7 +255,7 @@ namespace for all input names within an array expression. This was however remov
 in the later versions. As, in the process of associating names to array variables it
 would privately hold references to :class:`~pytato.array.InputArgumentBase`
 variables that could no longer be referenced by a user. This made it impossible for
-the garbage collector to deallocate large :class:`~pytato.array.DataWrapper`'s,
+the garbage collector to deallocate large :class:`~pytato.DataWrapper`'s,
 unless the namespace itself went out-of-scope.
 
 Glossary
@@ -275,6 +275,6 @@ Glossary
         *True*. See also :ref:`reserved_identifier`.
 
     placeholder name
-        See :attr:`pytato.array.Placeholder.name`.
+        See :attr:`pytato.Placeholder.name`.
 
 .. vim: shiftwidth=4

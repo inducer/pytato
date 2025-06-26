@@ -99,6 +99,8 @@ Concrete Array Data
 
 .. autoclass:: DataInterface
 
+.. currentmodule:: pytato
+
 Built-in Expression Nodes
 -------------------------
 
@@ -127,6 +129,8 @@ Input Arguments
 .. autoclass:: Placeholder
 .. autoclass:: SizeParam
 
+.. currentmodule:: pytato
+
 User-Facing Node Creation
 -------------------------
 
@@ -138,6 +142,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. class:: ShapeComponent
 .. class:: ConvertibleToShape
 
+.. currentmodule:: pytato
+
 .. autofunction:: make_dict_of_named_arrays
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
@@ -145,6 +151,8 @@ Node constructors such as :class:`Placeholder.__init__` and
 
 Internal API
 ------------
+
+.. currentmodule:: pytato.array
 
 .. autoclass:: EinsumAxisDescriptor
 .. autoclass:: EinsumElementwiseAxis
@@ -530,13 +538,13 @@ class NormalizedSlice:
 
     .. attribute:: start
 
-        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        An instance of :class:`~pytato.ShapeComponent`. Normalized to satisfy the
         relation ``0 <= start <= (axis_len-1)``, where ``axis_len`` is the
         length of the axis being sliced.
 
     .. attribute:: stop
 
-        An instance of :class:`ShapeComponent`. Normalized to satisfy the
+        An instance of :class:`~pytato.ShapeComponent`. Normalized to satisfy the
         relation ``-1 <= stop <= axis_len``, where ``axis_len`` is the length of
         the axis being sliced.
 
@@ -1431,7 +1439,7 @@ class Einsum(_SuppliedAxesAndTagsMixin, Array):
 
         A :class:`tuple` of *access_descriptor* for each *arg* in
         :attr:`Einsum.args`. An *access_descriptor* is a tuple of
-        :class:`EinsumAxisDescriptor` denoting how each axis of the
+        :class:`pytato.array.EinsumAxisDescriptor` denoting how each axis of the
         argument will be operated in the einstein summation.
 
     .. attribute:: args
@@ -2120,7 +2128,7 @@ class DataWrapper(_SuppliedAxesAndTagsMixin, InputArgumentBase):
 
     .. note::
 
-        Since we cannot compare instances of :class:`DataInterface` being
+        Since we cannot compare instances of :class:`~pytato.array.DataInterface` being
         wrapped, a :class:`DataWrapper` instances compare equal to themselves
         (i.e. the very same instance).
     """
@@ -2546,7 +2554,7 @@ def make_data_wrapper(data: DataInterface,
         axes: AxesT | None = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
-    :param data:       an instance obeying the :class:`DataInterface`
+    :param data:       an instance obeying the :class:`~pytato.array.DataInterface`
     :param name:       an optional name, generated automatically if not given
     :param shape:      optional shape of the array, inferred from *data* if not given
     :param tags:       implementation tags
