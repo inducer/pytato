@@ -216,7 +216,7 @@ import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method, opt_frozen_dataclass
-from pytools.tag import Tag, Taggable
+from pytools.tag import Tag, Taggable, ToTagSetConvertible
 
 from pytato.scalar_expr import (
     INT_CLASSES,
@@ -991,7 +991,7 @@ class Array(Taggable):
         return pt.any(self, axis)
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Iterable[Tag] | Tag) -> Array:
+                         tags: ToTagSetConvertible) -> Array:
         """
         Returns a copy of *self* with *iaxis*-th axis tagged with *tags*.
         """
