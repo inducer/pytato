@@ -32,6 +32,7 @@ intersphinx_mapping = {
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
     "immutabledict": ("https://immutabledict.corenting.fr/", None),
     "orderedsets": ("https://matthiasdiener.github.io/orderedsets", None),
+    "bidict": ("https://bidict.readthedocs.io/en/main/", None)
 }
 
 # Some modules need to import things just so that sphinx can resolve symbols in

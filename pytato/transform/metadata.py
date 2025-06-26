@@ -10,6 +10,10 @@
 .. autoclass:: AxisIgnoredForPropagationTag
 
 .. autoclass:: AxesTagsEquationCollector
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
 """
 from __future__ import annotations
 
@@ -158,22 +162,22 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
     operation. An equation is recorded for "straight-through" axes in expressions,
     i.e. ones that pass through an operation unmodified.
 
-    .. attribute:: tag_t
+    .. autoattribute:: tag_t
 
         The type of the tags that are to be propagated.
 
-    .. attribute:: equations
+    .. autoattribute:: equations
 
         A :class:`list` of equations. Each equation is represented by 2-tuple
         as ``("u", "v")`` that is mathematically interpreted as
         :math:`\{u \doteq v\}`.
 
-    .. attribute:: known_tag_to_var
+    .. autoattribute:: known_tag_to_var
 
-        A mapping from an instance of :class:`Tag` to a :class:`str` by which
-        it will be referenced in :attr:`equations`.
+        A mapping from an instance of :class:`pytools.tag.Tag` to a :class:`str`
+        by which it will be referenced in :attr:`equations`.
 
-    .. attribute:: axis_to_var
+    .. autoattribute:: axis_to_var
 
         A :class:`~bidict.bidict` from a :class:`tuple` of the form ``(array,
         iaxis)`` to the :class:`str` by which it will be referenced in
@@ -548,7 +552,8 @@ def unify_axes_tags(
     array operations with the tags propagation semantics implemented in
     *equations_collector_t*. By propagation, we mean that we solve the
     unification equations assembled in
-    :attr:`AxesTagsEquationCollector.equations` to obtain a mapping from an
+    :attr:`~pytato.transform.metadata.AxesTagsEquationCollector.equations`
+    to obtain a mapping from an
     :class:`~pytato.Array`\ 's axis to the new tags it is to be tagged with. We
     use this mapping to add more tags to an array's axis.
 

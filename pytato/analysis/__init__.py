@@ -263,7 +263,7 @@ def _get_indices_from_input_subscript(subscript: str,
 def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
     """
     Returns *True* if and only if an einsum with the subscript descriptor
-    string *subscripts* operated on *expr*'s :attr:`pytato.array.Einsum.args`
+    string *subscripts* operated on *expr*'s :attr:`pytato.Einsum.args`
     would compute the same result as *expr*.
     """
 
