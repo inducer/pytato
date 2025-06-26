@@ -77,7 +77,7 @@ from immutabledict import immutabledict
 from typing_extensions import Self
 
 from pytools import memoize_method
-from pytools.tag import Tag, Taggable
+from pytools.tag import Tag, Taggable, ToTagSetConvertible
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -272,7 +272,7 @@ class NamedCallResult(NamedArray):
     """
 
     def with_tagged_axis(self, iaxis: int,
-                         tags: Iterable[Tag] | Tag) -> Array:
+                         tags: ToTagSetConvertible) -> Array:
         raise ValueError("Tagging a NamedCallResult's axis is illegal, use"
                          " Call.with_tagged_axis instead")
 
