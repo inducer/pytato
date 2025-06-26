@@ -715,11 +715,17 @@ class Array(Taggable):
         from pytools import product
         return product(self.shape)  # type: ignore[no-any-return]
 
-    def __len__(self) -> ShapeComponent:
+    # The Sized protocol, required for len(), requires __len__ to return an int.
+    def __len__(self) -> int:
         if self.ndim == 0:
             raise TypeError("len() of unsized object")
 
-        return self.shape[0]
+        leading_shape = self.shape[0]
+        if not isinstance(leading_shape, int):
+            raise TypeError("cannot take len() of array with "
+                            "parametric first shape axis")
+
+        return leading_shape
 
     def __getitem__(self,
                     index: (ConvertibleToIndexExpr
