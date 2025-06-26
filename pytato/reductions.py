@@ -351,7 +351,7 @@ def sum(a: Array,
                                   axis_to_reduction_descr, initial)
 
 
-def amax(a: Array, axis: int | tuple[int] | None = None, *,
+def amax(a: Array, axis: int | tuple[int, ...] | None = None, *,
          initial: Any = _NoValue,
          axis_to_reduction_descr: Mapping[int, ReductionDescriptor] | None = None
          ) -> Array:
