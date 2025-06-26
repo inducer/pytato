@@ -199,6 +199,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
+    Literal,
     Protocol,
     TypeAlias,
     TypeVar,
@@ -245,6 +246,8 @@ ArrayOrScalarT = TypeVar("ArrayOrScalarT", "Array", Scalar, ArrayOrScalar)
 ShapeComponent: TypeAlias = "Integer | Array"
 ShapeType: TypeAlias = tuple[ShapeComponent, ...]
 ConvertibleToShape: TypeAlias = "ShapeComponent | Sequence[ShapeComponent]"
+
+OrderCF: TypeAlias = Literal["C"] | Literal["F"]
 
 # }}}
 
@@ -971,7 +974,13 @@ class Array(Taggable):
             dtype=dtype,
         )
 
-    def reshape(self, *shape: int | Sequence[int], order: str = "C") -> Array:
+    @overload
+    def reshape(self, *shape: int, order: OrderCF = "C") -> Array: ...
+
+    @overload
+    def reshape(self, shape: tuple[int, ...], /, *, order: OrderCF = "C") -> Array: ...
+
+    def reshape(self, *shape: int | Sequence[int], order: OrderCF = "C") -> Array:
         import pytato as pt
         if len(shape) == 0:
             raise TypeError("reshape takes at least one argument (0 given)")
