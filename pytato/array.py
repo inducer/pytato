@@ -629,6 +629,7 @@ class Array(Taggable):
 
     .. automethod:: __getitem__
     .. attribute:: T
+    .. automethod:: transpose
 
     .. method:: __mul__
     .. method:: __rmul__
@@ -758,6 +759,16 @@ class Array(Taggable):
                                tags=_get_default_tags(),
                                axes=_get_default_axes(self.ndim),
                                non_equality_tags=_get_created_at_tag())
+
+    def transpose(self, axes: Sequence[int] | None = None) -> Array:
+        """Reverse or permute the axes of an array.
+
+        :param a: input array
+        :param axes: if specified, a permutation of ``[0, 1, ..., a.ndim-1]``. Defaults
+            to ``range(a.ndim)[::-1]``. The returned axis at index *i* corresponds to
+            the input axis *axes[i]*.
+        """
+        return transpose(self, axes)
 
     @override
     def __eq__(self, other: Any) -> bool:
