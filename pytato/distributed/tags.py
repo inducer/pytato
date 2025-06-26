@@ -32,13 +32,15 @@ THE SOFTWARE.
 """
 
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from pytato.distributed.partition import DistributedGraphPartition
 
 
 if TYPE_CHECKING:
     import mpi4py.MPI
+
+    from pytato.distributed.nodes import CommTagType
 
 
 T = TypeVar("T")
@@ -85,7 +87,8 @@ def number_distributed_tags(
 
     # We can't let MPI do a set union here, since the result would be
     # non-deterministic.
-    all_tags = mpi_communicator.gather(tags, root=root_rank)
+    all_tags = cast("list[tuple[CommTagType, ...]]",
+                    mpi_communicator.gather(tags, root=root_rank))
 
     if mpi_communicator.rank == root_rank:
         sym_tag_to_int_tag = {}
@@ -93,7 +96,7 @@ def number_distributed_tags(
         assert isinstance(all_tags, list)
         assert len(all_tags) == mpi_communicator.size
 
-        for sym_tag in flatten(all_tags):  # type: ignore[no-untyped-call]
+        for sym_tag in flatten(all_tags):
             if sym_tag not in sym_tag_to_int_tag:
                 sym_tag_to_int_tag[sym_tag] = next_tag
                 next_tag += 1

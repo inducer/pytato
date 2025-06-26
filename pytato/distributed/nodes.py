@@ -55,7 +55,7 @@ THE SOFTWARE.
 
 import dataclasses
 from collections.abc import Hashable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 from typing_extensions import Self
@@ -77,7 +77,7 @@ from pytato.array import (
 )
 
 
-CommTagType = Hashable
+CommTagType: TypeAlias = Hashable
 
 
 # {{{ send

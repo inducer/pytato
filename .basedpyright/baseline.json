@@ -4372,22 +4372,6 @@
         ],
         "./pytato/distributed/tags.py": [
             {
-                "code": "reportUnknownVariableType",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownVariableType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 19,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 8,
