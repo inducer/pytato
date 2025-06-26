@@ -209,6 +209,7 @@ from typing import (
     ClassVar,
     Literal,
     Protocol,
+    SupportsInt,
     TypeAlias,
     TypeVar,
     Union,
@@ -310,6 +311,20 @@ def normalize_shape(
 
     assert isinstance(shape, Sequence)
     return tuple(normalize_shape_component(s) for s in shape)
+
+
+def shape_is_int_only(shape: tuple[Array | Integer, ...], /) -> tuple[int, ...]:
+    res: list[int] = []
+    for i, s in enumerate(shape):
+        try:
+            res.append(int(cast("SupportsInt", s)))
+        except TypeError:
+            raise TypeError(
+                    "only non-parametric shapes are allowed in this context, "
+                    f"axis {i+1} is {type(s)}"
+                ) from None
+
+    return tuple(res)
 
 # }}}
 
