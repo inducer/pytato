@@ -96,7 +96,7 @@ Internal stuff that is only here because the documentation tool wants it
 """
 
 
-@array_dataclass()
+@array_dataclass(hash=False)
 class LoopyCall(AbstractResultWithNamedArrays):
     """
     An array expression node representing a call to an entrypoint in a
