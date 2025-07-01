@@ -434,7 +434,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
+            err_on_collision: bool = __debug__,
             _cache:
                 CachedMapperCache[ArrayOrNames, ResultT, P] | None = None,
             _function_cache:
@@ -654,8 +654,8 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_created_duplicate: bool = False,
+            err_on_collision: bool = __debug__,
+            err_on_created_duplicate: bool = __debug__,
             _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
             _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
@@ -749,8 +749,8 @@ class TransformMapperWithExtraArgs(
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_created_duplicate: bool = False,
+            err_on_collision: bool = __debug__,
+            err_on_created_duplicate: bool = __debug__,
             _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
             _function_cache:
                 TransformMapperCache[FunctionDefinition, P] | None = None
@@ -1919,8 +1919,8 @@ class MPMSMaterializer(
             self,
             nsuccessors: Mapping[Array, int],
             _cache: MPMSMaterializerCache | None = None):
-        err_on_collision = False
-        err_on_created_duplicate = False
+        err_on_collision = __debug__
+        err_on_created_duplicate = __debug__
 
         if _cache is None:
             _cache = MPMSMaterializerCache(
