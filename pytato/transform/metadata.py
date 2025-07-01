@@ -392,14 +392,14 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        for _, subexpr in sorted(expr._data.items()):
+        for _, subexpr in expr._data.items():
             self.rec(subexpr)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
         """
         Does not add any equations.
         """
-        for _, subexpr in sorted(expr.bindings.items()):
+        for _, subexpr in expr.bindings.items():
             if isinstance(subexpr, Array):
                 self.rec(subexpr)
 
