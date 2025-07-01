@@ -881,7 +881,7 @@ def domain_for_shape(dim_names: tuple[str, ...],
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
 
     for iname, (left, right) in reductions.items():
-        dom &= aff_from_expr(dom.space, left).le_set(affs[iname])
+        dom &= aff_from_expr(dom.space, left).to_pw_aff().le_set(affs[iname])
         dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))
 
     doms = dom.get_basic_sets()
