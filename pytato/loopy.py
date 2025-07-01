@@ -127,6 +127,8 @@ class LoopyCall(AbstractResultWithNamedArrays):
     def _entry_kernel(self) -> lp.LoopKernel:
         return self.translation_unit[self.entrypoint]
 
+    # FIXME: If manually creating __hash__, should this class set hash=False in
+    # array_dataclass() decorator?
     @override
     def __hash__(self) -> int:
         return hash((self.translation_unit, tuple(self.bindings.items()),
