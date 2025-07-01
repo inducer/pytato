@@ -358,12 +358,16 @@ class ListOfDirectPredecessorsGetter(
     def map_einsum(self, expr: Einsum) -> list[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape) + list(expr.args)
 
+    def map_loopy_call(self, expr: LoopyCall) -> list[ArrayOrNames]:
+        return [ary for ary in expr.bindings.values() if isinstance(ary, Array)]
+
     def map_loopy_call_result(self, expr: NamedArray) -> list[ArrayOrNames]:
         from pytato.loopy import LoopyCall, LoopyCallResult
         assert isinstance(expr, LoopyCallResult)
         assert isinstance(expr._container, LoopyCall)
         return (
             self._get_preds_from_shape(expr.shape)
+            + [expr._container]
             + [
                 ary
                 for ary in expr._container.bindings.values()
