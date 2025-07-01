@@ -232,7 +232,7 @@ class EinsumDistributiveLawMapper(
                 shape=expr.shape,
                 dtype=expr.dtype,
                 bindings=immutabledict({name: _verify_is_array(self.rec(bnd, None))
-                              for name, bnd in sorted(expr.bindings.items())}),
+                              for name, bnd in expr.bindings.items()}),
                 var_to_reduction_descr=expr.var_to_reduction_descr,
                 tags=expr.tags,
                 axes=expr.axes,

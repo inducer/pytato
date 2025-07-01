@@ -212,7 +212,7 @@ class CodeGenPreprocessor(ToIndexLambdaMixin, CopyMapper):  # type: ignore[misc]
         new_bindings: Mapping[str, Any] = immutabledict(
                     {name: (self.rec(subexpr) if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())})
+                    for name, subexpr in expr.bindings.items()})
 
         return LoopyCall(translation_unit=new_translation_unit,
                          bindings=new_bindings,

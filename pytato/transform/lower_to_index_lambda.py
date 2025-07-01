@@ -289,7 +289,7 @@ class ToIndexLambdaMixin:
         new_shape = self.rec_size_tuple(expr.shape)
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: _verify_is_array(self.rec(subexpr))
-                for name, subexpr in sorted(expr.bindings.items())})
+                for name, subexpr in expr.bindings.items()})
         return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_stack(self, expr: Stack) -> IndexLambda:
