@@ -10010,7 +10010,23 @@
                 }
             },
             {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 27,
+                    "endColumn": 49,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 27,
+                    "endColumn": 49,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
                 "range": {
                     "startColumn": 27,
                     "endColumn": 49,
@@ -10039,6 +10055,14 @@
                     "startColumn": 11,
                     "endColumn": 87,
                     "lineCount": 4
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 46,
+                    "lineCount": 1
                 }
             },
             {
@@ -10138,6 +10162,38 @@
                 }
             },
             {
+                "code": "reportUnknownVariableType",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 17,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 26,
+                    "endColumn": 59,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 40,
+                    "endColumn": 52,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 46,
+                    "endColumn": 51,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 12,
@@ -10207,6 +10263,54 @@
                     "startColumn": 8,
                     "endColumn": 24,
                     "lineCount": 1
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportOperatorIssue",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 35,
+                    "endColumn": 75,
+                    "lineCount": 2
                 }
             },
             {
