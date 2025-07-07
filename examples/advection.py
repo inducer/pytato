@@ -190,6 +190,7 @@ def main():
     u = pt.make_placeholder(name="u", shape=(dg_ops.nelements, dg_ops.nnodes),
                             dtype=np.float64)
     result = op.apply(u)
+    result = pt.transform.deduplicate(result)
 
     prog = pt.generate_loopy(result, cl_device=queue.device)
     print(prog.program)
