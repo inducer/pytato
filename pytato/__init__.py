@@ -49,6 +49,7 @@ def set_debug_enabled(flag: bool) -> None:
 
 import pytato.analysis as analysis
 import pytato.function as function
+import pytato.loopy as loopy
 import pytato.tags as tags
 import pytato.transform as transform
 from pytato.array import (
@@ -249,6 +250,7 @@ __all__ = (
     "logical_and",
     "logical_not",
     "logical_or",
+    "loopy",
     "make_data_wrapper",
     "make_dict_of_named_arrays",
     "make_distributed_recv",
