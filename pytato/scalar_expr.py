@@ -65,7 +65,7 @@ from pymbolic.mapper import (
 )
 from pymbolic.mapper.collector import TermCollector as TermCollectorBase
 from pymbolic.mapper.dependency import (
-    DependenciesT,
+    Dependencies,
     DependencyMapper as DependencyMapperBase,
 )
 from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
@@ -183,7 +183,7 @@ class DependencyMapper(DependencyMapperBase[P]):
     @override
     def map_variable(self,
                 expr: prim.Variable, *args: P.args, **kwargs: P.kwargs
-            ) -> DependenciesT:
+            ) -> Dependencies:
         if ((not self.include_idx_lambda_indices)
                 and IDX_LAMBDA_REDUCTION_AXIS_INDEX.fullmatch(str(expr))):
             return set()
@@ -191,14 +191,14 @@ class DependencyMapper(DependencyMapperBase[P]):
             return super().map_variable(expr, *args, **kwargs)
 
     def map_reduce(self, expr: Reduce,
-            *args: P.args, **kwargs: P.kwargs) -> DependenciesT:
+            *args: P.args, **kwargs: P.kwargs) -> Dependencies:
         return self.combine([
             self.rec(expr.inner_expr, *args, **kwargs),
             set().union(*(self.rec((lb, ub), *args, **kwargs)
                         for (lb, ub) in expr.bounds.values()))])
 
     def map_type_cast(self, expr: TypeCast,
-            *args: P.args, **kwargs: P.kwargs) -> DependenciesT:
+            *args: P.args, **kwargs: P.kwargs) -> Dependencies:
         return self.rec(expr.inner_expr, *args, **kwargs)
 
 
