@@ -402,7 +402,7 @@ class ListOfDirectPredecessorsGetter(
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
                                         ) -> list[ArrayOrNames]:
-        return [expr.passthrough_data]
+        return [expr.send.data, expr.passthrough_data]
 
     def map_call(
             self, expr: Call) -> list[ArrayOrNames | FunctionDefinition]:
