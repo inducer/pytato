@@ -434,7 +434,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
+            err_on_collision: bool = True,
             _cache:
                 CachedMapperCache[ArrayOrNames, ResultT, P] | None = None,
             _function_cache:
@@ -654,8 +654,8 @@ class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_created_duplicate: bool = False,
+            err_on_collision: bool = True,
+            err_on_created_duplicate: bool = True,
             _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
             _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
             ) -> None:
@@ -749,8 +749,8 @@ class TransformMapperWithExtraArgs(
     """
     def __init__(
             self,
-            err_on_collision: bool = False,
-            err_on_created_duplicate: bool = False,
+            err_on_collision: bool = True,
+            err_on_created_duplicate: bool = True,
             _cache: TransformMapperCache[ArrayOrNames, P] | None = None,
             _function_cache:
                 TransformMapperCache[FunctionDefinition, P] | None = None
@@ -840,8 +840,7 @@ class CopyMapper(TransformMapper):
         new_shape = self.rec_size_tuple(expr.shape)
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: _verify_is_array(self.rec(subexpr))
-                # FIXME: Are these sorts still necessary?
-                for name, subexpr in sorted(expr.bindings.items())})
+                for name, subexpr in expr.bindings.items()})
         return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_placeholder(self, expr: Placeholder) -> Array:
@@ -911,7 +910,7 @@ class CopyMapper(TransformMapper):
         new_bindings: Mapping[str, ArrayOrScalar] = immutabledict(
                     {name: (_verify_is_array(self.rec(subexpr))
                             if isinstance(subexpr, Array) else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())})
+                    for name, subexpr in expr.bindings.items()})
         return expr.replace_if_different(bindings=new_bindings)
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> Array:
@@ -997,7 +996,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
         new_bindings: Mapping[str, Array] = immutabledict({
                 name: self.rec(subexpr, *args, **kwargs)
-                for name, subexpr in sorted(expr.bindings.items())})
+                for name, subexpr in expr.bindings.items()})
         return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 
     def map_placeholder(self,
@@ -1085,7 +1084,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                     {name: (self.rec(subexpr, *args, **kwargs)
                            if isinstance(subexpr, Array)
                            else subexpr)
-                    for name, subexpr in sorted(expr.bindings.items())})
+                    for name, subexpr in expr.bindings.items()})
         return expr.replace_if_different(bindings=new_bindings)
 
     def map_loopy_call_result(self, expr: LoopyCallResult,
@@ -1205,7 +1204,7 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 
     def map_index_lambda(self, expr: IndexLambda) -> ResultT:
         return self.combine(*(self.rec(bnd)
-                              for _, bnd in sorted(expr.bindings.items())),
+                              for _, bnd in expr.bindings.items()),
                             *self.rec_idx_or_size_tuple(expr.shape))
 
     def map_placeholder(self, expr: Placeholder) -> ResultT:
@@ -1263,7 +1262,7 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 
     def map_loopy_call(self, expr: LoopyCall) -> ResultT:
         return self.combine(*(self.rec(ary)
-                              for _, ary in sorted(expr.bindings.items())
+                              for _, ary in expr.bindings.items()
                               if isinstance(ary, Array)))
 
     def map_loopy_call_result(self, expr: LoopyCallResult) -> ResultT:
@@ -1439,7 +1438,7 @@ class InputGatherer(
         return self.combine(self.rec_function_definition(expr.function),
             *[
                 self.rec(bnd)
-                for name, bnd in sorted(expr.bindings.items())])
+                for name, bnd in expr.bindings.items()])
 
 # }}}
 
@@ -1469,7 +1468,7 @@ class SizeParamGatherer(
         return self.combine(self.rec_function_definition(expr.function),
             *[
                 self.rec(bnd)
-                for name, bnd in sorted(expr.bindings.items())])
+                for name, bnd in expr.bindings.items()])
 
 # }}}
 
@@ -1516,7 +1515,7 @@ class WalkMapper(Mapper[None, None, P]):
         if not self.visit(expr, *args, **kwargs):
             return
 
-        for _, child in sorted(expr.bindings.items()):
+        for _, child in expr.bindings.items():
             self.rec(child, *args, **kwargs)
 
         self.rec_idx_or_size_tuple(expr.shape, *args, **kwargs)
@@ -1644,7 +1643,7 @@ class WalkMapper(Mapper[None, None, P]):
         if not self.visit(expr, *args, **kwargs):
             return
 
-        for _, child in sorted(expr.bindings.items()):
+        for _, child in expr.bindings.items():
             if isinstance(child, Array):
                 self.rec(child, *args, **kwargs)
 
@@ -1920,8 +1919,8 @@ class MPMSMaterializer(
             self,
             nsuccessors: Mapping[Array, int],
             _cache: MPMSMaterializerCache | None = None):
-        err_on_collision = False
-        err_on_created_duplicate = False
+        err_on_collision = True
+        err_on_created_duplicate = True
 
         if _cache is None:
             _cache = MPMSMaterializerCache(
@@ -1966,7 +1965,7 @@ class MPMSMaterializer(
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
-                        for bnd_name, bnd in sorted(expr.bindings.items())}
+                        for bnd_name, bnd in expr.bindings.items()}
         new_children: Mapping[str, Array] = immutabledict({
             bnd_name: bnd.expr
             for bnd_name, bnd in children_rec.items()})
@@ -2090,7 +2089,7 @@ def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
         data = {}
     else:
         data = {name: _verify_is_array(copy_mapper.rec(val.expr))
-                for name, val in sorted(source_dict.items())}
+                for name, val in source_dict.items()}
 
     return DictOfNamedArrays(data, tags=source_dict.tags)
 
@@ -2305,7 +2304,7 @@ class UsersCollector(CachedMapper[None, Never, []]):
         self._map_index_base(expr)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
-        for _, child in sorted(expr.bindings.items()):
+        for _, child in expr.bindings.items():
             if isinstance(child, Array):
                 self.node_to_users.setdefault(child, set()).add(expr)
                 self.rec(child)
