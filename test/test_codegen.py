@@ -2137,7 +2137,9 @@ def test_zeros_like(ctx_factory):
     assert isinstance(zero, pt.Array)
     assert isinstance(one, pt.Array)
 
-    prg = pt.generate_loopy({"zero": zero, "one": one})
+    prg = pt.generate_loopy(
+        pt.transform.deduplicate(
+            pt.make_dict_of_named_arrays({"zero": zero, "one": one})))
     _, pt_out = prg(cq, x=x_in)
     np.testing.assert_allclose(pt_out["zero"], 0)
     np.testing.assert_allclose(pt_out["one"], 1)
