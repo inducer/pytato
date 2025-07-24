@@ -563,9 +563,9 @@ def _is_mapper_created_duplicate(expr: CacheExprT, result: CacheExprT) -> bool:
     from pytato.analysis import ListOfDirectPredecessorsGetter
     pred_getter = ListOfDirectPredecessorsGetter(include_functions=True)
     return (
-        hash(result) == hash(expr)
+        result is not expr
+        and hash(result) == hash(expr)
         and result == expr
-        and result is not expr
         # Only consider "direct" duplication, not duplication resulting from
         # equality-preserving changes to predecessors. Assume that such changes are
         # OK, otherwise they would have been detected at the point at which they
