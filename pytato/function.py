@@ -246,14 +246,9 @@ class FunctionDefinition(Taggable):
         else:
             raise NotImplementedError(self.return_type)
 
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-        if not isinstance(other, FunctionDefinition):
-            return False
-
+    def __eq__(self, other: object) -> bool:
         from pytato.equality import EqualityComparer
-        return EqualityComparer().map_function_definition(self, other)
+        return EqualityComparer()(self, other)
 
 
 @array_dataclass()

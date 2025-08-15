@@ -88,13 +88,17 @@ class EqualityComparer:
         self._cache: dict[tuple[int, int], bool] = {}
 
     def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
+        # These cases are simple enough that they don't need to be cached
+        if expr1 is expr2:
+            return True
+        if expr1.__class__ is not expr2.__class__:
+            return False
+
         cache_key = id(expr1), id(expr2)
         try:
             return self._cache[cache_key]
         except KeyError:
-            if expr1 is expr2:
-                result = True
-            elif isinstance(expr1, ArrayOrNames):
+            if isinstance(expr1, ArrayOrNames):
                 method: Callable[[ArrayOrNames, Any], bool]
                 try:
                     method = getattr(self, expr1._mapper_method)
@@ -113,8 +117,7 @@ class EqualityComparer:
             self._cache[cache_key] = result
             return result
 
-    def __call__(self, expr1: ArrayOrNames, expr2: Any
-                 ) -> bool:
+    def __call__(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
         return self.rec(expr1, expr2)
 
     def handle_unsupported_array(self, expr1: Array,

@@ -797,17 +797,12 @@ class Array(Taggable):
         return transpose(self, axes)
 
     @override
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-        if not isinstance(other, Array):
-            return False
-
+    def __eq__(self, other: object) -> bool:
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
     @override
-    def __ne__(self, other: Any) -> bool:
+    def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
     def __matmul__(self, other: Array, reverse: bool = False) -> Array:
@@ -1197,12 +1192,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         pass
 
     @override
-    def __eq__(self, other: Any) -> bool:
-        if self is other:
-            return True
-        if not isinstance(other, AbstractResultWithNamedArrays):
-            return False
-
+    def __eq__(self, other: object) -> bool:
         from pytato.equality import EqualityComparer
         return EqualityComparer()(self, other)
 
