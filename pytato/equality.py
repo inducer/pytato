@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -87,7 +87,7 @@ class EqualityComparer:
         # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], bool] = {}
 
-    def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
+    def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: object) -> bool:
         # These cases are simple enough that they don't need to be cached
         if expr1 is expr2:
             return True
@@ -99,7 +99,8 @@ class EqualityComparer:
             return self._cache[cache_key]
         except KeyError:
             if isinstance(expr1, ArrayOrNames):
-                method: Callable[[ArrayOrNames, Any], bool]
+                assert isinstance(expr2, ArrayOrNames)
+                method: Callable[[ArrayOrNames, ArrayOrNames], bool]
                 try:
                     method = getattr(self, expr1._mapper_method)
                 except AttributeError:
@@ -110,6 +111,7 @@ class EqualityComparer:
                 else:
                     result = method(expr1, expr2)
             elif isinstance(expr1, FunctionDefinition):
+                assert isinstance(expr2, FunctionDefinition)
                 result = self.map_function_definition(expr1, expr2)
             else:
                 result = self.map_foreign(expr1, expr2)
@@ -117,38 +119,35 @@ class EqualityComparer:
             self._cache[cache_key] = result
             return result
 
-    def __call__(self, expr1: ArrayOrNames | FunctionDefinition, expr2: Any) -> bool:
+    def __call__(self, expr1: ArrayOrNames | FunctionDefinition, expr2: object) -> bool:
         return self.rec(expr1, expr2)
 
     def handle_unsupported_array(self, expr1: Array,
-                                 expr2: Any) -> bool:
+                                 expr2: object) -> bool:
         raise NotImplementedError(type(expr1).__name__)
 
-    def map_foreign(self, expr1: Any, expr2: Any) -> bool:
+    def map_foreign(self, expr1: object, expr2: object) -> bool:
         raise NotImplementedError(type(expr1).__name__)
 
-    def map_placeholder(self, expr1: Placeholder, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.name == expr2.name
+    def map_placeholder(self, expr1: Placeholder, expr2: Placeholder) -> bool:
+        return (expr1.name == expr2.name
                 and expr1.shape == expr2.shape
                 and expr1.dtype == expr2.dtype
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
 
-    def map_size_param(self, expr1: SizeParam, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.name == expr2.name
+    def map_size_param(self, expr1: SizeParam, expr2: SizeParam) -> bool:
+        return (expr1.name == expr2.name
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
 
-    def map_data_wrapper(self, expr1: DataWrapper, expr2: Any) -> bool:
+    def map_data_wrapper(self, expr1: DataWrapper, expr2: DataWrapper) -> bool:
         return expr1 is expr2
 
-    def map_index_lambda(self, expr1: IndexLambda, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.expr == expr2.expr
+    def map_index_lambda(self, expr1: IndexLambda, expr2: IndexLambda) -> bool:
+        return (expr1.expr == expr2.expr
                 and (frozenset(expr1.bindings.keys())
                      == frozenset(expr2.bindings.keys()))
                 and all(self.rec(expr1.bindings[name], expr2.bindings[name])
@@ -163,9 +162,8 @@ class EqualityComparer:
                 and expr1.var_to_reduction_descr == expr2.var_to_reduction_descr
                 )
 
-    def map_stack(self, expr1: Stack, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.axis == expr2.axis
+    def map_stack(self, expr1: Stack, expr2: Stack) -> bool:
+        return (expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
@@ -173,9 +171,8 @@ class EqualityComparer:
                 and expr1.axes == expr2.axes
                 )
 
-    def map_concatenate(self, expr1: Concatenate, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.axis == expr2.axis
+    def map_concatenate(self, expr1: Concatenate, expr2: Concatenate) -> bool:
+        return (expr1.axis == expr2.axis
                 and len(expr1.arrays) == len(expr2.arrays)
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.arrays, expr2.arrays, strict=True))
@@ -183,26 +180,24 @@ class EqualityComparer:
                 and expr1.axes == expr2.axes
                 )
 
-    def map_roll(self, expr1: Roll, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.axis == expr2.axis
+    def map_roll(self, expr1: Roll, expr2: Roll) -> bool:
+        return (expr1.axis == expr2.axis
                 and expr1.shift == expr2.shift
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
 
-    def map_axis_permutation(self, expr1: AxisPermutation, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.axis_permutation == expr2.axis_permutation
+    def map_axis_permutation(
+            self, expr1: AxisPermutation, expr2: AxisPermutation) -> bool:
+        return (expr1.axis_permutation == expr2.axis_permutation
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
 
-    def _map_index_base(self, expr1: IndexBase, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.array, expr2.array)
+    def _map_index_base(self, expr1: IndexBase, expr2: IndexBase) -> bool:
+        return (self.rec(expr1.array, expr2.array)
                 and len(expr1.indices) == len(expr2.indices)
                 and all(self.rec(idx1, idx2)
                         if (isinstance(idx1, Array)
@@ -214,32 +209,30 @@ class EqualityComparer:
                 and expr1.axes == expr2.axes
                 )
 
-    def map_basic_index(self, expr1: BasicIndex, expr2: Any) -> bool:
+    def map_basic_index(self, expr1: BasicIndex, expr2: BasicIndex) -> bool:
         return self._map_index_base(expr1, expr2)
 
     def map_contiguous_advanced_index(self,
                                       expr1: AdvancedIndexInContiguousAxes,
-                                      expr2: Any
+                                      expr2: AdvancedIndexInContiguousAxes
                                       ) -> bool:
         return self._map_index_base(expr1, expr2)
 
     def map_non_contiguous_advanced_index(self,
                                           expr1: AdvancedIndexInNoncontiguousAxes,
-                                          expr2: Any
+                                          expr2: AdvancedIndexInNoncontiguousAxes
                                           ) -> bool:
         return self._map_index_base(expr1, expr2)
 
-    def map_reshape(self, expr1: Reshape, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.newshape == expr2.newshape
+    def map_reshape(self, expr1: Reshape, expr2: Reshape) -> bool:
+        return (expr1.newshape == expr2.newshape
                 and self.rec(expr1.array, expr2.array)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 )
 
-    def map_einsum(self, expr1: Einsum, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.access_descriptors == expr2.access_descriptors
+    def map_einsum(self, expr1: Einsum, expr2: Einsum) -> bool:
+        return (expr1.access_descriptors == expr2.access_descriptors
                 and all(self.rec(ary1, ary2)
                         for ary1, ary2 in zip(expr1.args,
                                               expr2.args, strict=True))
@@ -248,16 +241,14 @@ class EqualityComparer:
                 and expr1.redn_axis_to_redn_descr == expr2.redn_axis_to_redn_descr
                 )
 
-    def map_named_array(self, expr1: NamedArray, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1._container, expr2._container)
+    def map_named_array(self, expr1: NamedArray, expr2: NamedArray) -> bool:
+        return (self.rec(expr1._container, expr2._container)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.name == expr2.name)
 
-    def map_loopy_call(self, expr1: LoopyCall, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.translation_unit == expr2.translation_unit
+    def map_loopy_call(self, expr1: LoopyCall, expr2: LoopyCall) -> bool:
+        return (expr1.translation_unit == expr2.translation_unit
                 and expr1.entrypoint == expr2.entrypoint
                 and frozenset(expr1.bindings) == frozenset(expr2.bindings)
                 and all(self.rec(bnd,
@@ -268,25 +259,25 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_loopy_call_result(self, expr1: LoopyCallResult, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1._container, expr2._container)
+    def map_loopy_call_result(
+            self, expr1: LoopyCallResult, expr2: LoopyCallResult) -> bool:
+        return (self.rec(expr1._container, expr2._container)
                 and expr1.tags == expr2.tags
                 and expr1.axes == expr2.axes
                 and expr1.name == expr2.name)
 
-    def map_dict_of_named_arrays(self, expr1: DictOfNamedArrays, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
+    def map_dict_of_named_arrays(
+            self, expr1: DictOfNamedArrays, expr2: DictOfNamedArrays) -> bool:
+        return (frozenset(expr1._data.keys()) == frozenset(expr2._data.keys())
                 and all(self.rec(expr1._data[name], expr2._data[name])
                         for name in expr1._data)
                 and expr1.tags == expr2.tags
                 )
 
     def map_distributed_send_ref_holder(
-            self, expr1: DistributedSendRefHolder, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.send.data, expr2.send.data)
+            self, expr1: DistributedSendRefHolder, expr2: DistributedSendRefHolder
+            ) -> bool:
+        return (self.rec(expr1.send.data, expr2.send.data)
                 and self.rec(expr1.passthrough_data, expr2.passthrough_data)
                 and expr1.send.dest_rank == expr2.send.dest_rank
                 and expr1.send.comm_tag == expr2.send.comm_tag
@@ -294,19 +285,18 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_distributed_recv(self, expr1: DistributedRecv, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.src_rank == expr2.src_rank
+    def map_distributed_recv(
+            self, expr1: DistributedRecv, expr2: DistributedRecv) -> bool:
+        return (expr1.src_rank == expr2.src_rank
                 and expr1.comm_tag == expr2.comm_tag
                 and expr1.shape == expr2.shape
                 and expr1.dtype == expr2.dtype
                 and expr1.tags == expr2.tags
                 )
 
-    def map_function_definition(self, expr1: FunctionDefinition, expr2: Any
-                                ) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.parameters == expr2.parameters
+    def map_function_definition(
+            self, expr1: FunctionDefinition, expr2: FunctionDefinition) -> bool:
+        return (expr1.parameters == expr2.parameters
                 and expr1.return_type == expr2.return_type
                 and (set(expr1.returns.keys()) == set(expr2.returns.keys()))
                 and all(self.rec(expr1.returns[k], expr2.returns[k])
@@ -314,9 +304,8 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_call(self, expr1: Call, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and self.rec(expr1.function, expr2.function)
+    def map_call(self, expr1: Call, expr2: Call) -> bool:
+        return (self.rec(expr1.function, expr2.function)
                 and frozenset(expr1.bindings) == frozenset(expr2.bindings)
                 and all(self.rec(bnd,
                                  expr2.bindings[name])
@@ -324,9 +313,9 @@ class EqualityComparer:
                 and expr1.tags == expr2.tags
                 )
 
-    def map_named_call_result(self, expr1: NamedCallResult, expr2: Any) -> bool:
-        return (expr1.__class__ is expr2.__class__
-                and expr1.name == expr2.name
+    def map_named_call_result(
+            self, expr1: NamedCallResult, expr2: NamedCallResult) -> bool:
+        return (expr1.name == expr2.name
                 and self.rec(expr1._container, expr2._container))
 
 # }}}
