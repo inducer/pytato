@@ -46,7 +46,7 @@ jobs:
                 . ./ci-support-v0
                 build_py_project_in_conda_env
                 python -m pip install pytest
-                python -m pip install basedpyright
+                python -m pip install basedpyright optype
                 basedpyright
 
     pytest:

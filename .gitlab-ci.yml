@@ -49,7 +49,7 @@ BasedPyright:
     . ./ci-support-v0
     export EXTRA_INSTALL="git+https://github.com/inducer/arraycontext"
     build_py_project_in_venv
-    python -m pip install basedpyright mpi4py pytest pyopencl jax pygments
+    python -m pip install basedpyright mpi4py pytest pyopencl jax pygments optype
     basedpyright
   tags:
   - python3
