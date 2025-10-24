@@ -112,6 +112,7 @@ __doc__ = """
 .. autoclass:: Deduplicator
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
+.. autoclass:: ConditionalDependencyMapper
 .. autoclass:: InputGatherer
 .. autoclass:: SizeParamGatherer
 .. autoclass:: SubsetDependencyMapper
@@ -1302,7 +1303,7 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 # }}}
 
 
-# {{{ DependencyMapper
+# {{{ DependencyMapper / ConditionalDependencyMapper
 
 class DependencyMapper(CombineMapper[R, Never]):
     """
@@ -1377,25 +1378,39 @@ class DependencyMapper(CombineMapper[R, Never]):
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         raise AssertionError("Control shouldn't reach this point.")
 
+
+class ConditionalDependencyMapper(DependencyMapper):
+    """
+    Mapper to combine a subset of the dependencies of an expression according to
+    *include_dep_func*.
+    """
+    def __init__(
+            self,
+            include_dep_func: Callable[[Array], bool]):
+        super().__init__()
+        self.include_dep_func: Callable[[Array], bool] = include_dep_func
+
+    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
+        def accumulate_func(
+                acc: frozenset[Array],
+                arg: frozenset[Array]) -> frozenset[Array]:
+            return acc | {dep for dep in arg if self.include_dep_func(dep)}
+
+        from functools import reduce
+        return reduce(accumulate_func, args, frozenset())
+
 # }}}
 
 
 # {{{ SubsetDependencyMapper
 
-class SubsetDependencyMapper(DependencyMapper):
+class SubsetDependencyMapper(ConditionalDependencyMapper):
     """
     Mapper to combine the dependencies of an expression that are a subset of
     *universe*.
     """
     def __init__(self, universe: frozenset[Array]):
-        self.universe = universe
-        super().__init__()
-
-    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
-        from functools import reduce
-        return reduce(lambda acc, arg: acc | (arg & self.universe),
-                      args,
-                      frozenset())
+        super().__init__(lambda dep: dep in universe)
 
 # }}}
 
