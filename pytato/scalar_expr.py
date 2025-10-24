@@ -57,6 +57,7 @@ from typing_extensions import Never, TypeIs, override
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
 from pymbolic.mapper import (
+    Collector,
     CombineMapper as CombineMapperBase,
     IdentityMapper as IdentityMapperBase,
     P,
@@ -70,6 +71,7 @@ from pymbolic.mapper.dependency import (
 )
 from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
 from pymbolic.mapper.evaluator import EvaluationMapper as EvaluationMapperBase
+from pymbolic.mapper.flop_counter import FlopCounterBase
 from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
 from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
 from pymbolic.typing import Integer
@@ -240,6 +242,140 @@ class StringifyMapper(StringifyMapperBase[P]):
         from pymbolic.mapper.stringifier import PREC_NONE
         inner_str = self.rec(expr.inner_expr, PREC_NONE, *args, **kwargs)
         return f"cast({expr.dtype}, {inner_str})"
+
+
+class InputGatherer(Collector[str, []]):
+    @override
+    def map_variable(self, expr: prim.Variable) -> set[str]:
+        return {expr.name}
+
+
+class FlopCounter(FlopCounterBase):
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, ArithmeticExpression] | None = None):
+        super().__init__()
+        self.op_name_to_num_flops: dict[str, ArithmeticExpression]
+        if op_name_to_num_flops:
+            self.op_name_to_num_flops = dict(op_name_to_num_flops)
+        else:
+            self.op_name_to_num_flops = {}
+
+    def _get_op_nflops(self, name: str) -> ArithmeticExpression:
+        try:
+            return self.op_name_to_num_flops[name]
+        except KeyError:
+            from pymbolic import var
+            result = var("nflops")(var(name))
+            self.op_name_to_num_flops[name] = result
+            return result
+
+    @override
+    def map_call(self, expr: prim.Call) -> ArithmeticExpression:
+        assert isinstance(expr.function, prim.Variable)
+        return (
+            self._get_op_nflops(expr.function.name)
+            + sum(self.rec(child) for child in expr.parameters))
+
+    @override
+    def map_subscript(self, expr: prim.Subscript) -> ArithmeticExpression:
+        # Assume calculations inside subscripts are performed on non-floats
+        return 0
+
+    @override
+    def map_sum(self, expr: prim.Sum) -> ArithmeticExpression:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if expr.children:
+            return (
+                self._get_op_nflops("+") * (len(expr.children) - 1)
+                + sum(self.rec(ch) for ch in expr.children))
+        else:
+            return 0
+
+    @override
+    def map_product(self, expr: prim.Product) -> ArithmeticExpression:
+        if expr.children:
+            return (
+                self._get_op_nflops("*") * (len(expr.children) - 1)
+                + sum(self.rec(ch) for ch in expr.children))
+        else:
+            return 0
+
+    @override
+    def map_quotient(self, expr: prim.Quotient) -> ArithmeticExpression:   # pyright: ignore[reportIncompatibleMethodOverride]
+        return (
+            self._get_op_nflops("/")
+            + self.rec(expr.numerator)
+            + self.rec(expr.denominator))
+
+    @override
+    def map_floor_div(self, expr: prim.FloorDiv) -> ArithmeticExpression:
+        return (
+            self._get_op_nflops("//")
+            + self.rec(expr.numerator)
+            + self.rec(expr.denominator))
+
+    @override
+    def map_power(self, expr: prim.Power) -> ArithmeticExpression:
+        if isinstance(expr.exponent, int):
+            if expr.exponent >= 0:
+                return (
+                    expr.exponent * self._get_op_nflops("*")
+                    + self.rec(expr.base))
+            else:
+                return (
+                    self._get_op_nflops("/")
+                    + expr.exponent * self._get_op_nflops("*")
+                    + self.rec(expr.base))
+        else:
+            return (
+                self._get_op_nflops("**")
+                + self.rec(expr.base)
+                + self.rec(expr.exponent))
+
+    @override
+    def map_comparison(self, expr: prim.Comparison) -> ArithmeticExpression:
+        return (
+            self._get_op_nflops(expr.operator)
+            + self.rec(expr.left)
+            + self.rec(expr.right))
+
+    @override
+    def map_if(self, expr: prim.If) -> ArithmeticExpression:
+        return (
+            self.rec(expr.condition)
+            + self.rec(expr.then)
+            + self.rec(expr.else_))
+
+    @override
+    def map_max(self, expr: prim.Max) -> ArithmeticExpression:
+        if expr.children:
+            return (
+                self._get_op_nflops("max") * (len(expr.children) - 1)
+                + sum(self.rec(child) for child in expr.children))
+        else:
+            return 0
+
+    @override
+    def map_min(self, expr: prim.Min) -> ArithmeticExpression:
+        if expr.children:
+            return (
+                self._get_op_nflops("min") * (len(expr.children) - 1)
+                + sum(self.rec(child) for child in expr.children))
+        else:
+            return 0
+
+    @override
+    def map_nan(self, expr: prim.NaN) -> ArithmeticExpression:
+        return 0
+
+    def map_reduce(self, expr: Reduce) -> ArithmeticExpression:
+        result = self.rec(expr.inner_expr)
+        nflops_op = self._get_op_nflops(expr.op.scalar_op_name())
+        for lower_bd, upper_bd in expr.bounds.values():
+            nops = upper_bd - lower_bd
+            result = result * nops + nflops_op * (nops-1)
+
+        return result
 
 # }}}
 
