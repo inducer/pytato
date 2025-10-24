@@ -61,13 +61,15 @@ from pytato.scalar_expr import (
     ScalarExpression,
     TypeCast,
 )
-from pytato.transform import CachedMapper
+from pytato.transform import ArrayOrNames, CachedMapper
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
     from pytools.tag import Tag
+
+    from pytato.function import FunctionDefinition
 
 
 __doc__ = """
@@ -80,6 +82,7 @@ Helper routines
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
 .. autofunction:: get_einsum_subscript_str
+.. autofunction:: is_materializable
 
 References
 ^^^^^^^^^^
@@ -735,4 +738,20 @@ def get_einsum_specification(expr: Einsum) -> str:
                           for i in range(expr.ndim))
 
     return f"{','.join(input_specs)}->{output_spec}"
+
+
+def is_materializable(expr: ArrayOrNames | FunctionDefinition) -> bool:
+    """
+    Returns *True* if *expr* is an instance of an array type that can be materialized.
+    """
+    from pytato.array import InputArgumentBase, NamedArray
+    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
+    return (
+        isinstance(expr, Array)
+        and not isinstance(expr, (
+            # FIXME: Is there a nice way to generalize this?
+            InputArgumentBase, NamedArray, DistributedRecv,
+            DistributedSendRefHolder)))
+
+
 # vim: fdm=marker

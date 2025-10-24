@@ -27,16 +27,19 @@ THE SOFTWARE.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, overload
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import product
 
 from pytato.array import (
     Array,
+    ArrayOrScalar,
     Concatenate,
     DictOfNamedArrays,
     Einsum,
@@ -49,13 +52,21 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.scalar_expr import (
+    FlopCounter as ScalarFlopCounter,
+)
+from pytato.tags import ImplStored
 from pytato.transform import (
     ArrayOrNames,
+    ArrayOrNamesTc,
     CachedWalkMapper,
     CombineMapper,
     Mapper,
     VisitKeyT,
+    map_and_copy,
 )
+from pytato.transform.lower_to_index_lambda import to_index_lambda
+from pytato.utils import is_materializable
 
 
 if TYPE_CHECKING:
@@ -87,6 +98,13 @@ __doc__ = """
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
+
+.. autoclass:: UndefinedOpFlopCountError
+.. autofunction:: get_default_op_name_to_num_flops
+.. autofunction:: get_num_flops
+.. autofunction:: get_materialized_node_flop_counts
+.. autoclass:: UnmaterializedNodeFlopCounts
+.. autofunction:: get_unmaterialized_node_flop_counts
 """
 
 
@@ -754,5 +772,344 @@ class PytatoKeyBuilder(LoopyKeyBuilder):
         self.rec(key_hash, key.get())
 
 # }}}
+
+
+# {{{ flop counting
+
+def _is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
+    return (
+        is_materializable(expr)
+        and bool(expr.tags_of_type(ImplStored)))
+
+
+def _is_unmaterialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
+    return (
+        is_materializable(expr)
+        and not bool(expr.tags_of_type(ImplStored)))
+
+
+@dataclass
+class UndefinedOpFlopCountError(ValueError):
+    op_name: str
+
+
+class _PerEntryFlopCounter(CombineMapper[int, Never]):
+    def __init__(self, op_name_to_num_flops: Mapping[str, int]) -> None:
+        super().__init__()
+        self.scalar_flop_counter: ScalarFlopCounter = ScalarFlopCounter(
+            op_name_to_num_flops)
+        self.node_to_nflops: dict[Array, int] = {}
+
+    @override
+    def combine(self, *args: int) -> int:
+        return sum(args)
+
+    @override
+    def rec(self, expr: ArrayOrNames) -> int:
+        inputs = self._make_cache_inputs(expr)
+        try:
+            return self._cache_retrieve(inputs)
+        except KeyError:
+            result: int
+            if _is_unmaterialized(expr):
+                assert isinstance(expr, Array)
+                self_nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
+                if not isinstance(self_nflops, int):
+                    from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
+                    var_names: set[str] = set(ScalarInputGatherer()(self_nflops))
+                    var_names.discard("nflops")
+                    if var_names:
+                        raise UndefinedOpFlopCountError(next(iter(var_names))) from None
+                    else:
+                        raise AssertionError from None
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
+                result = self_nflops + cast("int", Mapper.rec(self, expr))
+            else:
+                result = 0
+            if isinstance(expr, Array):
+                self.node_to_nflops[expr] = result
+            return self._cache_add(inputs, result)
+
+
+class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
+    """
+    Mapper that counts the number of floating point operations of each materialized
+    expression in a DAG.
+
+    .. note::
+
+        Flops from nodes inside function calls are accumulated onto the corresponding
+        call node.
+    """
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, int],
+            _visited_functions: set[VisitKeyT] | None = None,
+            _function_to_nflops: dict[FunctionDefinition, ArrayOrScalar] | None = None
+            ) -> None:
+        super().__init__(_visited_functions=_visited_functions)
+        self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
+        self.materialized_node_to_nflops: dict[Array, ArrayOrScalar] = {}
+        self.call_to_nflops: dict[Call, ArrayOrScalar] = {}
+        self._function_to_nflops: dict[FunctionDefinition, ArrayOrScalar] = \
+            _function_to_nflops if _function_to_nflops is not None else {}
+        self._per_entry_flop_counter: _PerEntryFlopCounter = _PerEntryFlopCounter(
+            self.op_name_to_num_flops)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return expr
+
+    @override
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> VisitKeyT:
+        return expr
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            op_name_to_num_flops=self.op_name_to_num_flops,
+            _visited_functions=self._visited_functions,
+            _function_to_nflops=self._function_to_nflops)
+
+    @override
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
+        if not self.visit(expr):
+            return
+
+        new_mapper = self.clone_for_callee(expr)
+        for subexpr in expr.returns.values():
+            # Assume that any calls that haven't been inlined have their functions'
+            # outputs materialized
+            assert not _is_unmaterialized(subexpr)
+            new_mapper(subexpr)
+
+        self._function_to_nflops[expr] = (
+            sum(new_mapper.materialized_node_to_nflops.values())
+            + sum(new_mapper.call_to_nflops.values()))
+
+        self.post_visit(expr)
+
+    @override
+    def map_call(self, expr: Call) -> None:
+        if not self.visit(expr):
+            return
+
+        self.rec_function_definition(expr.function)
+        for bnd in expr.bindings.values():
+            # Assume that any calls that haven't been inlined have their inputs
+            # materialized
+            assert not _is_unmaterialized(bnd)
+            self.rec(bnd)
+
+        self.call_to_nflops[expr] = self._function_to_nflops[expr.function]
+
+        self.post_visit(expr)
+
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if not _is_materialized(expr):
+            return
+        assert isinstance(expr, Array)
+        unmaterialized_expr = expr.without_tags(ImplStored())
+        self._per_entry_flop_counter(unmaterialized_expr)
+        self.materialized_node_to_nflops[expr] = (
+            product(expr.shape)
+            * self._per_entry_flop_counter.node_to_nflops[unmaterialized_expr])
+
+
+class _UnmaterializedSubexpressionUseCounter(CombineMapper[dict[Array, int], Never]):
+    @override
+    def combine(self, *args: dict[Array, int]) -> dict[Array, int]:
+        result: dict[Array, int] = defaultdict(int)
+        for arg in args:
+            for ary, nuses in arg.items():
+                result[ary] += nuses
+        return result
+
+    @override
+    def rec(self, expr: ArrayOrNames) -> dict[Array, int]:
+        inputs = self._make_cache_inputs(expr)
+        try:
+            return self._cache_retrieve(inputs)
+        except KeyError:
+            result: dict[Array, int]
+            if _is_unmaterialized(expr):
+                assert isinstance(expr, Array)
+                # Intentionally going to Mapper instead of super() to avoid
+                # double caching when subclasses of CachedMapper override rec,
+                # see https://github.com/inducer/pytato/pull/585
+                result = self.combine(
+                    {expr: 1}, cast("dict[Array, int]", Mapper.rec(self, expr)))
+            else:
+                result = {}
+            return self._cache_add(inputs, result)
+
+
+@dataclass
+class UnmaterializedNodeFlopCounts:
+    materialized_successor_to_contrib_nflops: dict[Array, ArrayOrScalar]
+    nflops_if_materialized: ArrayOrScalar
+
+
+class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
+    """
+    Mapper that counts the accumulated number of floating point operations that each
+    unmaterialized expression contributes to materialized expressions in the DAG.
+
+    .. note::
+
+        This mapper does not descend into functions.
+    """
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, int],
+            _visited_functions: set[VisitKeyT] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
+        self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
+        self.unmaterialized_node_to_flop_counts: \
+            dict[Array, UnmaterializedNodeFlopCounts] = {}
+        self._per_entry_flop_counter: _PerEntryFlopCounter = _PerEntryFlopCounter(
+            self.op_name_to_num_flops)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return expr
+
+    @override
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> VisitKeyT:
+        return expr
+
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if not _is_materialized(expr):
+            return
+        assert isinstance(expr, Array)
+        unmaterialized_expr = expr.without_tags(ImplStored())
+        subexpr_to_nuses = _UnmaterializedSubexpressionUseCounter()(
+            unmaterialized_expr)
+        del subexpr_to_nuses[unmaterialized_expr]
+        self._per_entry_flop_counter(unmaterialized_expr)
+        for subexpr, nuses in subexpr_to_nuses.items():
+            per_entry_nflops = self._per_entry_flop_counter.node_to_nflops[subexpr]
+            if subexpr not in self.unmaterialized_node_to_flop_counts:
+                nflops_if_materialized = product(subexpr.shape) * per_entry_nflops
+                flop_counts = UnmaterializedNodeFlopCounts({}, nflops_if_materialized)
+                self.unmaterialized_node_to_flop_counts[subexpr] = flop_counts
+            else:
+                flop_counts = self.unmaterialized_node_to_flop_counts[subexpr]
+            assert expr not in flop_counts.materialized_successor_to_contrib_nflops
+            flop_counts.materialized_successor_to_contrib_nflops[expr] = (
+                nuses * product(expr.shape) * per_entry_nflops)
+
+
+# FIXME: Should this be added to normalize_outputs?
+def _normalize_materialization(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
+    # Make sure call bindings and function results are materialized
+    from pytato.transform.calls import normalize_calls
+    expr = normalize_calls(expr)
+
+    # Make sure outputs are materialized
+    if isinstance(expr, DictOfNamedArrays):
+        output_to_materialized_output: dict[Array, Array] = {
+            ary: ary.tagged(ImplStored()) if is_materializable(ary) else ary
+            for ary in expr._data.values()}
+
+        def replace_with_materialized(ary: ArrayOrNames) -> ArrayOrNames:
+            if not isinstance(ary, Array):
+                return ary
+            try:
+                return output_to_materialized_output[ary]
+            except KeyError:
+                return ary
+
+        expr = map_and_copy(expr, replace_with_materialized)
+
+    return expr
+
+
+def get_default_op_name_to_num_flops() -> dict[str, int]:
+    """
+    Returns a mapping from operator name to floating point operation count for
+    operators that are almost always a single flop.
+    """
+    return {
+        "+": 1,
+        "*": 1,
+        "==": 1,
+        "!=": 1,
+        "<": 1,
+        ">": 1,
+        "<=": 1,
+        ">=": 1,
+        "min": 1,
+        "max": 1}
+
+
+def get_num_flops(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> ArrayOrScalar:
+    """Count the total number of floating point operations in the DAG *expr*."""
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+    expr = _normalize_materialization(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = MaterializedNodeFlopCounter(op_name_to_num_flops)
+    fc(expr)
+
+    return (
+        sum(fc.materialized_node_to_nflops.values())
+        + sum(fc.call_to_nflops.values()))
+
+
+def get_materialized_node_flop_counts(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> dict[Array, ArrayOrScalar]:
+    """
+    Returns a dictionary mapping materialized nodes in DAG *expr* to their floating
+    point operation count.
+    """
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+    expr = _normalize_materialization(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = MaterializedNodeFlopCounter(op_name_to_num_flops)
+    fc(expr)
+
+    return fc.materialized_node_to_nflops
+
+
+def get_unmaterialized_node_flop_counts(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> dict[Array, UnmaterializedNodeFlopCounts]:
+    """
+    Returns a dictionary mapping unmaterialized nodes in DAG *expr* to a
+    :class:`UnmaterializedNodeFlopCounts` containing floating-point operation count
+    information.
+    """
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+    expr = _normalize_materialization(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = UnmaterializedNodeFlopCounter(op_name_to_num_flops)
+    fc(expr)
+
+    return fc.unmaterialized_node_to_flop_counts
+
+# }}}
+
 
 # vim: fdm=marker
