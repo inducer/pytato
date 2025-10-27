@@ -512,7 +512,7 @@ class NodeCountMapper(CachedWalkMapper[[]]):
             count_duplicates=self.count_duplicates,
             _visited_functions=self._visited_functions)
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_type_counts[type(expr)] += 1
 
@@ -574,7 +574,8 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
     def __init__(self, _visited_functions: set[Any] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
 
-        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
+        self.expr_multiplicity_counts: dict[
+            ArrayOrNames | FunctionDefinition, int] = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
@@ -584,12 +585,13 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_multiplicity_counts[expr] += 1
 
 
-def get_node_multiplicities(outputs: ArrayOrNames) -> dict[Array, int]:
+def get_node_multiplicities(outputs: ArrayOrNames) -> dict[
+        ArrayOrNames | FunctionDefinition, int]:
     """
     Returns the multiplicity per `expr`.
     """
@@ -634,7 +636,7 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
 
         self.post_visit(expr)
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
         if isinstance(expr, Call):
             self.count += 1
 

@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from pytato.distributed.nodes import CommTagType, DistributedRecv
+    from pytato.function import FunctionDefinition
 
 
 # {{{ data structures
@@ -151,7 +152,8 @@ class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def visit(self, expr: ArrayOrNames) -> bool:
+    def visit(self, expr: ArrayOrNames | FunctionDefinition) -> bool:
+        assert isinstance(expr, ArrayOrNames)
         super().visit(expr)
         self.seen_nodes.add(expr)
         return True
