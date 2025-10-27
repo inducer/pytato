@@ -2016,6 +2016,22 @@
                     "endColumn": 25,
                     "lineCount": 1
                 }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 51,
+                    "endColumn": 61,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 56,
+                    "endColumn": 66,
+                    "lineCount": 1
+                }
             }
         ],
         "./pytato/array.py": [
@@ -7960,6 +7976,14 @@
                 "range": {
                     "startColumn": 4,
                     "endColumn": 20,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 42,
+                    "endColumn": 52,
                     "lineCount": 1
                 }
             },
