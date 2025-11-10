@@ -1043,7 +1043,15 @@ def get_num_flops(
         expr: ArrayOrNames,
         op_name_to_num_flops: Mapping[str, int] | None = None,
     ) -> ArrayOrScalar:
-    """Count the total number of floating point operations in the DAG *expr*."""
+    """
+    Count the total number of floating point operations in the DAG *expr*.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
+    """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
     expr = _normalize_materialization(expr)
@@ -1066,6 +1074,12 @@ def get_materialized_node_flop_counts(
     """
     Returns a dictionary mapping materialized nodes in DAG *expr* to their floating
     point operation count.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
@@ -1088,6 +1102,12 @@ def get_unmaterialized_node_flop_counts(
     Returns a dictionary mapping unmaterialized nodes in DAG *expr* to a
     :class:`UnmaterializedNodeFlopCounts` containing floating-point operation count
     information.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
