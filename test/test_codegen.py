@@ -1383,7 +1383,8 @@ def test_materialize_reduces_flops(ctx_factory: cl.CtxFactory):
     y2 = cse / x5
     bad_graph = pt.make_dict_of_named_arrays({"y1": y1, "y2": y2})
 
-    good_graph = pt.transform.materialize_with_mpms(bad_graph)
+    from pytato.transform.materialize import materialize_with_mpms
+    good_graph = materialize_with_mpms(bad_graph)
 
     bad_t_unit = pt.generate_loopy(bad_graph)
     good_t_unit = pt.generate_loopy(good_graph)
@@ -1407,7 +1408,9 @@ def test_named_temporaries(ctx_factory: cl.CtxFactory):
     dag = pt.make_dict_of_named_arrays({"out1": 10 * tmp1 + 11 * tmp2,
                                         "out2": 22 * tmp1 + 53 * tmp2
                                         })
-    dag = pt.transform.materialize_with_mpms(dag)
+
+    from pytato.transform.materialize import materialize_with_mpms
+    dag = materialize_with_mpms(dag)
 
     def mark_materialized_nodes_as_cse(ary: pt.Array | pt.AbstractResultWithNamedArrays
                                        ) -> pt.Array:
@@ -1461,7 +1464,7 @@ def test_random_dag_against_numpy(ctx_factory: cl.CtxFactory):
 
             ref_result = make_random_dag(rdagc_np)
             dag = make_random_dag(rdagc_pt)
-            from pytato.transform import materialize_with_mpms
+            from pytato.transform.materialize import materialize_with_mpms
             dict_named_arys = pt.make_dict_of_named_arrays({"result": dag})
             dict_named_arys = materialize_with_mpms(dict_named_arys)
             if 0:
