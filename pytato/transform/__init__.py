@@ -26,7 +26,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import dataclasses
 import logging
 from collections.abc import Hashable, Mapping
 from typing import (
@@ -77,11 +76,10 @@ from pytato.array import (
 from pytato.equality import EqualityComparer
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
-from pytato.tags import ImplStored
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
 
     from pytato.distributed.nodes import (
         DistributedRecv,
@@ -123,11 +121,11 @@ __doc__ = """
 .. autofunction:: deduplicate
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
-.. autofunction:: materialize_with_mpms
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
 .. automodule:: pytato.transform.einsum_distributive_law
+.. automodule:: pytato.transform.materialize
 .. automodule:: pytato.transform.metadata
 .. automodule:: pytato.transform.dead_code_elimination
 
@@ -1815,276 +1813,6 @@ class CachedMapAndCopyMapper(CopyMapper):
 # }}}
 
 
-# {{{ MPMS materializer
-
-@dataclasses.dataclass(frozen=True, eq=True)
-class MPMSMaterializerAccumulator:
-    """This class serves as the return value of :class:`MPMSMaterializer`. It
-    contains the set of materialized predecessors and the rewritten expression
-    (i.e. the expression with tags for materialization applied).
-    """
-    materialized_predecessors: frozenset[Array]
-    expr: Array
-
-
-class MPMSMaterializerCache(
-        CachedMapperCache[ArrayOrNames, MPMSMaterializerAccumulator, []]):
-    """
-    Cache for :class:`MPMSMaterializer`.
-
-    .. automethod:: __init__
-    .. automethod:: add
-    """
-    def __init__(
-            self,
-            err_on_collision: bool,
-            err_on_created_duplicate: bool) -> None:
-        """
-        Initialize the cache.
-
-        :arg err_on_collision: Raise an exception if two distinct input expression
-            instances have the same key.
-        :arg err_on_created_duplicate: Raise an exception if mapping produces a new
-            array instance that has the same key as the input array.
-        """
-        super().__init__(err_on_collision=err_on_collision)
-
-        self.err_on_created_duplicate = err_on_created_duplicate
-
-        self._result_key_to_result: dict[
-            ArrayOrNames, MPMSMaterializerAccumulator] = {}
-
-        self._equality_comparer: EqualityComparer = EqualityComparer()
-
-    def add(
-            self,
-            inputs: CacheInputsWithKey[ArrayOrNames, []],
-            result: MPMSMaterializerAccumulator) -> MPMSMaterializerAccumulator:
-        """
-        Cache a mapping result.
-
-        Returns the cached result (which may not be identical to *result* if a
-        result was already cached with the same result key).
-        """
-        key = inputs.key
-
-        assert key not in self._input_key_to_result, \
-            f"Cache entry is already present for key '{key}'."
-
-        try:
-            # The first encountered instance of each distinct result (in terms of
-            # "==" of result.expr) gets cached, and subsequent mappings with results
-            # that are equal to prior cached results are replaced with the original
-            # instance
-            result = self._result_key_to_result[result.expr]
-        except KeyError:
-            if (
-                    self.err_on_created_duplicate
-                    and _is_mapper_created_duplicate(
-                        inputs.expr, result.expr,
-                        equality_comparer=self._equality_comparer)):
-                raise MapperCreatedDuplicateError from None
-
-            self._result_key_to_result[result.expr] = result
-
-        self._input_key_to_result[key] = result
-        if self.err_on_collision:
-            self._input_key_to_expr[key] = inputs.expr
-
-        return result
-
-
-def _materialize_if_mpms(expr: Array,
-                         nsuccessors: int,
-                         predecessors: Iterable[MPMSMaterializerAccumulator]
-                         ) -> MPMSMaterializerAccumulator:
-    """
-    Returns an instance of :class:`MPMSMaterializerAccumulator`, that
-    materializes *expr* if it has more than 1 successor and more than 1
-    materialized predecessor.
-    """
-    from functools import reduce
-
-    materialized_predecessors: frozenset[Array] = reduce(
-                                                    frozenset.union,
-                                                    (pred.materialized_predecessors
-                                                     for pred in predecessors),
-                                                    frozenset())
-    if nsuccessors > 1 and len(materialized_predecessors) > 1:
-        new_expr = expr.tagged(ImplStored())
-        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
-    else:
-        return MPMSMaterializerAccumulator(materialized_predecessors, expr)
-
-
-class MPMSMaterializer(
-        CachedMapper[MPMSMaterializerAccumulator, Never, []]):
-    """
-    See :func:`materialize_with_mpms` for an explanation.
-
-    .. attribute:: nsuccessors
-
-        A mapping from a node in the expression graph (i.e. an
-        :class:`~pytato.Array`) to its number of successors.
-    """
-    def __init__(
-            self,
-            nsuccessors: Mapping[Array, int],
-            _cache: MPMSMaterializerCache | None = None):
-        err_on_collision = __debug__
-        err_on_created_duplicate = __debug__
-
-        if _cache is None:
-            _cache = MPMSMaterializerCache(
-                err_on_collision=err_on_collision,
-                err_on_created_duplicate=err_on_created_duplicate)
-
-        # Does not support functions, so function_cache is ignored
-        super().__init__(err_on_collision=err_on_collision, _cache=_cache)
-
-        self.nsuccessors = nsuccessors
-
-    def _cache_add(
-            self,
-            inputs: CacheInputsWithKey[ArrayOrNames, []],
-            result: MPMSMaterializerAccumulator) -> MPMSMaterializerAccumulator:
-        try:
-            return self._cache.add(inputs, result)
-        except MapperCreatedDuplicateError as e:
-            raise ValueError(
-                f"no-op duplication detected on {type(inputs.expr)} in "
-                f"{type(self)}.") from e
-
-    def clone_for_callee(
-            self, function: FunctionDefinition) -> Self:
-        """
-        Called to clone *self* before starting traversal of a
-        :class:`pytato.function.FunctionDefinition`.
-        """
-        raise AssertionError("Control shouldn't reach this point.")
-
-    def _map_input_base(self, expr: InputArgumentBase
-                        ) -> MPMSMaterializerAccumulator:
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
-
-    map_placeholder = _map_input_base
-    map_data_wrapper = _map_input_base
-    map_size_param = _map_input_base
-
-    def map_named_array(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        raise NotImplementedError("only LoopyCallResult named array"
-                                  " supported for now.")
-
-    def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
-        children_rec = {bnd_name: self.rec(bnd)
-                        for bnd_name, bnd in sorted(expr.bindings.items())}
-        new_children: Mapping[str, Array] = immutabledict({
-            bnd_name: bnd.expr
-            for bnd_name, bnd in children_rec.items()})
-        return _materialize_if_mpms(
-            expr.replace_if_different(bindings=new_children),
-            self.nsuccessors[expr],
-            children_rec.values())
-
-    def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
-        rec_arrays = [self.rec(ary) for ary in expr.arrays]
-        new_arrays = tuple(ary.expr for ary in rec_arrays)
-        return _materialize_if_mpms(
-            expr.replace_if_different(arrays=new_arrays),
-            self.nsuccessors[expr],
-            rec_arrays)
-
-    def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
-        rec_arrays = [self.rec(ary) for ary in expr.arrays]
-        new_arrays = tuple(ary.expr for ary in rec_arrays)
-        return _materialize_if_mpms(
-            expr.replace_if_different(arrays=new_arrays),
-            self.nsuccessors[expr],
-            rec_arrays)
-
-    def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
-        rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
-            (rec_array,))
-
-    def map_axis_permutation(self, expr: AxisPermutation
-                             ) -> MPMSMaterializerAccumulator:
-        rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
-            (rec_array,))
-
-    def _map_index_base(self, expr: IndexBase) -> MPMSMaterializerAccumulator:
-        rec_array = self.rec(expr.array)
-        rec_indices = {i: self.rec(idx)
-                       for i, idx in enumerate(expr.indices)
-                       if isinstance(idx, Array)}
-        new_indices = tuple(rec_indices[i].expr
-                            if i in rec_indices
-                            else expr.indices[i]
-                            for i in range(
-                                len(expr.indices)))
-        new_indices = (
-            expr.indices
-            if _entries_are_identical(new_indices, expr.indices)
-            else new_indices)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr, indices=new_indices),
-            self.nsuccessors[expr],
-            (rec_array, *tuple(rec_indices.values())))
-
-    map_basic_index = _map_index_base
-    map_contiguous_advanced_index = _map_index_base
-    map_non_contiguous_advanced_index = _map_index_base
-
-    def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
-        rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
-            (rec_array,))
-
-    def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
-        rec_args = [self.rec(ary) for ary in expr.args]
-        new_args = tuple(ary.expr for ary in rec_args)
-        return _materialize_if_mpms(
-            expr.replace_if_different(args=new_args),
-            self.nsuccessors[expr],
-            rec_args)
-
-    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
-                                 ) -> MPMSMaterializerAccumulator:
-        raise NotImplementedError
-
-    def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        # loopy call result is always materialized
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
-
-    def map_distributed_send_ref_holder(self,
-                                        expr: DistributedSendRefHolder
-                                        ) -> MPMSMaterializerAccumulator:
-        rec_send_data = self.rec(expr.send.data)
-        rec_passthrough = self.rec(expr.passthrough_data)
-        return MPMSMaterializerAccumulator(
-            rec_passthrough.materialized_predecessors,
-            expr.replace_if_different(
-                send=expr.send.replace_if_different(data=rec_send_data.expr),
-                passthrough_data=rec_passthrough.expr))
-
-    def map_distributed_recv(self, expr: DistributedRecv
-                             ) -> MPMSMaterializerAccumulator:
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
-
-    def map_named_call_result(self, expr: NamedCallResult
-                              ) -> MPMSMaterializerAccumulator:
-        raise NotImplementedError("MPMSMaterializer does not support functions.")
-
-# }}}
-
-
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -2130,77 +1858,16 @@ def map_and_copy(expr: ArrayOrNamesTc,
 
 
 def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
-    r"""
-    Materialize nodes in *expr* with MPMS materialization strategy.
-    MPMS stands for Multiple-Predecessors, Multiple-Successors.
+    from warnings import warn
+    warn(
+        "pytato.transform.materialize_with_mpms is deprecated and will be removed in "
+        "2025. Use pytato.transform.materialize.materialize_with_mpms instead.",
+        DeprecationWarning, stacklevel=2)
 
-    .. note::
-
-        - MPMS materialization strategy is a greedy materialization algorithm in
-          which any node with more than 1 materialized predecessor and more than
-          1 successor is materialized.
-        - Materializing here corresponds to tagging a node with
-          :class:`~pytato.tags.ImplStored`.
-        - Does not attempt to materialize sub-expressions in
-          :attr:`pytato.Array.shape`.
-
-    .. warning::
-
-        This is a greedy materialization algorithm and thereby this algorithm
-        might be too eager to materialize. Consider the graph below:
-
-        ::
-
-                           I1          I2
-                            \         /
-                             \       /
-                              \     /
-                               🡦   🡧
-                                 T
-                                / \
-                               /   \
-                              /     \
-                             🡧       🡦
-                            O1        O2
-
-        where, 'I1', 'I2' correspond to instances of
-        :class:`pytato.array.InputArgumentBase`, and, 'O1' and 'O2' are the outputs
-        required to be evaluated in the computation graph. MPMS materialization
-        algorithm will materialize the intermediate node 'T' as it has 2
-        predecessors and 2 successors. However, the total number of memory
-        accesses after applying MPMS goes up as shown by the table below.
-
-        ======  ========  =======
-        ..        Before    After
-        ======  ========  =======
-        Reads          4        4
-        Writes         2        3
-        Total          6        7
-        ======  ========  =======
-
-    """
-    from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
-    materializer = MPMSMaterializer(get_nusers(expr))
-
-    if isinstance(expr, Array):
-        res = materializer(expr).expr
-        assert isinstance(res, Array)
-    elif isinstance(expr, DictOfNamedArrays):
-        res = expr.replace_if_different(
-            data={
-                name: _verify_is_array(materializer(ary).expr)
-                for name, ary, in expr._data.items()})
-        assert isinstance(res, DictOfNamedArrays)
-    else:
-        raise NotImplementedError("not implemented for {type(expr).__name__}.")
-
-    from pytato import DEBUG_ENABLED
-    if DEBUG_ENABLED:
-        transform_logger.info("materialize_with_mpms: materialized "
-            f"{get_num_tags_of_type(res, ImplStored)} out of "
-            f"{get_num_nodes(res)} nodes")
-
-    return res
+    from pytato.transform.materialize import (
+        materialize_with_mpms as new_materialize_with_mpms,
+    )
+    return new_materialize_with_mpms(expr)
 
 # }}}
 
