@@ -172,7 +172,7 @@ class MPMSMaterializerCache(
 
 
 def _materialize_if_mpms(expr: Array,
-                         nsuccessors: int,
+                         successors: list[ArrayOrNames],
                          predecessors: Iterable[MPMSMaterializerAccumulator]
                          ) -> MPMSMaterializerAccumulator:
     """
@@ -189,6 +189,24 @@ def _materialize_if_mpms(expr: Array,
         (pred.materialized_predecessors for pred in predecessors),
         cast("frozenset[Array]", frozenset()))
 
+    nsuccessors = 0
+    for successor in successors:
+        # Handle indexing with heavy reuse, if the sizes are known ahead of time.
+        # This can occur when the elements of a smaller array are used repeatedly to
+        # compute the elements of a larger array. (Example: In meshmode's direct
+        # connection code, this happens when injecting data from a smaller
+        # discretization into a larger one, such as BTAG_ALL -> FACE_RESTR_ALL.)
+        #
+        # In this case, we would like to bias towards materialization by
+        # making one successor seem like n of them, if it is n times bigger.
+        if (
+                isinstance(successor, IndexBase)
+                and isinstance(successor.size, int)
+                and isinstance(expr.size, int)):
+            nsuccessors += (successor.size // expr.size) if expr.size else 0
+        else:
+            nsuccessors += 1
+
     if nsuccessors > 1 and len(materialized_predecessors) > 1:
         new_expr = expr.tagged(ImplStored())
         return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
@@ -201,14 +219,15 @@ class MPMSMaterializer(
     """
     See :func:`materialize_with_mpms` for an explanation.
 
-    .. attribute:: nsuccessors
+    .. attribute:: successors
 
         A mapping from a node in the expression graph (i.e. an
-        :class:`~pytato.Array`) to its number of successors.
+        :class:`~pytato.Array`) to a list of its successors (possibly including
+        multiple references to the same successor if it uses the node multiple times).
     """
     def __init__(
             self,
-            nsuccessors: Mapping[Array, int],
+            successors: Mapping[Array, list[ArrayOrNames]],
             _cache: MPMSMaterializerCache | None = None):
         err_on_collision = __debug__
         err_on_created_duplicate = __debug__
@@ -221,7 +240,7 @@ class MPMSMaterializer(
         # Does not support functions, so function_cache is ignored
         super().__init__(err_on_collision=err_on_collision, _cache=_cache)
 
-        self.nsuccessors: Mapping[Array, int] = nsuccessors
+        self.successors: Mapping[Array, list[ArrayOrNames]] = successors
 
     @override
     def _cache_add(
@@ -269,7 +288,7 @@ class MPMSMaterializer(
             for bnd_name, bnd in children_rec.items()})
         return _materialize_if_mpms(
             expr.replace_if_different(bindings=new_children),
-            self.nsuccessors[expr],
+            self.successors[expr],
             children_rec.values())
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
@@ -277,7 +296,7 @@ class MPMSMaterializer(
         new_arrays = tuple(ary.expr for ary in rec_arrays)
         return _materialize_if_mpms(
             expr.replace_if_different(arrays=new_arrays),
-            self.nsuccessors[expr],
+            self.successors[expr],
             rec_arrays)
 
     def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
@@ -285,14 +304,14 @@ class MPMSMaterializer(
         new_arrays = tuple(ary.expr for ary in rec_arrays)
         return _materialize_if_mpms(
             expr.replace_if_different(arrays=new_arrays),
-            self.nsuccessors[expr],
+            self.successors[expr],
             rec_arrays)
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
             expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
+            self.successors[expr],
             (rec_array,))
 
     def map_axis_permutation(self, expr: AxisPermutation
@@ -300,7 +319,7 @@ class MPMSMaterializer(
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
             expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
+            self.successors[expr],
             (rec_array,))
 
     def _map_index_base(self, expr: IndexBase) -> MPMSMaterializerAccumulator:
@@ -319,7 +338,7 @@ class MPMSMaterializer(
             else new_indices)
         return _materialize_if_mpms(
             expr.replace_if_different(array=rec_array.expr, indices=new_indices),
-            self.nsuccessors[expr],
+            self.successors[expr],
             (rec_array, *tuple(rec_indices.values())))
 
     def map_basic_index(self, expr: BasicIndex) -> MPMSMaterializerAccumulator:
@@ -338,7 +357,7 @@ class MPMSMaterializer(
         rec_array = self.rec(expr.array)
         return _materialize_if_mpms(
             expr.replace_if_different(array=rec_array.expr),
-            self.nsuccessors[expr],
+            self.successors[expr],
             (rec_array,))
 
     def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
@@ -346,7 +365,7 @@ class MPMSMaterializer(
         new_args = tuple(ary.expr for ary in rec_args)
         return _materialize_if_mpms(
             expr.replace_if_different(args=new_args),
-            self.nsuccessors[expr],
+            self.successors[expr],
             rec_args)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
@@ -427,8 +446,8 @@ def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
         ======  ========  =======
 
     """
-    from pytato.analysis import get_num_nodes, get_num_tags_of_type, get_nusers
-    materializer = MPMSMaterializer(get_nusers(expr))
+    from pytato.analysis import get_list_of_users, get_num_nodes, get_num_tags_of_type
+    materializer = MPMSMaterializer(get_list_of_users(expr))
 
     if isinstance(expr, Array):
         res = materializer(expr).expr
