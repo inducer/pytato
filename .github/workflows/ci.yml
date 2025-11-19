@@ -122,3 +122,7 @@ jobs:
                     mpirun -n 2 python -O ../examples/wave/wave-op-mpi.py --lazy
                 fi
 
+                if [[ "$DOWNSTREAM_PROJECT" = "mirgecom" ]]; then
+                    mpirun -n 2 python ../examples/pulse.py --lazy
+                fi
+
