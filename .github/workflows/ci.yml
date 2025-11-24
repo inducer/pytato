@@ -16,7 +16,7 @@ jobs:
         name: Ruff
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -
             uses: actions/setup-python@v6
         -   name: "Main Script"
@@ -28,13 +28,13 @@ jobs:
         name: Typos
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -   uses: crate-ci/typos@master
 
     basedpyright:
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -
             uses: actions/setup-python@v6
             with:
@@ -53,7 +53,7 @@ jobs:
         name: Conda Pytest
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -   name: "Main Script"
             run: |
                 curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
@@ -63,7 +63,7 @@ jobs:
         name: Conda Examples
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -   name: "Main Script"
             run: |
                 curl -L -O https://tiker.net/ci-support-v0
@@ -80,7 +80,7 @@ jobs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -
             uses: actions/setup-python@v6
             with:
@@ -100,7 +100,7 @@ jobs:
         name: Tests for downstream project ${{ matrix.downstream_project }}
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v5
+        -   uses: actions/checkout@v6
         -   name: "Main Script"
             env:
                 DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}
