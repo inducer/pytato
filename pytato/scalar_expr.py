@@ -251,11 +251,12 @@ class InputGatherer(Collector[str, []]):
 
 
 class FlopCounter(FlopCounterBase):
+    op_name_to_num_flops: dict[str, ArithmeticExpression]
+
     def __init__(
             self,
             op_name_to_num_flops: Mapping[str, ArithmeticExpression] | None = None):
         super().__init__()
-        self.op_name_to_num_flops: dict[str, ArithmeticExpression]
         if op_name_to_num_flops:
             self.op_name_to_num_flops = dict(op_name_to_num_flops)
         else:
