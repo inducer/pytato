@@ -1050,6 +1050,10 @@ def get_num_flops(
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
         this function assumes a SIMT-like model of computation in which the per-entry
         cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        This *does* descend into functions.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
@@ -1083,6 +1087,10 @@ def get_materialized_node_flop_counts(
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
         this function assumes a SIMT-like model of computation in which the per-entry
         cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        This *does not* descend into functions.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
@@ -1120,6 +1128,10 @@ def get_unmaterialized_node_flop_counts(
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
         this function assumes a SIMT-like model of computation in which the per-entry
         cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        This *does not* descend into functions.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
