@@ -89,19 +89,19 @@ class ReductionOperation(ABC):
     @classmethod
     @abstractmethod
     def scalar_op_name(cls) -> str:
-        pass
+        ...
 
     @abstractmethod
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
-        pass
+        ...
 
     @abstractmethod
     def __hash__(self) -> int:
-        pass
+        ...
 
     @abstractmethod
     def __eq__(self, other: object) -> bool:
-        pass
+        ...
 
 
 class _StatelessReductionOperation(ReductionOperation):
