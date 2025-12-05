@@ -949,6 +949,10 @@ class _UnmaterializedSubexpressionUseCounter(CombineMapper[dict[Array, int], Nev
 
 @dataclass
 class UnmaterializedNodeFlopCounts:
+    """
+    Floating point operation counts for an unmaterialized node. See
+    :func:`get_unmaterialized_node_flop_counts` for details.
+    """
     materialized_successor_to_contrib_nflops: dict[Array, ArrayOrScalar]
     nflops_if_materialized: ArrayOrScalar
 
@@ -1054,6 +1058,11 @@ def get_num_flops(
     """
     Count the total number of floating point operations in the DAG *expr*.
 
+    Counts flops as if emitting a statement at each materialized node (i.e., a node
+    tagged with :class:`pytato.tags.ImplStored`) that computes everything up to
+    (not including) its materialized predecessors. The total flop count is the sum
+    over all materialized nodes.
+
     .. note::
 
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
@@ -1083,6 +1092,10 @@ def get_materialized_node_flop_counts(
     Returns a dictionary mapping materialized nodes in DAG *expr* to their floating
     point operation count.
 
+    Counts flops as if emitting a statement at each materialized node (i.e., a node
+    tagged with :class:`pytato.tags.ImplStored`) that computes everything up to
+    (not including) its materialized predecessors.
+
     .. note::
 
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
@@ -1110,6 +1123,15 @@ def get_unmaterialized_node_flop_counts(
     Returns a dictionary mapping unmaterialized nodes in DAG *expr* to a
     :class:`UnmaterializedNodeFlopCounts` containing floating-point operation count
     information.
+
+    The :class:`UnmaterializedNodeFlopCounts` instance for each unmaterialized node
+    (i.e., a node that can be tagged with :class:`pytato.tags.ImplStored` but isn't)
+    contains `materialized_successor_to_contrib_nflops` and `nflops_if_materialized`
+    attributes. The former is a mapping from each materialized successor of the
+    unmaterialized node to the number of flops the node contributes to evaluating
+    that successor (this includes flops from the predecessors of the unmaterialized
+    node). The latter is the number of flops that would be required to evaluate the
+    unmaterialized node if it was materialized instead.
 
     .. note::
 
