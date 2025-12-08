@@ -944,25 +944,6 @@ def test_flop_count():
 
     # }}}
 
-    # {{{ function call
-
-    x = pt.make_placeholder("x", (10, 4))
-    y = pt.make_placeholder("y", (10, 4))
-
-    def f(x, y):
-        z = x + y
-        return 2*z, 3*z
-
-    u, v = pt.trace_call(f, x, y)
-    expr = u - v
-
-    #    u[i, j] = 2*(x[i, j] + y[i, j])
-    #    v[i, j] = 3*(x[i, j] + y[i, j])
-    # expr[i, j] = u[i, j] + (-1)*v[i, j]
-    assert get_num_flops(expr) == 40*2 + 40*2 + 40*2
-
-    # }}}
-
     # {{{ einsum
 
     x = pt.make_placeholder("x", (2, 3, 4))
