@@ -976,15 +976,10 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
     def __init__(
             self,
             op_name_to_num_flops: Mapping[str, int],
-            _visited_functions: set[VisitKeyT] | None = None,
-            _function_to_nflops: dict[FunctionDefinition, ArrayOrScalar] | None = None
             ) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+        super().__init__()
         self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
         self.materialized_node_to_nflops: dict[Array, ArrayOrScalar] = {}
-        self.call_to_nflops: dict[Call, ArrayOrScalar] = {}
-        self._function_to_nflops: dict[FunctionDefinition, ArrayOrScalar] = \
-            _function_to_nflops if _function_to_nflops is not None else {}
         self._per_entry_flop_counter: _PerEntryFlopCounter = _PerEntryFlopCounter(
             self.op_name_to_num_flops)
 
@@ -993,49 +988,24 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
         return expr
 
     @override
-    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> VisitKeyT:
-        return expr
-
-    @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
-        return type(self)(
-            op_name_to_num_flops=self.op_name_to_num_flops,
-            _visited_functions=self._visited_functions,
-            _function_to_nflops=self._function_to_nflops)
+        raise AssertionError("Control shouldn't reach this point.")
 
     @override
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
 
-        new_mapper = self.clone_for_callee(expr)
-        for subexpr in expr.returns.values():
-            # Assume that any calls that haven't been inlined have their functions'
-            # outputs materialized
-            assert not _is_unmaterialized(subexpr)
-            new_mapper(subexpr)
-
-        self._function_to_nflops[expr] = (
-            sum(new_mapper.materialized_node_to_nflops.values())
-            + sum(new_mapper.call_to_nflops.values()))
-
-        self.post_visit(expr)
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
 
     @override
     def map_call(self, expr: Call) -> None:
         if not self.visit(expr):
             return
 
-        self.rec_function_definition(expr.function)
-        for bnd in expr.bindings.values():
-            # Assume that any calls that haven't been inlined have their inputs
-            # materialized
-            assert not _is_unmaterialized(bnd)
-            self.rec(bnd)
-
-        self.call_to_nflops[expr] = self._function_to_nflops[expr.function]
-
-        self.post_visit(expr)
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
 
     @override
     def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
@@ -1099,9 +1069,8 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
     """
     def __init__(
             self,
-            op_name_to_num_flops: Mapping[str, int],
-            _visited_functions: set[VisitKeyT] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+            op_name_to_num_flops: Mapping[str, int]) -> None:
+        super().__init__()
         self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
         self.unmaterialized_node_to_flop_counts: \
             dict[Array, UnmaterializedNodeFlopCounts] = {}
@@ -1113,8 +1082,24 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
         return expr
 
     @override
-    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> VisitKeyT:
-        return expr
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        raise AssertionError("Control shouldn't reach this point.")
+
+    @override
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
+
+    @override
+    def map_call(self, expr: Call) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
 
     @override
     def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
@@ -1141,10 +1126,6 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
 
 # FIXME: Should this be added to normalize_outputs?
 def _normalize_materialization(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
-    # Make sure call bindings and function results are materialized
-    from pytato.transform.calls import normalize_calls
-    expr = normalize_calls(expr)
-
     # Make sure outputs are materialized
     if isinstance(expr, DictOfNamedArrays):
         output_to_materialized_output: dict[Array, Array] = {
@@ -1202,7 +1183,7 @@ def get_num_flops(
 
     .. note::
 
-        This *does* descend into functions.
+        Does not support functions. Function calls must be inlined before calling.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
@@ -1214,9 +1195,7 @@ def get_num_flops(
     fc = MaterializedNodeFlopCounter(op_name_to_num_flops)
     fc(expr)
 
-    return (
-        sum(fc.materialized_node_to_nflops.values())
-        + sum(fc.call_to_nflops.values()))
+    return sum(fc.materialized_node_to_nflops.values())
 
 
 def get_materialized_node_flop_counts(
@@ -1239,7 +1218,7 @@ def get_materialized_node_flop_counts(
 
     .. note::
 
-        This *does not* descend into functions.
+        Does not support functions. Function calls must be inlined before calling.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
@@ -1280,7 +1259,7 @@ def get_unmaterialized_node_flop_counts(
 
     .. note::
 
-        This *does not* descend into functions.
+        Does not support functions. Function calls must be inlined before calling.
     """
     from pytato.codegen import normalize_outputs
     expr = normalize_outputs(expr)
