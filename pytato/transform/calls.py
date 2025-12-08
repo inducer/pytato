@@ -1,7 +1,6 @@
 """
 .. currentmodule:: pytato.transform.calls
 
-.. autofunction:: normalize_calls
 .. autofunction:: inline_calls
 .. autofunction:: tag_all_calls_to_be_inlined
 """
@@ -33,26 +32,20 @@ THE SOFTWARE.
 
 from typing import TYPE_CHECKING, cast
 
-from immutabledict import immutabledict
-from typing_extensions import Never, Self, override
+from typing_extensions import Self
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
-    DataWrapper,
     DictOfNamedArrays,
     Placeholder,
-    SizeParam,
-    make_dict_of_named_arrays,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.tags import ImplStored, InlineCallTag
+from pytato.tags import InlineCallTag
 from pytato.transform import (
     ArrayOrNames,
     ArrayOrNamesTc,
-    CombineMapper,
     CopyMapper,
-    Mapper,
     TransformMapperCache,
     _verify_is_array,
     deduplicate,
@@ -61,89 +54,6 @@ from pytato.transform import (
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-
-# {{{ normalizing
-
-class _LocalStackCallBindingCollector(CombineMapper[frozenset[Array], Never]):
-    """Mapper to collect bindings of calls on the current call stack."""
-    @override
-    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
-        from functools import reduce
-        return reduce(lambda a, b: a | b, args, cast("frozenset[Array]", frozenset()))
-
-    @override
-    def map_call(self, expr: Call) -> frozenset[Array]:
-        return frozenset(expr.bindings.values())
-
-
-class _CallMaterializer(CopyMapper):
-    """Mapper to add materialization tags for call bindings and function results."""
-    def __init__(
-            self,
-            local_call_bindings: frozenset[Array],
-            _cache: TransformMapperCache[ArrayOrNames, []] | None = None,
-            _function_cache: TransformMapperCache[FunctionDefinition, []] | None = None
-            ) -> None:
-        super().__init__(_cache=_cache, _function_cache=_function_cache)
-        self.local_call_bindings: frozenset[Array] = local_call_bindings
-
-    @override
-    def clone_for_callee(self, function: FunctionDefinition) -> Self:
-        """
-        Called to clone *self* before starting traversal of a
-        :class:`pytato.function.FunctionDefinition`.
-        """
-        local_call_bindings = _LocalStackCallBindingCollector()(
-            make_dict_of_named_arrays(function.returns))
-        return type(self)(
-            local_call_bindings,
-            _function_cache=cast(
-                "TransformMapperCache[FunctionDefinition, []]", self._function_cache))
-
-    def _materialize_if_possible(self, expr: ArrayOrNames) -> ArrayOrNames:
-        if (
-                isinstance(expr, Array)
-                and not isinstance(expr,
-                    (DataWrapper, Placeholder, SizeParam, NamedCallResult))):
-            return expr.tagged(ImplStored())
-        else:
-            return expr
-
-    @override
-    def map_function_definition(self,
-                                expr: FunctionDefinition) -> FunctionDefinition:
-        new_mapper = self.clone_for_callee(expr)
-        new_returns: Mapping[str, Array] = immutabledict({
-            name: self._materialize_if_possible(_verify_is_array(new_mapper(ret)))
-            for name, ret in expr.returns.items()})
-        return expr.replace_if_different(returns=new_returns)
-
-    @override
-    def rec(self, expr: ArrayOrNames) -> ArrayOrNames:
-        inputs = self._make_cache_inputs(expr)
-        try:
-            return self._cache_retrieve(inputs)
-        except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            result = cast("ArrayOrNames", Mapper.rec(self, expr))
-            if expr in self.local_call_bindings:
-                result = self._materialize_if_possible(result)
-            return self._cache_add(inputs, result)
-
-
-def normalize_calls(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
-    """
-    Ensure that calls/functions are defined uniformly.
-
-    Adds any missing materialization tags for call bindings and function results.
-    """
-    local_call_bindings = _LocalStackCallBindingCollector()(expr)
-    return _CallMaterializer(local_call_bindings)(expr)
-
-# }}}
 
 
 # {{{ inlining
