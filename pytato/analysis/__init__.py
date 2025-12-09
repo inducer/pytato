@@ -804,6 +804,18 @@ class _PerEntryFlopCounter(CombineMapper[int, Never]):
     def combine(self, *args: int) -> int:
         return sum(args)
 
+    def _get_own_flop_count(self, expr: Array) -> int:
+        nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
+        if not isinstance(nflops, int):
+            from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
+            var_names: set[str] = set(ScalarInputGatherer()(nflops))
+            var_names.discard("nflops")
+            if var_names:
+                raise UndefinedOpFlopCountError(next(iter(var_names))) from None
+            else:
+                raise AssertionError from None
+        return nflops
+
     @override
     def rec(self, expr: ArrayOrNames) -> int:
         inputs = self._make_cache_inputs(expr)
@@ -813,19 +825,12 @@ class _PerEntryFlopCounter(CombineMapper[int, Never]):
             result: int
             if _is_unmaterialized(expr):
                 assert isinstance(expr, Array)
-                self_nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
-                if not isinstance(self_nflops, int):
-                    from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
-                    var_names: set[str] = set(ScalarInputGatherer()(self_nflops))
-                    var_names.discard("nflops")
-                    if var_names:
-                        raise UndefinedOpFlopCountError(next(iter(var_names))) from None
-                    else:
-                        raise AssertionError from None
-                # Intentionally going to Mapper instead of super() to avoid
-                # double caching when subclasses of CachedMapper override rec,
-                # see https://github.com/inducer/pytato/pull/585
-                result = self_nflops + cast("int", Mapper.rec(self, expr))
+                result = (
+                    self._get_own_flop_count(expr)
+                    # Intentionally going to Mapper instead of super() to avoid
+                    # double caching when subclasses of CachedMapper override rec,
+                    # see https://github.com/inducer/pytato/pull/585
+                    + cast("int", Mapper.rec(self, expr)))
             else:
                 result = 0
             if isinstance(expr, Array):

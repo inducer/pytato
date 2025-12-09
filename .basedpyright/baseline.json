@@ -2020,8 +2020,8 @@
             {
                 "code": "reportUnknownMemberType",
                 "range": {
-                    "startColumn": 51,
-                    "endColumn": 61,
+                    "startColumn": 34,
+                    "endColumn": 44,
                     "lineCount": 1
                 }
             },
