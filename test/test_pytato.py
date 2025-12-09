@@ -979,9 +979,13 @@ def test_materialized_node_flop_counts():
 
     #    z[i, j] = x[i, j] + y[i, j]
     # expr[i, j] = 2*z[i, j] + (-1)*3*z[i, j]
-    assert len(materialized_node_to_flop_count) == 2
+    assert len(materialized_node_to_flop_count) == 4
+    assert x in materialized_node_to_flop_count
+    assert y in materialized_node_to_flop_count
     assert z in materialized_node_to_flop_count
     assert expr.tagged(ImplStored()) in materialized_node_to_flop_count
+    assert materialized_node_to_flop_count[x] == 0
+    assert materialized_node_to_flop_count[y] == 0
     assert materialized_node_to_flop_count[z] == 40
     assert materialized_node_to_flop_count[expr.tagged(ImplStored())] == 40*4
 
