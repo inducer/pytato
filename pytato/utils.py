@@ -82,7 +82,8 @@ Helper routines
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
 .. autofunction:: get_einsum_subscript_str
-.. autofunction:: is_materializable
+.. autofunction:: is_materialized
+.. autofunction:: has_taggable_materialization
 
 References
 ^^^^^^^^^^
@@ -740,18 +741,40 @@ def get_einsum_specification(expr: Einsum) -> str:
     return f"{','.join(input_specs)}->{output_spec}"
 
 
-def is_materializable(expr: ArrayOrNames | FunctionDefinition) -> bool:
+def is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
+    """Returns *True* if *expr* is materialized."""
+    from pytato.array import InputArgumentBase
+    from pytato.distributed.nodes import DistributedRecv
+    from pytato.tags import ImplStored
+    return (
+        (
+            isinstance(expr, Array)
+            and bool(expr.tags_of_type(ImplStored)))
+        or isinstance(
+            expr,
+            (
+                # FIXME: Is there a nice way to generalize this?
+                InputArgumentBase,
+                DistributedRecv)))
+
+
+def has_taggable_materialization(expr: ArrayOrNames | FunctionDefinition) -> bool:
     """
-    Returns *True* if *expr* is an instance of an array type that can be materialized.
+    Returns *True* if *expr* uses the :class:`pytato.tags.ImplStored` tag to
+    determine whether or not it is materialized.
     """
     from pytato.array import InputArgumentBase, NamedArray
     from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
     return (
         isinstance(expr, Array)
-        and not isinstance(expr, (
-            # FIXME: Is there a nice way to generalize this?
-            InputArgumentBase, NamedArray, DistributedRecv,
-            DistributedSendRefHolder)))
+        and not isinstance(
+            expr,
+            (
+                # FIXME: Is there a nice way to generalize this?
+                InputArgumentBase,
+                DistributedRecv,
+                NamedArray,
+                DistributedSendRefHolder)))
 
 
 # vim: fdm=marker
