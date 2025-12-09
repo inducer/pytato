@@ -51,6 +51,7 @@ from pytato.array import (
     ShapeType,
     Stack,
 )
+from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.scalar_expr import (
     FlopCounter as ScalarFlopCounter,
@@ -66,7 +67,7 @@ from pytato.transform import (
     map_and_copy,
 )
 from pytato.transform.lower_to_index_lambda import to_index_lambda
-from pytato.utils import is_materializable
+from pytato.utils import has_taggable_materialization, is_materialized
 
 
 if TYPE_CHECKING:
@@ -776,18 +777,6 @@ class PytatoKeyBuilder(LoopyKeyBuilder):
 
 # {{{ flop counting
 
-def _is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
-    return (
-        is_materializable(expr)
-        and bool(expr.tags_of_type(ImplStored)))
-
-
-def _is_unmaterialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
-    return (
-        is_materializable(expr)
-        and not bool(expr.tags_of_type(ImplStored)))
-
-
 @dataclass
 class UndefinedOpFlopCountError(ValueError):
     op_name: str
@@ -805,7 +794,10 @@ class _PerEntryFlopCounter(CombineMapper[int, Never]):
         return sum(args)
 
     def _get_own_flop_count(self, expr: Array) -> int:
-        nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
+        try:
+            nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
+        except CannotBeLoweredToIndexLambda:
+            nflops = 0
         if not isinstance(nflops, int):
             from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
             var_names: set[str] = set(ScalarInputGatherer()(nflops))
@@ -823,8 +815,7 @@ class _PerEntryFlopCounter(CombineMapper[int, Never]):
             return self._cache_retrieve(inputs)
         except KeyError:
             result: int
-            if _is_unmaterialized(expr):
-                assert isinstance(expr, Array)
+            if isinstance(expr, Array) and not is_materialized(expr):
                 result = (
                     self._get_own_flop_count(expr)
                     # Intentionally going to Mapper instead of super() to avoid
@@ -884,14 +875,16 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
 
     @override
     def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
-        if not _is_materialized(expr):
+        if not is_materialized(expr):
             return
         assert isinstance(expr, Array)
-        unmaterialized_expr = expr.without_tags(ImplStored())
-        self._per_entry_flop_counter(unmaterialized_expr)
-        self.materialized_node_to_nflops[expr] = (
-            product(expr.shape)
-            * self._per_entry_flop_counter.node_to_nflops[unmaterialized_expr])
+        if has_taggable_materialization(expr):
+            unmaterialized_expr = expr.without_tags(ImplStored())
+            self.materialized_node_to_nflops[expr] = (
+                product(expr.shape)
+                * self._per_entry_flop_counter(unmaterialized_expr))
+        else:
+            self.materialized_node_to_nflops[expr] = 0
 
 
 class _UnmaterializedSubexpressionUseCounter(CombineMapper[dict[Array, int], Never]):
@@ -910,8 +903,7 @@ class _UnmaterializedSubexpressionUseCounter(CombineMapper[dict[Array, int], Nev
             return self._cache_retrieve(inputs)
         except KeyError:
             result: dict[Array, int]
-            if _is_unmaterialized(expr):
-                assert isinstance(expr, Array)
+            if isinstance(expr, Array) and not is_materialized(expr):
                 # Intentionally going to Mapper instead of super() to avoid
                 # double caching when subclasses of CachedMapper override rec,
                 # see https://github.com/inducer/pytato/pull/585
@@ -977,7 +969,7 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
 
     @override
     def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
-        if not _is_materialized(expr):
+        if not is_materialized(expr) or not has_taggable_materialization(expr):
             return
         assert isinstance(expr, Array)
         unmaterialized_expr = expr.without_tags(ImplStored())
@@ -1003,7 +995,10 @@ def _normalize_materialization(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
     # Make sure outputs are materialized
     if isinstance(expr, DictOfNamedArrays):
         output_to_materialized_output: dict[Array, Array] = {
-            ary: ary.tagged(ImplStored()) if is_materializable(ary) else ary
+            ary: (
+                ary.tagged(ImplStored())
+                if has_taggable_materialization(ary)
+                else ary)
             for ary in expr._data.values()}
 
         def replace_with_materialized(ary: ArrayOrNames) -> ArrayOrNames:
