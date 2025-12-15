@@ -91,6 +91,8 @@ if TYPE_CHECKING:
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
+ArrayOrNamesOrFunctionDef: TypeAlias = \
+    Array | AbstractResultWithNamedArrays | FunctionDefinition
 ArrayOrNamesTc = TypeVar("ArrayOrNamesTc",
                   Array, AbstractResultWithNamedArrays, DictOfNamedArrays)
 ArrayOrNamesOrFunctionDefTc = TypeVar("ArrayOrNamesOrFunctionDefTc",
@@ -112,6 +114,7 @@ __doc__ = """
 .. autoclass:: Deduplicator
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
+.. autoclass:: ConditionalDependencyMapper
 .. autoclass:: InputGatherer
 .. autoclass:: SizeParamGatherer
 .. autoclass:: SubsetDependencyMapper
@@ -151,6 +154,7 @@ Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. class:: ArrayOrNames
+.. class:: ArrayOrNamesOrFunctionDef
 
 .. class:: ArrayOrNamesTc
 
@@ -308,7 +312,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
     def __call__(
             self,
-            expr: ArrayOrNames | FunctionDefinition,
+            expr: ArrayOrNamesOrFunctionDef,
             *args: P.args,
             **kwargs: P.kwargs) -> ResultT | FunctionResultT:
         """Handle the mapping of *expr*."""
@@ -1302,7 +1306,7 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 # }}}
 
 
-# {{{ DependencyMapper
+# {{{ DependencyMapper / ConditionalDependencyMapper
 
 class DependencyMapper(CombineMapper[R, Never]):
     """
@@ -1377,25 +1381,39 @@ class DependencyMapper(CombineMapper[R, Never]):
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         raise AssertionError("Control shouldn't reach this point.")
 
+
+class ConditionalDependencyMapper(DependencyMapper):
+    """
+    Mapper to combine a subset of the dependencies of an expression according to
+    *include_dep_func*.
+    """
+    def __init__(
+            self,
+            include_dep_func: Callable[[Array], bool]):
+        super().__init__()
+        self.include_dep_func: Callable[[Array], bool] = include_dep_func
+
+    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
+        def accumulate_func(
+                acc: frozenset[Array],
+                arg: frozenset[Array]) -> frozenset[Array]:
+            return acc | {dep for dep in arg if self.include_dep_func(dep)}
+
+        from functools import reduce
+        return reduce(accumulate_func, args, frozenset())
+
 # }}}
 
 
 # {{{ SubsetDependencyMapper
 
-class SubsetDependencyMapper(DependencyMapper):
+class SubsetDependencyMapper(ConditionalDependencyMapper):
     """
     Mapper to combine the dependencies of an expression that are a subset of
     *universe*.
     """
     def __init__(self, universe: frozenset[Array]):
-        self.universe = universe
-        super().__init__()
-
-    def combine(self, *args: frozenset[Array]) -> frozenset[Array]:
-        from functools import reduce
-        return reduce(lambda acc, arg: acc | (arg & self.universe),
-                      args,
-                      frozenset())
+        super().__init__(lambda dep: dep in universe)
 
 # }}}
 
@@ -1498,7 +1516,9 @@ class WalkMapper(Mapper[None, None, P]):
             self, function: FunctionDefinition) -> Self:
         return type(self)()
 
-    def visit(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> bool:
+    def visit(
+            self, expr: ArrayOrNamesOrFunctionDef,
+            *args: P.args, **kwargs: P.kwargs) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
         If this method returns *False*, *expr* is not traversed as a part of
@@ -1506,7 +1526,9 @@ class WalkMapper(Mapper[None, None, P]):
         """
         return True
 
-    def post_visit(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> None:
+    def post_visit(
+            self, expr: ArrayOrNamesOrFunctionDef,
+            *args: P.args, **kwargs: P.kwargs) -> None:
         """
         Callback after *expr* has been traversed.
         """
@@ -1768,7 +1790,8 @@ class TopoSortMapper(CachedWalkMapper[[]]):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def post_visit(self, expr: Any) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
+        assert isinstance(expr, Array)
         self.topological_order.append(expr)
 
     def map_function_definition(self, expr: FunctionDefinition) -> None:
