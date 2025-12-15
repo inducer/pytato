@@ -61,15 +61,13 @@ from pytato.scalar_expr import (
     ScalarExpression,
     TypeCast,
 )
-from pytato.transform import ArrayOrNames, CachedMapper
+from pytato.transform import ArrayOrNamesOrFunctionDef, CachedMapper
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
     from pytools.tag import Tag
-
-    from pytato.function import FunctionDefinition
 
 
 __doc__ = """
@@ -741,7 +739,7 @@ def get_einsum_specification(expr: Einsum) -> str:
     return f"{','.join(input_specs)}->{output_spec}"
 
 
-def is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
+def is_materialized(expr: ArrayOrNamesOrFunctionDef) -> bool:
     """Returns *True* if *expr* is materialized."""
     from pytato.array import InputArgumentBase
     from pytato.distributed.nodes import DistributedRecv
@@ -757,7 +755,7 @@ def is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
                 DistributedRecv)))
 
 
-def has_taggable_materialization(expr: ArrayOrNames | FunctionDefinition) -> bool:
+def has_taggable_materialization(expr: ArrayOrNamesOrFunctionDef) -> bool:
     """
     Returns *True* if *expr* uses the :class:`pytato.tags.ImplStored` tag to
     determine whether or not it is materialized.

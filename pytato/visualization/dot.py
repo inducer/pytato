@@ -59,7 +59,12 @@ from pytato.distributed.partition import (
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.tags import FunctionIdentifier
-from pytato.transform import ArrayOrNames, CachedMapper, InputGatherer
+from pytato.transform import (
+    ArrayOrNames,
+    ArrayOrNamesOrFunctionDef,
+    CachedMapper,
+    InputGatherer,
+)
 
 
 if TYPE_CHECKING:
@@ -160,7 +165,7 @@ class DotEmitter:
 class _DotNodeInfo:
     title: str
     fields: dict[str, Any]
-    edges: dict[str, ArrayOrNames | FunctionDefinition]
+    edges: dict[str, ArrayOrNamesOrFunctionDef]
 
 
 def stringify_tags(tags: frozenset[Tag | None]) -> str:
@@ -193,7 +198,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
                   "non_equality_tags": expr.non_equality_tags,
                   }
 
-        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
+        edges: dict[str, ArrayOrNamesOrFunctionDef] = {}
         return _DotNodeInfo(title, fields, edges)
 
     # type-ignore-reason: incompatible with supertype
@@ -297,7 +302,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
         self.node_to_dot[expr] = info
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:
-        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
+        edges: dict[str, ArrayOrNamesOrFunctionDef] = {}
         for name, val in expr._data.items():
             edges[name] = val
             self.rec(val)
@@ -308,7 +313,7 @@ class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
                 edges=edges)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
-        edges: dict[str, ArrayOrNames | FunctionDefinition] = {}
+        edges: dict[str, ArrayOrNamesOrFunctionDef] = {}
         for name, arg in expr.bindings.items():
             if isinstance(arg, Array):
                 edges[name] = arg

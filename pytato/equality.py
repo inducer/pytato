@@ -63,6 +63,8 @@ __doc__ = """
 
 
 ArrayOrNames = Array | AbstractResultWithNamedArrays
+ArrayOrNamesOrFunctionDef = \
+    Array | AbstractResultWithNamedArrays | FunctionDefinition
 
 
 # {{{ EqualityComparer
@@ -87,7 +89,7 @@ class EqualityComparer:
         # Uses the same cache for both arrays and functions
         self._cache: dict[tuple[int, int], bool] = {}
 
-    def rec(self, expr1: ArrayOrNames | FunctionDefinition, expr2: object) -> bool:
+    def rec(self, expr1: ArrayOrNamesOrFunctionDef, expr2: object) -> bool:
         # These cases are simple enough that they don't need to be cached
         if expr1 is expr2:
             return True
@@ -119,7 +121,7 @@ class EqualityComparer:
             self._cache[cache_key] = result
             return result
 
-    def __call__(self, expr1: ArrayOrNames | FunctionDefinition, expr2: object) -> bool:
+    def __call__(self, expr1: ArrayOrNamesOrFunctionDef, expr2: object) -> bool:
         return self.rec(expr1, expr2)
 
     def handle_unsupported_array(self, expr1: Array,

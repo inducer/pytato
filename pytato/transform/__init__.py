@@ -89,6 +89,8 @@ if TYPE_CHECKING:
 
 
 ArrayOrNames: TypeAlias = Array | AbstractResultWithNamedArrays
+ArrayOrNamesOrFunctionDef: TypeAlias = \
+    Array | AbstractResultWithNamedArrays | FunctionDefinition
 ArrayOrNamesTc = TypeVar("ArrayOrNamesTc",
                   Array, AbstractResultWithNamedArrays, DictOfNamedArrays)
 ArrayOrNamesOrFunctionDefTc = TypeVar("ArrayOrNamesOrFunctionDefTc",
@@ -150,6 +152,7 @@ Internal stuff that is only here because the documentation tool wants it
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. class:: ArrayOrNames
+.. class:: ArrayOrNamesOrFunctionDef
 
 .. class:: ArrayOrNamesTc
 
@@ -307,7 +310,7 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
 
     def __call__(
             self,
-            expr: ArrayOrNames | FunctionDefinition,
+            expr: ArrayOrNamesOrFunctionDef,
             *args: P.args,
             **kwargs: P.kwargs) -> ResultT | FunctionResultT:
         """Handle the mapping of *expr*."""
@@ -1569,7 +1572,7 @@ class WalkMapper(Mapper[None, None, P]):
         return type(self)()
 
     def visit(
-            self, expr: ArrayOrNames | FunctionDefinition,
+            self, expr: ArrayOrNamesOrFunctionDef,
             *args: P.args, **kwargs: P.kwargs) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
@@ -1579,7 +1582,7 @@ class WalkMapper(Mapper[None, None, P]):
         return True
 
     def post_visit(
-            self, expr: ArrayOrNames | FunctionDefinition,
+            self, expr: ArrayOrNamesOrFunctionDef,
             *args: P.args, **kwargs: P.kwargs) -> None:
         """
         Callback after *expr* has been traversed.
@@ -1841,7 +1844,7 @@ class TopoSortMapper(CachedWalkMapper[[]]):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if isinstance(expr, Array):
             self.topological_order.append(expr)
 
