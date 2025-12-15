@@ -753,7 +753,6 @@ def is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
         or isinstance(
             expr,
             (
-                # FIXME: Is there a nice way to generalize this?
                 InputArgumentBase,
                 DistributedRecv)))
 
@@ -770,7 +769,6 @@ def has_taggable_materialization(expr: ArrayOrNames | FunctionDefinition) -> boo
         and not isinstance(
             expr,
             (
-                # FIXME: Is there a nice way to generalize this?
                 InputArgumentBase,
                 DistributedRecv,
                 NamedArray,
