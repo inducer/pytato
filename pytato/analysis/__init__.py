@@ -42,6 +42,7 @@ from pytato.array import (
     ArrayOrScalar,
     Concatenate,
     CSRMatmul,
+    DataWrapper,
     DictOfNamedArrays,
     Einsum,
     IndexBase,
@@ -49,10 +50,10 @@ from pytato.array import (
     IndexRemappingBase,
     InputArgumentBase,
     NamedArray,
+    Placeholder,
     ShapeType,
     Stack,
 )
-from pytato.diagnostic import CannotBeLoweredToIndexLambda
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
@@ -924,10 +925,16 @@ class _PerEntryFlopCounter(CombineMapper[int, Never, []]):
         return sum(args)
 
     def _get_own_flop_count(self, expr: Array) -> int:
-        try:
-            nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
-        except CannotBeLoweredToIndexLambda:
-            nflops = 0
+        if isinstance(
+                expr,
+                (
+                    DataWrapper,
+                    Placeholder,
+                    NamedArray,
+                    DistributedRecv,
+                    DistributedSendRefHolder)):
+            return 0
+        nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
         if not isinstance(nflops, int):
             from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
             var_names: set[str] = set(ScalarInputGatherer()(nflops))
