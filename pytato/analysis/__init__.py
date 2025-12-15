@@ -61,6 +61,7 @@ from pytato.scalar_expr import (
 from pytato.tags import ImplStored
 from pytato.transform import (
     ArrayOrNames,
+    ArrayOrNamesOrFunctionDef,
     ArrayOrNamesTc,
     CachedWalkMapper,
     CombineMapper,
@@ -349,7 +350,7 @@ def is_einsum_similar_to_subscript(expr: Einsum, subscripts: str) -> bool:
 
 class ListOfDirectPredecessorsGetter(
         Mapper[
-            list[ArrayOrNames | FunctionDefinition],
+            list[ArrayOrNamesOrFunctionDef],
             list[ArrayOrNames],
             []]):
     """
@@ -432,8 +433,8 @@ class ListOfDirectPredecessorsGetter(
         return [expr.send.data, expr.passthrough_data]
 
     def map_call(
-            self, expr: Call) -> list[ArrayOrNames | FunctionDefinition]:
-        result: list[ArrayOrNames | FunctionDefinition] = []
+            self, expr: Call) -> list[ArrayOrNamesOrFunctionDef]:
+        result: list[ArrayOrNamesOrFunctionDef] = []
         if self.include_functions:
             result.append(expr.function)
         result += list(expr.bindings.values())
@@ -470,7 +471,7 @@ class DirectPredecessorsGetter:
     @overload
     def __call__(
             self, expr: ArrayOrNames
-            ) -> FrozenOrderedSet[ArrayOrNames | FunctionDefinition]:
+            ) -> FrozenOrderedSet[ArrayOrNamesOrFunctionDef]:
         ...
 
     @overload
@@ -479,9 +480,9 @@ class DirectPredecessorsGetter:
 
     def __call__(
             self,
-            expr: ArrayOrNames | FunctionDefinition,
+            expr: ArrayOrNamesOrFunctionDef,
             ) -> (
-                FrozenOrderedSet[ArrayOrNames | FunctionDefinition]
+                FrozenOrderedSet[ArrayOrNamesOrFunctionDef]
                 | FrozenOrderedSet[ArrayOrNames]):
         """Get the direct predecessors of *expr*."""
         return FrozenOrderedSet(self._pred_getter(expr))
@@ -527,7 +528,7 @@ class NodeCountMapper(CachedWalkMapper[[]]):
             count_duplicates=self.count_duplicates,
             _visited_functions=self._visited_functions)
 
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_type_counts[type(expr)] += 1
 
@@ -591,7 +592,7 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
 
         from collections import defaultdict
         self.expr_multiplicity_counts: dict[
-            ArrayOrNames | FunctionDefinition, int] = defaultdict(int)
+            ArrayOrNamesOrFunctionDef, int] = defaultdict(int)
 
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
@@ -601,13 +602,13 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_multiplicity_counts[expr] += 1
 
 
 def get_node_multiplicities(outputs: ArrayOrNames) -> dict[
-        ArrayOrNames | FunctionDefinition, int]:
+        ArrayOrNamesOrFunctionDef, int]:
     """
     Returns the multiplicity per `expr`.
     """
@@ -652,7 +653,7 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
 
         self.post_visit(expr)
 
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if isinstance(expr, Call):
             self.count += 1
 
@@ -863,7 +864,7 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
             f"{type(self).__name__} does not support functions.")
 
     @override
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if not is_materialized(expr):
             return
         assert isinstance(expr, Array)
@@ -957,7 +958,7 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
             f"{type(self).__name__} does not support functions.")
 
     @override
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+    def post_visit(self, expr: ArrayOrNamesOrFunctionDef) -> None:
         if not is_materialized(expr) or not has_taggable_materialization(expr):
             return
         assert isinstance(expr, Array)

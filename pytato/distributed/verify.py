@@ -53,7 +53,11 @@ from pytato.distributed.partition import (
     DistributedGraphPartition,
     PartId,
 )
-from pytato.transform import ArrayOrNames, CachedWalkMapper
+from pytato.transform import (
+    ArrayOrNames,
+    ArrayOrNamesOrFunctionDef,
+    CachedWalkMapper,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +70,6 @@ if TYPE_CHECKING:
     import numpy as np
 
     from pytato.distributed.nodes import CommTagType, DistributedRecv
-    from pytato.function import FunctionDefinition
 
 
 # {{{ data structures
@@ -152,7 +155,7 @@ class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def visit(self, expr: ArrayOrNames | FunctionDefinition) -> bool:
+    def visit(self, expr: ArrayOrNamesOrFunctionDef) -> bool:
         assert isinstance(expr, ArrayOrNames)
         super().visit(expr)
         self.seen_nodes.add(expr)
