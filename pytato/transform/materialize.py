@@ -191,7 +191,11 @@ def _materialize_if_mpms(expr: Array,
 
     nsuccessors = 0
     for successor in successors:
-        # Handle indexing with heavy reuse, if the sizes are known ahead of time
+        # Handle indexing with heavy reuse, if the sizes are known ahead of time.
+        # This can occur when the elements of a smaller array are used repeatedly to
+        # compute the elements of a larger array. (Example: In meshmode's direct
+        # connection code, this happens when injecting data from a smaller
+        # discretization into a larger one, such as BTAG_ALL -> FACE_RESTR_ALL.)
         if (
                 isinstance(successor, IndexBase)
                 and isinstance(successor.size, int)
