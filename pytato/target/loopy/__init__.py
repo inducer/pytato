@@ -56,6 +56,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from immutabledict import immutabledict
+from typing_extensions import override
 
 import loopy
 
@@ -123,10 +124,12 @@ class LoopyPyOpenCLTarget(LoopyTarget):
             warn("Passing 'device' is deprecated and will stop working in 2023.",
                     DeprecationWarning, stacklevel=2)
 
+    @override
     def get_loopy_target(self) -> loopy.PyOpenCLTarget:
         import loopy as lp
         return lp.PyOpenCLTarget()
 
+    @override
     def bind_program(self, program: loopy.TranslationUnit,
                      bound_arguments: Mapping[str, Any]) -> BoundProgram:
         return BoundPyOpenCLProgram(program=program,
