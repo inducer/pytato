@@ -308,7 +308,8 @@ def _do_test_distributed_execution_random_dag(ctx_factory: cl.CtxFactory):
                     ])
         pt_dag = pt.make_dict_of_named_arrays(
             {"result": make_random_dag(rdagc_comm)})
-        x_comm = pt.transform.materialize_with_mpms(pt_dag)
+        from pytato.transform.materialize import materialize_with_mpms
+        x_comm = materialize_with_mpms(pt_dag)
 
         distributed_partition = pt.find_distributed_partition(comm, x_comm)
         pt.verify_distributed_partition(comm, distributed_partition)
