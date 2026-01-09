@@ -27,11 +27,14 @@ import dataclasses
 import re
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from functools import reduce
+from typing import TYPE_CHECKING, Any, cast
 
 import islpy as isl
-from typing_extensions import Never
+import numpy as np
+from constantdict import constantdict
+from typing_extensions import Never, override
 
 import loopy as lp
 import loopy.symbolic as lp_symbolic
@@ -43,6 +46,7 @@ from pytato import scalar_expr
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
+    AxesT,
     DataWrapper,
     DictOfNamedArrays,
     IndexLambda,
@@ -212,6 +216,7 @@ class LocalExpressionContext:
     local_namespace: Mapping[str, ImplementedResult]
     reduction_bounds: ReductionBounds
     var_to_reduction_descr: Mapping[str, ReductionDescriptor]
+    var_to_reduction_unique_name: Mapping[str, str]
 
     def lookup(self, name: str) -> ImplementedResult:
         return self.local_namespace[name]
@@ -221,6 +226,7 @@ class LocalExpressionContext:
              num_indices: int | None = None,
              local_namespace: Mapping[str, ImplementedResult] | None = None,
              var_to_reduction_descr: Mapping[str, ReductionDescriptor] | None = None,
+             var_to_reduction_unique_name: Mapping[str, str] | None = None,
              ) -> LocalExpressionContext:
         if reduction_bounds is None:
             reduction_bounds = self.reduction_bounds
@@ -230,10 +236,14 @@ class LocalExpressionContext:
             local_namespace = self.local_namespace
         if var_to_reduction_descr is None:
             var_to_reduction_descr = self.var_to_reduction_descr
-        return LocalExpressionContext(reduction_bounds=reduction_bounds,
-                                      num_indices=num_indices,
-                                      local_namespace=local_namespace,
-                                      var_to_reduction_descr=var_to_reduction_descr)
+        if var_to_reduction_unique_name is None:
+            var_to_reduction_unique_name = self.var_to_reduction_unique_name
+        return LocalExpressionContext(
+            reduction_bounds=reduction_bounds,
+            num_indices=num_indices,
+            local_namespace=local_namespace,
+            var_to_reduction_descr=var_to_reduction_descr,
+            var_to_reduction_unique_name=var_to_reduction_unique_name)
 
 # }}}
 
@@ -295,7 +305,7 @@ class InlinedResult(ImplementedResult):
 
     See also: :class:`pytato.tags.ImplInlined`.
     """
-    def __init__(self, expr: ScalarExpression,
+    def __init__(self, expr: Expression,
             num_indices: int,
             depends_on: frozenset[str]):
         self.expr = expr
@@ -412,7 +422,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
 
         arg = lp.ValueArg(expr.name,
                           dtype=expr.dtype,
-                          tags=_filter_tags_not_of_type(expr,
+                          tags=_filter_tags_not_of_type(expr.tags,
                                                         self
                                                         .array_tag_t_to_not_propagate
                                                         ))
@@ -436,7 +446,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
 
             arg: lp.ArrayArg | lp.ValueArg = lp.ValueArg(expr.name,
                               dtype=expr.dtype,
-                              tags=_filter_tags_not_of_type(expr,
+                              tags=_filter_tags_not_of_type(expr.tags,
                                                             self
                                                             .array_tag_t_to_not_propagate))
         else:
@@ -448,7 +458,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                 offset=lp.auto,
                 is_input=True,
                 is_output=False,
-                tags=_filter_tags_not_of_type(expr,
+                tags=_filter_tags_not_of_type(expr.tags,
                                               self
                                               .array_tag_t_to_not_propagate))
 
@@ -464,6 +474,25 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
         if expr in state.results:
             return state.results[expr]
 
+        idx_expr = expr.expr
+
+        reductions = ReductionCollector()(idx_expr)
+
+        var_to_reduction = {
+            var_name: redn
+            for redn in reductions
+            for var_name in redn.bounds}
+
+        var_to_reduction_unique_name: Mapping[str, str] = {}
+        for var_name in expr.var_to_reduction_descr:
+            redn = var_to_reduction[var_name]
+            try:
+                loopy_redn_op = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(redn.op)]
+            except KeyError as err:
+                raise NotImplementedError(redn.op) from err
+            var_to_reduction_unique_name[var_name] = \
+                state.var_name_gen(f"_pt_{loopy_redn_op}" + var_name)
+
         prstnt_ctx = PersistentExpressionContext(state)
         local_ctx = LocalExpressionContext(
             local_namespace={
@@ -471,24 +500,106 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                 for name in sorted(expr.bindings)},
             num_indices=expr.ndim,
             reduction_bounds={},
-            var_to_reduction_descr=expr.var_to_reduction_descr)
-        loopy_expr = self.exprgen_mapper(expr.expr, prstnt_ctx, local_ctx)
+            var_to_reduction_descr=expr.var_to_reduction_descr,
+            var_to_reduction_unique_name=var_to_reduction_unique_name)
+
+        loopy_shape = shape_to_scalar_expression(expr.shape, self, state)
+
+        # If the scalar expression contains any reductions with bounds expressions
+        # that index into a binding, need to store the results of those expressions
+        # as scalar temporaries
+        subscript_detector = SubscriptDetector()
+
+        redn_bounds = {
+            var_name: redn.bounds[var_name]
+            for var_name, redn in var_to_reduction.items()}
+
+        # FIXME: Forcing storage of expressions containing processed reductions for
+        # now; attempting to generalize to unmaterialized expressions would require
+        # handling at least two complications:
+        #   1) final inames aren't assigned until the expression is stored, so any
+        #      temporary variables defined below would need to be finalized at that
+        #      point, not here
+        #   2) lp.make_reduction_inames_unique does not rename the temporaries
+        #      created below, so something would need to be done to make them unique
+        #      across all index lambda evaluations.
+        store_result = expr.tags_of_type(ImplStored) or any(
+            subscript_detector(bound)
+            for bounds in redn_bounds.values()
+            for bound in bounds)
+
+        name: str | None = None
+        inames: tuple[str, ...] | None = None
+        if store_result:
+            name = _generate_name_for_temp(expr, state.var_name_gen)
+
+            inames = tuple(
+                state.var_name_gen(f"{name}_dim{d}")
+                for d in range(expr.ndim))
+
+            from pytato.utils import are_shape_components_equal
+            result_is_empty = any(
+                are_shape_components_equal(s_i, 0) for s_i in expr.shape)
+            if not result_is_empty:
+                domain = domain_for_shape(inames, loopy_shape, {})
+                state.update_kernel(
+                    state.kernel.copy(domains=[*state.kernel.domains, domain]))
+
+            redn_bound_temps: dict[str, ImplementedResult] = {}
+            new_redn_bounds: dict[
+                str, tuple[ArithmeticExpression, ArithmeticExpression]] = {}
+            bound_prefixes = ("l", "u")
+            for var_name, bounds in redn_bounds.items():
+                new_bounds_list: list[ArithmeticExpression] = []
+                for bound_prefix, bound in zip(bound_prefixes, bounds, strict=True):
+                    if subscript_detector(bound):
+                        unique_name = var_to_reduction_unique_name[var_name]
+                        bound_name = f"{unique_name}_{bound_prefix}bound"
+                        loopy_bound = self.exprgen_mapper(
+                            bound, prstnt_ctx, local_ctx)
+                        bound_result: ImplementedResult = InlinedResult(
+                            loopy_bound, expr.ndim, prstnt_ctx.depends_on)
+                        bound_result = StoredResult(
+                            bound_name, 0, frozenset([
+                                add_store(
+                                    bound_name, (), np.dtype(np.int64), bound_result,
+                                    state, self, output_to_temporary=True,
+                                    store_inames=(),
+                                    result_inames=inames, add_domain=False)]))
+                        redn_bound_temps[bound_name] = bound_result
+                        new_bound = prim.Variable(bound_name)
+                    else:
+                        new_bound = bound
+                    new_bounds_list.append(new_bound)
+                new_redn_bounds[var_name] = cast(
+                    "tuple[ArithmeticExpression, ArithmeticExpression]",
+                    tuple(new_bounds_list))
+
+            new_namespace = dict(local_ctx.local_namespace)
+            new_namespace.update(redn_bound_temps)
+            local_ctx = local_ctx.copy(local_namespace=new_namespace)
+
+            idx_expr = ReductionBoundsReplacer(new_redn_bounds)(idx_expr)
+
+        loopy_expr = self.exprgen_mapper(idx_expr, prstnt_ctx, local_ctx)
 
         assert not isinstance(loopy_expr, tuple)
         result: ImplementedResult = InlinedResult(loopy_expr,
                                                   expr.ndim,
                                                   prstnt_ctx.depends_on)
 
-        shape_to_scalar_expression(expr.shape, self, state)  # walk over size params
-
         # {{{ implementation tag
 
-        if expr.tags_of_type(ImplStored):
-            name = _generate_name_for_temp(expr, state.var_name_gen)
-            result = StoredResult(name, expr.ndim,
-                                  frozenset([add_store(name, expr,
-                                                       result, state,
-                                                       self, True)]))
+        if store_result:
+            assert name is not None
+            assert inames is not None
+            result = StoredResult(
+                name, expr.ndim, frozenset([
+                    add_store(
+                        name, expr.shape, expr.dtype, result, state, self,
+                        tags=expr.tags, axes=expr.axes, output_to_temporary=True,
+                        store_inames=inames, result_inames=inames,
+                        add_domain=False)]))
         elif expr.tags_of_type(ImplInlined):
             # inlined results are automatically handled
             pass
@@ -496,7 +607,7 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
             subst_name = _generate_name_for_temp(expr, state.var_name_gen,
                                            default_prefix="_pt_subst")
 
-            add_substitution(subst_name, expr, result, state, self)
+            add_substitution(subst_name, expr.ndim, result, state, self)
             result = SubstitutionRuleResult(subst_name, expr.ndim,
                                             prstnt_ctx.depends_on)
         elif expr.tags_of_type(ImplementationStrategy):
@@ -517,8 +628,9 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
         for key in sorted(expr.keys()):
             subexpr = expr[key].expr
             name = _generate_name_for_temp(subexpr, state.var_name_gen)
-            insn_id = add_store(name, subexpr, self.rec(subexpr, state), state,
-                    output_to_temporary=True, cgen_mapper=self)
+            insn_id = add_store(
+                name, subexpr.shape, subexpr.dtype, self.rec(subexpr, state), state,
+                self, tags=subexpr.tags, axes=subexpr.axes, output_to_temporary=True)
             state.results[subexpr] = state.results[expr[key]] = (
                     StoredResult(name, subexpr.ndim, frozenset([insn_id])))
 
@@ -581,9 +693,9 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                     # record the result for the corresponding loopy array
                     state.results[named_array] = result
 
-                    new_tvs[assignee_name] = get_loopy_temporary(assignee_name,
-                                                                 named_array,
-                                                                 self, state)
+                    new_tvs[assignee_name] = get_loopy_temporary(
+                        assignee_name, named_array.shape, named_array.dtype,
+                        self, state, tags=named_array.tags)
                 else:
                     assert arg.is_input
                     pt_arg = expr.bindings[arg.name]
@@ -600,17 +712,18 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                         # did not find a stored result for the sub-expression, store
                         # it and then pass it to the call
                         name = _generate_name_for_temp(pt_arg, state.var_name_gen)
-                        store_insn_id = add_store(name, pt_arg,
-                                pt_arg_rec,
-                                state, output_to_temporary=True,
-                                cgen_mapper=self)
+                        store_insn_id = add_store(
+                            name, pt_arg.shape, pt_arg.dtype, pt_arg_rec, state, self,
+                            tags=pt_arg.tags, axes=pt_arg.axes,
+                            output_to_temporary=True)
                         depends_on.add(store_insn_id)
                         # replace "arg" with the created stored variable
                         state.results[pt_arg] = StoredResult(name, pt_arg.ndim,
                                                           frozenset([store_insn_id]))
                         params.append(_get_sub_array_ref(pt_arg, name))
-                        new_tvs[name] = get_loopy_temporary(name, pt_arg,
-                                                            self, state)
+                        new_tvs[name] = get_loopy_temporary(
+                            name, pt_arg.shape, pt_arg.dtype, self, state,
+                            tags=pt_arg.tags)
             else:
                 assert isinstance(arg, lp.ValueArg) and arg.is_input
                 pt_arg = expr.bindings[arg.name]
@@ -625,7 +738,8 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                     local_ctx = LocalExpressionContext(reduction_bounds={},
                                                        num_indices=0,
                                                        local_namespace={},
-                                                       var_to_reduction_descr={})
+                                                       var_to_reduction_descr={},
+                                                       var_to_reduction_unique_name={})
                     params.append(self.exprgen_mapper(pt_arg,
                                                       prstnt_ctx,
                                                       local_ctx))
@@ -677,6 +791,79 @@ PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] 
     red.AllReductionOperation: "all",
     red.AnyReductionOperation: "any",
 }
+
+
+class SubscriptDetector(scalar_expr.CombineMapper[bool, []]):
+    """Returns *True* if a scalar expression contains any subscripts."""
+    @override
+    def combine(self, values: Iterable[bool]) -> bool:
+        return any(values)
+
+    @override
+    def map_algebraic_leaf(self, expr: prim.AlgebraicLeaf) -> bool:
+        return False
+
+    @override
+    def map_subscript(self, expr: prim.Subscript) -> bool:
+        return True
+
+    @override
+    def map_constant(self, expr: object) -> bool:
+        return False
+
+
+class ReductionCollector(scalar_expr.CombineMapper[frozenset[scalar_expr.Reduce], []]):
+    """
+    Constructs a :class:`frozenset` containing all instances of
+    :class:`pytato.scalar_expr.Reduce` found in a scalar expression.
+    """
+    @override
+    def combine(
+            self, values: Iterable[frozenset[scalar_expr.Reduce]]
+            ) -> frozenset[scalar_expr.Reduce]:
+        return reduce(
+            lambda x, y: x.union(y),
+            values,
+            cast("frozenset[scalar_expr.Reduce]", frozenset()))
+
+    @override
+    def map_algebraic_leaf(
+            self, expr: prim.AlgebraicLeaf) -> frozenset[scalar_expr.Reduce]:
+        return frozenset()
+
+    @override
+    def map_constant(self, expr: object) -> frozenset[scalar_expr.Reduce]:
+        return frozenset()
+
+    @override
+    def map_reduce(self, expr: scalar_expr.Reduce) -> frozenset[scalar_expr.Reduce]:
+        return self.combine([
+            frozenset([expr]),
+            *(
+                self.rec(bnd)
+                for _, bnd in sorted(expr.bounds.items())),
+            self.rec(expr.inner_expr)])
+
+
+class ReductionBoundsReplacer(scalar_expr.IdentityMapper[[]]):
+    """
+    Replaces the expressions for the bounds of :class:`pytato.scalar_expr.Reduce`
+    instances in a scalar expression with those provided in *new_reduction_bounds*.
+    """
+    def __init__(self, new_redn_bounds: ReductionBounds):
+        super().__init__()
+        self.new_reduction_bounds: ReductionBounds = new_redn_bounds
+
+    @override
+    def map_reduce(self, expr: scalar_expr.Reduce) -> scalar_expr.Reduce:
+        new_bounds: ReductionBounds = constantdict({
+            name: (
+                self.rec_arith(
+                    cast("ArithmeticExpression", self.new_reduction_bounds[name][0])),
+                self.rec_arith(
+                    cast("ArithmeticExpression", self.new_reduction_bounds[name][1])))
+            for name in expr.bounds})
+        return dataclasses.replace(expr, bounds=new_bounds)
 
 
 class InlinedExpressionGenMapper(
@@ -754,48 +941,49 @@ class InlinedExpressionGenMapper(
         state = prstnt_ctx.state
 
         try:
-            loopy_redn = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
+            loopy_redn_op = PYTATO_REDUCTION_TO_LOOPY_REDUCTION[type(expr.op)]
         except KeyError as err:
             raise NotImplementedError(expr.op) from err
 
-        unique_names_mapping = {
-                old_name: state.var_name_gen(f"_pt_{loopy_redn}" + old_name)
-                for old_name in expr.bounds}
+        inner_expr = loopy_substitute(
+            expr.inner_expr,
+            {
+                var_name: prim.Variable(new_var_name)
+                for var_name, new_var_name in
+                local_ctx.var_to_reduction_unique_name.items()})
 
-        inner_expr = loopy_substitute(expr.inner_expr,
-                                      {k: prim.Variable(v)
-                                       for k, v in unique_names_mapping.items()})
-        new_bounds = {unique_names_mapping[name]: bound_exprs
-                      for name, bound_exprs in expr.bounds.items()}
+        renamed_bounds = {
+            local_ctx.var_to_reduction_unique_name[var_name]: bound_exprs
+            for var_name, bound_exprs in expr.bounds.items()}
 
         inner_expr = self.rec(inner_expr, prstnt_ctx,
-                              local_ctx.copy(reduction_bounds=new_bounds))
+                              local_ctx.copy(reduction_bounds=renamed_bounds))
 
-        inner_expr = LoopyReduction(loopy_redn,
-                                    tuple(unique_names_mapping.values()),
+        loopy_expr = LoopyReduction(loopy_redn_op,
+                                    tuple(renamed_bounds.keys()),
                                     inner_expr)
 
         domain = domain_for_shape((), shape=(), reductions={
-            redn_iname: (
+            var_name: (
                 self.rec_arith(lbound, prstnt_ctx, local_ctx),
                 self.rec_arith(ubound, prstnt_ctx, local_ctx),
                 )
-            for redn_iname, (lbound, ubound) in new_bounds.items()})
+            for var_name, (lbound, ubound) in renamed_bounds.items()})
         kernel = state.kernel
         state.update_kernel(kernel.copy(domains=[*kernel.domains, domain]))
 
         # {{{ pytato tags -> loopy tags
 
-        for name_in_expr, name_in_kernel in sorted(unique_names_mapping.items()):
-            for tag in local_ctx.var_to_reduction_descr[name_in_expr].tags:
+        for old_var_name, var_name in sorted(
+                local_ctx.var_to_reduction_unique_name.items()):
+            for tag in local_ctx.var_to_reduction_descr[old_var_name].tags:
                 if all(not isinstance(tag, tag_t)
                        for tag_t in self.axis_tag_t_to_not_propagate):
-                    state.update_kernel(lp.tag_inames(state.kernel,
-                                                      {name_in_kernel: tag}))
+                    state.update_kernel(lp.tag_inames(state.kernel, {var_name: tag}))
 
         # }}}
 
-        return inner_expr
+        return loopy_expr
 
     def map_type_cast(
                 self, expr: TypeCast,
@@ -895,65 +1083,93 @@ def domain_for_shape(dim_names: tuple[str, ...],
     return dom
 
 
-def _filter_tags_not_of_type(expr: Array,
+def _filter_tags_not_of_type(tags: frozenset[Tag],
                              ignore_tag_t: frozenset[type[Tag]]
                              ) -> frozenset[Tag]:
     return frozenset(tag
-                     for tag in expr.tags
+                     for tag in tags
                      if not isinstance(tag, tuple(ignore_tag_t)))
 
 
-def add_store(name: str, expr: Array, result: ImplementedResult,
-              state: CodeGenState, cgen_mapper: CodeGenMapper,
-              output_to_temporary: bool = False) -> str:
+def add_store(
+        name: str, shape: ShapeType, dtype: np.dtype[Any], result: ImplementedResult,
+        state: CodeGenState, cgen_mapper: CodeGenMapper, *,
+        tags: frozenset[Tag] | None = None, axes: AxesT | None = None,
+        output_to_temporary: bool = False, result_inames: tuple[str, ...] | None = None,
+        store_inames: tuple[str, ...] | None = None, add_domain: bool = True) -> str:
     """Add an instruction that stores to a variable in the kernel.
 
     :param name: name of the output array, which is created
-    :param expr: the :class:`~pytato.Array` to store
+    :param shape: the shape of the output array
+    :param dtype: the data type of the output array
     :param result: the corresponding :class:`ImplementedResult`
     :param state: code generation state
+    :param tags: the tags of the output array
+    :param axes: the axes of the output array
     :param output_to_temporary: whether to generate an output argument (default)
         or a temporary variable
+    :param store_inames: the index inames of the left hand side of the assignment;
+        must be a subset of *result_inames*
+    :param result_inames: the index inames of the right hand side of the assignment
+    :param add_domain: add a new domain to the kernel for these inames/shape.
 
     :returns: the id of the generated instruction
     """
-    # Get expression.
-    inames = tuple(
+    if tags is None:
+        tags = frozenset()
+
+    if store_inames is None and result_inames is None:
+        result_inames = tuple(
             state.var_name_gen(f"{name}_dim{d}")
-            for d in range(expr.ndim))
-    indices = tuple(prim.Variable(iname) for iname in inames)
+            for d in range(len(shape)))
+        store_inames = result_inames
+    else:
+        if store_inames is None or result_inames is None:
+            raise ValueError(
+                "must specify either both store_inames and result_inames or neither.")
+
+        if not (frozenset(store_inames) <= frozenset(result_inames)):
+            raise ValueError("store_inames must be a subset of result_inames")
+
+    store_indices = tuple(prim.Variable(iname) for iname in store_inames)
+    result_indices = tuple(prim.Variable(iname) for iname in result_inames)
+
+    # Get expression.
     loopy_expr_context = PersistentExpressionContext(state)
-    loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
+    loopy_expr = result.to_loopy_expression(result_indices, loopy_expr_context)
 
     # Make the instruction
     from loopy.kernel.instruction import make_assignment
-    assignee = prim.Variable(name)[indices] if indices else prim.Variable(name)
+    assignee = (
+        prim.Variable(name)[store_indices] if store_indices else prim.Variable(name))
     insn_id = state.insn_id_gen(f"{name}_store")
     insn = make_assignment((assignee,),
             loopy_expr,
             id=insn_id,
-            within_inames=frozenset(inames),
+            within_inames=frozenset(result_inames),
             depends_on=loopy_expr_context.depends_on)
-    shape = shape_to_scalar_expression(expr.shape, cgen_mapper, state)
-
-    # Get the domain.
-    domain = domain_for_shape(inames, shape, {})
+    loopy_shape = shape_to_scalar_expression(shape, cgen_mapper, state)
 
     from pytato.utils import are_shape_components_equal
-    result_is_empty = any(are_shape_components_equal(s_i, 0) for s_i in expr.shape)
+    result_is_empty = any(are_shape_components_equal(s_i, 0) for s_i in shape)
     if result_is_empty:
         # empty array, no need to do computation
         additional_domains = []
         additional_insns = []
     else:
-        additional_domains = [domain]
+        if add_domain:
+            # Get the domain.
+            domain = domain_for_shape(result_inames, loopy_shape, {})
+            additional_domains = [domain]
+        else:
+            additional_domains = []
         additional_insns = [insn]
 
     # Update the kernel.
     kernel = state.kernel
 
     if output_to_temporary:
-        tvar = get_loopy_temporary(name, expr, cgen_mapper, state)
+        tvar = get_loopy_temporary(name, shape, dtype, cgen_mapper, state, tags=tags)
         temporary_variables = dict(kernel.temporary_variables)
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
@@ -961,12 +1177,12 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
                 instructions=[*kernel.instructions, *additional_insns])
     else:
         arg = lp.GlobalArg(name,
-                shape=shape,
-                dtype=expr.dtype,
+                shape=loopy_shape,
+                dtype=dtype,
                 order="C",
                 is_input=False,
                 is_output=True,
-                tags=_filter_tags_not_of_type(expr,
+                tags=_filter_tags_not_of_type(tags,
                                               cgen_mapper
                                               .array_tag_t_to_not_propagate))
         kernel = kernel.copy(args=[*kernel.args, arg],
@@ -975,8 +1191,8 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
 
     # {{{ axes tags -> iname tags
 
-    if not result_is_empty:
-        for axis, iname in zip(expr.axes, inames, strict=True):
+    if not result_is_empty and axes is not None:
+        for axis, iname in zip(axes, result_inames, strict=True):
             for tag in axis.tags:
                 if all(not isinstance(tag, tag_t)
                        for tag_t in cgen_mapper.axis_tag_t_to_not_propagate):
@@ -988,20 +1204,21 @@ def add_store(name: str, expr: Array, result: ImplementedResult,
     return insn_id
 
 
-def add_substitution(subst_name: str, expr: Array, result: ImplementedResult,
+def add_substitution(subst_name: str, ndim: int, result: ImplementedResult,
                      state: CodeGenState, cgen_mapper: CodeGenMapper) -> None:
     """Add a :class:`~loopy.kernel.data.SubstitutionRule` to the kernel being built
     in *state*. The substitution rule that will be introduced with take the indices
-    of array expression *expr*'s as arguments and return the value for the index.
+    of an array expression of shape *ndim* as arguments and return the value for the
+    index.
     """
     # Get expression.
-    indices = tuple(prim.Variable(f"_{idim}") for idim in range(expr.ndim))
+    indices = tuple(prim.Variable(f"_{idim}") for idim in range(ndim))
     loopy_expr_context = PersistentExpressionContext(state)
     loopy_expr = result.to_loopy_expression(indices, loopy_expr_context)
 
     # Make the substitution rule
     subst_rule = lp.SubstitutionRule(subst_name,
-                                     tuple(f"_{idim}" for idim in range(expr.ndim)),
+                                     tuple(f"_{idim}" for idim in range(ndim)),
                                      loopy_expr)
 
     # Update the kernel.
@@ -1013,15 +1230,19 @@ def add_substitution(subst_name: str, expr: Array, result: ImplementedResult,
     state.update_kernel(kernel)
 
 
-def get_loopy_temporary(name: str, expr: Array, cgen_mapper: CodeGenMapper,
-                        state: CodeGenState) -> lp.TemporaryVariable:
+def get_loopy_temporary(
+        name: str, shape: ShapeType, dtype: np.dtype[Any],
+        cgen_mapper: CodeGenMapper, state: CodeGenState, *,
+        tags: frozenset[Tag] | None = None) -> lp.TemporaryVariable:
+    if tags is None:
+        tags = frozenset()
     # always allocating to global address space to avoid stack overflow
     address_space = lp.AddressSpace.GLOBAL
     return lp.TemporaryVariable(name,
-            shape=shape_to_scalar_expression(expr.shape, cgen_mapper, state),
-            dtype=expr.dtype,
+            shape=shape_to_scalar_expression(shape, cgen_mapper, state),
+            dtype=dtype,
             address_space=address_space,
-            tags=_filter_tags_not_of_type(expr,
+            tags=_filter_tags_not_of_type(tags,
                                           cgen_mapper
                                           .array_tag_t_to_not_propagate))
 
@@ -1149,7 +1370,9 @@ def generate_loopy(result: Array | AbstractResultWithNamedArrays | dict[str, Arr
     # Generate code for outputs.
     for name in compute_order:
         expr = outputs[name].expr
-        insn_id = add_store(name, expr, cg_mapper(expr, state), state, cg_mapper)
+        insn_id = add_store(
+            name, expr.shape, expr.dtype, cg_mapper(expr, state),
+            state, cg_mapper, tags=expr.tags, axes=expr.axes)
         # replace "expr" with the created stored variable
         state.results[expr] = StoredResult(name, expr.ndim, frozenset([insn_id]))
 

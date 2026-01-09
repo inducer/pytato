@@ -164,6 +164,7 @@ class Reprifier(Mapper[str, str, [int]]):
     map_non_contiguous_advanced_index = _map_generic_array
     map_reshape = _map_generic_array
     map_einsum = _map_generic_array
+    map_csr_matmul = _map_generic_array
     map_distributed_recv = _map_generic_array
     map_distributed_send_ref_holder = _map_generic_array
 
