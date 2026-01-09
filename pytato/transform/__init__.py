@@ -26,6 +26,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import dataclasses
 import logging
 from collections.abc import Hashable, Mapping
 from typing import (
@@ -54,6 +55,7 @@ from pytato.array import (
     AxisPermutation,
     BasicIndex,
     Concatenate,
+    CSRMatmul,
     DataInterface,
     DataWrapper,
     DictOfNamedArrays,
@@ -901,6 +903,29 @@ class CopyMapper(TransformMapper):
         new_args = tuple(_verify_is_array(self.rec(arg)) for arg in expr.args)
         return expr.replace_if_different(args=new_args)
 
+    def map_csr_matmul(self, expr: CSRMatmul) -> Array:
+        new_matrix_elem_values = _verify_is_array(
+            self.rec(expr.matrix.elem_values))
+        new_matrix_elem_col_indices = _verify_is_array(
+            self.rec(expr.matrix.elem_col_indices))
+        new_matrix_row_starts = _verify_is_array(
+            self.rec(expr.matrix.row_starts))
+        if (
+                new_matrix_elem_values is not expr.matrix.elem_values
+                or new_matrix_elem_col_indices is not expr.matrix.elem_col_indices
+                or new_matrix_row_starts is not expr.matrix.row_starts):
+            new_matrix = dataclasses.replace(
+                expr.matrix,
+                elem_values=new_matrix_elem_values,
+                elem_col_indices=new_matrix_elem_col_indices,
+                row_starts=new_matrix_row_starts)
+        else:
+            new_matrix = expr.matrix
+        new_array = _verify_is_array(self.rec(expr.array))
+        return expr.replace_if_different(
+            matrix=new_matrix,
+            array=new_array)
+
     def map_named_array(self, expr: NamedArray) -> Array:
         new_container = self.rec(expr._container)
         assert isinstance(new_container, AbstractResultWithNamedArrays)
@@ -1070,6 +1095,30 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
         new_args: tuple[Array, ...] = tuple(
             _verify_is_array(self.rec(arg, *args, **kwargs)) for arg in expr.args)
         return expr.replace_if_different(args=new_args)
+
+    def map_csr_matmul(
+            self, expr: CSRMatmul, *args: P.args, **kwargs: P.kwargs) -> Array:
+        new_matrix_elem_values = _verify_is_array(
+            self.rec(expr.matrix.elem_values, *args, **kwargs))
+        new_matrix_elem_col_indices = _verify_is_array(
+            self.rec(expr.matrix.elem_col_indices, *args, **kwargs))
+        new_matrix_row_starts = _verify_is_array(
+            self.rec(expr.matrix.row_starts, *args, **kwargs))
+        if (
+                new_matrix_elem_values is not expr.matrix.elem_values
+                or new_matrix_elem_col_indices is not expr.matrix.elem_col_indices
+                or new_matrix_row_starts is not expr.matrix.row_starts):
+            new_matrix = dataclasses.replace(
+                expr.matrix,
+                elem_values=new_matrix_elem_values,
+                elem_col_indices=new_matrix_elem_col_indices,
+                row_starts=new_matrix_row_starts)
+        else:
+            new_matrix = expr.matrix
+        new_array = _verify_is_array(self.rec(expr.array, *args, **kwargs))
+        return expr.replace_if_different(
+            matrix=new_matrix,
+            array=new_array)
 
     def map_named_array(self,
                         expr: NamedArray, *args: P.args, **kwargs: P.kwargs) -> Array:
@@ -1260,6 +1309,13 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
         return self.combine(*(self.rec(ary)
                               for ary in expr.args))
 
+    def map_csr_matmul(self, expr: CSRMatmul) -> ResultT:
+        return self.combine(
+            self.rec(expr.matrix.elem_values),
+            self.rec(expr.matrix.elem_col_indices),
+            self.rec(expr.matrix.row_starts),
+            self.rec(expr.array))
+
     def map_named_array(self, expr: NamedArray) -> ResultT:
         return self.combine(self.rec(expr._container))
 
@@ -1318,61 +1374,82 @@ class DependencyMapper(CombineMapper[R, Never]):
         from functools import reduce
         return reduce(lambda a, b: a | b, args, frozenset())
 
+    @override
     def map_index_lambda(self, expr: IndexLambda) -> R:
         return self.combine(frozenset([expr]), super().map_index_lambda(expr))
 
+    @override
     def map_placeholder(self, expr: Placeholder) -> R:
         return self.combine(frozenset([expr]), super().map_placeholder(expr))
 
+    @override
     def map_data_wrapper(self, expr: DataWrapper) -> R:
         return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
 
     def map_size_param(self, expr: SizeParam) -> R:
         return frozenset([expr])
 
+    @override
     def map_stack(self, expr: Stack) -> R:
         return self.combine(frozenset([expr]), super().map_stack(expr))
 
+    @override
     def map_roll(self, expr: Roll) -> R:
         return self.combine(frozenset([expr]), super().map_roll(expr))
 
+    @override
     def map_axis_permutation(self, expr: AxisPermutation) -> R:
         return self.combine(frozenset([expr]), super().map_axis_permutation(expr))
 
+    @override
     def _map_index_base(self, expr: IndexBase) -> R:
         return self.combine(frozenset([expr]), super()._map_index_base(expr))
 
+    @override
     def map_reshape(self, expr: Reshape) -> R:
         return self.combine(frozenset([expr]), super().map_reshape(expr))
 
+    @override
     def map_concatenate(self, expr: Concatenate) -> R:
         return self.combine(frozenset([expr]), super().map_concatenate(expr))
 
+    @override
     def map_einsum(self, expr: Einsum) -> R:
         return self.combine(frozenset([expr]), super().map_einsum(expr))
 
+    @override
+    def map_csr_matmul(self, expr: CSRMatmul) -> R:
+        return self.combine(frozenset([expr]), super().map_csr_matmul(expr))
+
+    @override
     def map_named_array(self, expr: NamedArray) -> R:
         return self.combine(frozenset([expr]), super().map_named_array(expr))
 
+    @override
     def map_loopy_call_result(self, expr: LoopyCallResult) -> R:
         return self.combine(frozenset([expr]), super().map_loopy_call_result(expr))
 
+    @override
     def map_distributed_send_ref_holder(
             self, expr: DistributedSendRefHolder) -> R:
         return self.combine(
                 frozenset([expr]), super().map_distributed_send_ref_holder(expr))
 
+    @override
     def map_distributed_recv(self, expr: DistributedRecv) -> R:
         return self.combine(frozenset([expr]), super().map_distributed_recv(expr))
 
+    @override
     def map_call(self, expr: Call) -> R:
         # do not include arrays from the function's body as it would involve
         # putting arrays from different namespaces into the same collection.
         return self.combine(*[self.rec(bnd) for bnd in expr.bindings.values()])
 
+    @override
     def map_named_call_result(self, expr: NamedCallResult) -> R:
         return self.rec(expr._container)
 
+    @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         raise AssertionError("Control shouldn't reach this point.")
 
@@ -1677,6 +1754,18 @@ class WalkMapper(Mapper[None, None, P]):
 
         for child in expr.args:
             self.rec(child, *args, **kwargs)
+
+        self.post_visit(expr, *args, **kwargs)
+
+    def map_csr_matmul(
+            self, expr: CSRMatmul, *args: P.args, **kwargs: P.kwargs) -> None:
+        if not self.visit(expr, *args, **kwargs):
+            return
+
+        self.rec(expr.matrix.elem_values, *args, **kwargs)
+        self.rec(expr.matrix.elem_col_indices, *args, **kwargs)
+        self.rec(expr.matrix.row_starts, *args, **kwargs)
+        self.rec(expr.array, *args, **kwargs)
 
         self.post_visit(expr, *args, **kwargs)
 
@@ -1989,13 +2078,6 @@ class UsersCollector(CachedMapper[None, Never, []]):
         self.node_to_users.setdefault(expr._container, set()).add(expr)
         self.rec(expr._container)
 
-    def map_einsum(self, expr: Einsum) -> None:
-        for arg in expr.args:
-            self.node_to_users.setdefault(arg, set()).add(expr)
-            self.rec(arg)
-
-        self.rec_idx_or_size_tuple(expr, expr.shape)
-
     def map_reshape(self, expr: Reshape) -> None:
         self.rec_idx_or_size_tuple(expr, expr.shape)
 
@@ -2057,6 +2139,24 @@ class UsersCollector(CachedMapper[None, Never, []]):
                                           expr: AdvancedIndexInNoncontiguousAxes
                                           ) -> None:
         self._map_index_base(expr)
+
+    def map_einsum(self, expr: Einsum) -> None:
+        for arg in expr.args:
+            self.node_to_users.setdefault(arg, set()).add(expr)
+            self.rec(arg)
+
+        self.rec_idx_or_size_tuple(expr, expr.shape)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> None:
+        for child in (
+                expr.matrix.elem_values,
+                expr.matrix.elem_col_indices,
+                expr.matrix.row_starts,
+                expr.array):
+            self.node_to_users.setdefault(child, set()).add(expr)
+            self.rec(child)
+
+        self.rec_idx_or_size_tuple(expr, expr.shape)
 
     def map_loopy_call(self, expr: LoopyCall) -> None:
         for _, child in sorted(expr.bindings.items()):

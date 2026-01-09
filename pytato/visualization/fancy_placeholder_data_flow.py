@@ -17,6 +17,7 @@ from pytato.array import (
     AdvancedIndexInNoncontiguousAxes,
     Array,
     Concatenate,
+    CSRMatmul,
     DataWrapper,
     DictOfNamedArrays,
     Einsum,
@@ -40,6 +41,7 @@ OUTPUT_COLOR = "springgreen"
 EINSUM_COLOR = "crimson"
 STACK_CONCAT_COLOR = "deepskyblue"
 INDIRECTION_COLOR = "darkblue"
+SPARSE_MATMUL_COLOR = "gold"
 
 # }}}
 
@@ -51,6 +53,7 @@ ELEMWISE_SHAPE = "diamond"
 EINSUM_SHAPE = "box3d"
 STACK_CONCAT_SHAPE = "folder"
 INDIRECTION_SHAPE = "hexagon"
+SPARSE_MATMUL_SHAPE = "star"
 
 # }}}
 
@@ -168,6 +171,27 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode, Never, []]):
         ret_node, new_edges = _get_dot_node_from_predecessors(
             node_id,
             [self.rec(arg) for arg in expr.args]
+        )
+
+        if new_edges:
+            self.node_decls.append(node_decl)
+            self.edges.update(new_edges)
+
+        return ret_node
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> _FancyDotWriterNode:
+        node_id = self.vng("_pt_sparse_matmul")
+        node_decl = (f'{node_id} [label="",'
+                     f" color={SPARSE_MATMUL_COLOR},"
+                     f" shape={SPARSE_MATMUL_SHAPE}]")
+
+        ret_node, new_edges = _get_dot_node_from_predecessors(
+            node_id,
+            [
+                self.rec(expr.matrix.elem_values),
+                self.rec(expr.matrix.elem_col_indices),
+                self.rec(expr.matrix.row_starts),
+                self.rec(expr.array)]
         )
 
         if new_edges:

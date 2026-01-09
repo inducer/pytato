@@ -63,6 +63,34 @@ def test_matmul_input_validation():
     d @ d
 
 
+def test_csr_matmul_input_validation():
+    a = pt.make_csr_matrix(
+        shape=(8, 10),
+        elem_values=pt.make_placeholder(name="a_elem_values", shape=(8,)),
+        elem_col_indices=pt.make_placeholder(name="a_elem_col_indicesi", shape=(8,)),
+        row_starts=pt.make_placeholder(name="a_row_starts", shape=(9,)))
+
+    b = pt.make_placeholder(name="b", shape=(10,))
+    a @ b
+
+    c = pt.make_placeholder(name="c", shape=(20,))
+    with pytest.raises(ValueError):
+        a @ c
+
+    d = pt.make_placeholder(name="d", shape=())
+    with pytest.raises(ValueError):
+        a @ d
+
+    n = pt.make_size_param("n")
+    e = pt.make_csr_matrix(
+        shape=(n, n),
+        elem_values=pt.make_placeholder(name="e_elem_values", shape=(n,)),
+        elem_col_indices=pt.make_placeholder(name="e_elem_col_indicesi", shape=(n,)),
+        row_starts=pt.make_placeholder(name="e_row_starts", shape=(n+1,)))
+    f = pt.make_placeholder(name="f", shape=(n,))
+    e @ f
+
+
 def test_roll_input_validation():
     a = pt.make_placeholder(name="a", shape=(10, 10))
     pt.roll(a, 1, axis=0)
