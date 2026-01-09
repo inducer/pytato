@@ -41,6 +41,7 @@ from pytools.codegen import remove_common_indentation
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
+    CSRMatmul,
     DataWrapper,
     DictOfNamedArrays,
     Einsum,
@@ -293,6 +294,25 @@ class ArrayToDotNodeInfoMapper(CachedMapper[None, None, []]):
                                                        strict=True)):
             self.rec(val)
             info.edges[f"{iarg}: {access_descr}"] = val
+
+        self.node_to_dot[expr] = info
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> None:
+        info = self.get_common_dot_info(expr)
+
+        self.rec(expr.matrix.elem_values)
+        info.edges["matrix.elem_values"] = expr.matrix.elem_values
+
+        self.rec(expr.matrix.elem_col_indices)
+        info.edges["matrix.elem_col_indices"] = expr.matrix.elem_col_indices
+
+        self.rec(expr.matrix.row_starts)
+        info.edges["matrix.row_starts"] = expr.matrix.row_starts
+
+        self.rec(expr.array)
+        info.edges["array"] = expr.array
+
+        info.fields["matrix_shape"] = stringify_shape(expr.matrix.shape)
 
         self.node_to_dot[expr] = info
 

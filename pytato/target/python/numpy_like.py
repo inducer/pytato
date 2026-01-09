@@ -47,6 +47,7 @@ from pytato.array import (
     ArrayOrScalar,
     AxisPermutation,
     Concatenate,
+    CSRMatmul,
     DataInterface,
     DataWrapper,
     DictOfNamedArrays,
@@ -527,6 +528,9 @@ class NumpyCodegenMapper(CachedMapper[str, Never, []]):
                        )
 
         return self._record_line_and_return_lhs(lhs, rhs)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> str:
+        raise NotImplementedError("CSRMatmul not yet supported in numpy-like targets.")
 
     def map_reshape(self, expr: Reshape) -> str:
         lhs = self.vng("_pt_tmp")
