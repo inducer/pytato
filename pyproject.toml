@@ -83,6 +83,7 @@ extend-ignore = [
   "N814",
   "N817",
   "C90",
+  "RUF067", # no code in __init__ *shrug*
 
   # numpy random generators---disable for now
   "NPY002",
