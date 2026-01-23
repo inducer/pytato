@@ -2234,10 +2234,6 @@ class SparseMatrix(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, ABC):
 
     .. automethod:: __matmul__
     """
-    if __debug__:
-        def __post_init__(self) -> None:
-            pass
-
     def __matmul__(self, other: Array) -> SparseMatmul:
         return sparse_matmul(self, other)
 
@@ -2303,17 +2299,6 @@ class CSRMatrix(SparseMatrix):
     elem_values: Array
     elem_col_indices: Array
     row_starts: Array
-
-    if __debug__:
-        @override
-        def __post_init__(self) -> None:
-            if self.elem_values.ndim != 1:
-                raise ValueError("elem_values must be a 1D array.")
-            if self.elem_col_indices.ndim != 1:
-                raise ValueError("elem_col_indices must be a 1D array.")
-            if self.row_starts.ndim != 1:
-                raise ValueError("row_starts must be a 1D array.")
-            super().__post_init__()
 
 
 @array_dataclass()
@@ -2752,7 +2737,7 @@ def make_csr_matrix(shape: ConvertibleToShape,
                     axes: AxesT | None = None) -> CSRMatrix:
     """Make a :class:`CSRMatrix` object.
 
-    :param shape: the shape of the matrix
+    :param shape: the (two-dimensional) shape of the matrix
     :param elem_values: a one-dimensional array containing the values of all of the
         nonzero entries of the matrix, grouped by row.
     :param elem_col_indices: a one-dimensional array containing the column index
@@ -2764,12 +2749,27 @@ def make_csr_matrix(shape: ConvertibleToShape,
     shape = normalize_shape(shape)
     dtype = elem_values.dtype
 
+    if len(shape) != 2:
+        raise ValueError("matrix must be 2D.")
+
     if axes is None:
         axes = _get_default_axes(len(shape))
 
     if len(axes) != len(shape):
         raise ValueError("'axes' dimensionality mismatch:"
                          f" expected {len(shape)}, got {len(axes)}.")
+
+    if elem_values.ndim != 1:
+        raise ValueError("'elem_values' must be 1D.")
+    if elem_col_indices.ndim != 1:
+        raise ValueError("'elem_col_indices' must be 1D.")
+    if row_starts.ndim != 1:
+        raise ValueError("'row_starts' must be 1D.")
+
+    from pytato.utils import are_shapes_equal
+    if not are_shapes_equal(row_starts.shape, (shape[0] + 1,)):
+        raise ValueError(
+            "'row_starts' must have length equal to the number of rows plus one.")
 
     return CSRMatrix(
         shape=shape,
