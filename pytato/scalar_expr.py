@@ -44,6 +44,7 @@ THE SOFTWARE.
 
 import re
 from collections.abc import Iterable, Mapping, Set as AbstractSet
+from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -266,8 +267,7 @@ class FlopCounter(FlopCounterBase):
         try:
             return self.op_name_to_num_flops[name]
         except KeyError:
-            from pymbolic import var
-            result = var("nflops")(var(name))
+            result = OpFlops(name)
             self.op_name_to_num_flops[name] = result
             return result
 
@@ -480,7 +480,40 @@ class TypeCast(ExpressionBase):
     dtype: np.dtype[Any]
     inner_expr: ScalarExpression
 
+
+@expr_dataclass()
+class OpFlops(prim.AlgebraicLeaf):
+    """
+    Placeholder flop count for an operator.
+
+    .. autoattribute:: op
+    """
+    op: str
+
 # }}}
+
+
+class OpFlopsCollector(CombineMapper[frozenset[OpFlops], []]):
+    """
+    Constructs a :class:`frozenset` containing all instances of
+    :class:`pytato.scalar_expr.OpFlops` found in a scalar expression.
+    """
+    @override
+    def combine(
+            self, values: Iterable[frozenset[OpFlops]]) -> frozenset[OpFlops]:
+        return reduce(
+            lambda x, y: x.union(y),
+            values,
+            cast("frozenset[OpFlops]", frozenset()))
+
+    @override
+    def map_algebraic_leaf(
+            self, expr: prim.AlgebraicLeaf) -> frozenset[OpFlops]:
+        return frozenset([expr]) if isinstance(expr, OpFlops) else frozenset()
+
+    @override
+    def map_constant(self, expr: object) -> frozenset[OpFlops]:
+        return frozenset()
 
 
 class InductionVariableCollector(CombineMapper[AbstractSet[str], []]):

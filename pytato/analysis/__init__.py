@@ -806,13 +806,16 @@ class _PerEntryFlopCounter(CombineMapper[int, Never]):
             return 0
         nflops = self.scalar_flop_counter(to_index_lambda(expr).expr)
         if not isinstance(nflops, int):
-            from pytato.scalar_expr import InputGatherer as ScalarInputGatherer
-            var_names: set[str] = set(ScalarInputGatherer()(nflops))
-            var_names.discard("nflops")
-            if var_names:
-                raise UndefinedOpFlopCountError(next(iter(var_names))) from None
+            # Restricting to numerical result here because the flop counters that use
+            # this mapper subsequently multiply the result by things that are
+            # potentially arrays (e.g., shape components), and arrays and scalar
+            # expressions are not interoperable
+            from pytato.scalar_expr import OpFlops, OpFlopsCollector
+            op_flops: frozenset[OpFlops] = OpFlopsCollector()(nflops)
+            if op_flops:
+                raise UndefinedOpFlopCountError(next(iter(op_flops)).op)
             else:
-                raise AssertionError from None
+                raise AssertionError
         return nflops
 
     @override
