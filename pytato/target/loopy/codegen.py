@@ -518,8 +518,8 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
         # now; attempting to generalize to unmaterialized expressions would require
         # handling at least two complications:
         #   1) final inames aren't assigned until the expression is stored, so any
-        #      temporary variables defined below would need to be finalized at that
-        #      point, not here
+        #      temporary variables defined below would need to be finalized at the
+        #      point of storage, not here
         #   2) lp.make_reduction_inames_unique does not rename the temporaries
         #      created below, so something would need to be done to make them unique
         #      across all index lambda evaluations.
