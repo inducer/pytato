@@ -49,7 +49,7 @@ def generate_jax(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
                  jit: bool = False,
                  function_name: str = "_pt_kernel",
                  show_code: bool = False,
-                 colorize_show_code: bool = True,
+                 colorize_show_code: bool | None = None,
                  ) -> BoundJAXPythonProgram:
     """
     Returns a :class:`pytato.target.python.BoundJAXPythonProgram` for the array
