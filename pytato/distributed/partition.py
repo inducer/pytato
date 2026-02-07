@@ -222,7 +222,7 @@ class DistributedGraphPartition:
     .. attribute:: overall_output_names
 
         The names of the outputs (in :attr:`name_to_output`) that were given to
-        :func:`find_distributed_partition` to specify the overall computaiton.
+        :func:`find_distributed_partition` to specify the overall computation.
 
     """
     parts: Mapping[PartId, DistributedGraphPart]
