@@ -236,7 +236,7 @@ import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method, opt_frozen_dataclass
-from pytools.tag import Tag, Taggable, ToTagSetConvertible
+from pytools.tag import Tag, Taggable, ToTagSetConvertible, normalize_tags
 
 from pytato.scalar_expr import (
     INT_CLASSES,
@@ -2648,6 +2648,7 @@ def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any = np.float64,
                      tags: frozenset[Tag] = frozenset(),
+                     # FIXME: Accept tuple[ToTagSetConvertible, ...]?
                      axes: AxesT | None = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2695,6 +2696,7 @@ def make_data_wrapper(data: DataInterface,
         name: str | None = None,
         shape: ConvertibleToShape | None = None,
         tags: frozenset[Tag] = frozenset(),
+        # FIXME: Accept tuple[ToTagSetConvertible, ...]?
         axes: AxesT | None = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
@@ -2734,7 +2736,8 @@ def make_csr_matrix(shape: ConvertibleToShape,
                     elem_col_indices: Array,
                     row_starts: Array,
                     tags: frozenset[Tag] = frozenset(),
-                    axes: AxesT | None = None) -> CSRMatrix:
+                    axes: AxesT | tuple[ToTagSetConvertible, ...] | None = None
+                    ) -> CSRMatrix:
     """Make a :class:`CSRMatrix` object.
 
     :param shape: the (two-dimensional) shape of the matrix
@@ -2752,7 +2755,11 @@ def make_csr_matrix(shape: ConvertibleToShape,
     if len(shape) != 2:
         raise ValueError("matrix must be 2D.")
 
-    if axes is None:
+    if axes is not None:
+        axes = tuple(
+            Axis(normalize_tags(axis)) if not isinstance(axis, Axis) else axis
+            for axis in axes)
+    else:
         axes = _get_default_axes(len(shape))
 
     if len(axes) != len(shape):
