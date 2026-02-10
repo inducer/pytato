@@ -160,6 +160,7 @@ from pytato.target.python.jax import generate_jax
 from pytato.transform.calls import inline_calls, tag_all_calls_to_be_inlined
 from pytato.transform.dead_code_elimination import eliminate_dead_code
 from pytato.transform.lower_to_index_lambda import to_index_lambda
+from pytato.transform.materialize import materialize_with_mpms
 from pytato.transform.metadata import unify_axes_tags
 from pytato.transform.remove_broadcasts_einsum import rewrite_einsums_with_no_broadcasts
 from pytato.visualization import (
@@ -253,6 +254,7 @@ __all__ = (
     "make_distributed_send_ref_holder",
     "make_placeholder",
     "make_size_param",
+    "materialize_with_mpms",
     "matmul",
     "maximum",
     "minimum",
