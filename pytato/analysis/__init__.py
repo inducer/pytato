@@ -641,10 +641,6 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
 
 def get_num_call_sites(outputs: ArrayOrNames) -> int:
     """Returns the number of nodes in DAG *outputs*."""
-
-    from pytato.codegen import normalize_outputs
-    outputs = normalize_outputs(outputs)
-
     cscm = CallSiteCountMapper()
     cscm(outputs)
 
