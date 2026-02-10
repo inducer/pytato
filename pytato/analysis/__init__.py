@@ -30,7 +30,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any, overload
 
 from orderedsets import FrozenOrderedSet
-from typing_extensions import Never, Self
+from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
@@ -49,7 +49,13 @@ from pytato.array import (
     Stack,
 )
 from pytato.function import Call, FunctionDefinition, NamedCallResult
-from pytato.transform import ArrayOrNames, CachedWalkMapper, CombineMapper, Mapper
+from pytato.transform import (
+    ArrayOrNames,
+    CachedWalkMapper,
+    CombineMapper,
+    Mapper,
+    VisitKeyT,
+)
 
 
 if TYPE_CHECKING:
@@ -86,7 +92,7 @@ __doc__ = """
 
 # {{{ ListOfUsersCollector
 
-class ListOfUsersCollector(Mapper[None, None, []]):
+class ListOfUsersCollector(Mapper[None, Never, []]):
     """
     A :class:`pytato.transform.CachedWalkMapper` that records, for each array
     expression, the nodes that directly depend on it.
@@ -103,6 +109,7 @@ class ListOfUsersCollector(Mapper[None, None, []]):
         self._visited_ids: set[int] = set()
         self.array_to_users: dict[Array, list[ArrayOrNames]] = defaultdict(list)
 
+    @override
     def rec(self, expr: ArrayOrNames) -> None:
         # See CachedWalkMapper.rec on why we chose id(x) as the cache key.
 
@@ -491,28 +498,32 @@ class NodeCountMapper(CachedWalkMapper[[]]):
     def __init__(
             self,
             count_duplicates: bool = False,
-            _visited_functions: set[Any] | None = None,
+            _visited_functions: set[VisitKeyT] | None = None,
             ) -> None:
         super().__init__(_visited_functions=_visited_functions)
 
         self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
-        self.count_duplicates = count_duplicates
+        self.count_duplicates: bool = count_duplicates
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
+    @override
     def get_function_definition_cache_key(
             self, expr: FunctionDefinition) -> int | FunctionDefinition:
         # Returns unique nodes only if count_duplicates is False
         return id(expr) if self.count_duplicates else expr
 
+    @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
             count_duplicates=self.count_duplicates,
             _visited_functions=self._visited_functions)
 
-    def post_visit(self, expr: Any) -> None:
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_type_counts[type(expr)] += 1
 
@@ -574,22 +585,27 @@ class NodeMultiplicityMapper(CachedWalkMapper[[]]):
     def __init__(self, _visited_functions: set[Any] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
 
-        self.expr_multiplicity_counts: dict[Array, int] = defaultdict(int)
+        self.expr_multiplicity_counts: \
+            dict[ArrayOrNames | FunctionDefinition, int] = defaultdict(int)
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
+    @override
     def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         # Returns each node, including nodes that are duplicates
         return id(expr)
 
-    def post_visit(self, expr: Any) -> None:
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
         if not isinstance(expr, DictOfNamedArrays):
             self.expr_multiplicity_counts[expr] += 1
 
 
-def get_node_multiplicities(outputs: ArrayOrNames) -> dict[Array, int]:
+def get_node_multiplicities(
+        outputs: ArrayOrNames) -> dict[ArrayOrNames | FunctionDefinition, int]:
     """
     Returns the multiplicity per `expr`.
     """
@@ -613,16 +629,24 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
        The number of nodes.
     """
 
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
+    def __init__(self, _visited_functions: set[VisitKeyT] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
         self.count = 0
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
+    @override
     def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
         return id(expr)
 
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if isinstance(expr, Call):
+            self.count += 1
+
+    @override
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         if not self.visit(expr):
             return
@@ -633,10 +657,6 @@ class CallSiteCountMapper(CachedWalkMapper[[]]):
         self.count += new_mapper.count
 
         self.post_visit(expr)
-
-    def post_visit(self, expr: Any) -> None:
-        if isinstance(expr, Call):
-            self.count += 1
 
 
 def get_num_call_sites(outputs: ArrayOrNames) -> int:
