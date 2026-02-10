@@ -40,6 +40,8 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import override
+
 from pymbolic.mapper.optimize import optimize_mapper
 
 from pytato.array import (
@@ -66,6 +68,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from pytato.distributed.nodes import CommTagType, DistributedRecv
+    from pytato.function import FunctionDefinition
 
 
 # {{{ data structures
@@ -148,12 +151,15 @@ class _SeenNodesWalkMapper(CachedWalkMapper[[]]):
         super().__init__(_visited_functions=_visited_functions)
         self.seen_nodes: set[ArrayOrNames] = set()
 
+    @override
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def visit(self, expr: ArrayOrNames) -> bool:
+    @override
+    def visit(self, expr: ArrayOrNames | FunctionDefinition) -> bool:
         super().visit(expr)
-        self.seen_nodes.add(expr)
+        if isinstance(expr, ArrayOrNames):
+            self.seen_nodes.add(expr)
         return True
 
 
