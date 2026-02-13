@@ -68,6 +68,7 @@ from pytato.scalar_expr import (
     INT_CLASSES,
     ScalarExpression,
     TypeCast,
+    is_quasi_affine,
 )
 from pytato.tags import (
     ForceValueArgTag,
@@ -505,28 +506,36 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
 
         loopy_shape = shape_to_scalar_expression(expr.shape, self, state)
 
-        # If the scalar expression contains any reductions with bounds expressions
-        # that index into a binding, need to store the results of those expressions
-        # as scalar temporaries
-        subscript_detector = SubscriptDetector()
-
         redn_bounds = {
             var_name: redn.bounds[var_name]
             for var_name, redn in var_to_reduction.items()}
 
-        # FIXME: Forcing storage of expressions containing processed reductions for
-        # now; attempting to generalize to unmaterialized expressions would require
-        # handling at least two complications:
-        #   1) final inames aren't assigned until the expression is stored, so any
-        #      temporary variables defined below would need to be finalized at the
-        #      point of storage, not here
+        loopy_redn_bounds: Mapping[str, tuple[Expression, Expression]] = {
+            var_name: cast(
+                "tuple[Expression, Expression]",
+                tuple(
+                    self.exprgen_mapper(bound, prstnt_ctx, local_ctx)
+                    for bound in bounds))
+            for var_name, bounds in redn_bounds.items()}
+
+        # If the scalar expression contains any reductions with bounds
+        # expressions that are non-affine, we need to store the results of those
+        # expressions as scalar temporaries.
+        # FIXME: For now, forcing storage of expressions containing such
+        # processed reductions; attempting to generalize to unmaterialized
+        # expressions would require handling at least two complications:
+        #   1) final inames aren't assigned until the expression is stored, so
+        #      any temporary variables defined below would need to be finalized
+        #      at the point of storage, not here
         #   2) lp.make_reduction_inames_unique does not rename the temporaries
-        #      created below, so something would need to be done to make them unique
-        #      across all index lambda evaluations.
-        store_result = expr.tags_of_type(ImplStored) or any(
-            subscript_detector(bound)
-            for bounds in redn_bounds.values()
-            for bound in bounds)
+        #      created below, so something would need to be done to make them
+        #      unique across all index lambda evaluations.
+        store_result = (
+            expr.tags_of_type(ImplStored)
+            or any(
+                not is_quasi_affine(bound)
+                for bounds in loopy_redn_bounds.values()
+                for bound in bounds))
 
         name: str | None = None
         inames: tuple[str, ...] | None = None
@@ -550,13 +559,13 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                 str, tuple[ArithmeticExpression, ArithmeticExpression]] = {}
             bound_prefixes = ("l", "u")
             for var_name, bounds in redn_bounds.items():
+                loopy_bounds = loopy_redn_bounds[var_name]
                 new_bounds_list: list[ArithmeticExpression] = []
-                for bound_prefix, bound in zip(bound_prefixes, bounds, strict=True):
-                    if subscript_detector(bound):
+                for bound_prefix, bound, loopy_bound in zip(
+                        bound_prefixes, bounds, loopy_bounds, strict=True):
+                    if not is_quasi_affine(loopy_bound):
                         unique_name = var_to_reduction_unique_name[var_name]
                         bound_name = f"{unique_name}_{bound_prefix}bound"
-                        loopy_bound = self.exprgen_mapper(
-                            bound, prstnt_ctx, local_ctx)
                         bound_result: ImplementedResult = InlinedResult(
                             loopy_bound, expr.ndim, prstnt_ctx.depends_on)
                         bound_result = StoredResult(
@@ -791,25 +800,6 @@ PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] 
     red.AllReductionOperation: "all",
     red.AnyReductionOperation: "any",
 }
-
-
-class SubscriptDetector(scalar_expr.CombineMapper[bool, []]):
-    """Returns *True* if a scalar expression contains any subscripts."""
-    @override
-    def combine(self, values: Iterable[bool]) -> bool:
-        return any(values)
-
-    @override
-    def map_algebraic_leaf(self, expr: prim.AlgebraicLeaf) -> bool:
-        return False
-
-    @override
-    def map_subscript(self, expr: prim.Subscript) -> bool:
-        return True
-
-    @override
-    def map_constant(self, expr: object) -> bool:
-        return False
 
 
 class ReductionCollector(scalar_expr.CombineMapper[frozenset[scalar_expr.Reduce], []]):

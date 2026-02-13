@@ -42,6 +42,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import re
 from collections.abc import Iterable, Mapping, Set as AbstractSet
 from typing import (
@@ -55,6 +56,8 @@ from constantdict import constantdict
 from typing_extensions import Never, TypeIs, override
 
 import pymbolic.primitives as prim
+from loopy.diagnostic import ExpressionToAffineConversionError
+from loopy.symbolic import guarded_pwaff_from_expr
 from pymbolic import ArithmeticExpression, Bool, Expression, expr_dataclass
 from pymbolic.mapper import (
     CombineMapper as CombineMapperBase,
@@ -367,5 +370,19 @@ def get_reduction_induction_variables(expr: Expression) -> AbstractSet[str]:
     Returns the induction variables for the reduction nodes.
     """
     return InductionVariableCollector()(expr)
+
+
+def is_quasi_affine(expr: Expression) -> bool:
+    import islpy as isl
+    space = isl.Space.create_from_names(
+        isl.DEFAULT_CONTEXT,
+        set=list(get_dependencies(expr)),
+        )
+    try:
+        guarded_pwaff_from_expr(space, expr)
+    except ExpressionToAffineConversionError:
+        return False
+    return True
+
 
 # vim: foldmethod=marker
