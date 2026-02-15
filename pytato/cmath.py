@@ -62,7 +62,7 @@ __doc__ = """
 from typing import TYPE_CHECKING, cast
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import pymbolic.primitives as prim
 from pymbolic import var
@@ -134,11 +134,11 @@ def _apply_elem_wise_func(inputs: tuple[ArrayOrScalarT, ...],
     return cast("ArrayOrScalarT", IndexLambda(
         expr=prim.Call(var(f"pytato.{pt_namespace}{func_name}"),
                   tuple(sym_args)),
-        shape=shape, dtype=ret_dtype, bindings=immutabledict(bindings),
+        shape=shape, dtype=ret_dtype, bindings=constantdict(bindings),
         tags=_get_default_tags(),
         non_equality_tags=_get_created_at_tag(stacklevel=2),
         axes=_get_default_axes(len(shape)),
-        var_to_reduction_descr=immutabledict(),
+        var_to_reduction_descr=constantdict(),
     ))
 
 

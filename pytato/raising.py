@@ -5,7 +5,7 @@ from enum import Enum, auto, unique
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import pymbolic.primitives as p
 
@@ -363,7 +363,7 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
                                       .expr
                                       .inner_expr
                                       .aggregate.name],
-                        axes=immutabledict({i: idx.name
+                        axes=constantdict({i: idx.name
                                   for i, idx in enumerate(expr
                                                           .expr
                                                           .inner_expr

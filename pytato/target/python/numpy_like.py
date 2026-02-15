@@ -37,7 +37,7 @@ from typing import (
 )
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import Never, NotRequired
 
 from pytools import UniqueNameGenerator
@@ -646,4 +646,4 @@ def generate_numpy_like(expr: Array | Mapping[str, Array] | DictOfNamedArrays,
         program,
         function_name,
         expected_arguments=frozenset(cgen_mapper.arg_names),
-        bound_arguments=immutabledict(cgen_mapper.bound_arguments))
+        bound_arguments=constantdict(cgen_mapper.bound_arguments))

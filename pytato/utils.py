@@ -31,7 +31,7 @@ from typing import (
 
 import islpy as isl
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import Never
 
 import pymbolic.primitives as prim
@@ -260,10 +260,10 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
     return IndexLambda(expr=op(expr1, expr2),
                        shape=result_shape,
                        dtype=result_dtype,
-                       bindings=immutabledict(bindings),
+                       bindings=constantdict(bindings),
                        tags=tags,
                        non_equality_tags=non_equality_tags,
-                       var_to_reduction_descr=immutabledict(),
+                       var_to_reduction_descr=constantdict(),
                        axes=_get_default_axes(len(result_shape)))
 
 

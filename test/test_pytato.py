@@ -827,7 +827,7 @@ def test_basic_index_equality_traverses_underlying_arrays():
 
 
 def test_idx_lambda_to_hlo():
-    from immutabledict import immutabledict
+    from constantdict import constantdict
 
     from pytato.raising import (
         BinaryOp,
@@ -876,11 +876,11 @@ def test_idx_lambda_to_hlo():
     assert (index_lambda_to_high_level_op(pt.sum(b, axis=1))
             == ReduceOp(SumReductionOperation(),
                         b,
-                        immutabledict({1: "_r0"})))
+                        constantdict({1: "_r0"})))
     assert (index_lambda_to_high_level_op(pt.prod(a))
             == ReduceOp(ProductReductionOperation(),
                         a,
-                        immutabledict({0: "_r0",
+                        constantdict({0: "_r0",
                              1: "_r1"})))
     assert index_lambda_to_high_level_op(pt.sinh(a)) == C99CallOp("sinh", (a,))
     assert index_lambda_to_high_level_op(pt.arctan2(b, a)) == C99CallOp("atan2",
@@ -1071,8 +1071,8 @@ class NonDuplicatingMapper(pt.transform.TransformMapper):
 
     def map_index_lambda(self, expr: pt.IndexLambda) -> pt.Array:
         assert not any(isinstance(s, pt.Array) for s in expr.shape)
-        from immutabledict import immutabledict
-        new_bindings: Mapping[str, pt.Array] = immutabledict({
+        from constantdict import constantdict
+        new_bindings: Mapping[str, pt.Array] = constantdict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
         return expr.replace_if_different(bindings=new_bindings)
@@ -1088,8 +1088,8 @@ class DuplicatingMapper(pt.transform.TransformMapper):
 
     def map_index_lambda(self, expr: pt.IndexLambda) -> pt.Array:
         assert not any(isinstance(s, pt.Array) for s in expr.shape)
-        from immutabledict import immutabledict
-        new_bindings: Mapping[str, pt.Array] = immutabledict({
+        from constantdict import constantdict
+        new_bindings: Mapping[str, pt.Array] = constantdict({
                 name: self.rec(subexpr)
                 for name, subexpr in sorted(expr.bindings.items())})
         return pt.IndexLambda(expr=expr.expr,
@@ -1453,7 +1453,7 @@ def test_cached_walk_mapper_with_extra_args():
 
 
 def test_unify_axes_tags_indexlambda():
-    from immutabledict import immutabledict
+    from constantdict import constantdict
     from testlib import BarTag, FooTag, TestlibTag
 
     from pymbolic import primitives as prim
@@ -1469,11 +1469,11 @@ def test_unify_axes_tags_indexlambda():
                                             prim.Subscript(prim.Variable("_in1"),
                                                            (prim.Variable("_1"), 0)))
                                            ),
-                       bindings=immutabledict({"_in0": x, "_in1": y}),
+                       bindings=constantdict({"_in0": x, "_in1": y}),
                        dtype=float, axes=pt.array._get_default_axes(2),
                        tags=pt.array._get_default_tags(),
                        shape=(10, 4),
-                       var_to_reduction_descr=immutabledict({}))
+                       var_to_reduction_descr=constantdict({}))
 
     z_unified = pt.unify_axes_tags(z)
 
@@ -1630,7 +1630,7 @@ def test_unify_axes_tags():
     # {{ Reduction Operations with IndexLambda
     # {{{ Reduce on outside of scalar expression
 
-    from immutabledict import immutabledict
+    from constantdict import constantdict
 
     import pymbolic.primitives as prim
 
@@ -1662,7 +1662,7 @@ def test_unify_axes_tags():
                                                         frozenset([BazTag()])
 
     def get_def_reduction_descrs():
-        return immutabledict({"_r0": pt.array.ReductionDescriptor(frozenset([])),
+        return constantdict({"_r0": pt.array.ReductionDescriptor(frozenset([])),
                               "_r1": pt.array.ReductionDescriptor(frozenset([]))
                                                             })
 
@@ -1670,9 +1670,9 @@ def test_unify_axes_tags():
     # sum((_r0, _r1), a[_0] + b[_0, _r0] + b[_0,_r1]))
     w = pt.IndexLambda(expr=pt.scalar_expr.Reduce(prim.Sum((x, y, z)),
                                               pt.reductions.SumReductionOperation,
-                                              immutabledict({"_r0": (0, 10),
+                                              constantdict({"_r0": (0, 10),
                                                              "_r1": (0, 10)})),
-                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                       bindings=constantdict({"_in0": a, "_in1": b, "_in2": c}),
                        shape=(512,), tags=pt.array._get_default_tags(),
                        axes=pt.array._get_default_axes(1),
                        dtype=float,
@@ -1692,11 +1692,11 @@ def test_unify_axes_tags():
 
     w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(y,
                                             pt.reductions.SumReductionOperation,
-                                            immutabledict({"_r0": (0, 10)})),
+                                            constantdict({"_r0": (0, 10)})),
                                       pt.scalar_expr.Reduce(z,
                                             pt.reductions.SumReductionOperation,
-                                            immutabledict({"_r1": (0, 10)})))),
-                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                                            constantdict({"_r1": (0, 10)})))),
+                       bindings=constantdict({"_in0": a, "_in1": b, "_in2": c}),
                        shape=(512,), tags=pt.array._get_default_tags(),
                        axes=pt.array._get_default_axes(1),
                        dtype=float,
@@ -1714,10 +1714,10 @@ def test_unify_axes_tags():
     w = pt.IndexLambda(expr=prim.Sum((x, pt.scalar_expr.Reduce(prim.Sum((y,
                                                 pt.scalar_expr.Reduce(z,
                                                     pt.reductions.SumReductionOperation,
-                                                    immutabledict({"_r1": (0, 10)})))),
+                                                    constantdict({"_r1": (0, 10)})))),
                                             pt.reductions.SumReductionOperation,
-                                            immutabledict({"_r0": (0, 10)})))),
-                       bindings=immutabledict({"_in0": a, "_in1": b, "_in2": c}),
+                                            constantdict({"_r0": (0, 10)})))),
+                       bindings=constantdict({"_in0": a, "_in1": b, "_in2": c}),
                        shape=(512,), tags=pt.array._get_default_tags(),
                        axes=pt.array._get_default_axes(1),
                        dtype=float,
@@ -1740,7 +1740,7 @@ def test_unify_axes_tags_with_unbroadcastable_expressions():
     a = a.with_tagged_axis(1, QuuxTag())
     a = a.with_tagged_axis(2, FooTag())
 
-    from immutabledict import immutabledict
+    from constantdict import constantdict
 
     import pymbolic.primitives as prim
 
@@ -1749,11 +1749,11 @@ def test_unify_axes_tags_with_unbroadcastable_expressions():
     y = prim.Subscript(prim.Variable("_in1"),
                        (prim.Variable("_0"), prim.Variable("_1")))
 
-    z = pt.IndexLambda(expr=x+y, bindings=immutabledict({"_in0": a, "_in1": b}),
+    z = pt.IndexLambda(expr=x+y, bindings=constantdict({"_in0": a, "_in1": b}),
                        shape=(512, 10, 8), tags=pt.array._get_default_tags(),
                        axes=pt.array._get_default_axes(3),
                        dtype=float,
-                       var_to_reduction_descr=immutabledict({}))
+                       var_to_reduction_descr=constantdict({}))
 
     z_unified = pt.unify_axes_tags(z)
 

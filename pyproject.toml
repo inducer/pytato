@@ -32,7 +32,7 @@ classifiers = [
 ]
 dependencies = [
     "bidict",
-    "immutabledict",
+    "constantdict",
     "loopy>=2020.2",
     "pytools>=2025.1.5",
     "pymbolic>=2024.2",

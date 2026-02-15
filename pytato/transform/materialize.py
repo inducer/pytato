@@ -33,7 +33,7 @@ from typing import (
     cast,
 )
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import Never, Self, override
 
 from pytato.array import (
@@ -283,7 +283,7 @@ class MPMSMaterializer(
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
         children_rec = {bnd_name: self.rec(bnd)
                         for bnd_name, bnd in sorted(expr.bindings.items())}
-        new_children: Mapping[str, Array] = immutabledict({
+        new_children: Mapping[str, Array] = constantdict({
             bnd_name: bnd.expr
             for bnd_name, bnd in children_rec.items()})
         return _materialize_if_mpms(

@@ -35,7 +35,7 @@ from typing import (
 
 import islpy as isl
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import override
 
 import loopy as lp
@@ -109,7 +109,7 @@ class LoopyCall(AbstractResultWithNamedArrays):
     copy = dataclasses.replace
 
     def __post_init__(self) -> None:
-        assert isinstance(self.bindings, immutabledict)
+        assert isinstance(self.bindings, constantdict)
         super().__post_init__()
 
     @property
@@ -252,7 +252,7 @@ def call_loopy(translation_unit: lp.TranslationUnit,
     # {{{ perform shape inference here
 
     bindings_new = extend_bindings_with_shape_inference(translation_unit[entrypoint],
-                                                    immutabledict(bindings))
+                                                    constantdict(bindings))
     del bindings
 
     # }}}
@@ -421,7 +421,7 @@ def _get_pt_dim_expr(dim: Integer | Array) -> ScalarExpression:
 
 def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
                                          bindings: Mapping[str, ArrayOrScalar]
-                                         ) -> immutabledict[str, ArrayOrScalar]:
+                                         ) -> constantdict[str, ArrayOrScalar]:
     from functools import reduce
 
     from loopy.kernel.array import ArrayBase
@@ -549,7 +549,7 @@ def extend_bindings_with_shape_inference(knl: lp.LoopKernel,
 
         bindings_dict[var] = val_sp
 
-    return immutabledict(bindings_dict)
+    return constantdict(bindings_dict)
 
 # }}}
 
