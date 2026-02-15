@@ -33,7 +33,7 @@ THE SOFTWARE.
 """
 from typing import TYPE_CHECKING
 
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import override
 
 import pymbolic.primitives as p
@@ -53,7 +53,7 @@ class DeadCodeEliminator(CopyMapper):
             and isinstance(expr.expr.function, p.Variable)
             and expr.expr.function.name == "pytato.zero"
         ):
-            return expr.copy(expr=0, bindings=immutabledict())
+            return expr.copy(expr=0, bindings=constantdict())
 
         return super().map_index_lambda(expr)
 

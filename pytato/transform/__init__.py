@@ -40,7 +40,7 @@ from typing import (
 )
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 from typing_extensions import Never, Self, override
 
 from pymbolic.mapper.optimize import optimize_mapper
@@ -843,7 +843,7 @@ class CopyMapper(TransformMapper):
 
     def map_index_lambda(self, expr: IndexLambda) -> Array:
         new_shape = self.rec_size_tuple(expr.shape)
-        new_bindings: Mapping[str, Array] = immutabledict({
+        new_bindings: Mapping[str, Array] = constantdict({
                 name: _verify_is_array(self.rec(subexpr))
                 # FIXME: Are these sorts still necessary?
                 for name, subexpr in sorted(expr.bindings.items())})
@@ -913,7 +913,7 @@ class CopyMapper(TransformMapper):
         return expr.replace_if_different(data=new_data)
 
     def map_loopy_call(self, expr: LoopyCall) -> LoopyCall:
-        new_bindings: Mapping[str, ArrayOrScalar] = immutabledict(
+        new_bindings: Mapping[str, ArrayOrScalar] = constantdict(
                     {name: (_verify_is_array(self.rec(subexpr))
                             if isinstance(subexpr, Array) else subexpr)
                     for name, subexpr in sorted(expr.bindings.items())})
@@ -946,14 +946,14 @@ class CopyMapper(TransformMapper):
         # spawn a new mapper to avoid unsound cache hits, since the namespace of the
         # function's body is different from that of the caller.
         new_mapper = self.clone_for_callee(expr)
-        new_returns: Mapping[str, Array] = immutabledict({
+        new_returns: Mapping[str, Array] = constantdict({
             name: _verify_is_array(new_mapper(ret))
             for name, ret in expr.returns.items()})
         return expr.replace_if_different(returns=new_returns)
 
     def map_call(self, expr: Call) -> AbstractResultWithNamedArrays:
         new_function = self.rec_function_definition(expr.function)
-        new_bindings: Mapping[str, Array] = immutabledict({
+        new_bindings: Mapping[str, Array] = constantdict({
             name: _verify_is_array(self.rec(bnd))
             for name, bnd in expr.bindings.items()})
         return expr.replace_if_different(
@@ -1000,7 +1000,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_index_lambda(self, expr: IndexLambda,
                          *args: P.args, **kwargs: P.kwargs) -> Array:
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
-        new_bindings: Mapping[str, Array] = immutabledict({
+        new_bindings: Mapping[str, Array] = constantdict({
                 name: self.rec(subexpr, *args, **kwargs)
                 for name, subexpr in sorted(expr.bindings.items())})
         return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
@@ -1086,7 +1086,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
 
     def map_loopy_call(self, expr: LoopyCall,
                        *args: P.args, **kwargs: P.kwargs) -> LoopyCall:
-        new_bindings: Mapping[Any, Any] = immutabledict(
+        new_bindings: Mapping[Any, Any] = constantdict(
                     {name: (self.rec(subexpr, *args, **kwargs)
                            if isinstance(subexpr, Array)
                            else subexpr)
@@ -1130,7 +1130,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
     def map_call(self, expr: Call,
                  *args: P.args, **kwargs: P.kwargs) -> AbstractResultWithNamedArrays:
         new_function = self.rec_function_definition(expr.function, *args, **kwargs)
-        new_bindings: Mapping[str, Array] = immutabledict({
+        new_bindings: Mapping[str, Array] = constantdict({
             name: _verify_is_array(self.rec(bnd, *args, **kwargs))
             for name, bnd in expr.bindings.items()})
         return expr.replace_if_different(
