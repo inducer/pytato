@@ -1001,7 +1001,7 @@ class CopyMapperWithExtraArgs(TransformMapperWithExtraArgs[P]):
                          *args: P.args, **kwargs: P.kwargs) -> Array:
         new_shape = self.rec_size_tuple(expr.shape, *args, **kwargs)
         new_bindings: Mapping[str, Array] = constantdict({
-                name: self.rec(subexpr, *args, **kwargs)
+                name: _verify_is_array(self.rec(subexpr, *args, **kwargs))
                 for name, subexpr in sorted(expr.bindings.items())})
         return expr.replace_if_different(shape=new_shape, bindings=new_bindings)
 

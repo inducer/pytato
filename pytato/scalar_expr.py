@@ -137,8 +137,8 @@ class IdentityMapper(IdentityMapperBase[P]):
                       expr.op,
                       constantdict({
                                         name: (
-                                            self.rec(lower, *args, **kwargs),
-                                            self.rec(upper, *args, **kwargs)
+                                            self.rec_arith(lower, *args, **kwargs),
+                                            self.rec_arith(upper, *args, **kwargs)
                                         )
                                         for name, (lower, upper) in expr.bounds.items()
                                     }))
@@ -157,8 +157,8 @@ class SubstitutionMapper(SubstitutionMapperBase):
         return Reduce(inner_expr,
                       op=expr.op,
                       bounds=constantdict(
-                          {name: self.rec(bound)
-                           for name, bound in expr.bounds.items()}))
+                          {name: (self.rec_arith(lbound), self.rec_arith(ubound))
+                           for name, (lbound, ubound) in expr.bounds.items()}))
 
 
 IDX_LAMBDA_REDUCTION_AXIS_INDEX = re.compile(r"^(_r?(?P<index>0|[1-9][0-9]*))$")
