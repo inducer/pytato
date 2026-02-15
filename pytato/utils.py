@@ -293,7 +293,7 @@ class ShapeExpressionMapper(CachedMapper[ScalarExpression, Never, []]):
 
 def dim_to_index_lambda_components(expr: ShapeComponent,
                                    vng: UniqueNameGenerator | None = None,
-                                   ) -> tuple[ScalarExpression,
+                                   ) -> tuple[ArithmeticExpression,
                                               dict[str, SizeParam]]:
     """
     Returns the scalar expressions and bindings to use the shape
@@ -324,6 +324,7 @@ def dim_to_index_lambda_components(expr: ShapeComponent,
     assert isinstance(expr, Array)
     mapper = ShapeExpressionMapper(vng)
     result = mapper(expr)
+    assert prim.is_arithmetic_expression(result)
     return result, mapper.bindings
 
 # }}}

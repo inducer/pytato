@@ -392,7 +392,7 @@ class ToIndexLambdaMixin:
         rec_args: tuple[Array, ...] = tuple(self.rec(arg) for arg in expr.args)
 
         bindings = {f"_in{k}": arg for k, arg in enumerate(rec_args)}
-        redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
+        redn_bounds: dict[str, tuple[ArithmeticExpression, ArithmeticExpression]] = {}
         args_as_pym_expr: list[prim.Subscript] = []
         namegen = UniqueNameGenerator(set(bindings))
         var_to_redn_descr = {}

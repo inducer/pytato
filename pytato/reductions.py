@@ -39,7 +39,7 @@ import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
 
 from pytato.array import Array, ReductionDescriptor, ShapeType, make_index_lambda
-from pytato.scalar_expr import INT_CLASSES, Reduce, ScalarExpression
+from pytato.scalar_expr import INT_CLASSES, Reduce
 
 
 if TYPE_CHECKING:
@@ -205,7 +205,7 @@ def _get_reduction_indices_bounds(shape: ShapeType,
     :returns: ``indices, redn_bounds, var_to_redn_descr``
     """
     indices: list[prim.Variable] = []
-    redn_bounds: dict[str, tuple[ScalarExpression, ScalarExpression]] = {}
+    redn_bounds: dict[str, tuple[ArithmeticExpression, ArithmeticExpression]] = {}
 
     n_out_dims = 0
     n_redn_dims = 0
