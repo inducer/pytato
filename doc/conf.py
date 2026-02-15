@@ -62,3 +62,13 @@ nitpick_ignore_regex = [
     # It's :data:, not :class:, but we can't tell autodoc that.
     ["py:class", r"types\.EllipsisType"],
 ]
+
+
+sphinxconfig_missing_reference_aliases = {
+    # pymbolic
+    "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
+}
+
+
+def setup(app):
+    app.connect("missing-reference", process_autodoc_missing_reference)  # noqa: F821
