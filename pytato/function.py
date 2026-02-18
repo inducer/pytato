@@ -87,6 +87,7 @@ from pytato.array import (
     ShapeType,
     _dtype_any,
     array_dataclass,
+    make_dict_of_named_arrays,
 )
 
 
@@ -172,26 +173,28 @@ class FunctionDefinition(Taggable):
 
     @cached_property
     def _placeholders(self) -> Mapping[str, Placeholder]:
-        from pytato.transform import InputGatherer
+        from pytato.transform import ListOfInputsGatherer
 
-        mapper = InputGatherer()
+        mapper = ListOfInputsGatherer()
 
-        all_placeholders: frozenset[Placeholder] = frozenset()
-        for ary in self.returns.values():
-            new_placeholders = frozenset({
-                arg for arg in mapper(ary)
-                if isinstance(arg, Placeholder)})
-            all_placeholders |= new_placeholders
+        list_of_placeholders: list[Placeholder] = [
+            inp for inp in mapper(make_dict_of_named_arrays(self.returns))
+            if isinstance(inp, Placeholder)]
 
-        # FIXME: Need a way to check for *any* captured arrays, not just placeholders
-        if __debug__:
-            pl_names = frozenset(arg.name for arg in all_placeholders)
-            extra_pl_names = pl_names - self.parameters
-            assert not extra_pl_names, \
-                f"Found non-argument placeholder '{next(iter(extra_pl_names))}' " \
-                "in function definition."
+        placeholders: set[Placeholder] = set()
+        for pl in list_of_placeholders:
+            if pl.name not in self.parameters:
+                # FIXME: Need a way to check for *any* captured arrays, not just
+                # placeholders
+                raise ValueError(
+                    f"Found non-argument placeholder '{pl}' in function definition.")
+            if pl in placeholders:
+                raise ValueError(
+                    f"Duplicated placeholder for argument '{pl.name}' in "
+                    "function definition.")
+            placeholders.add(pl)
 
-        return constantdict({arg.name: arg for arg in all_placeholders})
+        return constantdict({pl.name: pl for pl in placeholders})
 
     def get_placeholder(self, name: str) -> Placeholder:
         """
