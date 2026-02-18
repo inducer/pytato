@@ -118,10 +118,13 @@ __doc__ = """
 .. autoclass:: CachedWalkMapper
 .. autoclass:: TopoSortMapper
 .. autoclass:: CachedMapAndCopyMapper
+.. autoclass:: MapOnceMapper
+.. autoclass:: MapAndReduceMapper
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: deduplicate
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
+.. autofunction:: map_and_reduce
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
@@ -1889,6 +1892,405 @@ class CachedMapAndCopyMapper(CopyMapper):
 # }}}
 
 
+# {{{ MapOnceMapper
+
+# FIXME: optimize_mapper?
+class MapOnceMapper(Mapper[ResultT, FunctionResultT, [set[VisitKeyT] | None]]):
+    """
+    Mapper that maps each node to a result only once per call (excepting duplicates
+    and different function contexts, depending on configuration). Each time the
+    mapper visits a node after the first visit, the value *no_result_value* or
+    *no_function_result_value* is returned instead. This is intended to be used as a
+    base class for mappers that must avoid double counting of results.
+
+    .. attribute:: no_result_value
+
+        The value to return for nodes that have already been visited.
+
+    .. attribute:: no_function_result_value
+
+        The value to return for function nodes that have already been visited.
+
+    .. attribute:: map_duplicates
+
+        Controls whether duplicate nodes (equal nodes with different `id()`) are to
+        be mapped separately or treated as the same.
+
+    .. attribute:: map_in_different_functions
+
+        Controls whether nodes in different function call contexts are to be mapped
+        separately or treated as the same.
+    """
+    def __init__(
+            self,
+            no_result_value: ResultT,
+            no_function_result_value: FunctionResultT,
+            map_duplicates: bool,
+            map_in_different_functions: bool,
+            ) -> None:
+        super().__init__()
+
+        self.no_result_value: ResultT = no_result_value
+        self.no_function_result_value: FunctionResultT = no_function_result_value
+
+        self.map_duplicates: bool = map_duplicates
+        self.map_in_different_functions: bool = map_in_different_functions
+
+    def get_visit_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return id(expr) if self.map_duplicates else expr
+
+    def get_function_definition_visit_key(self, expr: FunctionDefinition) -> VisitKeyT:
+        return id(expr) if self.map_duplicates else expr
+
+    @override
+    def rec(
+            self,
+            expr: ArrayOrNames,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        assert visited_node_keys is not None
+
+        key = self.get_visit_key(expr)
+
+        if key in visited_node_keys:
+            return self.no_result_value
+
+        # Intentionally going to Mapper instead of super() to avoid
+        # double visiting when subclasses of MapOnceMapper override rec,
+        # see https://github.com/inducer/pytato/pull/585
+        result = Mapper.rec(self, expr, visited_node_keys)
+
+        visited_node_keys.add(key)
+        return result
+
+    @override
+    def rec_function_definition(
+            self,
+            expr: FunctionDefinition,
+            visited_node_keys: set[VisitKeyT] | None) -> FunctionResultT:
+        assert visited_node_keys is not None
+
+        key = self.get_function_definition_visit_key(expr)
+
+        if key in visited_node_keys:
+            return self.no_function_result_value
+
+        # Intentionally going to Mapper instead of super() to avoid
+        # double visiting when subclasses of MapOnceMapper override rec,
+        # see https://github.com/inducer/pytato/pull/585
+        result = Mapper.rec_function_definition(self, expr, visited_node_keys)
+
+        visited_node_keys.add(key)
+        return result
+
+    def rec_idx_or_size_tuple(
+            self,
+            situp: tuple[IndexOrShapeExpr, ...],
+            visited_node_keys: set[VisitKeyT] | None) -> tuple[ResultT, ...]:
+        return tuple(
+            self.rec(s, visited_node_keys)
+            for s in situp if isinstance(s, Array))
+
+    def get_visited_node_keys_for_callee(
+            self, visited_node_keys: set[VisitKeyT] | None) -> set[VisitKeyT]:
+        assert visited_node_keys is not None
+        return (
+            visited_node_keys
+            if not self.map_in_different_functions
+            else set())
+
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            no_result_value=self.no_result_value,
+            no_function_result_value=self.no_function_result_value,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions)
+
+    @overload
+    def __call__(
+            self,
+            expr: ArrayOrNames,
+            visited_node_keys: set[VisitKeyT] | None = None,
+            ) -> ResultT:
+        ...
+
+    @overload
+    def __call__(
+            self,
+            expr: FunctionDefinition,
+            visited_node_keys: set[VisitKeyT] | None = None,
+            ) -> FunctionResultT:
+        ...
+
+    @override
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            visited_node_keys: set[VisitKeyT] | None = None,
+            ) -> ResultT | FunctionResultT:
+        if visited_node_keys is None:
+            visited_node_keys = set()
+
+        return super().__call__(expr, visited_node_keys)
+
+# }}}
+
+
+# {{{ MapAndReduceMapper
+
+# FIXME: basedpyright doesn't like this
+# @optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class MapAndReduceMapper(MapOnceMapper[ResultT, ResultT]):
+    """
+    Mapper that, for each node, calls *map_fn* on that node and then calls
+    *reduce_fn* on the output together with the already-reduced results from its
+    predecessors.
+
+    .. note::
+
+        Each node is mapped/reduced only the first time it is visited (excepting
+        duplicates and different function contexts, depending on configuration).
+        On subsequent visits, the returned result is `reduce_fn()`.
+
+    .. attribute:: traverse_functions
+
+        Controls whether or not the mapper should descend into function definitions.
+
+    .. attribute:: map_duplicates
+
+        Controls whether duplicate nodes (equal nodes with different `id()`) are to
+        be mapped separately or treated as the same.
+
+    .. attribute:: map_in_different_functions
+
+        Controls whether nodes in different function call contexts are to be mapped
+        separately or treated as the same.
+    """
+    def __init__(
+            self,
+            map_fn: Callable[[ArrayOrNames | FunctionDefinition], ResultT],
+            # FIXME: Is there a way to make argument type annotation more specific?
+            reduce_fn: Callable[..., ResultT],
+            traverse_functions: bool = True,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True,
+            ) -> None:
+        super().__init__(
+            no_result_value=reduce_fn(),
+            no_function_result_value=reduce_fn(),
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
+        self.map_fn: Callable[[ArrayOrNames | FunctionDefinition], ResultT] = map_fn
+        self.reduce_fn: Callable[..., ResultT] = reduce_fn
+
+        self.traverse_functions: bool = traverse_functions
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            map_fn=self.map_fn,
+            reduce_fn=self.reduce_fn,
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions)
+
+    def map_index_lambda(
+            self,
+            expr: IndexLambda,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *self.rec_idx_or_size_tuple(expr.shape, visited_node_keys),
+            *(
+                self.rec(subexpr, visited_node_keys)
+                for subexpr in expr.bindings.values()))
+
+    def map_placeholder(
+            self,
+            expr: Placeholder,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *self.rec_idx_or_size_tuple(expr.shape, visited_node_keys))
+
+    def map_stack(
+            self,
+            expr: Stack,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(self.rec(arr, visited_node_keys) for arr in expr.arrays))
+
+    def map_concatenate(
+            self,
+            expr: Concatenate,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(self.rec(arr, visited_node_keys) for arr in expr.arrays))
+
+    def map_roll(
+            self,
+            expr: Roll,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr.array, visited_node_keys))
+
+    def map_axis_permutation(
+            self,
+            expr: AxisPermutation,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr.array, visited_node_keys))
+
+    def _map_index_base(
+            self,
+            expr: IndexBase,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr.array, visited_node_keys),
+            *self.rec_idx_or_size_tuple(expr.indices, visited_node_keys))
+
+    def map_basic_index(
+            self,
+            expr: BasicIndex,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self._map_index_base(expr, visited_node_keys)
+
+    def map_contiguous_advanced_index(
+            self,
+            expr: AdvancedIndexInContiguousAxes,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self._map_index_base(expr, visited_node_keys)
+
+    def map_non_contiguous_advanced_index(
+            self,
+            expr: AdvancedIndexInNoncontiguousAxes,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self._map_index_base(expr, visited_node_keys)
+
+    def map_data_wrapper(
+            self,
+            expr: DataWrapper,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *self.rec_idx_or_size_tuple(expr.shape, visited_node_keys))
+
+    def map_size_param(
+            self,
+            expr: SizeParam,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(self.map_fn(expr))
+
+    def map_einsum(
+            self,
+            expr: Einsum,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(self.rec(arg, visited_node_keys) for arg in expr.args))
+
+    def map_named_array(
+            self,
+            expr: NamedArray,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr._container, visited_node_keys))
+
+    def map_dict_of_named_arrays(
+            self,
+            expr: DictOfNamedArrays,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
+
+    def map_loopy_call(
+            self,
+            expr: LoopyCall,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(
+                self.rec(subexpr, visited_node_keys)
+                for subexpr in expr.bindings.values()
+                if isinstance(subexpr, Array)))
+
+    def map_loopy_call_result(
+            self,
+            expr: LoopyCallResult,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr._container, visited_node_keys))
+
+    def map_reshape(
+            self,
+            expr: Reshape,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr.array, visited_node_keys),
+            *self.rec_idx_or_size_tuple(expr.newshape, visited_node_keys))
+
+    def map_distributed_send_ref_holder(
+            self,
+            expr: DistributedSendRefHolder,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr.send.data, visited_node_keys),
+            self.rec(expr.passthrough_data, visited_node_keys))
+
+    def map_distributed_recv(
+            self,
+            expr: DistributedRecv,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *self.rec_idx_or_size_tuple(expr.shape, visited_node_keys))
+
+    def map_function_definition(
+            self,
+            expr: FunctionDefinition,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        if not self.traverse_functions:
+            return self.no_function_result_value
+
+        new_mapper = self.clone_for_callee(expr)
+        new_visited_node_keys = self.get_visited_node_keys_for_callee(
+            visited_node_keys)
+        return self.reduce_fn(
+            self.map_fn(expr),
+            *(
+                new_mapper(ret, new_visited_node_keys)
+                for ret in expr.returns.values()))
+
+    def map_call(
+            self,
+            expr: Call,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec_function_definition(expr.function, visited_node_keys),
+            *(self.rec(bnd, visited_node_keys) for bnd in expr.bindings.values()))
+
+    def map_named_call_result(
+            self,
+            expr: NamedCallResult,
+            visited_node_keys: set[VisitKeyT] | None) -> ResultT:
+        return self.reduce_fn(
+            self.map_fn(expr),
+            self.rec(expr._container, visited_node_keys))
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -1931,6 +2333,29 @@ def map_and_copy(expr: ArrayOrNamesTc,
         caching nature each node is mapped exactly once.
     """
     return CachedMapAndCopyMapper(map_fn)(expr)
+
+
+def map_and_reduce(
+        expr: ArrayOrNames | FunctionDefinition,
+        map_fn: Callable[[ArrayOrNames | FunctionDefinition], ResultT],
+        # FIXME: Is there a way to make argument type annotation more specific?
+        reduce_fn: Callable[..., ResultT],
+        traverse_functions: bool = True,
+        map_duplicates: bool = False,
+        map_in_different_functions: bool = True) -> ResultT:
+    """
+    For each node, call *map_fn* on that node and then call *reduce_fn* on the output
+    together with the already-reduced results from its predecessors.
+
+    See :class:`MapAndReduceMapper` for more details.
+    """
+    mrm = MapAndReduceMapper(
+        map_fn=map_fn,
+        reduce_fn=reduce_fn,
+        traverse_functions=traverse_functions,
+        map_duplicates=map_duplicates,
+        map_in_different_functions=map_in_different_functions)
+    return mrm(expr)
 
 
 def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:

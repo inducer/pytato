@@ -157,6 +157,9 @@ from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target.python.jax import generate_jax
+
+# FIXME: Should some of the functions from pytato.transform be imported here?
+#        (deduplicate, map_and_copy, etc.)
 from pytato.transform.calls import inline_calls, tag_all_calls_to_be_inlined
 from pytato.transform.dead_code_elimination import eliminate_dead_code
 from pytato.transform.lower_to_index_lambda import to_index_lambda
