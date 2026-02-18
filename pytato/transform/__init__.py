@@ -111,6 +111,7 @@ __doc__ = """
 .. autoclass:: CombineMapper
 .. autoclass:: DependencyMapper
 .. autoclass:: InputGatherer
+.. autoclass:: ListOfInputsGatherer
 .. autoclass:: SizeParamGatherer
 .. autoclass:: SubsetDependencyMapper
 .. autoclass:: WalkMapper
@@ -1398,7 +1399,7 @@ class SubsetDependencyMapper(DependencyMapper):
 # }}}
 
 
-# {{{ InputGatherer
+# {{{ InputGatherer / ListOfInputsGatherer
 
 class InputGatherer(
         CombineMapper[frozenset[InputArgumentBase], frozenset[InputArgumentBase]]):
@@ -1406,20 +1407,27 @@ class InputGatherer(
     Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
     an array expression depends on.
     """
+    @override
     def combine(self, *args: frozenset[InputArgumentBase]
                 ) -> frozenset[InputArgumentBase]:
         from functools import reduce
-        return reduce(lambda a, b: a | b, args, frozenset())
+        return reduce(
+            lambda a, b: a | b,
+            args,
+            cast("frozenset[InputArgumentBase]", frozenset()))
 
+    @override
     def map_placeholder(self, expr: Placeholder) -> frozenset[InputArgumentBase]:
         return self.combine(frozenset([expr]), super().map_placeholder(expr))
 
+    @override
     def map_data_wrapper(self, expr: DataWrapper) -> frozenset[InputArgumentBase]:
         return self.combine(frozenset([expr]), super().map_data_wrapper(expr))
 
     def map_size_param(self, expr: SizeParam) -> frozenset[SizeParam]:
         return frozenset([expr])
 
+    @override
     def map_function_definition(self, expr: FunctionDefinition
                                 ) -> frozenset[InputArgumentBase]:
         # get rid of placeholders local to the function.
@@ -1440,11 +1448,75 @@ class InputGatherer(
 
         return frozenset(result)
 
+    @override
     def map_call(self, expr: Call) -> frozenset[InputArgumentBase]:
         return self.combine(self.rec_function_definition(expr.function),
             *[
                 self.rec(bnd)
-                for name, bnd in sorted(expr.bindings.items())])
+                for _, bnd in sorted(expr.bindings.items())])
+
+
+class ListOfInputsGatherer(
+        CombineMapper[list[InputArgumentBase], list[InputArgumentBase]]):
+    """
+    Mapper to combine all instances of :class:`pytato.array.InputArgumentBase` that
+    an array expression depends on, preserving duplicates.
+    """
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> CacheKeyT:
+        return id(expr)
+
+    @override
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> CacheKeyT:
+        return id(expr)
+
+    @override
+    def combine(self, *args: list[InputArgumentBase]
+                ) -> list[InputArgumentBase]:
+        id_to_input: dict[int, InputArgumentBase] = {
+            id(inp): inp
+            for arg in args
+            for inp in arg}
+        return list(id_to_input.values())
+
+    @override
+    def map_placeholder(self, expr: Placeholder) -> list[InputArgumentBase]:
+        return self.combine([expr], super().map_placeholder(expr))
+
+    @override
+    def map_data_wrapper(self, expr: DataWrapper) -> list[InputArgumentBase]:
+        return self.combine([expr], super().map_data_wrapper(expr))
+
+    def map_size_param(self, expr: SizeParam) -> list[SizeParam]:
+        return [expr]
+
+    @override
+    def map_function_definition(self, expr: FunctionDefinition
+                                ) -> list[InputArgumentBase]:
+        # get rid of placeholders local to the function.
+        new_mapper = ListOfInputsGatherer()
+        all_callee_inputs = new_mapper.combine(*[new_mapper(ret)
+                                                 for ret in expr.returns.values()])
+        result: list[InputArgumentBase] = []
+        for inp in all_callee_inputs:
+            if isinstance(inp, Placeholder):
+                if inp.name in expr.parameters:
+                    # drop, reference to argument
+                    pass
+                else:
+                    raise ValueError("function definition refers to non-argument "
+                                     f"placeholder named '{inp.name}'")
+            else:
+                result.append(inp)
+
+        return result
+
+    @override
+    def map_call(self, expr: Call) -> list[InputArgumentBase]:
+        return self.combine(self.rec_function_definition(expr.function),
+            *[
+                self.rec(bnd)
+                for _, bnd in sorted(expr.bindings.items())])
 
 # }}}
 
