@@ -79,7 +79,6 @@ __doc__ = """
 .. autofunction:: get_num_nodes
 .. autofunction:: get_node_multiplicities
 .. autofunction:: get_num_node_instances_of
-.. autofunction:: get_num_call_sites
 .. autofunction:: get_num_tags_of_type
 """
 
@@ -840,6 +839,12 @@ class CallSiteCountMapper(MapAndReduceMapper[int]):
             traverse_functions: bool = True,
             map_duplicates: bool = False,
             map_in_different_functions: bool = True) -> None:
+        from warnings import warn
+        warn(
+            "CallSiteCountMapper is deprecated and will be removed in Q3 2026. "
+            "Use NodeInstanceCountMapper instead.",
+            DeprecationWarning, stacklevel=2)
+
         super().__init__(
             map_fn=lambda expr: int(isinstance(expr, Call)),
             reduce_fn=lambda *args: sum(args, 0),
@@ -858,23 +863,21 @@ class CallSiteCountMapper(MapAndReduceMapper[int]):
 def get_num_call_sites(
         outputs: ArrayOrNames | FunctionDefinition,
         traverse_functions: bool = True,
-        count_duplicates: bool | None = None,
+        count_duplicates: bool = True,
         count_in_different_functions: bool = True) -> int:
     """Returns the number of :class:`pytato.function.Call` nodes in DAG *outputs*."""
-    if count_duplicates is None:
-        from warnings import warn
-        warn(
-            "The default value of 'count_duplicates' will change "
-            "from True to False in Q3 2026. "
-            "For now, pass the desired value explicitly.",
-            DeprecationWarning, stacklevel=2)
-        count_duplicates = True
+    from warnings import warn
+    warn(
+        "get_num_call_sites is deprecated and will be removed in Q3 2026. "
+        "Use get_num_node_instances_of instead.",
+        DeprecationWarning, stacklevel=2)
 
-    cscm = CallSiteCountMapper(
+    nicm = NodeInstanceCountMapper(
+        node_type=Call,
         traverse_functions=traverse_functions,
         map_duplicates=count_duplicates,
         map_in_different_functions=count_in_different_functions)
-    return cscm(outputs)
+    return nicm(outputs)
 
 # }}}
 
