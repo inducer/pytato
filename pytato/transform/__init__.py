@@ -120,11 +120,13 @@ __doc__ = """
 .. autoclass:: CachedMapAndCopyMapper
 .. autoclass:: MapOnceMapper
 .. autoclass:: MapAndReduceMapper
+.. autoclass:: NodeCollector
 .. autofunction:: copy_dict_of_named_arrays
 .. autofunction:: deduplicate
 .. autofunction:: get_dependencies
 .. autofunction:: map_and_copy
 .. autofunction:: map_and_reduce
+.. autofunction:: collect_nodes
 .. autofunction:: deduplicate_data_wrappers
 .. automodule:: pytato.transform.lower_to_index_lambda
 .. automodule:: pytato.transform.remove_broadcasts_einsum
@@ -1306,6 +1308,9 @@ class CombineMapper(CachedMapper[ResultT, FunctionResultT, []]):
 
 # {{{ DependencyMapper
 
+# FIXME: Might be able to replace this with NodeCollector. Would need to be slightly
+# careful, as DependencyMapper excludes DictOfNamedArrays and NodeCollector does not
+# (unless specified via collect_fn).
 class DependencyMapper(CombineMapper[R, Never]):
     """
     Maps a :class:`pytato.array.Array` to a :class:`frozenset` of
@@ -1384,6 +1389,9 @@ class DependencyMapper(CombineMapper[R, Never]):
 
 # {{{ SubsetDependencyMapper
 
+# FIXME: Might be able to implement this as a NodeCollector. Would need to be slightly
+# careful, as DependencyMapper excludes DictOfNamedArrays and NodeCollector does not
+# (unless specified via collect_fn).
 class SubsetDependencyMapper(DependencyMapper):
     """
     Mapper to combine the dependencies of an expression that are a subset of
@@ -2291,6 +2299,49 @@ class MapAndReduceMapper(MapOnceMapper[ResultT, ResultT]):
 # }}}
 
 
+# {{{ NodeCollector
+
+NodeSet: TypeAlias = frozenset[ArrayOrNames | FunctionDefinition]
+
+
+# FIXME: optimize_mapper?
+class NodeCollector(MapAndReduceMapper[NodeSet]):
+    """
+    Return the set of nodes in a DAG that match a condition specified via
+    *collect_fn*.
+
+    .. attribute:: traverse_functions
+
+        Controls whether or not the mapper should descend into function definitions.
+    """
+    def __init__(
+            self,
+            collect_fn: Callable[[ArrayOrNames | FunctionDefinition], bool],
+            traverse_functions: bool = True) -> None:
+        from functools import reduce
+        super().__init__(
+            map_fn=lambda expr: (
+                frozenset([expr]) if collect_fn(expr) else frozenset()),
+            reduce_fn=lambda *args: reduce(
+                cast("Callable[[NodeSet, NodeSet], NodeSet]", frozenset.union),
+                args,
+                cast("NodeSet", frozenset())),
+            traverse_functions=traverse_functions,
+            map_duplicates=False,
+            map_in_different_functions=False)
+
+        self.collect_fn: Callable[[ArrayOrNames | FunctionDefinition], bool] = \
+            collect_fn
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            collect_fn=self.collect_fn,
+            traverse_functions=self.traverse_functions)
+
+# }}}
+
+
 # {{{ mapper frontends
 
 def copy_dict_of_named_arrays(source_dict: DictOfNamedArrays,
@@ -2356,6 +2407,23 @@ def map_and_reduce(
         map_duplicates=map_duplicates,
         map_in_different_functions=map_in_different_functions)
     return mrm(expr)
+
+
+def collect_nodes(
+        expr: ArrayOrNames | FunctionDefinition,
+        collect_fn: Callable[[ArrayOrNames | FunctionDefinition], bool],
+        traverse_functions: bool = True
+        ) -> frozenset[ArrayOrNames | FunctionDefinition]:
+    """
+    Return the set of nodes in a DAG that match a condition specified via
+    *collect_fn*.
+
+    See :class:`NodeCollector` for more details.
+    """
+    nc = NodeCollector(
+        collect_fn=collect_fn,
+        traverse_functions=traverse_functions)
+    return nc(expr)
 
 
 def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
