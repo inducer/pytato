@@ -78,6 +78,7 @@ __doc__ = """
 .. autofunction:: get_node_type_counts
 .. autofunction:: get_num_nodes
 .. autofunction:: get_node_multiplicities
+.. autofunction:: get_num_node_instances_of
 .. autofunction:: get_num_call_sites
 .. autofunction:: get_num_tags_of_type
 """
@@ -771,6 +772,60 @@ def get_node_multiplicities(
         map_in_different_functions=count_in_different_functions,
         map_dict=count_dict)
     return nmm(outputs)
+
+# }}}
+
+
+# {{{ get_num_node_instances_of
+
+# FIXME: optimize_mapper?
+class NodeInstanceCountMapper(MapAndReduceMapper[int]):
+    """Count the number of nodes in a DAG that are instances of *node_type*."""
+    def __init__(
+            self,
+            node_type:
+                type[ArrayOrNames | FunctionDefinition]
+                | tuple[type[ArrayOrNames | FunctionDefinition], ...],
+            traverse_functions: bool = True,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True) -> None:
+        super().__init__(
+            map_fn=lambda expr: int(isinstance(expr, node_type)),
+            reduce_fn=lambda *args: sum(args, 0),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
+        self.node_type: \
+            type[ArrayOrNames | FunctionDefinition] \
+            | tuple[type[ArrayOrNames | FunctionDefinition], ...] = node_type
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            node_type=self.node_type,
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions)
+
+
+def get_num_node_instances_of(
+        outputs: ArrayOrNames | FunctionDefinition,
+        node_type:
+            type[ArrayOrNames | FunctionDefinition]
+            | tuple[type[ArrayOrNames | FunctionDefinition], ...],
+        traverse_functions: bool = True,
+        count_duplicates: bool = False,
+        count_in_different_functions: bool = True) -> int:
+    """
+    Returns the number of nodes in DAG *outputs* that are instances of *node_type*.
+    """
+    nicm = NodeInstanceCountMapper(
+        node_type=node_type,
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions)
+    return nicm(outputs)
 
 # }}}
 

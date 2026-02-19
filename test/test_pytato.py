@@ -892,6 +892,54 @@ def test_dag_with_duplicates_and_function_count():
     # }}}
 
 
+def test_get_num_node_instances_of():
+    from pytato.analysis import get_num_node_instances_of
+
+    indices = pt.make_data_wrapper(np.array([1, 0], dtype=np.int32))
+
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+    y = x[:, indices]
+    z = y[0]
+
+    def f(a):
+        return a[:, indices]
+
+    u = pt.trace_call(f, x)
+    v = u[0]
+
+    dag = z + v
+
+    # indices (once outside f, once inside), x, y, z, a, a[:, indices], f, call(f),
+    # u, v, z + v
+    assert get_num_node_instances_of(
+        dag,
+        (
+            pt.Array,
+            pt.AbstractResultWithNamedArrays,
+            pt.FunctionDefinition)) == 12
+
+    # Same as above, but with indices only counted once
+    assert get_num_node_instances_of(
+        dag,
+        (
+            pt.Array,
+            pt.AbstractResultWithNamedArrays,
+            pt.FunctionDefinition),
+        count_in_different_functions=False) == 11
+
+    # Everything but f and call(f)
+    assert get_num_node_instances_of(dag, pt.Array) == 10
+
+    # y, z, a[:, indices], v
+    assert get_num_node_instances_of(dag, pt.IndexBase) == 4
+
+    # z, v
+    assert get_num_node_instances_of(dag, pt.BasicIndex) == 2
+
+    # y, a[:, indices]
+    assert get_num_node_instances_of(dag, pt.AdvancedIndexInContiguousAxes) == 2
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))
