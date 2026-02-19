@@ -52,6 +52,8 @@ from pytato.transform import (
     ArrayOrNames,
     MapAndReduceMapper,
     Mapper,
+    NodeCollector,
+    NodeSet,
     VisitKeyT,
 )
 
@@ -79,6 +81,7 @@ __doc__ = """
 .. autofunction:: get_num_nodes
 .. autofunction:: get_node_multiplicities
 .. autofunction:: get_num_node_instances_of
+.. autofunction:: collect_node_instances_of
 .. autofunction:: get_num_tags_of_type
 """
 
@@ -825,6 +828,47 @@ def get_num_node_instances_of(
         map_duplicates=count_duplicates,
         map_in_different_functions=count_in_different_functions)
     return nicm(outputs)
+
+# }}}
+
+
+# {{{ collect_node_instances_of
+
+# FIXME: optimize_mapper?
+class NodeInstanceCollector(NodeCollector):
+    """Return the nodes in a DAG that are instances of *node_type*."""
+    def __init__(
+            self,
+            node_type:
+                type[ArrayOrNames | FunctionDefinition]
+                | tuple[type[ArrayOrNames | FunctionDefinition], ...],
+            traverse_functions: bool = True) -> None:
+        super().__init__(
+            collect_fn=lambda expr: isinstance(expr, node_type),
+            traverse_functions=traverse_functions)
+
+        self.node_type: \
+            type[ArrayOrNames | FunctionDefinition] \
+            | tuple[type[ArrayOrNames | FunctionDefinition], ...] = node_type
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            node_type=self.node_type,
+            traverse_functions=self.traverse_functions)
+
+
+def collect_node_instances_of(
+        outputs: ArrayOrNames | FunctionDefinition,
+        node_type:
+            type[ArrayOrNames | FunctionDefinition]
+            | tuple[type[ArrayOrNames | FunctionDefinition], ...],
+        traverse_functions: bool = True) -> NodeSet:
+    """Return the nodes in DAG *outputs* that are instances of *node_type*."""
+    nic = NodeInstanceCollector(
+        node_type=node_type,
+        traverse_functions=traverse_functions)
+    return nic(outputs)
 
 # }}}
 

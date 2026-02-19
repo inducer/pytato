@@ -940,6 +940,59 @@ def test_get_num_node_instances_of():
     assert get_num_node_instances_of(dag, pt.AdvancedIndexInContiguousAxes) == 2
 
 
+def test_collect_node_instances_of():
+    from pytato.analysis import collect_node_instances_of
+
+    indices = pt.make_data_wrapper(np.array([1, 0], dtype=np.int32))
+
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+    y = x[:, indices]
+    z = y[0]
+
+    # Save a and b so we can reference them below
+    f_nodes = []
+
+    def f(a):
+        b = a[:, indices]
+        assert not f_nodes
+        f_nodes.extend([a, b])
+        return b
+
+    u = pt.trace_call(f, x)
+    v = u[0]
+
+    dag = z + v
+
+    a = f_nodes[0]
+    b = f_nodes[1]
+
+    assert (
+        collect_node_instances_of(
+            dag,
+            (
+                pt.Array,
+                pt.AbstractResultWithNamedArrays,
+                pt.FunctionDefinition))
+        == frozenset([
+            indices, x, y, z, a, b, u._container.function, u._container, u, v, dag]))
+
+    assert (
+        collect_node_instances_of(dag, pt.Array)
+        == frozenset([indices, x, y, z, a, b, u, v, dag]))
+
+    assert (
+        collect_node_instances_of(dag, pt.IndexBase)
+        == frozenset([y, z, b, v]))
+
+    assert (
+        collect_node_instances_of(dag, pt.BasicIndex)
+        == frozenset([z, v]))
+
+    assert (
+        collect_node_instances_of(dag, pt.AdvancedIndexInContiguousAxes)
+        == frozenset([y, b]))
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))
