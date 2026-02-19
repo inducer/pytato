@@ -771,6 +771,19 @@ def test_large_dag_with_duplicates_count():
         dag, count_duplicates=False)
 
 
+def test_nodemaxdepthmapper():
+    from pytato.analysis import get_max_node_depth
+
+    x = pt.make_placeholder("x", shape=(10, 4), dtype=np.float64)
+
+    assert get_max_node_depth(x) == 0
+
+    for _ in range(10):
+        x = x + 1
+
+    assert get_max_node_depth(x) == 10
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))

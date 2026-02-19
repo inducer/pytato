@@ -69,6 +69,7 @@ __doc__ = """
 .. autofunction:: is_einsum_similar_to_subscript
 
 .. autofunction:: get_num_nodes
+.. autofunction:: get_max_node_depth
 
 .. autofunction:: get_node_type_counts
 
@@ -597,6 +598,57 @@ def get_node_multiplicities(outputs: ArrayOrNames) -> dict[Array, int]:
     nmm(outputs)
 
     return nmm.expr_multiplicity_counts
+
+# }}}
+
+
+# {{{ NodeMaxDepthMapper
+
+@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
+class NodeMaxDepthMapper(CachedWalkMapper):
+    """
+    Finds the maximum depth of a node in a DAG.
+
+    .. attribute:: max_depth
+
+       The depth of the deepest node.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Want the first rec() call to increment to 0, so start at -1
+        self.depth = -1
+        self.max_depth = -1
+
+    # FIXME: Do I need this?
+    # type-ignore-reason: dropped the extra `*args, **kwargs`.
+    def get_cache_key(self, expr: ArrayOrNames) -> int:  # type: ignore[override]
+        return id(expr)
+
+    def rec(self, expr: ArrayOrNames, *args: Any, **kwargs: Any) -> None:
+        """Call the mapper method of *expr* and return the result."""
+        if isinstance(expr, DictOfNamedArrays):
+            super().rec(expr, *args, **kwargs)
+        else:
+            self.depth += 1
+            self.max_depth = max(self.max_depth, self.depth)
+
+            try:
+                super().rec(expr, *args, **kwargs)
+            finally:
+                self.depth -= 1
+
+
+def get_max_node_depth(outputs: Union[Array, DictOfNamedArrays]) -> int:
+    """Finds the maximum depth of a node in *outputs*."""
+
+    from pytato.codegen import normalize_outputs
+    outputs = normalize_outputs(outputs)
+
+    nmdm = NodeMaxDepthMapper()
+    nmdm(outputs)
+
+    return nmdm.max_depth
 
 # }}}
 
