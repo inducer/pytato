@@ -993,6 +993,12 @@ def test_collect_node_instances_of():
         == frozenset([y, b]))
 
 
+def test_collect_materialized_nodes():
+    # FIXME: Add tests after fixing collect_materialized_nodes to use
+    # is_materialized() function from https://github.com/inducer/pytato/pull/623
+    pytest.fail("Not implemented yet.")
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))

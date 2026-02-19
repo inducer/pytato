@@ -83,6 +83,7 @@ __doc__ = """
 .. autofunction:: get_num_node_instances_of
 .. autofunction:: collect_node_instances_of
 .. autofunction:: get_num_tags_of_type
+.. autofunction:: collect_materialized_nodes
 """
 
 
@@ -991,6 +992,42 @@ def get_num_tags_of_type(
         map_duplicates=count_duplicates,
         map_in_different_functions=count_in_different_functions)
     return tcm(outputs)
+
+# }}}
+
+
+# {{{ collect_materialized_nodes
+
+# FIXME: optimize_mapper?
+class MaterializedNodeCollector(NodeCollector):
+    """Return the nodes in a DAG that are materialized."""
+    def __init__(
+            self,
+            traverse_functions: bool = True) -> None:
+        def collect_fn(expr: ArrayOrNames | FunctionDefinition) -> bool:
+            # FIXME: This isn't right; need is_materialized() function from
+            # https://github.com/inducer/pytato/pull/623
+            from pytato.tags import ImplStored
+            return bool(expr.tags_of_type(ImplStored))
+
+        super().__init__(
+            collect_fn=collect_fn,
+            traverse_functions=traverse_functions)
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            traverse_functions=self.traverse_functions)
+
+
+def collect_materialized_nodes(
+        outputs: ArrayOrNames | FunctionDefinition,
+        node_type: type[ArrayOrNames | FunctionDefinition],
+        traverse_functions: bool = True) -> NodeSet:
+    """Return the nodes in DAG *outputs* that are materialized."""
+    mnc = MaterializedNodeCollector(
+        traverse_functions=traverse_functions)
+    return mnc(outputs)
 
 # }}}
 
