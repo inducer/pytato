@@ -94,7 +94,7 @@ class ReductionOperation(ABC):
         pass
 
     @abstractmethod
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         pass
 
 
@@ -105,7 +105,7 @@ class _StatelessReductionOperation(ReductionOperation):
     def __hash__(self) -> int:
         return hash(type(self))
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return type(self) is type(other)
 
 

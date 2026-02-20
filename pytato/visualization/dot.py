@@ -136,8 +136,7 @@ class DotEmitter:
 
             indent = (indent_level*4)*" "
             if sg.contents:
-                for ln in sg.contents:
-                    result.append(indent + ln)
+                result.extend(indent + ln for ln in sg.contents)
 
             indent_level += 1
             for sg_name, sub_sg in sg.subgraphs.items():

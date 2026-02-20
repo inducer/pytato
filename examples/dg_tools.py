@@ -21,7 +21,7 @@ import pytato as pt
 def ortholegvander(x, deg):
     """See numpy.polynomial.legendre.legvander(). Uses an orthonormal basis."""
     result = leg.legvander(x, deg)
-    factors = np.array([np.sqrt((2*n+1)/2) for n in range(0, 1 + deg)])
+    factors = np.array([np.sqrt((2*n+1)/2) for n in range(1 + deg)])
     return result * factors
 
 

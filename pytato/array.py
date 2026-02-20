@@ -256,7 +256,7 @@ ShapeComponent: TypeAlias = "Integer | Array"
 ShapeType: TypeAlias = tuple[ShapeComponent, ...]
 ConvertibleToShape: TypeAlias = "ShapeComponent | Sequence[ShapeComponent]"
 
-OrderCF: TypeAlias = Literal["C"] | Literal["F"]
+OrderCF: TypeAlias = Literal["C", "F"]
 
 # }}}
 
@@ -360,7 +360,7 @@ _CAMEL_TO_SNAKE_RE = re.compile(
         (?<=[A-Z])      # preceded by lowercase
         (?=[A-Z][a-z])  # followed by uppercase, then lowercase
     """,
-    re.X,
+    re.VERBOSE,
 )
 
 
@@ -462,7 +462,7 @@ def _augment_array_dataclass(
         """)
 
     exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-    exec(compile(augment_code,
+    exec(compile(augment_code,  # noqa: S102
                  f"<dataclass augmentation code for {cls}>", "exec"),
          exec_dict)
 
@@ -730,7 +730,7 @@ class Array(Taggable):
             # or "__hash__" implementation as they have exponential complexity.
             assert self._is_eq_valid()
 
-    def copy(self: ArrayT, **kwargs: Any) -> ArrayT:
+    def copy(self, **kwargs: Any) -> Self:
         return dataclasses.replace(self, **kwargs)
 
     if TYPE_CHECKING:
@@ -838,7 +838,7 @@ class Array(Taggable):
         tags = _get_default_tags()
         non_equality_tags = _get_created_at_tag()
 
-        import pytato.utils as utils
+        from pytato import utils
         if reverse:
             result = utils.broadcast_binary_op(
                          other, self, op,
@@ -1200,7 +1200,6 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
     @override
     def keys(self) -> KeysView[str]:
         """Return a :class:`KeysView` of the names of the named arrays."""
-        pass
 
 
 @opt_frozen_dataclass(eq=False, init=False)
@@ -1377,7 +1376,6 @@ class EinsumAxisDescriptor:
     Records the access pattern of iterating over an array's axis in a
     :class:`Einsum`.
     """
-    pass
 
 
 @dataclasses.dataclass(frozen=True, order=True)
@@ -1885,10 +1883,8 @@ class AxisPermutation(_SuppliedAxesAndTagsMixin, IndexRemappingBase):
     @property
     @override
     def shape(self) -> ShapeType:
-        result = []
         base_shape = self.array.shape
-        for index in self.axis_permutation:
-            result.append(base_shape[index])
+        result = [base_shape[index] for index in self.axis_permutation]
         return tuple(result)
 
 # }}}
@@ -2772,7 +2768,7 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 
 def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
     # https://github.com/python/mypy/issues/3186
-    import pytato.utils as utils
+    from pytato import utils
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
     return utils.broadcast_binary_op(
@@ -2849,7 +2845,7 @@ def logical_or(x1: ArrayOrScalar, x2: ArrayOrScalar, /) -> Array | bool:
     # https://github.com/python/mypy/issues/3186
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
-    import pytato.utils as utils
+    from pytato import utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalOr((x, y)),
                                      lambda x, y: np.dtype(np.bool_),
@@ -2877,7 +2873,7 @@ def logical_and(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
     # https://github.com/python/mypy/issues/3186
     # type-ignored because 'broadcast_binary_op' returns Scalar, while
     # '_compare' returns a bool.
-    import pytato.utils as utils
+    from pytato import utils
     return utils.broadcast_binary_op(x1, x2,
                                      lambda x, y: prim.LogicalAnd((x, y)),
                                      lambda x, y: np.dtype(np.bool_),
@@ -2921,7 +2917,7 @@ def where(condition: ArrayOrScalar,
     """
     Elementwise selector between *x* and *y* depending on *condition*.
     """
-    import pytato.utils as utils
+    from pytato import utils
 
     # {{{ raise if single-argument form of pt.where is invoked
 

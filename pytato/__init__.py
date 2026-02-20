@@ -47,10 +47,7 @@ def set_debug_enabled(flag: bool) -> None:
 # }}}
 
 
-import pytato.analysis as analysis
-import pytato.function as function
-import pytato.tags as tags
-import pytato.transform as transform
+from pytato import analysis, function, tags, transform
 from pytato.array import (
     AbstractResultWithNamedArrays,
     AdvancedIndexInContiguousAxes,

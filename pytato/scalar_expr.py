@@ -43,7 +43,7 @@ THE SOFTWARE.
 """
 
 import re
-from collections.abc import Iterable, Mapping, Set
+from collections.abc import Iterable, Mapping, Set as AbstractSet
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -345,23 +345,23 @@ class TypeCast(ExpressionBase):
 # }}}
 
 
-class InductionVariableCollector(CombineMapper[Set[str], []]):
-    def combine(self, values: Iterable[Set[str]]) -> frozenset[str]:
+class InductionVariableCollector(CombineMapper[AbstractSet[str], []]):
+    def combine(self, values: Iterable[AbstractSet[str]]) -> frozenset[str]:
         from functools import reduce
         return reduce(frozenset.union, values, frozenset())
 
-    def map_reduce(self, expr: Reduce) -> Set[str]:
+    def map_reduce(self, expr: Reduce) -> AbstractSet[str]:
         return self.combine([frozenset(expr.bounds.keys()),
                              super().map_reduce(expr)])
 
     def map_algebraic_leaf(self, expr: prim.ExpressionNode) -> frozenset[str]:
         return frozenset()
 
-    def map_constant(self, expr: object) -> Set[str]:
+    def map_constant(self, expr: object) -> AbstractSet[str]:
         return frozenset()
 
 
-def get_reduction_induction_variables(expr: Expression) -> Set[str]:
+def get_reduction_induction_variables(expr: Expression) -> AbstractSet[str]:
     """
     Returns the induction variables for the reduction nodes.
     """

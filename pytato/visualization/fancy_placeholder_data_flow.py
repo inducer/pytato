@@ -60,7 +60,6 @@ class _FancyDotWriterNode:
     """
     Return type for :class:`FancyDotWriter`.
     """
-    pass
 
 
 @dataclass(frozen=True)

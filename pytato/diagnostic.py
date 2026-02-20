@@ -54,7 +54,6 @@ class UnknownIndexLambdaExpr(ValueError):  # noqa: N818
     Raised when the structure :class:`pytato.array.IndexLambda` could not be
     inferred.
     """
-    pass
 
 
 class InvalidEinsumIndex(ValueError):  # noqa: N818

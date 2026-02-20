@@ -39,7 +39,7 @@ import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 
 import pytato.reductions as red
-import pytato.scalar_expr as scalar_expr
+from pytato import scalar_expr
 from pytato.array import (
     AbstractResultWithNamedArrays,
     Array,
@@ -1008,7 +1008,7 @@ def add_substitution(subst_name: str, expr: Array, result: ImplementedResult,
     kernel = state.kernel
     kernel = kernel.copy(
         substitutions={**kernel.substitutions,
-                       **{subst_name: subst_rule}})
+                       subst_name: subst_rule})
 
     state.update_kernel(kernel)
 
