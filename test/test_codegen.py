@@ -966,6 +966,71 @@ def test_einsum_with_parameterized_shapes(ctx_factory: cl.CtxFactory):
     np.testing.assert_allclose(np_out, pt_out)
 
 
+@pytest.mark.parametrize("case", ["single", "multiple", "stacked"])
+def test_csr_matmul(ctx_factory: cl.CtxFactory, case, visualize=False):
+    ctx = ctx_factory()
+    cq = cl.CommandQueue(ctx)
+
+    n = 100
+    h = 2/n
+
+    np_x = np.linspace(-1, 1, n)
+
+    # FD Laplacian operator for interior points
+    diags = [np.ones(n-2)/h**2, -2*np.ones(n-2)/h**2, np.ones(n-2)/h**2]
+    col_indices = [np.arange(n-2), np.arange(1, n-1), np.arange(2, n)]
+    np_A = np.zeros((n-2, n))  # noqa: N806
+    np_A[np.arange(n-2), col_indices[0]] = diags[0]
+    np_A[np.arange(n-2), col_indices[1]] = diags[1]
+    np_A[np.arange(n-2), col_indices[2]] = diags[2]
+
+    pt_A = pt.make_csr_matrix(  # noqa: N806
+        shape=np_A.shape,
+        elem_values=pt.make_data_wrapper(np.stack(diags).T.flatten()),
+        elem_col_indices=pt.make_data_wrapper(np.stack(col_indices).T.flatten()),
+        row_starts=pt.make_data_wrapper(
+            np.concatenate((3*np.arange(n-2), np.array([3*(n-2)])))))
+
+    np_u = np.sin(np.pi*np_x)
+    pt_u = pt.make_data_wrapper(np_u)
+
+    np_v = -np.sin(np.pi*np_x)
+    pt_v = pt.make_data_wrapper(np_v)
+
+    if case == "single":
+        exact_out = -np.pi**2 * np_u
+        np_out = np_A @ np_u
+        _, (pt_out,) = pt.generate_loopy(pt_A @ pt_u)(cq)
+    elif case == "multiple":
+        exact_out = 0*np_x
+        np_out = np_A @ np_u + np_A @ np_v
+        _, (pt_out,) = pt.generate_loopy(pt_A @ pt_u + pt_A @ pt_v)(cq)
+    elif case == "stacked":
+        np_w = (np.stack([np_u, np_v]).T).copy()
+        exact_out = np.stack([-np.pi**2 * np_u, -np.pi**2 * np_v]).T
+        pt_w = pt.make_data_wrapper(np_w)
+        np_out = np_A @ np_w
+        _, (pt_out,) = pt.generate_loopy(pt_A @ pt_w)(cq)
+    else:
+        raise ValueError("invalid case.")
+
+    if visualize:
+        import matplotlib.pyplot as plt
+        ax = plt.axes()
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-12, 12)
+        ax.plot(np_x, np_u)
+        ax.plot(np_x, np_v)
+        ax.plot(np_x[1:n-1], pt_out)
+        plt.show()
+
+    assert np_out.shape[0] == exact_out.shape[0]-2
+    assert np_out.shape[1:] == exact_out.shape[1:]
+    assert pt_out.shape == np_out.shape
+    np.testing.assert_allclose(np_out, exact_out[1:n-1], rtol=1e-1)
+    np.testing.assert_allclose(pt_out, np_out)
+
+
 def test_arguments_passing_to_loopy_kernel_for_non_dependent_vars(
             ctx_factory: cl.CtxFactory):
     from numpy.random import default_rng

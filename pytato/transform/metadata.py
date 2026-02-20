@@ -68,6 +68,7 @@ from pytato.array import (
     AxisPermutation,
     BasicIndex,
     Concatenate,
+    CSRMatmul,
     DictOfNamedArrays,
     Einsum,
     EinsumReductionAxis,
@@ -389,6 +390,15 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
     def map_einsum(self, expr: Einsum) -> None:
         for arg in expr.args:
             self.rec(arg)
+        self.add_equations_using_index_lambda_version_of_expr(expr)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> None:
+        for ary in (
+                expr.matrix.elem_values,
+                expr.matrix.elem_col_indices,
+                expr.matrix.row_starts,
+                expr.array):
+            self.rec(ary)
         self.add_equations_using_index_lambda_version_of_expr(expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays) -> None:

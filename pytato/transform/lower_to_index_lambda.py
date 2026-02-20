@@ -46,10 +46,12 @@ from pytato.array import (
     AxisPermutation,
     BasicIndex,
     Concatenate,
+    CSRMatmul,
     Einsum,
     IndexExpr,
     IndexLambda,
     NormalizedSlice,
+    ReductionDescriptor,
     Reshape,
     Roll,
     ShapeComponent,
@@ -708,6 +710,41 @@ class ToIndexLambdaMixin:
                            bindings=constantdict({"_in0": rec_array}),
                            axes=expr.axes,
                            var_to_reduction_descr=constantdict(),
+                           tags=expr.tags,
+                           non_equality_tags=expr.non_equality_tags)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> IndexLambda:
+        rec_matrix_elem_values = self.rec(expr.matrix.elem_values)
+        rec_matrix_elem_col_indices = self.rec(expr.matrix.elem_col_indices)
+        rec_matrix_row_starts = self.rec(expr.matrix.row_starts)
+        rec_array = self.rec(expr.array)
+
+        from pytato.reductions import SumReductionOperation
+        from pytato.scalar_expr import Reduce
+        index_expr = Reduce(
+            prim.Variable("_in0")[prim.Variable("_r0"),]
+            * prim.Variable("_in3")[(
+                prim.Variable("_in1")[prim.Variable("_r0"),],
+                *(
+                    prim.Variable(f"_{idim}")
+                    for idim in range(1, rec_array.ndim)))],
+            SumReductionOperation(),
+            constantdict({
+                "_r0": (
+                    prim.Variable("_in2")[prim.Variable("_0"),],
+                    prim.Variable("_in2")[prim.Variable("_0") + 1,])}))
+
+        return IndexLambda(expr=index_expr,
+                           shape=self.rec_size_tuple(expr.shape),
+                           dtype=expr.dtype,
+                           bindings=constantdict({
+                                "_in0": rec_matrix_elem_values,
+                                "_in1": rec_matrix_elem_col_indices,
+                                "_in2": rec_matrix_row_starts,
+                                "_in3": rec_array}),
+                           axes=expr.axes,
+                           var_to_reduction_descr=constantdict({
+                                "_r0": ReductionDescriptor(tags=frozenset())}),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
