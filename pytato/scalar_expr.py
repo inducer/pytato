@@ -303,9 +303,10 @@ def distribute(expr: Expression, parameters: frozenset[Any] = frozenset(),
 # {{{ custom scalar expression nodes
 
 class ExpressionBase(prim.ExpressionNode):
+    @override
     def make_stringifier(self,
-                 originating_stringifier: StringifyMapperBase[[]] | None = None
-             ) -> StringifyMapperBase[[]]:
+                 originating_stringifier: StringifyMapperBase[P] | None = None
+             ) -> StringifyMapperBase[P]:
         return StringifyMapper()
 
 
