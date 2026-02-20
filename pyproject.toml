@@ -87,6 +87,8 @@ extend-ignore = [
 
   # numpy random generators---disable for now
   "NPY002",
+  "TRY004",
+  "TRY300",
 ]
 
 allowed-confusables = [
@@ -99,6 +101,8 @@ allowed-confusables = [
 "test/test_linalg.py" = ["N806"]
 "doc/*.py" = ["I002"]
 "examples/*.py" = ["I002"]
+"test/*.py" = ["S102"]
+"doc/conf.py" = ["S102"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]

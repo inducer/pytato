@@ -67,7 +67,7 @@ THE SOFTWARE.
 """
 
 import dataclasses
-from collections.abc import Hashable, Mapping, Sequence, Set
+from collections.abc import Hashable, Mapping, Sequence, Set as AbstractSet
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -131,7 +131,7 @@ class CommunicationOpIdentifier:
 
 
 CommunicationDepGraph = Mapping[
-        CommunicationOpIdentifier, Set[CommunicationOpIdentifier]]
+        CommunicationOpIdentifier, AbstractSet[CommunicationOpIdentifier]]
 
 
 _KeyT = TypeVar("_KeyT")
@@ -377,13 +377,12 @@ def _make_distributed_partition(
                     for recv_id in comm_ids.recv_ids}),
                 name_to_send_nodes=constantdict(name_to_send_nodes))
 
-    result = DistributedGraphPartition(
+    return DistributedGraphPartition(
             parts=parts,
             name_to_output=name_to_output,
             overall_output_names=overall_output_names,
             )
 
-    return result
 
 # }}}
 
@@ -488,7 +487,7 @@ TaskType = TypeVar("TaskType")
 # {{{ _schedule_task_batches (and related)
 
 def _schedule_task_batches(
-        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
         -> Sequence[OrderedSet[TaskType]]:
     """For each :type:`TaskType`, determine the
     'round'/'batch' during which it will be performed. A 'batch'
@@ -503,7 +502,7 @@ def _schedule_task_batches(
 # {{{ _schedule_task_batches_counted
 
 def _schedule_task_batches_counted(
-        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]) \
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]) \
         -> tuple[Sequence[OrderedSet[TaskType]], int]:
     """
     Static type checkers need the functions to return the same type regardless
@@ -527,7 +526,7 @@ def _schedule_task_batches_counted(
 # {{{ _calculate_dependency_levels
 
 def _calculate_dependency_levels(
-        task_ids_to_needed_task_ids: Mapping[TaskType, Set[TaskType]]
+        task_ids_to_needed_task_ids: Mapping[TaskType, AbstractSet[TaskType]]
         ) -> tuple[Mapping[TaskType, int], int]:
     """Calculate the minimum dependency level needed before a task of
     type TaskType can be scheduled. We assume that any number of tasks
@@ -740,7 +739,7 @@ def find_distributed_partition(
     - Gather sent arrays into
       assigned in :attr:`DistributedGraphPart.name_to_send_nodes`.
     """
-    import mpi4py.MPI as MPI
+    from mpi4py import MPI
 
     from pytato.transform import SubsetDependencyMapper
     from pytato.transform.dead_code_elimination import eliminate_dead_code

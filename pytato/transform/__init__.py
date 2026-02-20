@@ -193,7 +193,7 @@ Internal stuff that is only here because the documentation tool wants it
 
 """
 
-transform_logger = logging.getLogger(__file__)
+transform_logger = logging.getLogger(__name__)
 
 
 class UnsupportedArrayError(ValueError):
@@ -1508,7 +1508,6 @@ class WalkMapper(Mapper[None, None, P]):
         """
         Callback after *expr* has been traversed.
         """
-        pass
 
     def rec_idx_or_size_tuple(self, situp: tuple[IndexOrShapeExpr, ...],
                               *args: P.args, **kwargs: P.kwargs) -> None:

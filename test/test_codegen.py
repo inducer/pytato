@@ -463,7 +463,7 @@ def generate_test_slices_for_dim(dim_bound):
     for i in range(dim_bound):
         yield i
 
-    for i in range(0, dim_bound):
+    for i in range(dim_bound):
         for j in range(i + 1, 1 + dim_bound):
             yield slice(i, j, None)
 
@@ -515,7 +515,7 @@ def test_stack(ctx_factory: cl.CtxFactory, input_dims):
     x = pt.make_data_wrapper(x_in)
     y = pt.make_data_wrapper(y_in)
 
-    for axis in range(0, 1 + input_dims):
+    for axis in range(1 + input_dims):
         assert_allclose_to_numpy(pt.stack((x, y), axis=axis), queue)
 
 
@@ -1608,8 +1608,7 @@ def test_regression_reduction_in_conditional(ctx_factory: cl.CtxFactory):
         pt_tmp_53 = pt_data_9 @ pt_data_9
         pt_tmp_42 = usr_np.maximum(pt_tmp_53, pt_tmp_53)
         pt_tmp_27 = usr_np.sum(pt_tmp_42)
-        pt_tmp_0 = usr_np.maximum(pt_tmp_27, pt_tmp_53)
-        return pt_tmp_0
+        return usr_np.maximum(pt_tmp_27, pt_tmp_53)
 
     def get_np_input_args():
         return {

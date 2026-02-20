@@ -434,7 +434,6 @@ class AxesTagsEquationCollector(Mapper[None, Never, []]):
         :class:`pytato.DistributedRecv` does not have any operands and so no
         more equations are deduced.
         """
-        pass
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
         raise NotImplementedError(
@@ -536,7 +535,6 @@ class AxisIgnoredForPropagationTag(Tag):
     is not always desirable, this tag can be used to disable the default
     behavior at axis-granularity.
     """
-    pass
 
 
 def unify_axes_tags(

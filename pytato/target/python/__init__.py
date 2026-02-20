@@ -68,7 +68,6 @@ class PythonTarget(Target, ABC):
         :arg program: The python code containing the compiled routine.
         :arg entrypoint: Name of the entrypoint
         """
-        pass
 
 
 @dataclass(repr=False, eq=False)
@@ -88,7 +87,7 @@ class BoundPythonProgram(BoundProgram):
         variables_after_execution: dict[str, Any] = {
             "_MODULE_SOURCE_CODE": self.program  # helps pudb
         }
-        exec(self.program, variables_after_execution)
+        exec(self.program, variables_after_execution)  # noqa: S102
         assert callable(variables_after_execution[self.entrypoint])
         return variables_after_execution[  # type: ignore[no-any-return]
             self.entrypoint]

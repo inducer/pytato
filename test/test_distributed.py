@@ -190,9 +190,9 @@ def test_distributed_scheduling_o_n_direct_dependents():
     count_list = np.zeros(len(sizes))
     for i, tree_size in enumerate(sizes):
         needed_ids = {i: set() for i in range(int(tree_size))}
-        for key in needed_ids:
+        for key, val in needed_ids.items():
             for j in range(key):
-                needed_ids[key].add(j)
+                val.add(j)
         _, count_list[i] = _schedule_task_batches_counted(needed_ids)
 
     # Now to do the fitting.
@@ -659,7 +659,7 @@ def test_dag_with_periodic_communication(num_ranks):
 # {{{ test deterministic partitioning
 
 def _gather_random_dist_partitions(ctx_factory: cl.CtxFactory):
-    import mpi4py.MPI as MPI
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

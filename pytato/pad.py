@@ -13,7 +13,7 @@ from __future__ import annotations
 
 __copyright__ = "Copyright (C) 2023 Kaushik Kulkarni"
 
-import collections.abc as abc
+from collections import abc
 from typing import TYPE_CHECKING, Any
 
 import numpy as np

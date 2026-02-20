@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 
@@ -601,7 +600,7 @@ def test_repr_array_is_deterministic():
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
-        assert repr(dag) == repr(dag)
+        assert repr(dag) == repr(dag)  # noqa: PLR0124
 
 
 def test_empty_dag_count():

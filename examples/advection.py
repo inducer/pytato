@@ -47,9 +47,7 @@ class AdvectionOperator:
         else:
             raise ValueError("Invalid flux type")
 
-        flux = flux * self.c * self.dg.normals
-
-        return flux
+        return flux * self.c * self.dg.normals
 
     def strong_flux(self, vec):
         """Apply the flux, strong form.
