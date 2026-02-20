@@ -1496,7 +1496,9 @@ class WalkMapper(Mapper[None, None, P]):
             self, function: FunctionDefinition) -> Self:
         return type(self)()
 
-    def visit(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> bool:
+    def visit(
+            self, expr: ArrayOrNames | FunctionDefinition,
+            *args: P.args, **kwargs: P.kwargs) -> bool:
         """
         If this method returns *True*, *expr* is traversed during the walk.
         If this method returns *False*, *expr* is not traversed as a part of
@@ -1504,7 +1506,9 @@ class WalkMapper(Mapper[None, None, P]):
         """
         return True
 
-    def post_visit(self, expr: Any, *args: P.args, **kwargs: P.kwargs) -> None:
+    def post_visit(
+            self, expr: ArrayOrNames | FunctionDefinition,
+            *args: P.args, **kwargs: P.kwargs) -> None:
         """
         Callback after *expr* has been traversed.
         """
@@ -1765,8 +1769,9 @@ class TopoSortMapper(CachedWalkMapper[[]]):
     def get_cache_key(self, expr: ArrayOrNames) -> int:
         return id(expr)
 
-    def post_visit(self, expr: Any) -> None:
-        self.topological_order.append(expr)
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if isinstance(expr, Array):
+            self.topological_order.append(expr)
 
     def map_function_definition(self, expr: FunctionDefinition) -> None:
         # do nothing as it includes arrays from a different namespace.
