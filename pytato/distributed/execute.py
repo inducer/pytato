@@ -110,7 +110,8 @@ def execute_distributed_partition(
         queue: Any, mpi_communicator: Any,
         *,
         allocator: Any | None = None,
-        input_args: dict[str, Any] | None = None) -> dict[str, Any]:
+        input_args: dict[str, Any] | None = None,
+        actx: Any | None = None) -> dict[str, Any]:
 
     if input_args is None:
         input_args = {}
@@ -168,9 +169,17 @@ def execute_distributed_partition(
     def exec_ready_part(part: DistributedGraphPart) -> None:
         inputs = {k: context[k] for k in part.all_input_names()}
 
-        _evt, result_dict = prg_per_partition[part.pid](queue,
+        if actx and actx.profile_kernels:
+            import pyopencl as cl
+            start_evt = cl.enqueue_marker(queue)
+
+        evt, result_dict = prg_per_partition[part.pid](queue,
                                                         allocator=allocator,
                                                         **inputs)
+
+        if actx and actx.profile_kernels:
+            name = next(iter(prg_per_partition[part.pid].program.entrypoints))
+            actx._add_profiling_events(start_evt, evt, name)
 
         context.update(result_dict)
 
