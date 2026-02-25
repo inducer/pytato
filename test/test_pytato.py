@@ -245,7 +245,7 @@ def test_accessing_dict_of_named_arrays_validation():
     x = pt.make_placeholder(name="x", shape=10)
     y1y2 = pt.make_dict_of_named_arrays({"y1": 2*x, "y2": 3*x})
 
-    assert isinstance(y1y2["y1"], pt.array.NamedArray)
+    assert isinstance(y1y2["y1"], pt.NamedArray)
     assert y1y2["y1"].shape == (2*x).shape
     assert y1y2["y1"].dtype == (2*x).dtype
 
@@ -647,8 +647,8 @@ def test_small_dag_count():
 
     counts = get_node_type_counts(dag)
     assert len(counts) == 2
-    assert counts[pt.array.Placeholder] == 1   # "a"
-    assert counts[pt.array.IndexLambda] == 1   # single operation
+    assert counts[pt.Placeholder] == 1   # "a"
+    assert counts[pt.IndexLambda] == 1   # single operation
 
 
 def test_large_dag_count():
@@ -664,8 +664,8 @@ def test_large_dag_count():
 
     counts = get_node_type_counts(dag)
     assert len(counts) >= 1
-    assert counts[pt.array.Placeholder] == 1
-    assert counts[pt.array.IndexLambda] == 100   # 100 operations
+    assert counts[pt.Placeholder] == 1
+    assert counts[pt.IndexLambda] == 100   # 100 operations
     assert sum(counts.values()) == iterations + 1
 
 
@@ -719,8 +719,8 @@ def test_small_dag_with_duplicates_count():
 
     counts = get_node_type_counts(dag, count_duplicates=True)
     expected_counts = {
-        pt.array.Placeholder: 1,
-        pt.array.IndexLambda: 3
+        pt.Placeholder: 1,
+        pt.IndexLambda: 3
     }
 
     for node_type, expected_count in expected_counts.items():
@@ -760,7 +760,7 @@ def test_large_dag_with_duplicates_count():
 
     counts = get_node_type_counts(dag, count_duplicates=True)
 
-    assert counts[pt.array.Placeholder] == 1
+    assert counts[pt.Placeholder] == 1
     assert sum(counts.values()) == expected_node_count
 
     # Check that duplicates are correctly calculated
