@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from testlib import RandomDAGContext, make_random_dag
+from typing_extensions import override
 
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
@@ -603,33 +604,20 @@ def test_repr_array_is_deterministic():
         assert repr(dag) == repr(dag)  # noqa: PLR0124
 
 
-def test_empty_dag_count():
-    from pytato.analysis import get_node_type_counts, get_num_nodes
-
-    empty_dag = pt.make_dict_of_named_arrays({})
-
-    # Verify that get_num_nodes returns 0 for an empty DAG
-    assert get_num_nodes(empty_dag, count_duplicates=False) == 0
-
-    counts = get_node_type_counts(empty_dag)
-    assert len(counts) == 0
-
-
 def test_single_node_dag_count():
     from pytato.analysis import get_node_type_counts, get_num_nodes
 
     data = np.random.rand(4, 4)
-    single_node_dag = pt.make_dict_of_named_arrays(
-        {"result": pt.make_data_wrapper(data)})
+    single_node_dag = pt.make_data_wrapper(data)
 
     # Get counts per node type
-    node_counts = get_node_type_counts(single_node_dag)
+    node_counts = get_node_type_counts(single_node_dag, count_dict=True)
 
     # Assert that there is only one node of type DataWrapper
     assert node_counts == {pt.DataWrapper: 1}
 
     # Get total number of nodes
-    total_nodes = get_num_nodes(single_node_dag, count_duplicates=False)
+    total_nodes = get_num_nodes(single_node_dag, count_dict=True)
 
     assert total_nodes == 1
 
@@ -637,18 +625,19 @@ def test_single_node_dag_count():
 def test_small_dag_count():
     from pytato.analysis import get_node_type_counts, get_num_nodes
 
-    # Make a DAG using two nodes and one operation
+    # Make a DAG using two placeholders, one operation, and a dict of named arrays
     a = pt.make_placeholder(name="a", shape=(2, 2), dtype=np.float64)
-    b = a + 1
-    dag = pt.make_dict_of_named_arrays({"result": b})   # b = a + 1
+    b = pt.make_placeholder(name="b", shape=(2, 2), dtype=np.float64)
+    dag = pt.make_dict_of_named_arrays({"res0": a + 1, "res1": b})
 
-    # Verify that get_num_nodes returns 2 for a DAG with two nodes
-    assert get_num_nodes(dag, count_duplicates=False) == 2
+    # Verify that get_num_nodes returns 4 for a DAG with four nodes
+    assert get_num_nodes(dag, count_dict=True) == 4
 
-    counts = get_node_type_counts(dag)
-    assert len(counts) == 2
-    assert counts[pt.Placeholder] == 1   # "a"
+    counts = get_node_type_counts(dag, count_dict=True)
+    assert len(counts) == 3
+    assert counts[pt.Placeholder] == 2   # "a" / "b"
     assert counts[pt.IndexLambda] == 1   # single operation
+    assert counts[pt.DictOfNamedArrays] == 1   # dict
 
 
 def test_large_dag_count():
@@ -660,9 +649,9 @@ def test_large_dag_count():
     dag = make_large_dag(iterations, seed=42)
 
     # Verify that the number of nodes is equal to iterations + 1 (placeholder)
-    assert get_num_nodes(dag, count_duplicates=False) == iterations + 1
+    assert get_num_nodes(dag, count_dict=True) == iterations + 1
 
-    counts = get_node_type_counts(dag)
+    counts = get_node_type_counts(dag, count_dict=True)
     assert len(counts) >= 1
     assert counts[pt.Placeholder] == 1
     assert counts[pt.IndexLambda] == 100   # 100 operations
@@ -700,6 +689,19 @@ def test_dag_with_function_count():
     assert counts[pt.DictOfNamedArrays] == 1
 
 
+class SelfCachingCachedWalkMapper(pt.transform.CachedWalkMapper[[]]):
+    @override
+    def get_cache_key(self, expr: pt.transform.ArrayOrNames) -> pt.transform.VisitKeyT:
+        return expr
+
+
+def get_num_nodes_alt(expr: pt.transform.ArrayOrNames) -> int:
+    mapper = SelfCachingCachedWalkMapper()
+    mapper(expr)
+
+    return len(mapper._visited_arrays_or_names)
+
+
 def test_random_dag_count():
     from testlib import get_random_pt_dag
 
@@ -707,8 +709,7 @@ def test_random_dag_count():
     for i in range(80):
         dag = get_random_pt_dag(seed=i, axis_len=5)
 
-        assert get_num_nodes(dag, count_duplicates=False) == len(
-            pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag, count_dict=True) == get_num_nodes_alt(dag)
 
 
 def test_random_dag_with_comm_count():
@@ -721,8 +722,7 @@ def test_random_dag_with_comm_count():
         dag = get_random_pt_dag_with_send_recv_nodes(
             seed=i, rank=rank, size=size)
 
-        assert get_num_nodes(dag, count_duplicates=False) == len(
-            pt.transform.DependencyMapper()(dag))
+        assert get_num_nodes(dag, count_dict=True) == get_num_nodes_alt(dag)
 
 
 def test_small_dag_with_duplicates_count():
@@ -737,18 +737,19 @@ def test_small_dag_with_duplicates_count():
     dag = make_small_dag_with_duplicates()
 
     # Get the number of expressions, including duplicates
-    node_count = get_num_nodes(dag, count_duplicates=True)
+    node_count = get_num_nodes(dag, count_duplicates=True, count_dict=True)
     expected_node_count = 4
     assert node_count == expected_node_count
 
     # Get the number of occurrences of each unique expression
-    node_multiplicity = get_node_multiplicities(dag)
+    node_multiplicity = get_node_multiplicities(
+        dag, count_duplicates=True, count_dict=True)
     assert any(count > 1 for count in node_multiplicity.values())
 
     # Get difference in duplicates
     num_duplicates = sum(count - 1 for count in node_multiplicity.values())
 
-    counts = get_node_type_counts(dag, count_duplicates=True)
+    counts = get_node_type_counts(dag, count_duplicates=True, count_dict=True)
     expected_counts = {
         pt.Placeholder: 1,
         pt.IndexLambda: 3
@@ -758,10 +759,8 @@ def test_small_dag_with_duplicates_count():
         assert counts[node_type] == expected_count
 
     # Check that duplicates are correctly calculated
-    assert node_count - num_duplicates == len(
-        pt.transform.DependencyMapper(err_on_collision=False)(dag))
-    assert node_count - num_duplicates == get_num_nodes(
-        dag, count_duplicates=False)
+    assert node_count - num_duplicates == get_num_nodes_alt(dag)
+    assert node_count - num_duplicates == get_num_nodes(dag, count_dict=True)
 
 
 def test_large_dag_with_duplicates_count():
@@ -777,10 +776,10 @@ def test_large_dag_with_duplicates_count():
     dag = make_large_dag_with_duplicates(iterations, seed=42)
 
     # Get the number of expressions, including duplicates
-    node_count = get_num_nodes(dag, count_duplicates=True)
+    node_count = get_num_nodes(dag, count_duplicates=True, count_dict=True)
 
     # Get the number of occurrences of each unique expression
-    node_multiplicity = get_node_multiplicities(dag)
+    node_multiplicity = get_node_multiplicities(dag, count_dict=True)
     assert any(count > 1 for count in node_multiplicity.values())
 
     expected_node_count = sum(count for count in node_multiplicity.values())
@@ -789,16 +788,14 @@ def test_large_dag_with_duplicates_count():
     # Get difference in duplicates
     num_duplicates = sum(count - 1 for count in node_multiplicity.values())
 
-    counts = get_node_type_counts(dag, count_duplicates=True)
+    counts = get_node_type_counts(dag, count_duplicates=True, count_dict=True)
 
     assert counts[pt.Placeholder] == 1
     assert sum(counts.values()) == expected_node_count
 
     # Check that duplicates are correctly calculated
-    assert node_count - num_duplicates == len(
-        pt.transform.DependencyMapper(err_on_collision=False)(dag))
-    assert node_count - num_duplicates == get_num_nodes(
-        dag, count_duplicates=False)
+    assert node_count - num_duplicates == get_num_nodes_alt(dag)
+    assert node_count - num_duplicates == get_num_nodes(dag, count_dict=True)
 
 
 def test_dag_with_duplicates_and_function_count():
@@ -1377,12 +1374,11 @@ def test_tagcountmapper():
     rdagc_pt = RandomDAGContext(np.random.default_rng(seed=seed),
                                     axis_len=axis_len, use_numpy=False)
 
-    out = make_random_dag(rdagc_pt).tagged(ExistentTag())
+    dag = make_random_dag(rdagc_pt).tagged(ExistentTag())
 
-    dag = pt.transform.deduplicate(pt.make_dict_of_named_arrays({"out": out}))
-
-    # get_num_nodes() returns an extra DictOfNamedArrays node
-    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
+    assert (
+        get_num_tags_of_type(dag, frozenset())
+        == get_num_nodes(dag, count_dict=True))
 
     assert get_num_tags_of_type(dag, NonExistentTag) == 0
     assert get_num_tags_of_type(dag, frozenset((ExistentTag,))) == 1
@@ -1392,7 +1388,9 @@ def test_tagcountmapper():
     a = pt.make_data_wrapper(np.arange(27))
     dag = a+a+a+a+a+a+a+a
 
-    assert get_num_tags_of_type(dag, frozenset()) == get_num_nodes(dag)
+    assert (
+        get_num_tags_of_type(dag, frozenset())
+        == get_num_nodes(dag, count_dict=True))
 
 
 def test_expand_dims_input_validate():

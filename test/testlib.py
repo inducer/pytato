@@ -10,7 +10,7 @@ from typing_extensions import Never
 from pytools.tag import Tag
 
 import pytato as pt
-from pytato.transform import Mapper
+from pytato.transform import ArrayOrNames, Mapper
 
 
 if TYPE_CHECKING:
@@ -299,7 +299,7 @@ def get_random_pt_dag(seed: int,
                       axis_len: int = 4,
                       convert_dws_to_placeholders: bool = False,
                       allow_duplicate_nodes: bool = False
-                      ) -> pt.DictOfNamedArrays:
+                      ) -> ArrayOrNames:
     if additional_generators is None:
         additional_generators = []
 
@@ -309,14 +309,13 @@ def get_random_pt_dag(seed: int,
             axis_len=axis_len, use_numpy=False,
             allow_duplicate_nodes=allow_duplicate_nodes,
             additional_generators=additional_generators)
-    dag = pt.make_dict_of_named_arrays({"result": make_random_dag(rdagc_comm)})
+    dag = make_random_dag(rdagc_comm)
 
     if convert_dws_to_placeholders:
         from pytools import UniqueNameGenerator
         vng = UniqueNameGenerator()
 
-        def make_dws_placeholder(expr: pt.transform.ArrayOrNames
-                                 ) -> pt.transform.ArrayOrNames:
+        def make_dws_placeholder(expr: ArrayOrNames) -> ArrayOrNames:
             if isinstance(expr, pt.DataWrapper):
                 return pt.make_placeholder(vng("_pt_ph"),
                                            expr.shape, expr.dtype)
@@ -336,7 +335,7 @@ def get_random_pt_dag_with_send_recv_nodes(
         comm_fake_probability: int = 500,
         axis_len: int = 4,
         convert_dws_to_placeholders: bool = False
-        ) -> pt.DictOfNamedArrays:
+        ) -> ArrayOrNames:
     comm_tag = 17
 
     def gen_comm(rdagc: RandomDAGContext) -> pt.Array:
@@ -356,7 +355,7 @@ def get_random_pt_dag_with_send_recv_nodes(
         additional_generators=[(comm_fake_probability, gen_comm)])
 
 
-def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
+def make_large_dag(iterations: int, seed: int = 0) -> ArrayOrNames:
     """
     Builds a DAG with emphasis on number of operations.
     """
@@ -376,23 +375,20 @@ def make_large_dag(iterations: int, seed: int = 0) -> pt.DictOfNamedArrays:
         current = operation(current, value)
 
     # DAG should have `iterations` number of operations
-    return pt.make_dict_of_named_arrays({"result": current})
+    return current
 
 
-def make_small_dag_with_duplicates() -> pt.DictOfNamedArrays:
+def make_small_dag_with_duplicates() -> ArrayOrNames:
     x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
 
     expr1 = 2 * x
     expr2 = 2 * x
 
-    y = expr1 + expr2
-
     # Has duplicates of the 2*x operation
-    return pt.make_dict_of_named_arrays({"result": y})
+    return expr1 + expr2
 
 
-def make_large_dag_with_duplicates(iterations: int,
-                                   seed: int = 0) -> pt.DictOfNamedArrays:
+def make_large_dag_with_duplicates(iterations: int, seed: int = 0) -> ArrayOrNames:
 
     random.seed(seed)
     rng = np.random.default_rng(seed)
@@ -419,8 +415,7 @@ def make_large_dag_with_duplicates(iterations: int,
     all_exprs = [current, *duplicates]
     combined_expr = pt.stack(all_exprs, axis=0)
 
-    result = pt.sum(combined_expr, axis=0)
-    return pt.make_dict_of_named_arrays({"result": result})
+    return pt.sum(combined_expr, axis=0)
 
 # }}}
 
