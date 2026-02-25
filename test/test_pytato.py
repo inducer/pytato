@@ -770,6 +770,272 @@ def test_large_dag_with_duplicates_count():
         dag, count_duplicates=False)
 
 
+def test_scalar_flop_count():
+    from pytato.scalar_expr import FlopCounter
+    fc = FlopCounter({
+        "+": 1,
+        "*": 1,
+        "/": 4,
+        "//": 4,
+        "%": 4,
+        "**": 8,
+        "<": 1,
+        "min": 1,
+        "max": 1,
+        "f": 32})
+
+    import pymbolic.primitives as prim
+    from pymbolic import Variable
+
+    x = Variable("x")
+    y = Variable("y")
+
+    assert fc(Variable("f")(x)) == 32
+
+    assert fc(x[0]) == 0
+
+    assert fc(x + 2) == 1
+    assert fc(2 + y) == 1
+    assert fc(x + y) == 1
+
+    assert fc(prim.Sum((2, x, y))) == 2
+
+    assert fc(x - 2) == 1
+    assert fc(2 - y) == 2
+    assert fc(x - y) == 2
+
+    assert fc(x * 2) == 1
+    assert fc(2 * y) == 1
+    assert fc(x * y) == 1
+
+    assert fc(prim.Product((2, x, y))) == 2
+
+    assert fc(x.or_(y)) == 0
+    assert fc(x.and_(y)) == 0
+
+    assert fc(x / 2) == 4
+    assert fc(2 / y) == 4
+    assert fc(x / y) == 4
+
+    assert fc(x // 2) == 4
+
+    assert fc(x % 2) == 0
+
+    assert fc(x ** 3) == 3
+    assert fc(x ** 0.3) == 8
+
+    assert fc(x.lt(y)) == 1
+
+    assert fc(prim.If(x, x, y)) == 0
+
+    assert fc(prim.Min((2, x, y))) == 2
+    assert fc(prim.Max((2, x, y))) == 2
+
+    from constantdict import constantdict
+
+    from pytato.reductions import SumReductionOperation
+    from pytato.scalar_expr import Reduce
+
+    assert fc(Reduce(x, SumReductionOperation(), constantdict({"_0": (0, 10)}))) == 9
+
+
+def test_flop_count():
+    from pytato.analysis import (
+        UndefinedOpFlopCountError,
+        get_default_op_name_to_num_flops,
+        get_num_flops,
+    )
+    from pytato.tags import ImplStored
+
+    # {{{ basic expression
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = x + y
+    u = 2*z
+    v = 3*z
+    expr = u - v
+
+    # expr[i, j] = 2*(x[i, j] + y[i, j]) + (-1)*3*(x[i, j] + y[i, j])
+    assert get_num_flops(expr) == 40*6
+
+    # }}}
+
+    # {{{ expression with operators that don't have default flop counts
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    expr = pt.cmath.exp(x / y)
+
+    with pytest.raises(UndefinedOpFlopCountError):
+        get_num_flops(expr)
+
+    op_name_to_num_flops = get_default_op_name_to_num_flops()
+    op_name_to_num_flops.update({
+        "/": 4,
+        "pytato.c99.exp": 8})
+
+    assert get_num_flops(expr, op_name_to_num_flops) == 40*12
+
+    # }}}
+
+    # {{{ multiple expressions
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = x + y
+    u = 2*z
+    v = 3*z
+    expr = pt.make_dict_of_named_arrays({"u": u, "v": v})
+
+    # expr["u"][i, j] = 2*(x[i, j] + y[i, j])
+    # expr["v"][i, j] = 3*(x[i, j] + y[i, j])
+    assert get_num_flops(expr) == 40*4
+
+    # }}}
+
+    # {{{ subscripting
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = x + y
+    u = 2*z
+    v = 3*z
+    expr = (u - v)[::2, :]
+
+    # expr[i, j] = 2*(x[2*i, j] + y[2*i, j]) + (-1)*3*(x[2*i, j] + y[2*i, j])
+    assert get_num_flops(expr) == 20*6
+
+    # }}}
+
+    # {{{ materialized array
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = (x + y).tagged(ImplStored())
+    u = 2*z
+    v = 3*z
+    expr = u - v
+
+    #    z[i, j] = x[i, j] + y[i, j]
+    # expr[i, j] = 2*z[i, j] + (-1)*3*z[i, j]
+    assert get_num_flops(expr) == 40 + 40*4
+
+    # }}}
+
+    # {{{ materialized array and subscripting
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = (x + y).tagged(ImplStored())
+    u = 2*z
+    v = 3*z
+    expr = (u - v)[::2, :]
+
+    #    z[i, j] = x[i, j] + y[i, j]
+    # expr[i, j] = 2*z[2*i, j] + (-1)*3*z[2*i, j]
+    assert get_num_flops(expr) == 40 + 20*4
+
+    # }}}
+
+    # {{{ einsum
+
+    x = pt.make_placeholder("x", (2, 3, 4))
+    y = pt.make_placeholder("y", (3, 4))
+    expr = pt.einsum("ijk,jk->ijk", x, y)
+
+    # expr[i, j, k] = x[i, j, k] * y[j, k]
+    assert get_num_flops(expr) == 24
+
+    x = pt.make_placeholder("x", (2, 3, 4))
+    y = pt.make_placeholder("y", (3, 4))
+    expr = pt.einsum("ijk,jk->i", x, y)
+
+    # expr[i] = sum(sum(x[i, j, k] * y[j, k], j), k)
+    assert get_num_flops(expr) == 2*(4 * (3*1 + 2) + 3)
+
+    # }}}
+
+
+def test_materialized_node_flop_counts():
+    from pytato.analysis import get_materialized_node_flop_counts
+    from pytato.tags import ImplStored
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    z = (x + y).tagged(ImplStored())
+    u = 2*z
+    v = 3*z
+    expr = u - v
+
+    materialized_node_to_flop_count = get_materialized_node_flop_counts(expr)
+
+    #    z[i, j] = x[i, j] + y[i, j]
+    # expr[i, j] = 2*z[i, j] + (-1)*3*z[i, j]
+    assert len(materialized_node_to_flop_count) == 4
+    assert x in materialized_node_to_flop_count
+    assert y in materialized_node_to_flop_count
+    assert z in materialized_node_to_flop_count
+    assert expr.tagged(ImplStored()) in materialized_node_to_flop_count
+    assert materialized_node_to_flop_count[x] == 0
+    assert materialized_node_to_flop_count[y] == 0
+    assert materialized_node_to_flop_count[z] == 40
+    assert materialized_node_to_flop_count[expr.tagged(ImplStored())] == 40*4
+
+
+def test_unmaterialized_node_flop_counts():
+    from pytato.analysis import get_unmaterialized_node_flop_counts
+    from pytato.tags import ImplStored
+
+    x = pt.make_placeholder("x", (10, 4))
+    y = pt.make_placeholder("y", (10, 4))
+
+    # Make a reduction over a bunch of expressions that reference z
+    z = x + y
+    w = [i*z for i in range(1, 11)]
+    s = [w[0]]
+    for w_i in w[1:-1]:
+        s.append(s[-1] + w_i)
+    expr = s[-1] + w[-1]
+
+    unmaterialized_node_to_flop_counts = get_unmaterialized_node_flop_counts(expr)
+
+    materialized_expr = expr.tagged(ImplStored())
+
+    # Everything except expr stays unmaterialized
+    assert len(unmaterialized_node_to_flop_counts) == 1 + 10 + 8
+    assert z in unmaterialized_node_to_flop_counts
+    assert all(w_i in unmaterialized_node_to_flop_counts for w_i in w)
+    assert all(s_i in unmaterialized_node_to_flop_counts for s_i in s)
+    flop_counts = unmaterialized_node_to_flop_counts[z]
+    assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
+    assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
+    assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
+        == 40*10
+    assert flop_counts.nflops_if_materialized == 40
+    for w_i in w:
+        flop_counts = unmaterialized_node_to_flop_counts[w_i]
+        assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
+        assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
+        assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
+            == 40*2
+        assert flop_counts.nflops_if_materialized == 40*2
+    for i, s_i in enumerate(s):
+        flop_counts = unmaterialized_node_to_flop_counts[s_i]
+        assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
+        assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
+        assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
+            == 40*2*(i+1) + 40*i
+        assert flop_counts.nflops_if_materialized == 40*2*(i+1) + 40*i
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))

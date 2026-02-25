@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from constantdict import constantdict
+from typing_extensions import override
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
@@ -80,22 +81,27 @@ class _NoValue:
 
 class ReductionOperation(ABC):
     """
+    .. automethod:: scalar_op_name
     .. automethod:: neutral_element
     .. automethod:: __hash__
     .. automethod:: __eq__
     """
+    @classmethod
+    @abstractmethod
+    def scalar_op_name(cls) -> str:
+        ...
 
     @abstractmethod
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
-        pass
+        ...
 
     @abstractmethod
     def __hash__(self) -> int:
-        pass
+        ...
 
     @abstractmethod
     def __eq__(self, other: object) -> bool:
-        pass
+        ...
 
 
 class _StatelessReductionOperation(ReductionOperation):
@@ -110,16 +116,31 @@ class _StatelessReductionOperation(ReductionOperation):
 
 
 class SumReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "+"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return 0
 
 
 class ProductReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "*"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return 1
 
 
 class MaxReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "max"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         if dtype.kind == "f":
             return dtype.type(float("-inf"))
@@ -130,6 +151,11 @@ class MaxReductionOperation(_StatelessReductionOperation):
 
 
 class MinReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "min"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         if dtype.kind == "f":
             return dtype.type(float("inf"))
@@ -140,11 +166,21 @@ class MinReductionOperation(_StatelessReductionOperation):
 
 
 class AllReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "or"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return np.bool_(True)
 
 
 class AnyReductionOperation(_StatelessReductionOperation):
+    @override
+    @classmethod
+    def scalar_op_name(cls):
+        return "and"
+
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return np.bool_(False)
 
