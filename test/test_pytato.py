@@ -669,6 +669,37 @@ def test_large_dag_count():
     assert sum(counts.values()) == iterations + 1
 
 
+def test_dag_with_function_count():
+    from pytato.analysis import get_node_type_counts, get_num_nodes
+
+    def f(x):
+        return x, 2*x
+
+    x = pt.make_placeholder(name="x", shape=(2, 2), dtype=np.float64)
+
+    call = pt.trace_call(f, x)
+
+    dag = pt.transform.deduplicate(
+        pt.make_dict_of_named_arrays({
+            "result0": call[0],
+            "result1": call[1]}))
+
+    # placeholder x 2 (one for input x, one for f parameter x), 2*x, function, call,
+    # named call result for call[0], named call result for call[1], dict of named
+    # arrays
+
+    assert get_num_nodes(dag, count_dict=True) == 8
+
+    counts = get_node_type_counts(dag, count_dict=True)
+    assert len(counts) == 6
+    assert counts[pt.Placeholder] == 2
+    assert counts[pt.IndexLambda] == 1
+    assert counts[pt.FunctionDefinition] == 1
+    assert counts[pt.Call] == 1
+    assert counts[pt.NamedCallResult] == 2
+    assert counts[pt.DictOfNamedArrays] == 1
+
+
 def test_random_dag_count():
     from testlib import get_random_pt_dag
 
@@ -768,6 +799,100 @@ def test_large_dag_with_duplicates_count():
         pt.transform.DependencyMapper(err_on_collision=False)(dag))
     assert node_count - num_duplicates == get_num_nodes(
         dag, count_duplicates=False)
+
+
+def test_dag_with_duplicates_and_function_count():
+    from pytato.analysis import (
+        get_node_multiplicities,
+        get_node_type_counts,
+        get_num_nodes,
+    )
+
+    zeros = pt.zeros(shape=(2, 2), dtype=np.float64)
+
+    def f():
+        return 2*zeros, 2*zeros
+
+    call = pt.trace_call(f)
+
+    dag = pt.make_dict_of_named_arrays({
+        "result0": call[0],
+        "result1": call[1],
+        "result2": 2*zeros})
+
+    # {{{ counting with duplicates
+
+    # zeros x 2 (once inside f, once outside), 2*zeros x 3 (twice inside f, once
+    # outside), function, call, named call result for call[0], named call result for
+    # call[1], dict of named arrays
+
+    assert get_num_nodes(
+        dag, count_duplicates=True, count_in_different_functions=True,
+        count_dict=True) == 10
+
+    counts = get_node_type_counts(
+        dag, count_duplicates=True, count_in_different_functions=True,
+        count_dict=True)
+    assert len(counts) == 5
+    assert counts[pt.IndexLambda] == 5
+    assert counts[pt.FunctionDefinition] == 1
+    assert counts[pt.Call] == 1
+    assert counts[pt.NamedCallResult] == 2
+    assert counts[pt.DictOfNamedArrays] == 1
+
+    multiplicities = get_node_multiplicities(
+        dag, traverse_functions=True, count_in_different_functions=True,
+        count_dict=True)
+    assert len(multiplicities) == 7
+    assert sum(count for count in multiplicities.values()) == 10
+    assert multiplicities[zeros] == 2
+    assert multiplicities[2*zeros] == 3
+
+    multiplicities = get_node_multiplicities(
+        dag, traverse_functions=False, count_in_different_functions=True,
+        count_dict=True)
+    assert len(multiplicities) == 6
+    assert sum(count for count in multiplicities.values()) == 6
+    assert multiplicities[zeros] == 1
+    assert multiplicities[2*zeros] == 1
+
+    # }}}
+
+    # {{{ counting without duplicates
+
+    # zeros x 2 (once inside f, once outside), 2*zeros x 2 (once inside f, once
+    # outside), function, call, named call result for call[0], named call result for
+    # call[1], dict of named arrays
+
+    assert get_num_nodes(
+        dag, count_in_different_functions=True, count_dict=True) == 9
+
+    counts = get_node_type_counts(
+        dag, count_in_different_functions=True, count_dict=True)
+    assert len(counts) == 5
+    assert counts[pt.IndexLambda] == 4
+    assert counts[pt.FunctionDefinition] == 1
+    assert counts[pt.Call] == 1
+    assert counts[pt.NamedCallResult] == 2
+    assert counts[pt.DictOfNamedArrays] == 1
+
+    multiplicities = get_node_multiplicities(
+        dag, traverse_functions=True, count_duplicates=False,
+        count_in_different_functions=True, count_dict=True)
+    assert len(multiplicities) == 7
+    assert sum(count for count in multiplicities.values()) == 9
+    assert multiplicities[zeros] == 2
+    assert multiplicities[2*zeros] == 2
+
+    multiplicities = get_node_multiplicities(
+        dag, traverse_functions=False, count_duplicates=False,
+        count_in_different_functions=True, count_dict=True)
+    assert len(multiplicities) == 6
+    assert sum(count for count in multiplicities.values()) == 6
+    assert multiplicities[zeros] == 1
+    assert multiplicities[2*zeros] == 1
+
+    # }}}
 
 
 def test_rec_get_user_nodes():
