@@ -149,7 +149,7 @@ from pytato.distributed.partition import (
 )
 from pytato.distributed.tags import number_distributed_tags
 from pytato.distributed.verify import verify_distributed_partition
-from pytato.function import trace_call
+from pytato.function import Call, FunctionDefinition, NamedCallResult, trace_call
 from pytato.loopy import LoopyCall
 from pytato.pad import pad
 from pytato.reductions import all, amax, amin, any, prod, sum
@@ -179,6 +179,7 @@ __all__ = (
     "Axis",
     "AxisPermutation",
     "BasicIndex",
+    "Call",
     "Concatenate",
     "DataWrapper",
     "DictOfNamedArrays",
@@ -188,6 +189,7 @@ __all__ = (
     "DistributedSend",
     "DistributedSendRefHolder",
     "Einsum",
+    "FunctionDefinition",
     "IndexBase",
     "IndexLambda",
     "IndexRemappingBase",
@@ -195,6 +197,7 @@ __all__ = (
     "LoopyCall",
     "LoopyPyOpenCLTarget",
     "NamedArray",
+    "NamedCallResult",
     "Placeholder",
     "ReductionDescriptor",
     "Reshape",
