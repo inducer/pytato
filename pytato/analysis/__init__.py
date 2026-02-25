@@ -27,13 +27,12 @@ THE SOFTWARE.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, overload
 
 from orderedsets import FrozenOrderedSet
 from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
-from pymbolic.mapper.optimize import optimize_mapper
 
 from pytato.array import (
     Array,
@@ -51,15 +50,14 @@ from pytato.array import (
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.transform import (
     ArrayOrNames,
-    CachedWalkMapper,
-    CombineMapper,
+    MapAndReduceMapper,
     Mapper,
     VisitKeyT,
 )
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
     import pytools.tag
 
@@ -74,20 +72,40 @@ __doc__ = """
 
 .. autofunction:: is_einsum_similar_to_subscript
 
-.. autofunction:: get_num_nodes
-
-.. autofunction:: get_node_type_counts
-
-.. autofunction:: get_node_multiplicities
-
-.. autofunction:: get_num_call_sites
-
 .. autoclass:: DirectPredecessorsGetter
 .. autoclass:: ListOfDirectPredecessorsGetter
 
-.. autoclass:: TagCountMapper
+.. autofunction:: get_node_type_counts
+.. autofunction:: get_num_nodes
+.. autofunction:: get_node_multiplicities
+.. autofunction:: get_num_call_sites
 .. autofunction:: get_num_tags_of_type
 """
+
+
+# {{{ reduce_dicts
+
+KeyT = TypeVar("KeyT")
+ValueT = TypeVar("ValueT")
+
+
+def reduce_dicts(
+        # FIXME: Is there a way to make argument type annotation more specific?
+        function: Callable[..., ValueT],
+        iterable: Iterable[dict[KeyT, ValueT]]) -> dict[KeyT, ValueT]:
+    """
+    Apply *function* to the collection of values corresponding to each unique key in
+    *iterable*.
+    """
+    key_to_list_of_values: dict[KeyT, list[ValueT]] = defaultdict(list)
+    for d in iterable:
+        for key, value in d.items():
+            key_to_list_of_values[key].append(value)
+    return {
+        key: function(*list_of_values)
+        for key, list_of_values in key_to_list_of_values.items()}
+
+# }}}
 
 
 # {{{ ListOfUsersCollector
@@ -482,246 +500,394 @@ class DirectPredecessorsGetter:
 # }}}
 
 
-# {{{ NodeCountMapper
+# {{{ get_node_type_counts
 
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class NodeCountMapper(CachedWalkMapper[[]]):
-    """
-    Counts the number of nodes of a given type in a DAG.
+NodeTypeCountDict: TypeAlias = dict[type[ArrayOrNames | FunctionDefinition], int]
 
-    .. autoattribute:: expr_type_counts
-    .. autoattribute:: count_duplicates
 
-       Dictionary mapping node types to number of nodes of that type.
-    """
-
+# FIXME: I'm on the fence about whether these mapper classes should be kept around
+# if they can be replaced with a call to map_and_reduce (which will be the case
+# for most of these mappers once count_dict is removed). AFAIK the only real use
+# case for using the mapper directly is if you want to compute a result for a
+# collection of subexpressions by calling it multiple times while accumulating the set
+# of visited nodes. But in most cases you could do that by putting them in a
+# DictOfNamedArrays first and then call it once instead? *shrug*
+# FIXME: optimize_mapper?
+class NodeTypeCountMapper(MapAndReduceMapper[NodeTypeCountDict]):
+    """Count the number of nodes of each type in a DAG."""
     def __init__(
             self,
-            count_duplicates: bool = False,
-            _visited_functions: set[VisitKeyT] | None = None,
-            ) -> None:
-        super().__init__(_visited_functions=_visited_functions)
+            traverse_functions: bool = True,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True,
+            map_dict: bool = False) -> None:
+        super().__init__(
+            map_fn=lambda expr: {type(expr): 1},
+            reduce_fn=lambda *args: reduce_dicts(
+                lambda *values: sum(values, 0), args),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
 
-        self.expr_type_counts: dict[type[Any], int] = defaultdict(int)
-        self.count_duplicates: bool = count_duplicates
-
-    @override
-    def get_cache_key(self, expr: ArrayOrNames) -> int | ArrayOrNames:
-        # Returns unique nodes only if count_duplicates is False
-        return id(expr) if self.count_duplicates else expr
-
-    @override
-    def get_function_definition_cache_key(
-            self, expr: FunctionDefinition) -> int | FunctionDefinition:
-        # Returns unique nodes only if count_duplicates is False
-        return id(expr) if self.count_duplicates else expr
+        # FIXME: Remove this once count_dict argument has been eliminated from
+        # get_node_type_counts
+        self.map_dict: bool = map_dict
 
     @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
-            count_duplicates=self.count_duplicates,
-            _visited_functions=self._visited_functions)
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions,
+            map_dict=self.map_dict)
 
+    # FIXME: Remove this once count_dict argument has been eliminated from
+    # get_node_type_counts
     @override
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
-        if not isinstance(expr, DictOfNamedArrays):
-            self.expr_type_counts[type(expr)] += 1
+    def map_dict_of_named_arrays(
+            self,
+            expr: DictOfNamedArrays,
+            visited_node_keys: set[VisitKeyT] | None) -> NodeTypeCountDict:
+        if self.map_dict:
+            return self.reduce_fn(
+                self.map_fn(expr),
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
+        else:
+            return self.reduce_fn(
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
 
 
 def get_node_type_counts(
-        outputs: ArrayOrNames,
-        count_duplicates: bool = False
-        ) -> dict[type[Any], int]:
+        outputs: ArrayOrNames | FunctionDefinition, *,
+        traverse_functions: bool = True,
+        count_duplicates: bool = False,
+        count_in_different_functions: bool | None = None,
+        count_dict: bool | None = None) -> NodeTypeCountDict:
     """
     Returns a dictionary mapping node types to node count for that type
     in DAG *outputs*.
-
-    Instances of `DictOfNamedArrays` are excluded from counting.
     """
+    if count_in_different_functions is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_in_different_functions' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_in_different_functions = False
 
-    ncm = NodeCountMapper(count_duplicates)
-    ncm(outputs)
+    # FIXME: Deprecate/remove count_dict argument entirely after default value is
+    # changed
+    if count_dict is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_dict' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_dict = False
 
-    return ncm.expr_type_counts
+    ntcm = NodeTypeCountMapper(
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions,
+        map_dict=count_dict)
+    return ntcm(outputs)
+
+# }}}
+
+
+# {{{ get_num_nodes
+
+# FIXME: optimize_mapper?
+class NodeCountMapper(MapAndReduceMapper[int]):
+    """Count the total number of nodes in a DAG."""
+    def __init__(
+            self,
+            traverse_functions: bool = True,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True,
+            map_dict: bool = False) -> None:
+        super().__init__(
+            map_fn=lambda _: 1,
+            reduce_fn=lambda *args: sum(args, 0),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
+        # FIXME: Remove this once count_dict argument has been eliminated from
+        # get_num_nodes
+        self.map_dict: bool = map_dict
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions,
+            map_dict=self.map_dict)
+
+    # FIXME: Remove this once count_dict argument has been eliminated from
+    # get_num_nodes
+    @override
+    def map_dict_of_named_arrays(
+            self,
+            expr: DictOfNamedArrays,
+            visited_node_keys: set[VisitKeyT] | None) -> int:
+        if self.map_dict:
+            return self.reduce_fn(
+                self.map_fn(expr),
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
+        else:
+            return self.reduce_fn(
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
 
 
 def get_num_nodes(
-        outputs: ArrayOrNames,
-        count_duplicates: bool | None = None
-        ) -> int:
+        outputs: ArrayOrNames | FunctionDefinition, *,
+        traverse_functions: bool = True,
+        count_duplicates: bool = False,
+        count_in_different_functions: bool | None = None,
+        count_dict: bool | None = None) -> int:
     """
     Returns the number of nodes in DAG *outputs*.
-    Instances of `DictOfNamedArrays` are excluded from counting.
     """
+    if count_in_different_functions is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_in_different_functions' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_in_different_functions = False
+
+    # FIXME: Deprecate/remove count_dict argument entirely after default value is
+    # changed
+    if count_dict is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_dict' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_dict = False
+
+    ncm = NodeCountMapper(
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions,
+        map_dict=count_dict)
+    return ncm(outputs)
+
+# }}}
+
+
+# {{{ get_node_multiplicities
+
+NodeMultiplicityDict: TypeAlias = dict[ArrayOrNames | FunctionDefinition, int]
+
+
+# FIXME: optimize_mapper?
+class NodeMultiplicityMapper(MapAndReduceMapper[NodeMultiplicityDict]):
+    """
+    Computes the multiplicity of each unique node in a DAG.
+
+    See :func:`get_node_multiplicities` for details.
+    """
+    def __init__(
+            self,
+            traverse_functions: bool = True,
+            map_duplicates: bool = True,
+            map_in_different_functions: bool = True,
+            map_dict: bool = False) -> None:
+        super().__init__(
+            map_fn=lambda expr: {expr: 1},
+            reduce_fn=lambda *args: reduce_dicts(
+                lambda *values: sum(values, 0), args),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
+        # FIXME: Remove this once count_dict argument has been eliminated from
+        # get_node_multiplicities
+        self.map_dict: bool = map_dict
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions,
+            map_dict=self.map_dict)
+
+    # FIXME: Remove this once count_dict argument has been eliminated from
+    # get_node_multiplicities
+    @override
+    def map_dict_of_named_arrays(
+            self,
+            expr: DictOfNamedArrays,
+            visited_node_keys: set[VisitKeyT] | None) -> NodeMultiplicityDict:
+        if self.map_dict:
+            return self.reduce_fn(
+                self.map_fn(expr),
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
+        else:
+            return self.reduce_fn(
+                *(self.rec(val.expr, visited_node_keys) for val in expr.values()))
+
+
+def get_node_multiplicities(
+        outputs: ArrayOrNames | FunctionDefinition,
+        traverse_functions: bool = True,
+        count_duplicates: bool = True,
+        count_in_different_functions: bool = True,
+        count_dict: bool | None = None) -> NodeMultiplicityDict:
+    """
+    Computes the multiplicity of each unique node in a DAG.
+
+    The multiplicity of a node `x` is the number of times an object equal to `x` will
+    be mapped during a cached DAG traversal. This varies depending on the combination
+    of options used.
+
+    :param count_duplicates: If *True*, distinct node instances equal to `x` will be
+        counted.
+    :param count_in_different_functions: If *True*, instances equal to `x` in
+        different functions will be counted.
+    """
+    # FIXME: Deprecate/remove count_dict argument entirely after default value is
+    # changed
+    if count_dict is None:
+        from warnings import warn
+        warn(
+            "The default value of 'count_dict' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        count_dict = False
+
+    nmm = NodeMultiplicityMapper(
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions,
+        map_dict=count_dict)
+    return nmm(outputs)
+
+# }}}
+
+
+# {{{ get_num_call_sites
+
+# FIXME: optimize_mapper?
+class CallSiteCountMapper(MapAndReduceMapper[int]):
+    """Count the number of :class:`~pytato.Call` nodes in a DAG."""
+    def __init__(
+            self,
+            traverse_functions: bool = True,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True) -> None:
+        super().__init__(
+            map_fn=lambda expr: int(isinstance(expr, Call)),
+            reduce_fn=lambda *args: sum(args, 0),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions)
+
+
+def get_num_call_sites(
+        outputs: ArrayOrNames | FunctionDefinition,
+        traverse_functions: bool = True,
+        count_duplicates: bool | None = None,
+        count_in_different_functions: bool = True) -> int:
+    """Returns the number of :class:`pytato.function.Call` nodes in DAG *outputs*."""
     if count_duplicates is None:
         from warnings import warn
         warn(
             "The default value of 'count_duplicates' will change "
-            "from True to False in 2025. "
+            "from True to False in Q3 2026. "
             "For now, pass the desired value explicitly.",
             DeprecationWarning, stacklevel=2)
         count_duplicates = True
 
-    ncm = NodeCountMapper(count_duplicates)
-    ncm(outputs)
-
-    return sum(ncm.expr_type_counts.values())
-
-# }}}
-
-
-# {{{ NodeMultiplicityMapper
-
-
-class NodeMultiplicityMapper(CachedWalkMapper[[]]):
-    """
-    Computes the multiplicity of each unique node in a DAG.
-
-    The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
-    that equal `x`.
-
-    .. autoattribute:: expr_multiplicity_counts
-    """
-    def __init__(self, _visited_functions: set[Any] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
-
-        self.expr_multiplicity_counts: \
-            dict[ArrayOrNames | FunctionDefinition, int] = defaultdict(int)
-
-    @override
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        # Returns each node, including nodes that are duplicates
-        return id(expr)
-
-    @override
-    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
-        # Returns each node, including nodes that are duplicates
-        return id(expr)
-
-    @override
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
-        if not isinstance(expr, DictOfNamedArrays):
-            self.expr_multiplicity_counts[expr] += 1
-
-
-def get_node_multiplicities(
-        outputs: ArrayOrNames) -> dict[ArrayOrNames | FunctionDefinition, int]:
-    """
-    Returns the multiplicity per `expr`.
-    """
-    nmm = NodeMultiplicityMapper()
-    nmm(outputs)
-
-    return nmm.expr_multiplicity_counts
+    cscm = CallSiteCountMapper(
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions)
+    return cscm(outputs)
 
 # }}}
 
 
-# {{{ CallSiteCountMapper
+# {{{ get_num_tags_of_type
 
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class CallSiteCountMapper(CachedWalkMapper[[]]):
+# FIXME: optimize_mapper?
+class TagCountMapper(MapAndReduceMapper[int]):
     """
-    Counts the number of :class:`~pytato.Call` nodes in a DAG.
-
-    .. attribute:: count
-
-       The number of nodes.
-    """
-
-    def __init__(self, _visited_functions: set[VisitKeyT] | None = None) -> None:
-        super().__init__(_visited_functions=_visited_functions)
-        self.count = 0
-
-    @override
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
-
-    @override
-    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> int:
-        return id(expr)
-
-    @override
-    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
-        if isinstance(expr, Call):
-            self.count += 1
-
-    @override
-    def map_function_definition(self, expr: FunctionDefinition) -> None:
-        if not self.visit(expr):
-            return
-
-        new_mapper = self.clone_for_callee(expr)
-        for subexpr in expr.returns.values():
-            new_mapper(subexpr)
-        self.count += new_mapper.count
-
-        self.post_visit(expr)
-
-
-def get_num_call_sites(outputs: ArrayOrNames) -> int:
-    """Returns the number of nodes in DAG *outputs*."""
-    cscm = CallSiteCountMapper()
-    cscm(outputs)
-
-    return cscm.count
-
-# }}}
-
-
-# {{{ TagCountMapper
-
-class TagCountMapper(CombineMapper[int, Never]):
-    """
-    Returns the number of nodes in a DAG that are tagged with all the tag types in
+    Count the number of nodes in a DAG that are tagged with all the tag types in
     *tag_types*.
     """
-
     def __init__(
             self,
             tag_types:
                 type[pytools.tag.Tag]
-                | Iterable[type[pytools.tag.Tag]]) -> None:
-        super().__init__()
+                | Iterable[type[pytools.tag.Tag]],
+            traverse_functions: bool = False,
+            map_duplicates: bool = False,
+            map_in_different_functions: bool = True) -> None:
+        super().__init__(
+            map_fn=lambda expr: int(
+                isinstance(expr, Array)
+                and (
+                    self.tag_types
+                    <= frozenset(type(tag) for tag in expr.tags))),
+            reduce_fn=lambda *args: sum(args, 0),
+            traverse_functions=traverse_functions,
+            map_duplicates=map_duplicates,
+            map_in_different_functions=map_in_different_functions)
+
         if isinstance(tag_types, type):
             tag_types = frozenset((tag_types,))
         elif not isinstance(tag_types, frozenset):
             tag_types = frozenset(tag_types)
-        self._tag_types = tag_types
+        self.tag_types: frozenset[type[pytools.tag.Tag]] = tag_types
 
-    def combine(self, *args: int) -> int:
-        return sum(args)
-
-    def rec(self, expr: ArrayOrNames) -> int:
-        inputs = self._make_cache_inputs(expr)
-        try:
-            return self._cache_retrieve(inputs)
-        except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            s = Mapper.rec(self, expr)
-            if (
-                    isinstance(expr, Array)
-                    and (
-                        self._tag_types
-                        <= frozenset(type(tag) for tag in expr.tags))):
-                result = 1 + s
-            else:
-                result = 0 + s
-
-            self._cache_add(inputs, 0)
-            return result
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            tag_types=self.tag_types,
+            traverse_functions=self.traverse_functions,
+            map_duplicates=self.map_duplicates,
+            map_in_different_functions=self.map_in_different_functions)
 
 
 def get_num_tags_of_type(
-        outputs: ArrayOrNames,
-        tag_types: type[pytools.tag.Tag] | Iterable[type[pytools.tag.Tag]]) -> int:
+        outputs: ArrayOrNames | FunctionDefinition,
+        tag_types: type[pytools.tag.Tag] | Iterable[type[pytools.tag.Tag]],
+        traverse_functions: bool | None = None,
+        count_duplicates: bool = False,
+        count_in_different_functions: bool = True) -> int:
     """Returns the number of nodes in DAG *outputs* that are tagged with
     all the tag types in *tag_types*."""
+    if traverse_functions is None:
+        from warnings import warn
+        warn(
+            "The default value of 'traverse_functions' will change "
+            "from False to True in Q3 2026. "
+            "For now, pass the desired value explicitly.",
+            DeprecationWarning, stacklevel=2)
+        traverse_functions = False
 
-    tcm = TagCountMapper(tag_types)
-
+    tcm = TagCountMapper(
+        tag_types=tag_types,
+        traverse_functions=traverse_functions,
+        map_duplicates=count_duplicates,
+        map_in_different_functions=count_in_different_functions)
     return tcm(outputs)
 
 # }}}
