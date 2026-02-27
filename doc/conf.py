@@ -61,12 +61,17 @@ nitpick_ignore_regex = [
 
     # It's :data:, not :class:, but we can't tell autodoc that.
     ["py:class", r"types\.EllipsisType"],
+    # pytools
+    # Got documented in Feb 2026, try removing?
+    ["py:class", "ToTagSetConvertible"],
 ]
 
 
 sphinxconfig_missing_reference_aliases = {
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
+    # pytools
+    "lp.TemporaryVariable": "class:loopy.TemporaryVariable",
 }
 
 

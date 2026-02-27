@@ -121,9 +121,20 @@ __doc__ = """
     A mapping from reduction inames to a tuple ``(lower_bound, upper_bound)``,
     considered half-open.
 
+Cross-references
+^^^^^^^^^^^^^^^^
+
 .. class:: SymbolicIndex
 
     See :class:`pytato.codegen.SymbolicIndex`.
+
+.. class:: Tag
+
+    See :class:`pytools.tag.Tag`.
+
+.. class:: AxesT
+
+    See :class:`pytato.array.AxesT`.
 
 .. currentmodule:: isl
 
