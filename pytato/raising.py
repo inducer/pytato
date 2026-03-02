@@ -90,7 +90,7 @@ class BinaryOp(HighLevelOp):
 @dataclass(frozen=True, eq=True, repr=True)
 class ZerosLikeOp(HighLevelOp):
     function: str
-    x: ArrayOrScalar
+    x: Array
 
 
 @dataclass(frozen=True, eq=True, repr=True)
@@ -328,11 +328,11 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
     if (isinstance(inner_expr, p.Call)
         and inner_expr.function.name == ("pytato.zero")):
         try:
-            return ZerosLikeOp(
-                _as_array_or_scalar(
-                    inner_expr.parameters, expr.bindings, expr.shape
-                )
+            (ary,) = _as_array_or_scalar(
+                inner_expr.parameters, expr.bindings, expr.shape
             )
+            assert isinstance(ary, Array)
+            return ZerosLikeOp(ary)
         except UnknownIndexLambdaExpr:
             pass
 
