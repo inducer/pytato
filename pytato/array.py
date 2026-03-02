@@ -61,6 +61,7 @@ These functions generally follow the interface of the corresponding functions in
 :mod:`numpy`, but not all NumPy features may be supported.
 
 .. autofunction:: matmul
+.. autofunction:: sparse_matmul
 .. autofunction:: roll
 .. autofunction:: transpose
 .. autofunction:: stack
@@ -129,6 +130,14 @@ Input Arguments
 .. autoclass:: Placeholder
 .. autoclass:: SizeParam
 
+Sparse Matrices
+^^^^^^^^^^^^^^^
+
+.. autoclass:: SparseMatmul
+.. autoclass:: SparseMatrix
+.. autoclass:: CSRMatmul
+.. autoclass:: CSRMatrix
+
 .. currentmodule:: pytato
 
 User-Facing Node Creation
@@ -148,6 +157,7 @@ Node constructors such as :class:`Placeholder.__init__` and
 .. autofunction:: make_placeholder
 .. autofunction:: make_size_param
 .. autofunction:: make_data_wrapper
+.. autofunction:: make_csr_matrix
 
 Internal API
 ------------
@@ -226,7 +236,7 @@ import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression, var
 from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method, opt_frozen_dataclass
-from pytools.tag import Tag, Taggable, ToTagSetConvertible
+from pytools.tag import Tag, Taggable, ToTagSetConvertible, normalize_tags
 
 from pytato.scalar_expr import (
     INT_CLASSES,
@@ -659,6 +669,8 @@ class Array(Taggable):
 
     .. method:: __mul__
     .. method:: __rmul__
+    .. method:: __matmul__
+    .. method:: __rmatmul__
     .. method:: __add__
     .. method:: __radd__
     .. method:: __sub__
@@ -2213,6 +2225,112 @@ class SizeParam(
 # }}}
 
 
+# {{{ sparse matrix multiply
+
+@opt_frozen_dataclass(eq=False, repr=False)
+class SparseMatrix(_SuppliedAxesAndTagsMixin, _SuppliedShapeAndDtypeMixin, ABC):
+    """
+    Abstract base class for sparse matrices.
+
+    .. automethod:: __matmul__
+    """
+    def __matmul__(self, other: Array) -> SparseMatmul:
+        return sparse_matmul(self, other)
+
+
+@array_dataclass()
+class SparseMatmul(_SuppliedAxesAndTagsMixin, Array, ABC):
+    """
+    Abstract base class for sparse matrix multiplies.
+
+    .. attribute:: shape
+    .. attribute:: dtype
+    """
+    @property
+    @abstractmethod
+    def _matrix(self) -> SparseMatrix:
+        pass
+
+    @property
+    @abstractmethod
+    def _array(self) -> Array:
+        pass
+
+    @memoize_method
+    def _get_shape(self) -> ShapeType:
+        return (self._matrix.shape[0], *self._array.shape[1:])
+
+    @property
+    @override
+    def shape(self) -> ShapeType:
+        return self._get_shape()
+
+    @memoize_method
+    def _get_dtype(self) -> np.dtype[Any]:
+        return np.result_type(self._matrix.dtype, self._array.dtype)
+
+    @property
+    @override
+    def dtype(self) -> np.dtype[Any]:
+        return self._get_dtype()
+
+
+@opt_frozen_dataclass(eq=False, repr=False)
+class CSRMatrix(SparseMatrix):
+    """
+    A sparse matrix in compressed sparse row (CSR) format.
+
+    .. attribute:: elem_values
+
+        A one-dimensional array containing the values of all of the nonzero entries
+        of the matrix, grouped by row.
+
+    .. attribute:: elem_col_indices
+
+        A one-dimensional array containing the column index values corresponding to
+        each entry in *elem_values*.
+
+    .. attribute:: row_starts
+
+        A one-dimensional array of length `nrows+1`, where each entry gives the
+        starting index in *elem_values* and *elem_col_indices* for the given row,
+        with the last entry being equal to `nrows`.
+    """
+    elem_values: Array
+    elem_col_indices: Array
+    row_starts: Array
+
+
+@array_dataclass()
+class CSRMatmul(SparseMatmul):
+    """
+    A multiplication of a sparse matrix in compressed sparse row (CSR) format with
+    an array.
+
+    .. attribute:: matrix
+
+        The :class:`CSRMatrix` representing the sparse matrix to be applied.
+
+    .. attribute:: array
+
+        The :class:`Array` to which the sparse matrix is being applied.
+    """
+    matrix: CSRMatrix
+    array: Array
+
+    @property
+    @override
+    def _matrix(self) -> SparseMatrix:
+        return self.matrix
+
+    @property
+    @override
+    def _array(self) -> Array:
+        return self.array
+
+# }}}
+
+
 # {{{ end-user facing
 
 def _get_default_axes(ndim: int) -> AxesT:
@@ -2290,6 +2408,31 @@ def matmul(x1: Array, x2: Array) -> Array:
     result_indices = stack_indices + "ik"
 
     return pt.einsum(f"{x1_indices}, {x2_indices} -> {result_indices}", x1, x2)
+
+
+def sparse_matmul(x1: SparseMatrix, x2: Array) -> SparseMatmul:
+    """Sparse matrix multiplication.
+
+    :param x1: first argument
+    :param x2: second argument
+    """
+    if (
+            isinstance(x2, SCALAR_CLASSES)
+            or x2.shape == ()):
+        raise ValueError("scalars not allowed as arguments to sparse_matmul")
+
+    if x2.shape[0] != x1.shape[1]:
+        raise ValueError("argument shapes are incompatible")
+
+    if isinstance(x1, CSRMatrix):
+        return CSRMatmul(
+            matrix=x1,
+            array=x2,
+            axes=_get_default_axes(x2.ndim),
+            tags=_get_default_tags(),
+            non_equality_tags=_get_created_at_tag())
+    else:
+        raise ValueError(f"unknown sparse matrix type '{type(x1).__name__}'.")
 
 
 def roll(a: Array, shift: int, axis: int | None = None) -> Array:
@@ -2505,6 +2648,7 @@ def make_placeholder(name: str,
                      shape: ConvertibleToShape,
                      dtype: Any = np.float64,
                      tags: frozenset[Tag] = frozenset(),
+                     # FIXME: Accept tuple[ToTagSetConvertible, ...]?
                      axes: AxesT | None = None) -> Placeholder:
     """Make a :class:`Placeholder` object.
 
@@ -2552,6 +2696,7 @@ def make_data_wrapper(data: DataInterface,
         name: str | None = None,
         shape: ConvertibleToShape | None = None,
         tags: frozenset[Tag] = frozenset(),
+        # FIXME: Accept tuple[ToTagSetConvertible, ...]?
         axes: AxesT | None = None) -> DataWrapper:
     """Make a :class:`DataWrapper`.
 
@@ -2584,6 +2729,64 @@ def make_data_wrapper(data: DataInterface,
 
     return DataWrapper(data, shape, axes=axes, tags=(tags | _get_default_tags()),
                        non_equality_tags=_get_created_at_tag(),)
+
+
+def make_csr_matrix(shape: ConvertibleToShape,
+                    elem_values: Array,
+                    elem_col_indices: Array,
+                    row_starts: Array,
+                    tags: frozenset[Tag] = frozenset(),
+                    axes: AxesT | tuple[ToTagSetConvertible, ...] | None = None
+                    ) -> CSRMatrix:
+    """Make a :class:`CSRMatrix` object.
+
+    :param shape: the (two-dimensional) shape of the matrix
+    :param elem_values: a one-dimensional array containing the values of all of the
+        nonzero entries of the matrix, grouped by row.
+    :param elem_col_indices: a one-dimensional array containing the column index
+        values corresponding to each entry in *elem_values*.
+    :param row_starts: a one-dimensional array of length `nrows+1`, where each entry
+        gives the starting index in *elem_values* and *elem_col_indices* for the
+        given row, with the last entry being equal to `nrows`.
+    """
+    shape = normalize_shape(shape)
+    dtype = elem_values.dtype
+
+    if len(shape) != 2:
+        raise ValueError("matrix must be 2D.")
+
+    if axes is not None:
+        axes = tuple(
+            Axis(normalize_tags(axis)) if not isinstance(axis, Axis) else axis
+            for axis in axes)
+    else:
+        axes = _get_default_axes(len(shape))
+
+    if len(axes) != len(shape):
+        raise ValueError("'axes' dimensionality mismatch:"
+                         f" expected {len(shape)}, got {len(axes)}.")
+
+    if elem_values.ndim != 1:
+        raise ValueError("'elem_values' must be 1D.")
+    if elem_col_indices.ndim != 1:
+        raise ValueError("'elem_col_indices' must be 1D.")
+    if row_starts.ndim != 1:
+        raise ValueError("'row_starts' must be 1D.")
+
+    from pytato.utils import are_shapes_equal
+    if not are_shapes_equal(row_starts.shape, (shape[0] + 1,)):
+        raise ValueError(
+            "'row_starts' must have length equal to the number of rows plus one.")
+
+    return CSRMatrix(
+        shape=shape,
+        elem_values=elem_values,
+        elem_col_indices=elem_col_indices,
+        row_starts=row_starts,
+        dtype=dtype,
+        axes=axes,
+        tags=(tags | _get_default_tags()),
+        non_equality_tags=_get_created_at_tag(),)
 
 # }}}
 

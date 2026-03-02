@@ -38,6 +38,7 @@ from pymbolic.mapper.optimize import optimize_mapper
 from pytato.array import (
     Array,
     Concatenate,
+    CSRMatmul,
     DictOfNamedArrays,
     Einsum,
     IndexBase,
@@ -147,6 +148,20 @@ class ListOfUsersCollector(Mapper[None, Never, []]):
 
     def map_einsum(self, expr: Einsum) -> None:
         for ary in expr.args:
+            self.array_to_users[ary].append(expr)
+            self.rec(ary)
+
+        for dim in expr.shape:
+            if isinstance(dim, Array):
+                self.array_to_users[dim].append(expr)
+                self.rec(dim)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> None:
+        for ary in (
+                expr.matrix.elem_values,
+                expr.matrix.elem_col_indices,
+                expr.matrix.row_starts,
+                expr.array):
             self.array_to_users[ary].append(expr)
             self.rec(ary)
 
@@ -377,6 +392,14 @@ class ListOfDirectPredecessorsGetter(
 
     def map_einsum(self, expr: Einsum) -> list[ArrayOrNames]:
         return self._get_preds_from_shape(expr.shape) + list(expr.args)
+
+    def map_csr_matmul(self, expr: CSRMatmul) -> list[ArrayOrNames]:
+        return [
+            *self._get_preds_from_shape(expr.shape),
+            expr.matrix.elem_values,
+            expr.matrix.elem_col_indices,
+            expr.matrix.row_starts,
+            expr.array]
 
     def map_loopy_call(self, expr: LoopyCall) -> list[ArrayOrNames]:
         return [ary for ary in expr.bindings.values() if isinstance(ary, Array)]
