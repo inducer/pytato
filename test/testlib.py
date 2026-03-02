@@ -10,7 +10,8 @@ from typing_extensions import Never
 from pytools.tag import Tag
 
 import pytato as pt
-from pytato.transform import Mapper
+from pytato.array import Array
+from pytato.transform import ArrayOrNamesTc, Mapper
 
 
 if TYPE_CHECKING:
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
     import pyopencl as cl
 
     from pytato.array import (
-        Array,
         AxisPermutation,
         Concatenate,
         DataWrapper,
@@ -90,6 +90,45 @@ def assert_allclose_to_numpy(expr: Array, queue: cl.CommandQueue,
     assert pt_result.dtype == np_result.dtype
 
     np.testing.assert_allclose(np_result, pt_result, rtol=rtol)
+
+
+def assert_allclose_to_ref(
+    expr: ArrayOrNamesTc,
+    ref: ArrayOrNamesTc,
+    queue: cl.CommandQueue,
+    parameters: dict[str, Any] | None = None,
+    rtol: float = 1e-7,
+) -> None:
+    """
+    Raises an :class:`AssertionError`, if there is a value discrepancy between
+    *expr* and *ref* on evaluation with the placeholders values as *parameters*.
+
+    :arg queue: An instance of :class:`pyopencl.CommandQueue` to which the
+        generated kernel must be enqueued.
+    """
+    if parameters is None:
+        parameters = {}
+    if isinstance(expr, Array):
+        assert isinstance(ref, Array)
+        expr_dict = pt.make_dict_of_named_arrays({"_pt_out": expr})
+        ref_dict = pt.make_dict_of_named_arrays({"_pt_out": ref})
+    else:
+        expr_dict = expr
+        ref_dict = ref
+
+    ref_prog = pt.generate_loopy(ref_dict)
+    prog = pt.generate_loopy(expr_dict)
+
+    _evt, ref_evaled = ref_prog(queue, **parameters)
+    _evt, expr_evaled = prog(queue, **parameters)
+
+    assert set(ref_evaled.keys()) == set(expr_evaled.keys())
+    for name, subref in ref_evaled.items():
+        subexpr = expr_evaled[name]
+        assert subref.shape == subexpr.shape
+        assert subref.dtype == subexpr.dtype
+        np.testing.assert_allclose(subexpr, subref, rtol=rtol)
+
 
 # }}}
 
