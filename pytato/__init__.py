@@ -149,7 +149,7 @@ from pytato.distributed.partition import (
 )
 from pytato.distributed.tags import number_distributed_tags
 from pytato.distributed.verify import verify_distributed_partition
-from pytato.function import trace_call
+from pytato.function import Call, FunctionDefinition, NamedCallResult, trace_call
 from pytato.loopy import LoopyCall
 from pytato.pad import pad
 from pytato.reductions import all, amax, amin, any, prod, sum
@@ -157,6 +157,9 @@ from pytato.target import Target
 from pytato.target.loopy import LoopyPyOpenCLTarget
 from pytato.target.loopy.codegen import generate_loopy
 from pytato.target.python.jax import generate_jax
+
+# FIXME: Should some of the functions from pytato.transform be imported here?
+#        (deduplicate, map_and_copy, etc.)
 from pytato.transform.calls import inline_calls, tag_all_calls_to_be_inlined
 from pytato.transform.dead_code_elimination import eliminate_dead_code
 from pytato.transform.lower_to_index_lambda import to_index_lambda
@@ -179,6 +182,7 @@ __all__ = (
     "Axis",
     "AxisPermutation",
     "BasicIndex",
+    "Call",
     "Concatenate",
     "DataWrapper",
     "DictOfNamedArrays",
@@ -188,6 +192,7 @@ __all__ = (
     "DistributedSend",
     "DistributedSendRefHolder",
     "Einsum",
+    "FunctionDefinition",
     "IndexBase",
     "IndexLambda",
     "IndexRemappingBase",
@@ -195,6 +200,7 @@ __all__ = (
     "LoopyCall",
     "LoopyPyOpenCLTarget",
     "NamedArray",
+    "NamedCallResult",
     "Placeholder",
     "ReductionDescriptor",
     "Reshape",

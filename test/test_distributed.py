@@ -668,6 +668,7 @@ def _gather_random_dist_partitions(ctx_factory: cl.CtxFactory):
     dag = get_random_pt_dag_with_send_recv_nodes(
         seed, rank=comm.rank, size=comm.size,
         convert_dws_to_placeholders=True)
+    dag = pt.make_dict_of_named_arrays({"result": dag})
 
     my_partition = pt.find_distributed_partition(comm, dag)
 
