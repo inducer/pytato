@@ -89,7 +89,6 @@ class BinaryOp(HighLevelOp):
 
 @dataclass(frozen=True, eq=True, repr=True)
 class ZerosLikeOp(HighLevelOp):
-    function: str
     x: Array
 
 
