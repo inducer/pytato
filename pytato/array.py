@@ -538,7 +538,9 @@ def _entries_are_identical(
 
 # {{{ array interface
 
-ConvertibleToIndexExpr = Union[Integer, slice, "Array", EllipsisType, None]
+ConvertibleToIndexExpr = Union[
+    Integer, slice, "NormalizedSlice", "Array", EllipsisType, None
+]
 IndexExpr = Union[Integer, "NormalizedSlice", "Array", None]
 PyScalarType = type[bool] | type[int] | type[float] | type[complex]
 DtypeOrPyScalarType = _dtype_any | PyScalarType
