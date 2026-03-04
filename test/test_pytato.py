@@ -2064,6 +2064,12 @@ def test_replace_if_different_on_idx_lambda():
     assert 3*x == new_expr
 
 
+def test_normalized_slice_is_valid_indexee():
+    from pytato.array import NormalizedSlice
+    a = pt.make_placeholder("a", 10)
+    assert a[NormalizedSlice(0, 10, 1)] == a[:]
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:
