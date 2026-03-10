@@ -45,6 +45,7 @@ from pytato.array import (
     AxesT,
     AxisPermutation,
     Concatenate,
+    DictOfNamedArrays,
     Einsum,
     EinsumAxisDescriptor,
     EinsumReductionAxis,
@@ -190,54 +191,55 @@ class EinsumDistributiveLawMapper(
         if _can_hlo_be_distributed(hlo):
             assert isinstance(hlo, BinaryOp)
             # /!\ Warning: Loses metadata.
+            rec_x1 = (
+                _verify_is_array(self.rec(hlo.x1, ctx))
+                if isinstance(hlo.x1, Array)
+                else hlo.x1
+            )
+            rec_x2 = (
+                _verify_is_array(self.rec(hlo.x2, ctx))
+                if isinstance(hlo.x2, Array)
+                else hlo.x2
+            )
+            if rec_x1 is hlo.x1 and rec_x2 is hlo.x2:
+                return expr
 
             if hlo.binary_op == BinaryOpType.ADD:
-                assert (isinstance(hlo.x1, Array)
-                        and isinstance(hlo.x2, Array)
-                        and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
-                # https://github.com/python/mypy/issues/16499
-                return (  # type: ignore[no-any-return]
-                    _verify_is_array(self.rec(hlo.x1, ctx))
-                    + _verify_is_array(self.rec(hlo.x2, ctx)))
+                assert (
+                    isinstance(hlo.x1, Array)
+                    and isinstance(hlo.x2, Array)
+                    and are_shapes_equal(hlo.x1.shape, hlo.x2.shape)
+                )
+                assert isinstance(rec_x1, Array) and isinstance(rec_x2, Array)
+                return rec_x1 + rec_x2
             elif hlo.binary_op == BinaryOpType.SUB:
-                assert (isinstance(hlo.x1, Array)
-                        and isinstance(hlo.x2, Array)
-                        and are_shapes_equal(hlo.x1.shape, hlo.x2.shape))
-                assert are_shapes_equal(hlo.x1.shape, hlo.x2.shape)
-                # https://github.com/python/mypy/issues/16499
-                return (  # type: ignore[no-any-return]
-                    _verify_is_array(self.rec(hlo.x1, ctx))
-                    - _verify_is_array(self.rec(hlo.x2, ctx)))
+                assert (
+                    isinstance(hlo.x1, Array)
+                    and isinstance(hlo.x2, Array)
+                    and are_shapes_equal(hlo.x1.shape, hlo.x2.shape)
+                )
+                assert isinstance(rec_x1, Array) and isinstance(rec_x2, Array)
+                return rec_x1 - rec_x2
             elif hlo.binary_op == BinaryOpType.MULT:
-                if isinstance(hlo.x1, Array) and not isinstance(hlo.x2, Array):
-                    # https://github.com/python/mypy/issues/16499
-                    return _verify_is_array(self.rec(hlo.x1, ctx)) * hlo.x2  # type: ignore[no-any-return]
-                else:
-                    assert isinstance(hlo.x2, Array) and not isinstance(hlo.x1, Array)
-                    # https://github.com/python/mypy/issues/16499
-                    return hlo.x1 * _verify_is_array(self.rec(hlo.x2, ctx))  # type: ignore[no-any-return]
+                assert isinstance(rec_x1, Array) or isinstance(rec_x2, Array)
+                return cast("Array", rec_x1 * rec_x2)
             elif hlo.binary_op == BinaryOpType.TRUEDIV:
-                if isinstance(hlo.x1, Array) and not isinstance(hlo.x2, Array):
-                    # https://github.com/python/mypy/issues/16499
-                    return _verify_is_array(self.rec(hlo.x1, ctx)) / hlo.x2  # type: ignore[no-any-return]
-                else:
-                    assert isinstance(hlo.x2, Array) and not isinstance(hlo.x1, Array)
-                    # https://github.com/python/mypy/issues/16499
-                    return hlo.x1 / _verify_is_array(self.rec(hlo.x2, ctx))  # type: ignore[no-any-return]
+                assert isinstance(rec_x1, Array) or isinstance(rec_x2, Array)
+                return cast("Array", rec_x1 / rec_x2)
             else:
                 raise NotImplementedError(hlo)
         else:
-            rec_expr = IndexLambda(
-                expr=expr.expr,
-                shape=expr.shape,
-                dtype=expr.dtype,
-                bindings=constantdict({name: _verify_is_array(self.rec(bnd, None))
-                              for name, bnd in sorted(expr.bindings.items())}),
-                var_to_reduction_descr=expr.var_to_reduction_descr,
-                tags=expr.tags,
-                axes=expr.axes,
+            return _wrap_einsum_from_ctx(
+                expr.replace_if_different(
+                    bindings=constantdict(
+                        {
+                            name: _verify_is_array(self.rec(bnd, None))
+                            for name, bnd in sorted(expr.bindings.items())
+                        }
+                    )
+                ),
+                ctx,
             )
-            return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def map_einsum(self,
                    expr: Einsum,
@@ -262,67 +264,72 @@ class EinsumDistributiveLawMapper(
                     self.rec(expr.args[distributive_law_descr.ioperand], ctx))
         else:
             assert isinstance(distributive_law_descr, DoNotDistribute)
-            rec_expr = Einsum(
-                expr.access_descriptors,
-                tuple(_verify_is_array(self.rec(arg, None)) for arg in expr.args),
-                expr.redn_axis_to_redn_descr,
-                tags=expr.tags,
-                axes=expr.axes
+            return _wrap_einsum_from_ctx(
+                expr.replace_if_different(
+                    args=tuple(
+                        _verify_is_array(self.rec(arg, None)) for arg in expr.args
+                    )
+                ),
+                ctx,
             )
-
-            return _wrap_einsum_from_ctx(rec_expr, ctx)
 
     def map_stack(self,
                   expr: Stack,
                   ctx: _EinsumDistributiveLawMapperContext | None) -> Array:
-        rec_expr = Stack(tuple(_verify_is_array(self.rec(ary, None))
-                               for ary in expr.arrays),
-                         expr.axis,
-                         tags=expr.tags,
-                         axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                arrays=tuple(
+                    _verify_is_array(self.rec(ary, None)) for ary in expr.arrays
+                )
+            ),
+            ctx,
+        )
 
     def map_concatenate(self,
                         expr: Concatenate,
                         ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = Concatenate(tuple(_verify_is_array(self.rec(ary, None))
-                                     for ary in expr.arrays),
-                               expr.axis,
-                               tags=expr.tags,
-                               axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                arrays=tuple(
+                    _verify_is_array(self.rec(ary, None)) for ary in expr.arrays
+                )
+            ),
+            ctx,
+        )
 
     def map_roll(self,
                  expr: Roll,
                  ctx: _EinsumDistributiveLawMapperContext | None
                  ) -> Array:
-        rec_expr = Roll(_verify_is_array(self.rec(expr.array, None)),
-                        expr.shift,
-                        expr.axis,
-                        tags=expr.tags,
-                        axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                array=_verify_is_array(self.rec(expr.array, None))
+            ),
+            ctx,
+        )
 
     def map_axis_permutation(self,
                              expr: AxisPermutation,
                              ctx: _EinsumDistributiveLawMapperContext | None
                              ) -> Array:
-        rec_expr = AxisPermutation(_verify_is_array(self.rec(expr.array, None)),
-                                   expr.axis_permutation,
-                                   tags=expr.tags,
-                                   axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                array=_verify_is_array(self.rec(expr.array, None))
+            ),
+            ctx,
+        )
 
     def _map_index_base(self,
                         expr: IndexBase,
                         ctx: _EinsumDistributiveLawMapperContext | None
                         ) -> Array:
-        rec_expr = type(expr)(_verify_is_array(self.rec(expr.array, None)),
-                              expr.indices,
-                              tags=expr.tags,
-                              axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                array=_verify_is_array(self.rec(expr.array, None))
+            ),
+            ctx,
+        )
 
     map_basic_index = _map_index_base
     map_contiguous_advanced_index = _map_index_base
@@ -332,12 +339,24 @@ class EinsumDistributiveLawMapper(
                     expr: Reshape,
                     ctx: _EinsumDistributiveLawMapperContext | None
                     ) -> Array:
-        rec_expr = Reshape(_verify_is_array(self.rec(expr.array, None)),
-                           expr.newshape,
-                           expr.order,
-                           tags=expr.tags,
-                           axes=expr.axes)
-        return _wrap_einsum_from_ctx(rec_expr, ctx)
+        return _wrap_einsum_from_ctx(
+            expr.replace_if_different(
+                array=_verify_is_array(self.rec(expr.array, None))
+            ),
+            ctx,
+        )
+
+    def map_dict_of_named_arrays(
+        self, expr: DictOfNamedArrays, ctx: _EinsumDistributiveLawMapperContext | None
+    ) -> DictOfNamedArrays:
+        return expr.replace_if_different(
+            _data=constantdict(
+                {
+                    name: _verify_is_array(self.rec(subexpr, ctx))
+                    for name, subexpr in expr._data.items()
+                }
+            )
+        )
 
 
 def apply_distributive_property_to_einsums(
