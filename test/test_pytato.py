@@ -197,6 +197,28 @@ def test_reshape_input_validation():
     assert pt.reshape(x, (128, 0, 17)).shape == (128, 0, 17)
 
 
+def test_boolean_subtract_raises():
+    a_pt = pt.make_placeholder(name="a", shape=(2,), dtype=np.bool_)
+
+    with pytest.raises(TypeError, match="boolean subtract"):
+        a_pt - a_pt
+
+    with pytest.raises(TypeError, match="boolean subtract"):
+        a_pt - True
+
+    with pytest.raises(TypeError, match="boolean subtract"):
+        True - a_pt
+
+    # Non-boolean subtraction should still work
+    b_pt = pt.make_placeholder(name="b", shape=(2,), dtype=np.int64)
+    result = b_pt - b_pt
+    assert result.dtype == np.dtype("int64")
+
+    # bool - int should work (result is int)
+    result2 = a_pt - b_pt
+    assert np.issubdtype(result2.dtype, np.integer)
+
+
 def test_binary_op_dispatch():
     class Foo:
         def __add__(self, other):
