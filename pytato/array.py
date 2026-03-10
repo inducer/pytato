@@ -2315,9 +2315,9 @@ class CSRMatrix(SparseMatrix):
 
     .. attribute:: row_starts
 
-        A one-dimensional array of length `nrows+1`, where each entry gives the
+        A one-dimensional array of length ``nrows+1``, where each entry gives the
         starting index in *elem_values* and *elem_col_indices* for the given row,
-        with the last entry being equal to `nrows`.
+        with the last entry being equal to ``len(elem_values)``.
     """
     elem_values: Array
     elem_col_indices: Array
@@ -2768,9 +2768,9 @@ def make_csr_matrix(shape: ConvertibleToShape,
         nonzero entries of the matrix, grouped by row.
     :param elem_col_indices: a one-dimensional array containing the column index
         values corresponding to each entry in *elem_values*.
-    :param row_starts: a one-dimensional array of length `nrows+1`, where each entry
+    :param row_starts: a one-dimensional array of length ``nrows+1``, where each entry
         gives the starting index in *elem_values* and *elem_col_indices* for the
-        given row, with the last entry being equal to `nrows`.
+        given row, with the last entry being equal to ``len(elem_values)``.
     """
     shape = normalize_shape(shape)
     dtype = elem_values.dtype
