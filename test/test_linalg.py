@@ -122,6 +122,28 @@ def test_apply_einsum_distributive_law_2():
                              - 3 * ((7*A1 + 8*A2) @ (B@x2)))
 
 
+def test_apply_einsum_distributive_law_3():
+    # Test that no duplication occurs for a no-op in einsum_distributive_law.
+    from pytato.transform.einsum_distributive_law import (
+        DoNotDistribute,
+        apply_distributive_property_to_einsums,
+    )
+
+    x = pt.make_placeholder("x", 10)
+    idx = pt.make_placeholder("idx", 1729, np.int32)
+    y = pt.make_dict_of_named_arrays(
+        {
+            "y0": (2 * x)[idx],
+            "y1": pt.stack([5 * x, 3 * x]),
+            "y2": pt.concatenate([7 * x, 8 * x]),
+            "y3": x.reshape(-1, 1, 1, 1),
+            "y4": 42 * pt.broadcast_to(x, (1, 10)),
+        }
+    )
+
+    assert y is apply_distributive_property_to_einsums(y, lambda x: DoNotDistribute())
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
