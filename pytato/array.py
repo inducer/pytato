@@ -2800,6 +2800,9 @@ def make_csr_matrix(shape: ConvertibleToShape,
     if not are_shapes_equal(row_starts.shape, (shape[0] + 1,)):
         raise ValueError(
             "'row_starts' must have length equal to the number of rows plus one.")
+    if not are_shapes_equal(elem_values.shape, elem_col_indices.shape):
+        raise ValueError(
+            "'elem_values' and 'elem_col_indices' must have the same shape.")
 
     return CSRMatrix(
         shape=shape,
