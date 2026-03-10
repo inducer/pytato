@@ -743,7 +743,7 @@ class Array(Taggable):
     @property
     def size(self) -> ShapeComponent:
         from pytools import product
-        return product(self.shape)  # type: ignore[no-any-return]
+        return product(self.shape)
 
     # The Sized protocol, required for len(), requires __len__ to return an int.
     def __len__(self) -> int:
@@ -833,8 +833,7 @@ class Array(Taggable):
         # {{{ sanity checks
 
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
-            # https://github.com/python/mypy/issues/4791
-            return NotImplemented  # type: ignore[no-any-return]
+            return NotImplemented
 
         # }}}
 
@@ -898,7 +897,7 @@ class Array(Taggable):
 
     def __sub__(self, other: ArrayOrScalar) -> Array:
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
-            return NotImplemented  # type: ignore[no-any-return]
+            return NotImplemented
         if _np_result_dtype(self, other) == _BOOL_DTYPE:
             raise TypeError(
                 "numpy boolean subtract, the `-` operator, is not supported, "
@@ -908,7 +907,7 @@ class Array(Taggable):
 
     def __rsub__(self, other: ArrayOrScalar) -> Array:
         if not isinstance(other, (Array, *SCALAR_CLASSES)):
-            return NotImplemented  # type: ignore[no-any-return]
+            return NotImplemented
         if _np_result_dtype(other, self) == _BOOL_DTYPE:
             raise TypeError(
                 "numpy boolean subtract, the `-` operator, is not supported, "
@@ -2906,8 +2905,7 @@ def logical_not(x: ArrayOrScalar) -> Array | bool:
     Returns the element-wise logical NOT of *x*.
     """
     if prim.is_constant(x):
-        # https://github.com/python/mypy/issues/3186
-        return np.logical_not(x)  # type: ignore[no-any-return]
+        return np.logical_not(x)
 
     assert isinstance(x, Array)
 
@@ -3100,8 +3098,7 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
     elif a.ndim == b.ndim == 2:
         return a @ b
     elif a.ndim == 0 or b.ndim == 0:
-        # https://github.com/python/mypy/issues/16499
-        return a * b  # type: ignore[no-any-return]
+        return a * b
     elif b.ndim == 1:
         return pt.sum(a * b, axis=(a.ndim - 1))
     else:
