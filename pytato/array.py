@@ -535,6 +535,9 @@ def _np_result_dtype(
     return np.result_type(*arrays_and_dtypes)
 
 
+_BOOL_DTYPE: np.dtype[Any] = np.dtype(np.bool_)
+
+
 def _truediv_result_type(*dtypes: ArrayOrScalar) -> np.dtype[Any]:
     dtype = _np_result_dtype(*dtypes)
     # See: test_true_divide in numpy/core/tests/test_ufunc.py
@@ -894,9 +897,23 @@ class Array(Taggable):
         return self._binary_op(operator.mul, other, reverse=True)
 
     def __sub__(self, other: ArrayOrScalar) -> Array:
+        if not isinstance(other, (Array, *SCALAR_CLASSES)):
+            return NotImplemented  # type: ignore[no-any-return]
+        if _np_result_dtype(self, other) == _BOOL_DTYPE:
+            raise TypeError(
+                "numpy boolean subtract, the `-` operator, is not supported, "
+                "use the bitwise_xor, the `^` operator, or the logical_xor "
+                "function instead.")
         return self._binary_op(operator.sub, other)
 
     def __rsub__(self, other: ArrayOrScalar) -> Array:
+        if not isinstance(other, (Array, *SCALAR_CLASSES)):
+            return NotImplemented  # type: ignore[no-any-return]
+        if _np_result_dtype(other, self) == _BOOL_DTYPE:
+            raise TypeError(
+                "numpy boolean subtract, the `-` operator, is not supported, "
+                "use the bitwise_xor, the `^` operator, or the logical_xor "
+                "function instead.")
         return self._binary_op(operator.sub, other, reverse=True)
 
     def __floordiv__(self, other: ArrayOrScalar) -> Array:
