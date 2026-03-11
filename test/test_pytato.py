@@ -2027,6 +2027,12 @@ def test_eliminate_dead_code_removes_pt_zero():
     assert pt.eliminate_dead_code(expr1) == expr2
 
 
+def test_normalized_slice_is_valid_indexee():
+    from pytato.array import NormalizedSlice
+    a = pt.make_placeholder("a", 10)
+    assert a[NormalizedSlice(0, 10, 1)] == a[:]
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:

@@ -438,7 +438,7 @@ def _is_non_positive(expr: ShapeComponent) -> Bool:
 
 # {{{ normalized slice
 
-def _normalize_slice(slice_: slice,
+def _normalize_slice(slice_: slice | NormalizedSlice,
                      axis_len: ShapeComponent) -> NormalizedSlice:
     start, stop, step = slice_.start, slice_.stop, slice_.step
     if step is None:
@@ -458,28 +458,24 @@ def _normalize_slice(slice_: slice,
     if start is None:
         start = default_start
     else:
-        if isinstance(axis_len, INT_CLASSES):
-            if -axis_len <= start < axis_len:
-                start = start % axis_len
-            elif start >= axis_len:
-                start = axis_len if step > 0 else axis_len - 1
-            else:
-                start = 0 if step > 0 else -1
+        if _is_non_negative(start + axis_len) and not _is_non_positive(
+            axis_len - start
+        ):
+            start = start % axis_len
+        elif _is_non_negative(start - axis_len):
+            start = axis_len if step > 0 else axis_len - 1
         else:
-            raise NotImplementedError
+            start = 0 if step > 0 else -1
 
     if stop is None:
         stop = default_stop
     else:
-        if isinstance(axis_len, INT_CLASSES):
-            if -axis_len <= stop < axis_len:
-                stop = stop % axis_len
-            elif stop >= axis_len:
-                stop = axis_len if step > 0 else axis_len - 1
-            else:
-                stop = 0 if step > 0 else -1
+        if _is_non_negative(stop + axis_len) and not _is_non_positive(axis_len - stop):
+            stop = stop % axis_len
+        elif _is_non_negative(stop - axis_len):
+            stop = axis_len if step > 0 else axis_len - 1
         else:
-            raise NotImplementedError
+            stop = 0 if step > 0 else -1
 
     return NormalizedSlice(start, stop, step)
 
@@ -572,7 +568,7 @@ def _index_into(
     # {{{ validate index
 
     for i, idx in enumerate(indices):
-        if isinstance(idx, slice):
+        if isinstance(idx, (slice, NormalizedSlice)):
             pass
         elif isinstance(idx, INT_CLASSES):
             if not (_is_non_negative(idx + ary.shape[i])
@@ -594,7 +590,7 @@ def _index_into(
     # {{{ normalize slices
 
     normalized_indices: list[IndexExpr] = [_normalize_slice(idx, axis_len)
-                                           if isinstance(idx, slice)
+                                           if isinstance(idx, (slice, NormalizedSlice))
                                            else idx
                                            for idx, axis_len
                                            in zip(indices, ary.shape, strict=True)]
