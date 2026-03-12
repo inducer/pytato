@@ -2027,6 +2027,15 @@ def test_eliminate_dead_code_removes_pt_zero():
     assert pt.eliminate_dead_code(expr1) == expr2
 
 
+def test_replace_if_different_on_idx_lambda():
+    from pymbolic import parse
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    expr = 2 * x
+    name_in_expr, = expr.bindings.keys()
+    new_expr = expr.replace_if_different(expr=parse(f"3*{name_in_expr}[_0, _1]"))
+    assert 3*x == new_expr
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:
