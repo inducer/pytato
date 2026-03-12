@@ -223,7 +223,7 @@ from constantdict import constantdict
 from typing_extensions import Self, dataclass_transform, override
 
 import pymbolic.primitives as prim
-from pymbolic import ArithmeticExpression, var
+from pymbolic import ArithmeticExpression, ExpressionNode, var
 from pymbolic.typing import Integer, Scalar, not_none
 from pytools import memoize_method, opt_frozen_dataclass
 from pytools.tag import Tag, Taggable, ToTagSetConvertible
@@ -430,6 +430,7 @@ def _augment_array_dataclass(
         """
         from collections.abc import Iterable, Mapping
         from dataclasses import replace
+        from pymbolic.primitives import ExpressionNode
 
         def _dataclass_sequence_or_mapping_entries_are_identical(a, b):
             if isinstance(a, Mapping):
@@ -447,7 +448,10 @@ def _augment_array_dataclass(
             diff_fields = {}
             for name, new_value in kwargs.items():
                 value = getattr(self, name)
-                if isinstance(value, Iterable | Mapping):
+
+                if isinstance(value, Iterable | Mapping) and not isinstance(
+                    value, ExpressionNode
+                ):
                     if not _dataclass_sequence_or_mapping_entries_are_identical(
                             new_value, value):
                         diff_fields[name] = new_value
@@ -459,7 +463,8 @@ def _augment_array_dataclass(
                 return self
 
         cls.replace_if_different = _dataclass_replace_if_different
-        """)
+        """
+    )
 
     exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
     exec(compile(augment_code,  # noqa: S102
@@ -1182,7 +1187,9 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         diff_fields: Mapping[str, Any] = {}
         for name, new_value in kwargs.items():
             value = getattr(self, name)
-            if isinstance(value, Iterable | Mapping):
+            if isinstance(value, Iterable | Mapping) and not isinstance(
+                value, ExpressionNode
+            ):
                 if not _entries_are_identical(new_value, value):
                     diff_fields[name] = new_value
             elif new_value is not value:
