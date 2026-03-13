@@ -151,8 +151,6 @@ def _can_hlo_be_distributed(hlo: HighLevelOp) -> bool:
                                           hlo.x2.shape))))
 
 
-# FIXME: This mapper still needs to be updated to avoid duplicating arrays (see
-# https://github.com/inducer/pytato/pull/515).
 class EinsumDistributiveLawMapper(
                 TransformMapperWithExtraArgs[
                     [_EinsumDistributiveLawMapperContext | None]]):
