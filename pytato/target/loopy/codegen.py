@@ -486,9 +486,9 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
         if expr in state.results:
             return state.results[expr]
 
-        idx_expr = expr.expr
+        il_expr = expr.expr
 
-        reductions = ReductionCollector()(idx_expr)
+        reductions = ReductionCollector()(il_expr)
 
         var_to_reduction = {
             var_name: redn
@@ -576,7 +576,8 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                         bound_prefixes, bounds, loopy_bounds, strict=True):
                     if not is_quasi_affine(loopy_bound):
                         unique_name = var_to_reduction_unique_name[var_name]
-                        bound_name = f"{unique_name}_{bound_prefix}bound"
+                        bound_name = state.var_name_gen(
+                                        f"{unique_name}_{bound_prefix}bound")
                         bound_result: ImplementedResult = InlinedResult(
                             loopy_bound, expr.ndim, prstnt_ctx.depends_on)
                         bound_result = StoredResult(
@@ -599,9 +600,9 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
             new_namespace.update(redn_bound_temps)
             local_ctx = local_ctx.copy(local_namespace=new_namespace)
 
-            idx_expr = ReductionBoundsReplacer(new_redn_bounds)(idx_expr)
+            il_expr = ReductionBoundsReplacer(new_redn_bounds)(il_expr)
 
-        loopy_expr = self.exprgen_mapper(idx_expr, prstnt_ctx, local_ctx)
+        loopy_expr = self.exprgen_mapper(il_expr, prstnt_ctx, local_ctx)
 
         assert not isinstance(loopy_expr, tuple)
         result: ImplementedResult = InlinedResult(loopy_expr,
