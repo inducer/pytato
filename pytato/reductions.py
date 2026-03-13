@@ -169,7 +169,7 @@ class AllReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
     def scalar_op_name(cls):
-        return "or"
+        return "and"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return np.bool_(True)
@@ -179,7 +179,7 @@ class AnyReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
     def scalar_op_name(cls):
-        return "and"
+        return "or"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
         return np.bool_(False)
