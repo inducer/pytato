@@ -1004,6 +1004,7 @@ def test_scalar_flop_count():
     assert fc(x % 2) == 0
 
     assert fc(x ** 3) == 3
+    assert fc(x ** (-3)) == 7
     assert fc(x ** 0.3) == 8
 
     assert fc(x.lt(y)) == 1
