@@ -847,8 +847,7 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
 
     .. note::
 
-        Flops from nodes inside function calls are accumulated onto the corresponding
-        call node.
+        This mapper does not descend into functions.
     """
     def __init__(
             self,
