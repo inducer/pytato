@@ -908,9 +908,8 @@ class PytatoKeyBuilder(LoopyKeyBuilder):
 
 # {{{ flop counting
 
-@dataclass
 class UndefinedOpFlopCountError(ValueError):
-    op_name: str
+    pass
 
 
 class _PerEntryFlopCounter(CombineMapper[int, Never, []]):
@@ -943,7 +942,9 @@ class _PerEntryFlopCounter(CombineMapper[int, Never, []]):
             from pytato.scalar_expr import OpFlops, OpFlopsCollector
             op_flops: frozenset[OpFlops] = OpFlopsCollector()(nflops)
             if op_flops:
-                raise UndefinedOpFlopCountError(next(iter(op_flops)).op)
+                op_name = next(iter(op_flops)).op
+                raise UndefinedOpFlopCountError(
+                    f"Undefined flop count for operation '{op_name}'.")
             else:
                 raise AssertionError
         return nflops
