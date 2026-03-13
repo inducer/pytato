@@ -325,7 +325,7 @@ class FlopCounter(FlopCounterBase):
             else:
                 return (
                     self._get_op_nflops("/")
-                    + expr.exponent * self._get_op_nflops("*")
+                    + (-expr.exponent) * self._get_op_nflops("*")
                     + self.rec(expr.base))
         else:
             return (
