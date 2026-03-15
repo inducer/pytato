@@ -144,6 +144,31 @@ def test_apply_einsum_distributive_law_3():
     assert y is apply_distributive_property_to_einsums(y, lambda x: DoNotDistribute())
 
 
+def test_apply_einsum_distributive_law_4():
+    from pytato.transform.einsum_distributive_law import (
+        DoDistribute,
+        DoNotDistribute,
+        EinsumDistributiveLawDescriptor,
+        apply_distributive_property_to_einsums,
+    )
+
+    def how_to_distribute(
+            expr: pt.Einsum) -> EinsumDistributiveLawDescriptor:
+        if pt.analysis.is_einsum_similar_to_subscript(
+                expr, "ij,j->i"):
+            return DoDistribute(ioperand=1)
+        else:
+            return DoNotDistribute()
+
+    x1 = pt.make_placeholder("x1", 4, np.float64)
+    x2 = pt.make_placeholder("x2", 4, np.float64)
+    A = pt.make_placeholder("A", (10, 4), np.float64)
+    y = pt.make_dict_of_named_arrays({"y": A @ (x1+x2)})
+    y_transformed = apply_distributive_property_to_einsums(y, how_to_distribute)
+
+    assert y_transformed == pt.make_dict_of_named_arrays({"y": A@x1 + A@x2})
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
