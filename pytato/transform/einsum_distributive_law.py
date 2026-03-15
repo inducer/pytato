@@ -377,7 +377,7 @@ class EinsumDistributiveLawMapper(
         self, expr: DictOfNamedArrays, ctx: _EinsumDistributiveLawMapperContext | None
     ) -> DictOfNamedArrays:
         return expr.replace_if_different(
-            _data=constantdict(
+            data=constantdict(
                 {
                     name: _verify_is_array(self.rec(subexpr, ctx))
                     for name, subexpr in expr._data.items()
