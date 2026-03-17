@@ -72,6 +72,7 @@ sphinxconfig_missing_reference_aliases = {
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     # pytools
     "lp.TemporaryVariable": "class:loopy.TemporaryVariable",
+    "lp.AddressSpace": "class:loopy.AddressSpace",
 }
 
 

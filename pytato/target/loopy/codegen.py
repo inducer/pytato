@@ -586,7 +586,8 @@ class CodeGenMapper(Mapper[ImplementedResult, Never, [CodeGenState]]):
                                     bound_name, (), np.dtype(np.int64), bound_result,
                                     state, self, output_to_temporary=True,
                                     store_inames=(),
-                                    result_inames=inames, add_domain=False)]))
+                                    result_inames=inames, add_domain=False,
+                                    address_space=lp.AddressSpace.PRIVATE)]))
                         redn_bound_temps[bound_name] = bound_result
                         new_bound = prim.Variable(bound_name)
                     else:
@@ -1098,7 +1099,8 @@ def add_store(
         state: CodeGenState, cgen_mapper: CodeGenMapper, *,
         tags: frozenset[Tag] | None = None, axes: AxesT | None = None,
         output_to_temporary: bool = False, result_inames: tuple[str, ...] | None = None,
-        store_inames: tuple[str, ...] | None = None, add_domain: bool = True) -> str:
+        store_inames: tuple[str, ...] | None = None, add_domain: bool = True,
+        address_space: lp.AddressSpace = lp.AddressSpace.GLOBAL) -> str:
     """Add an instruction that stores to a variable in the kernel.
 
     :param name: name of the output array, which is created
@@ -1114,6 +1116,9 @@ def add_store(
         must be a subset of *result_inames*
     :param result_inames: the index inames of the right hand side of the assignment
     :param add_domain: add a new domain to the kernel for these inames/shape.
+    :param address_space: the address space for the temporary variable, when
+        *output_to_temporary* is ``True``. Defaults to
+        :attr:`loopy.AddressSpace.GLOBAL`.
 
     :returns: the id of the generated instruction
     """
@@ -1171,7 +1176,8 @@ def add_store(
     kernel = state.kernel
 
     if output_to_temporary:
-        tvar = get_loopy_temporary(name, shape, dtype, cgen_mapper, state, tags=tags)
+        tvar = get_loopy_temporary(name, shape, dtype, cgen_mapper, state, tags=tags,
+                                   address_space=address_space)
         temporary_variables = dict(kernel.temporary_variables)
         temporary_variables[name] = tvar
         kernel = kernel.copy(temporary_variables=temporary_variables,
@@ -1235,11 +1241,11 @@ def add_substitution(subst_name: str, ndim: int, result: ImplementedResult,
 def get_loopy_temporary(
         name: str, shape: ShapeType, dtype: np.dtype[Any],
         cgen_mapper: CodeGenMapper, state: CodeGenState, *,
-        tags: frozenset[Tag] | None = None) -> lp.TemporaryVariable:
+        tags: frozenset[Tag] | None = None,
+        address_space: lp.AddressSpace = lp.AddressSpace.GLOBAL
+        ) -> lp.TemporaryVariable:
     if tags is None:
         tags = frozenset()
-    # always allocating to global address space to avoid stack overflow
-    address_space = lp.AddressSpace.GLOBAL
     return lp.TemporaryVariable(name,
             shape=shape_to_scalar_expression(shape, cgen_mapper, state),
             dtype=dtype,
