@@ -601,6 +601,40 @@ def test_only_deps_as_knl_args():
     assert "y" not in knl.arg_dict
 
 
+def test_reduction_bound_temps_are_private():
+    # Regression test for https://github.com/inducer/pytato/issues/648
+    # (Temporaries for bounds should not be global)
+    # Reduction bound temporaries (for non-affine bounds) should use
+    # PRIVATE address space to avoid race conditions in parallel kernels.
+    n = 5
+    row_starts = pt.make_placeholder("row_starts", (n+1,), np.int64)
+    col_indices = pt.make_placeholder("col_indices", (n*3,), np.int64)
+    values = pt.make_placeholder("values", (n*3,), np.float64)
+    x = pt.make_placeholder("x", (n,), np.float64)
+
+    csr = pt.make_csr_matrix(
+        shape=(n, n),
+        elem_values=values,
+        elem_col_indices=col_indices,
+        row_starts=row_starts
+    )
+
+    result = csr @ x
+    knl = pt.generate_loopy(result).kernel
+
+    found_bound_temp = False
+    for name, tv in knl.temporary_variables.items():
+        if name.endswith(("_lbound", "_ubound")):
+            found_bound_temp = True
+            assert tv.address_space == lp.AddressSpace.PRIVATE, (
+                f"Reduction bound temporary '{name}' should be PRIVATE, "
+                f"got {tv.address_space}")
+
+    assert found_bound_temp, (
+        "Expected at least one reduction bound temporary whose name ends in "
+        "'_lbound' or '_ubound', but none were found.")
+
+
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.complex128))
 @pytest.mark.parametrize("function_name", ("abs", "sin", "cos", "tan", "arcsin",
     "arccos", "arctan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt",
