@@ -158,7 +158,7 @@ class EinsumDistributiveLawMapper(
     Primary mapper for :func:`apply_distributive_property_to_einsums`.
     """
     def __init__(self,
-                 how_to_distribute: Callable[[Array],
+                 how_to_distribute: Callable[[Einsum],
                                              EinsumDistributiveLawDescriptor]
                  ) -> None:
         super().__init__()
@@ -388,7 +388,7 @@ class EinsumDistributiveLawMapper(
 
 def apply_distributive_property_to_einsums(
     expr: ArrayOrNamesTc,
-    how_to_distribute: Callable[[Array], EinsumDistributiveLawDescriptor]
+    how_to_distribute: Callable[[Einsum], EinsumDistributiveLawDescriptor]
 ) -> ArrayOrNamesTc:
     """
     Returns a copy of *expr* after applying distributive law for einstein
