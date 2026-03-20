@@ -115,9 +115,8 @@ BINDING_NAME_RESERVED_PATTERN = re.compile(r"^(_in?(0|([1-9][0-9]*)))$")
 # {{{ BindingSubscriptsCollector
 
 
-class BindingSubscriptsCollector(CombineMapper[dict[BindingName,
-                                               set[tuple[Expression, ...]]],
-                                                      []]):
+class BindingSubscriptsCollector(
+        CombineMapper[dict[BindingName, set[tuple[Expression, ...]]], []]):
     """
     Return all the subscript expressions used by a variable specified by BindingName.
     Ex:

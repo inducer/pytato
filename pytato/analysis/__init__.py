@@ -694,7 +694,7 @@ def get_num_call_sites(outputs: ArrayOrNames) -> int:
 
 # {{{ TagCountMapper
 
-class TagCountMapper(CombineMapper[int, Never]):
+class TagCountMapper(CombineMapper[int, Never, []]):
     """
     Returns the number of nodes in a DAG that are tagged with all the tag types in
     *tag_types*.

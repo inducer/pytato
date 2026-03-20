@@ -815,7 +815,8 @@ PYTATO_REDUCTION_TO_LOOPY_REDUCTION: Mapping[type[red.ReductionOperation], str] 
 }
 
 
-class ReductionCollector(scalar_expr.CombineMapper[frozenset[scalar_expr.Reduce], []]):
+class ReductionCollector(
+        scalar_expr.CombineMapper[frozenset[scalar_expr.Reduce], []]):
     """
     Constructs a :class:`frozenset` containing all instances of
     :class:`pytato.scalar_expr.Reduce` found in a scalar expression.
