@@ -414,7 +414,7 @@ def _recv_to_comm_id(
 
 
 class _LocalSendRecvDepGatherer(
-        CombineMapper[FrozenOrderedSet[CommunicationOpIdentifier], Never]):
+        CombineMapper[FrozenOrderedSet[CommunicationOpIdentifier], Never, []]):
     def __init__(self, local_rank: int) -> None:
         super().__init__()
         self.local_comm_ids_to_needed_comm_ids: \
