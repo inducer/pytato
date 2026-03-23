@@ -1166,16 +1166,15 @@ def test_materialized_node_flop_counts():
     assert x in materialized_node_to_flop_count
     assert y in materialized_node_to_flop_count
     assert z in materialized_node_to_flop_count
-    assert expr.tagged(ImplStored()) in materialized_node_to_flop_count
+    assert expr in materialized_node_to_flop_count
     assert materialized_node_to_flop_count[x] == 0
     assert materialized_node_to_flop_count[y] == 0
     assert materialized_node_to_flop_count[z] == 40
-    assert materialized_node_to_flop_count[expr.tagged(ImplStored())] == 40*4
+    assert materialized_node_to_flop_count[expr] == 40*4
 
 
 def test_unmaterialized_node_flop_counts():
     from pytato.analysis import get_unmaterialized_node_flop_counts
-    from pytato.tags import ImplStored
 
     x = pt.make_placeholder("x", (10, 4))
     y = pt.make_placeholder("y", (10, 4))
@@ -1190,8 +1189,6 @@ def test_unmaterialized_node_flop_counts():
 
     unmaterialized_node_to_flop_counts = get_unmaterialized_node_flop_counts(expr)
 
-    materialized_expr = expr.tagged(ImplStored())
-
     # Everything except expr stays unmaterialized
     assert len(unmaterialized_node_to_flop_counts) == 1 + 10 + 8
     assert z in unmaterialized_node_to_flop_counts
@@ -1199,23 +1196,21 @@ def test_unmaterialized_node_flop_counts():
     assert all(s_i in unmaterialized_node_to_flop_counts for s_i in s)
     flop_counts = unmaterialized_node_to_flop_counts[z]
     assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
-    assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
-    assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
-        == 40*10
+    assert expr in flop_counts.materialized_successor_to_contrib_nflops
+    assert flop_counts.materialized_successor_to_contrib_nflops[expr] == 40*10
     assert flop_counts.nflops_if_materialized == 40
     for w_i in w:
         flop_counts = unmaterialized_node_to_flop_counts[w_i]
         assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
-        assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
-        assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
-            == 40*2
+        assert expr in flop_counts.materialized_successor_to_contrib_nflops
+        assert flop_counts.materialized_successor_to_contrib_nflops[expr] == 40*2
         assert flop_counts.nflops_if_materialized == 40*2
     for i, s_i in enumerate(s):
         flop_counts = unmaterialized_node_to_flop_counts[s_i]
         assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
-        assert materialized_expr in flop_counts.materialized_successor_to_contrib_nflops
-        assert flop_counts.materialized_successor_to_contrib_nflops[materialized_expr] \
-            == 40*2*(i+1) + 40*i
+        assert expr in flop_counts.materialized_successor_to_contrib_nflops
+        assert flop_counts.materialized_successor_to_contrib_nflops[expr] == \
+            40*2*(i+1) + 40*i
         assert flop_counts.nflops_if_materialized == 40*2*(i+1) + 40*i
 
 

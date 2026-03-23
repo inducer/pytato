@@ -61,15 +61,13 @@ from pytato.scalar_expr import (
     ScalarExpression,
     TypeCast,
 )
-from pytato.transform import ArrayOrNames, CachedMapper
+from pytato.transform import CachedMapper
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
     from pytools.tag import Tag
-
-    from pytato.function import FunctionDefinition
 
 
 __doc__ = """
@@ -82,8 +80,6 @@ Helper routines
 .. autofunction:: dim_to_index_lambda_components
 .. autofunction:: get_common_dtype_of_ary_or_scalars
 .. autofunction:: get_einsum_subscript_str
-.. autofunction:: is_materialized
-.. autofunction:: has_taggable_materialization
 
 References
 ^^^^^^^^^^
@@ -739,40 +735,6 @@ def get_einsum_specification(expr: Einsum) -> str:
                           for i in range(expr.ndim))
 
     return f"{','.join(input_specs)}->{output_spec}"
-
-
-def is_materialized(expr: ArrayOrNames | FunctionDefinition) -> bool:
-    """Returns *True* if *expr* is materialized."""
-    from pytato.array import InputArgumentBase
-    from pytato.distributed.nodes import DistributedRecv
-    from pytato.tags import ImplStored
-    return (
-        (
-            isinstance(expr, Array)
-            and bool(expr.tags_of_type(ImplStored)))
-        or isinstance(
-            expr,
-            (
-                InputArgumentBase,
-                DistributedRecv)))
-
-
-def has_taggable_materialization(expr: ArrayOrNames | FunctionDefinition) -> bool:
-    """
-    Returns *True* if *expr* uses the :class:`pytato.tags.ImplStored` tag to
-    determine whether or not it is materialized.
-    """
-    from pytato.array import InputArgumentBase, NamedArray
-    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-    return (
-        isinstance(expr, Array)
-        and not isinstance(
-            expr,
-            (
-                InputArgumentBase,
-                DistributedRecv,
-                NamedArray,
-                DistributedSendRefHolder)))
 
 
 # vim: fdm=marker
