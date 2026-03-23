@@ -44,6 +44,7 @@ THE SOFTWARE.
 
 
 import re
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Set as AbstractSet
 from functools import reduce
 from typing import (
@@ -80,6 +81,7 @@ from pymbolic.mapper.flop_counter import FlopCounterBase
 from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
 from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
 from pymbolic.typing import Integer
+from pytools import product
 
 
 if TYPE_CHECKING:
@@ -255,6 +257,36 @@ class InputGatherer(Collector[str, []]):
     @override
     def map_variable(self, expr: prim.Variable) -> set[str]:
         return {expr.name}
+
+
+class InputUseCounter(CombineMapper[dict[str, ArithmeticExpression], []]):
+    @override
+    def combine(
+            self, values: Iterable[dict[str, ArithmeticExpression]]
+            ) -> dict[str, ArithmeticExpression]:
+        result: dict[str, ArithmeticExpression] = defaultdict(int)
+        for val in values:
+            for name, nuses in val.items():
+                result[name] += nuses
+        return result
+
+    @override
+    def map_constant(self, expr: object) -> dict[str, ArithmeticExpression]:
+        return {}
+
+    @override
+    def map_variable(self, expr: prim.Variable) -> dict[str, ArithmeticExpression]:
+        return {expr.name: 1}
+
+    @override
+    def map_reduce(self, expr: Reduce) -> dict[str, ArithmeticExpression]:
+        inner_expr_result = self.rec(expr.inner_expr)
+        niters = product((
+            upper_bd - lower_bd
+            for lower_bd, upper_bd in expr.bounds.values()))
+        return {
+            name: niters * inner_expr_nuses
+            for name, inner_expr_nuses in inner_expr_result.items()}
 
 
 class FlopCounter(FlopCounterBase):
