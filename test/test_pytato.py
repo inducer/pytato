@@ -1131,17 +1131,17 @@ def test_flop_count():
 
     x = pt.make_placeholder("x", (2, 3, 4))
     y = pt.make_placeholder("y", (3, 4))
-    expr = pt.einsum("ijk,jk->ijk", x, y)
+    expr = pt.einsum("ijk,jk->ijk", 2*x, 3*y)
 
-    # expr[i, j, k] = x[i, j, k] * y[j, k]
-    assert get_num_flops(expr) == 24
+    # expr[i, j, k] = 2*x[i, j, k] * 3*y[j, k]
+    assert get_num_flops(expr) == 72
 
     x = pt.make_placeholder("x", (2, 3, 4))
     y = pt.make_placeholder("y", (3, 4))
-    expr = pt.einsum("ijk,jk->i", x, y)
+    expr = pt.einsum("ijk,jk->i", 2*x, 3*y)
 
-    # expr[i] = sum(sum(x[i, j, k] * y[j, k], j), k)
-    assert get_num_flops(expr) == 2*(4 * (3*1 + 2) + 3)
+    # expr[i] = sum(sum(2*x[i, j, k] * 3*y[j, k], j), k)
+    assert get_num_flops(expr) == 2*(4 * (3*3 + 2) + 3)
 
     # }}}
 

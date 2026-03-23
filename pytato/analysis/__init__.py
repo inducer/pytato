@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from orderedsets import FrozenOrderedSet, OrderedSet
 from typing_extensions import Never, Self, override
@@ -60,6 +60,7 @@ from pytato.loopy import LoopyCall, LoopyCallResult
 from pytato.scalar_expr import (
     SCALAR_CLASSES,
     FlopCounter as ScalarFlopCounter,
+    InputUseCounter as ScalarInputUseCounter,
 )
 from pytato.tags import ImplStored
 from pytato.transform import (
@@ -983,11 +984,17 @@ class _PerEntryFlopCounter(
                 raise _NonIntegralPerEntryFlopCountError(
                     "Unable to compute an integer-valued per-entry flop count.")
 
+        binding_to_nuses = ScalarInputUseCounter()(idx_lambda.expr)
+        # self_nflops check above should take care of non-constant use count case
+        assert all(
+            isinstance(nuses, int)
+            for nuses in binding_to_nuses.values())
+
         return self.combine(
             self_nflops,
             *(
-                self.rec(bnd, False)
-                for _, bnd in sorted(idx_lambda.bindings.items())))
+                cast("int", binding_to_nuses[name]) * self.rec(bnd, False)
+                for name, bnd in sorted(idx_lambda.bindings.items())))
 
     @override
     def map_placeholder(self, expr: Placeholder, is_root: bool) -> int:
@@ -1154,11 +1161,21 @@ class _UnmaterializedSubexpressionUseCounter(
         if expr in self.materialized_nodes and not is_root:
             return {}
 
+        binding_to_nuses = ScalarInputUseCounter()(idx_lambda.expr)
+        if any(
+                not isinstance(nuses, int)
+                for nuses in binding_to_nuses.values()):
+            raise ValueError(
+                "Unable to compute integer-valued use counts for the predecessors "
+                f"of array of type '{type(expr).__name__}'.")
+
         return self.combine(
             {expr: 1} if not is_root else {},
             *(
-                self.rec(bnd, False)
-                for _, bnd in sorted(idx_lambda.bindings.items())))
+                {
+                    ary: cast("int", binding_to_nuses[name]) * nuses
+                    for ary, nuses in self.rec(bnd, False).items()}
+                for name, bnd in sorted(idx_lambda.bindings.items())))
 
     @override
     def map_placeholder(self, expr: Placeholder, is_root: bool) -> dict[Array, int]:
