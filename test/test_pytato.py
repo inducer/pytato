@@ -2064,6 +2064,20 @@ def test_replace_if_different_on_idx_lambda():
     assert 3*x == new_expr
 
 
+def test_replace_if_different_on_idx_lambda_0():
+    # before commit 474a71a, this test would raise 'ValueError: zip() argument 2
+    # is shorter than argument 1'
+    from pytato.array import Axis
+    from pytato.utils import are_shapes_equal
+
+    x = pt.make_placeholder("x", 10)
+    expr = 2 * x
+    new_expr = expr.replace_if_different(
+        shape=(10, 1), axes=(Axis(frozenset()), Axis(frozenset()))
+    )
+    assert are_shapes_equal(new_expr.shape, (10, 1))
+
+
 if __name__ == "__main__":
     import os
     if "INVOCATION_INFO" in os.environ:
