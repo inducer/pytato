@@ -452,7 +452,9 @@ def _augment_array_dataclass(
                         for a_k, b_k in zip(
                             a.values(), b.values(), strict=True)))
             else:
-                return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+                return (
+                    len(a) == len(b)
+                    and all(b_i is a_i for a_i, b_i in zip(a, b, strict=True)))
 
         def _dataclass_replace_if_different(self, **kwargs):
             diff_fields = {}
@@ -531,7 +533,9 @@ def _entries_are_identical(
                 for a_k, b_k in zip(
                     a.values(), b.values(), strict=True)))
     else:
-        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+        return len(a) == len(b) and all(
+            b_i is a_i for a_i, b_i in zip(a, b, strict=True)
+        )
 
 # }}}
 
