@@ -1005,10 +1005,6 @@ class _PerEntryFlopCounter(
         return 0
 
     @override
-    def map_csr_matmul(self, expr: CSRMatmul, is_root: bool) -> int:
-        raise NotImplementedError
-
-    @override
     def map_named_array(self, expr: NamedArray, is_root: bool) -> int:
         assert isinstance(expr._container, DictOfNamedArrays)
         return self.combine(self.rec(expr._container._data[expr.name], False))
@@ -1099,10 +1095,31 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
         try:
             nflops_per_entry = self._per_entry_flop_counter(expr)
         except _NonIntegralPerEntryFlopCountError as e:
-            raise ValueError(
-                "Unable to compute a flop count for array of type "
-                f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
-                "non-integer-valued.") from e
+            if isinstance(expr, CSRMatmul):
+                # _PerEntryFlopCounter chokes on CSRMatmul because the row reduction
+                # bounds are data dependent. By handling it here instead we can take
+                # advantage of knowing that the total number of reduction iterations
+                # is len(elem_values). Note: assumes no flops for elem_col_indices
+                # and row_starts as they are integer-valued.
+                nelems = expr.matrix.elem_values.shape[0]
+                nflops_self = (
+                    (
+                        nelems  # multiplies
+                        + nelems - expr.shape[0])  # adds
+                    * product(expr.shape[1:]))
+                nflops_children = (
+                    nelems
+                    * (
+                        self._per_entry_flop_counter(expr.matrix.elem_values)
+                        + self._per_entry_flop_counter(expr.array))
+                    * product(expr.shape[1:]))
+                self.materialized_node_to_nflops[expr] = (
+                    nflops_self + nflops_children)
+            else:
+                raise ValueError(
+                    "Unable to compute a flop count for array of type "
+                    f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
+                    "non-integer-valued.") from e
         else:
             self.materialized_node_to_nflops[expr] = (
                 nflops_per_entry
@@ -1184,10 +1201,6 @@ class _UnmaterializedSubexpressionUseCounter(
     @override
     def map_data_wrapper(self, expr: DataWrapper, is_root: bool) -> dict[Array, int]:
         return {}
-
-    @override
-    def map_csr_matmul(self, expr: CSRMatmul, is_root: bool) -> dict[Array, int]:
-        raise NotImplementedError
 
     @override
     def map_named_array(self, expr: NamedArray, is_root: bool) -> dict[Array, int]:
@@ -1297,10 +1310,45 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
         try:
             self._per_entry_flop_counter(expr)
         except _NonIntegralPerEntryFlopCountError as e:
-            raise ValueError(
-                "Unable to compute a flop count for array of type "
-                f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
-                "non-integer-valued.") from e
+            if isinstance(expr, CSRMatmul):
+                # _PerEntryFlopCounter chokes on CSRMatmul because the row reduction
+                # bounds are data dependent. By handling it here instead we can take
+                # advantage of knowing that the total number of reduction iterations
+                # is len(elem_values). Note: assumes no flops for elem_col_indices
+                # and row_starts as they are integer-valued.
+                nelems = expr.matrix.elem_values.shape[0]
+                subexpr_to_nuses_per_elem = self._use_counter.combine(
+                    self._use_counter(expr.matrix.elem_values, is_root=False),
+                    self._use_counter(expr.array, is_root=False))
+                for subexpr, nuses_per_elem in subexpr_to_nuses_per_elem.items():
+                    try:
+                        nflops_per_entry = self._per_entry_flop_counter(
+                            subexpr, is_root=False)
+                    except _NonIntegralPerEntryFlopCountError:
+                        raise ValueError(
+                            "Unable to compute a flop count for array of type "
+                            f"'{type(subexpr).__name__}'; per-entry flop count is "
+                            "unexpectedly non-integer-valued.") from e
+                    if subexpr not in self.unmaterialized_node_to_flop_counts:
+                        nflops_if_materialized = (
+                            nflops_per_entry * product(subexpr.shape))
+                        flop_counts = UnmaterializedNodeFlopCounts(
+                            {}, nflops_if_materialized)
+                        self.unmaterialized_node_to_flop_counts[subexpr] = flop_counts
+                    else:
+                        flop_counts = self.unmaterialized_node_to_flop_counts[subexpr]
+                    assert expr not in \
+                        flop_counts.materialized_successor_to_contrib_nflops
+                    flop_counts.materialized_successor_to_contrib_nflops[expr] = (
+                        nuses_per_elem
+                        * nelems
+                        * nflops_per_entry
+                        * product(expr.shape[1:]))
+            else:
+                raise ValueError(
+                    "Unable to compute a flop count for array of type "
+                    f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
+                    "non-integer-valued.") from e
         else:
             subexpr_to_nuses = self._use_counter(expr)
             for subexpr, nuses in subexpr_to_nuses.items():

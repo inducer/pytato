@@ -1145,10 +1145,59 @@ def test_flop_count():
 
     # }}}
 
+    # {{{ CSR matmul (trivial predecessors)
+
+    x = pt.make_csr_matrix(
+        shape=(8, 10),
+        elem_values=pt.make_placeholder("x_elem_values", (16,)),
+        elem_col_indices=pt.make_placeholder("x_elem_col_indices", (16,)),
+        row_starts=pt.make_placeholder("x_row_starts", (9,)))
+    y = pt.make_placeholder("y", (10, 5, 3))
+    expr = x @ y
+
+    assert get_num_flops(expr) == 5*3*(
+        16        # multiplies
+        + 16 - 8  # adds
+        )
+
+    # }}}
+
+    # {{{ CSR matmul (nontrivial predecessors)
+
+    elem_values = pt.zeros(12) + 1
+    elem_col_indices = pt.make_data_wrapper(np.array([
+        0,
+        0, 1,
+        0, 1, 2,
+        1, 2, 3,
+        2, 3,
+        3]))
+    row_starts = pt.make_data_wrapper(np.array([0, 1, 3, 6, 9, 11, 12]))
+    x = pt.make_csr_matrix(
+        shape=(6, 4),
+        elem_values=elem_values,
+        elem_col_indices=elem_col_indices,
+        row_starts=row_starts)
+    y = pt.zeros((4, 3, 2)) + 1
+    expr = x @ y
+
+    assert get_num_flops(expr) == 3*2*(
+        3          # row 1
+        + 3*2 + 1  # row 2
+        + 3*3 + 2  # row 3
+        + 3*3 + 2  # row 4
+        + 3*2 + 1  # row 5
+        + 3        # row 6
+        )
+
+    # }}}
+
 
 def test_materialized_node_flop_counts():
     from pytato.analysis import get_materialized_node_flop_counts
     from pytato.tags import ImplStored
+
+    # {{{ basic DAG
 
     x = pt.make_placeholder("x", (10, 4))
     y = pt.make_placeholder("y", (10, 4))
@@ -1172,9 +1221,51 @@ def test_materialized_node_flop_counts():
     assert materialized_node_to_flop_count[z] == 40
     assert materialized_node_to_flop_count[expr] == 40*4
 
+    # }}}
+
+    # {{{ CSR matmul
+
+    zeros_10 = pt.make_data_wrapper(np.zeros(10))
+    zeros_20 = pt.make_data_wrapper(np.zeros(20))
+    elem_values = zeros_20 + 1
+    elem_col_indices = pt.make_data_wrapper((1 + np.arange(0, 20)) // 2)
+    row_starts = pt.make_data_wrapper(2*np.arange(0, 11))
+    x = pt.make_csr_matrix(
+        shape=(10, 10),
+        elem_values=elem_values,
+        elem_col_indices=elem_col_indices,
+        row_starts=row_starts)
+    y = zeros_10 + 1
+    z = x @ y
+    u = 2*z
+    v = 3*z
+    expr = u - v
+
+    materialized_node_to_flop_count = get_materialized_node_flop_counts(expr)
+
+    assert len(materialized_node_to_flop_count) == 6
+    assert zeros_20 in materialized_node_to_flop_count
+    assert elem_col_indices in materialized_node_to_flop_count
+    assert row_starts in materialized_node_to_flop_count
+    assert zeros_10 in materialized_node_to_flop_count
+    assert z in materialized_node_to_flop_count
+    assert expr in materialized_node_to_flop_count
+    assert materialized_node_to_flop_count[zeros_20] == 0
+    assert materialized_node_to_flop_count[elem_col_indices] == 0
+    assert materialized_node_to_flop_count[row_starts] == 0
+    assert materialized_node_to_flop_count[zeros_10] == 0
+    # flops from elem_values/y/z (2 elems per row so y gets used twice)
+    assert materialized_node_to_flop_count[z] == 20 + 20 + 20 + 10
+    # flops from u/v/expr (no flops from z because it's materialized)
+    assert materialized_node_to_flop_count[expr] == 40
+
+    # }}}
+
 
 def test_unmaterialized_node_flop_counts():
     from pytato.analysis import get_unmaterialized_node_flop_counts
+
+    # {{{ basic DAG
 
     x = pt.make_placeholder("x", (10, 4))
     y = pt.make_placeholder("y", (10, 4))
@@ -1189,7 +1280,7 @@ def test_unmaterialized_node_flop_counts():
 
     unmaterialized_node_to_flop_counts = get_unmaterialized_node_flop_counts(expr)
 
-    # Everything except expr stays unmaterialized
+    # Everything except x/y/expr stays unmaterialized
     assert len(unmaterialized_node_to_flop_counts) == 1 + 10 + 8
     assert z in unmaterialized_node_to_flop_counts
     assert all(w_i in unmaterialized_node_to_flop_counts for w_i in w)
@@ -1212,6 +1303,39 @@ def test_unmaterialized_node_flop_counts():
         assert flop_counts.materialized_successor_to_contrib_nflops[expr] == \
             40*2*(i+1) + 40*i
         assert flop_counts.nflops_if_materialized == 40*2*(i+1) + 40*i
+
+    # }}}
+
+    # {{{ CSR matmul
+
+    elem_values = pt.make_data_wrapper(np.zeros(20)) + 1
+    elem_col_indices = pt.make_data_wrapper((1 + np.arange(0, 20)) // 2)
+    row_starts = pt.make_data_wrapper(2*np.arange(0, 11))
+    x = pt.make_csr_matrix(
+        shape=(10, 10),
+        elem_values=elem_values,
+        elem_col_indices=elem_col_indices,
+        row_starts=row_starts)
+    y = pt.make_data_wrapper(np.zeros(10)) + 1
+    expr = x @ y
+
+    unmaterialized_node_to_flop_counts = get_unmaterialized_node_flop_counts(expr)
+
+    assert len(unmaterialized_node_to_flop_counts) == 2
+    assert elem_values in unmaterialized_node_to_flop_counts
+    assert y in unmaterialized_node_to_flop_counts
+    flop_counts = unmaterialized_node_to_flop_counts[elem_values]
+    assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
+    assert expr in flop_counts.materialized_successor_to_contrib_nflops
+    assert flop_counts.materialized_successor_to_contrib_nflops[expr] == 20
+    assert flop_counts.nflops_if_materialized == 20
+    flop_counts = unmaterialized_node_to_flop_counts[y]
+    assert len(flop_counts.materialized_successor_to_contrib_nflops) == 1
+    assert expr in flop_counts.materialized_successor_to_contrib_nflops
+    assert flop_counts.materialized_successor_to_contrib_nflops[expr] == 20
+    assert flop_counts.nflops_if_materialized == 10
+
+    # }}}
 
 
 def test_rec_get_user_nodes():
