@@ -1972,14 +1972,6 @@
                 }
             },
             {
-                "code": "reportOverlappingOverload",
-                "range": {
-                    "startColumn": 4,
-                    "endColumn": 26,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 20,
@@ -1992,38 +1984,6 @@
                 "range": {
                     "startColumn": 25,
                     "endColumn": 28,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 32,
-                    "endColumn": 42,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 34,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 39,
-                    "endColumn": 42,
                     "lineCount": 1
                 }
             },
