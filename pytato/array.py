@@ -438,9 +438,8 @@ def _augment_array_dataclass(
     augment_code += "\n"
     augment_code += remove_common_indentation(
         """
-        from collections.abc import Iterable, Mapping
+        from collections.abc import Mapping, Sequence
         from dataclasses import replace
-        from pymbolic.primitives import ExpressionNode
 
         def _dataclass_sequence_or_mapping_entries_are_identical(a, b):
             if isinstance(a, Mapping):
@@ -452,16 +451,16 @@ def _augment_array_dataclass(
                         for a_k, b_k in zip(
                             a.values(), b.values(), strict=True)))
             else:
-                return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+                return (
+                    len(a) == len(b)
+                    and all(b_i is a_i for a_i, b_i in zip(a, b, strict=True)))
 
         def _dataclass_replace_if_different(self, **kwargs):
             diff_fields = {}
             for name, new_value in kwargs.items():
                 value = getattr(self, name)
 
-                if isinstance(value, Iterable | Mapping) and not isinstance(
-                    value, ExpressionNode
-                ):
+                if isinstance(value, Sequence | Mapping):
                     if not _dataclass_sequence_or_mapping_entries_are_identical(
                             new_value, value):
                         diff_fields[name] = new_value
@@ -507,8 +506,8 @@ def _augment_array_dataclass(
 
 @overload
 def _entries_are_identical(
-        a: Iterable[Any],
-        b: Iterable[Any]) -> bool:
+        a: Sequence[Any],
+        b: Sequence[Any]) -> bool:
     ...
 
 
@@ -520,8 +519,8 @@ def _entries_are_identical(
 
 
 def _entries_are_identical(
-        a: Iterable[Any] | Mapping[str, Any],
-        b: Iterable[Any] | Mapping[str, Any]) -> bool:
+        a: Sequence[Any] | Mapping[str, Any],
+        b: Sequence[Any] | Mapping[str, Any]) -> bool:
     if isinstance(a, Mapping):
         assert isinstance(b, Mapping)
         return (
@@ -531,7 +530,10 @@ def _entries_are_identical(
                 for a_k, b_k in zip(
                     a.values(), b.values(), strict=True)))
     else:
-        return all(b_i is a_i for a_i, b_i in zip(a, b, strict=True))
+        return len(a) == len(b) and all(
+            b_i is a_i
+            for a_i, b_i in zip(a, b, strict=True)  # pyright: ignore[reportAny]
+        )
 
 # }}}
 
@@ -1199,7 +1201,7 @@ class AbstractResultWithNamedArrays(Mapping[str, NamedArray], Taggable, ABC):
         diff_fields: Mapping[str, Any] = {}
         for name, new_value in kwargs.items():
             value = getattr(self, name)
-            if isinstance(value, Iterable | Mapping) and not isinstance(
+            if isinstance(value, Sequence | Mapping) and not isinstance(
                 value, ExpressionNode
             ):
                 if not _entries_are_identical(new_value, value):
