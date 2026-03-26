@@ -526,7 +526,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
             # Reminder: If overriding this in a subclass and reimplementing the cache
             # lookup logic there, must use super(CachedMapper, self) instead of
             # super() below to avoid double caching,
-            # see https://github.com/inducer/pytato/pull/585.
+            # see https://github.com/inducer/pytato/pull/654.
             return self._cache_add(inputs, super().rec(expr, *args, **kwargs))
 
     def rec_function_definition(
@@ -539,7 +539,7 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
             # Reminder: If overriding this in a subclass and reimplementing the cache
             # lookup logic there, must use super(CachedMapper, self) instead of
             # super() below to avoid double caching,
-            # see https://github.com/inducer/pytato/pull/585.
+            # see https://github.com/inducer/pytato/pull/654.
             return self._function_cache_add(
                 inputs, super().rec_function_definition(expr, *args, **kwargs))
 
