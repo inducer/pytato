@@ -52,6 +52,7 @@ from pytato.array import (
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.transform import (
     ArrayOrNames,
+    CachedMapper,
     CachedWalkMapper,
     CombineMapper,
     Mapper,
@@ -720,10 +721,9 @@ class TagCountMapper(CombineMapper[int, Never, []]):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            s = Mapper.rec(self, expr)
+            # Using super(CachedMapper, self) instead of super() to bypass
+            # CachedMapper.rec and avoid double caching
+            s = super(CachedMapper, self).rec(expr)
             if (
                     isinstance(expr, Array)
                     and (
