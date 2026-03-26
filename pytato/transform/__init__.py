@@ -280,15 +280,15 @@ class Mapper(Generic[ResultT, FunctionResultT, P]):
             self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
             ) -> FunctionResultT:
         """Call the mapper method of *expr* and return the result."""
-        method: Callable[..., FunctionResultT] | None
-
         try:
-            method = self.map_function_definition  # type: ignore[attr-defined]
+            method_name = "map_function_definition"
+            method: Callable[..., FunctionResultT] = cast(
+                "Callable[..., FunctionResultT]",
+                getattr(self, method_name))
         except AttributeError:
             raise ValueError(
                 f"{type(self).__name__} lacks a mapper method for functions.") from None
 
-        assert method is not None
         return method(expr, *args, **kwargs)
 
     @overload
@@ -523,10 +523,11 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            return self._cache_add(inputs, Mapper.rec(self, expr, *args, **kwargs))
+            # Reminder: If overriding this in a subclass and reimplementing the cache
+            # lookup logic there, must use super(CachedMapper, self) instead of
+            # super() below to avoid double caching,
+            # see https://github.com/inducer/pytato/pull/585.
+            return self._cache_add(inputs, super().rec(expr, *args, **kwargs))
 
     def rec_function_definition(
                 self, expr: FunctionDefinition, *args: P.args, **kwargs: P.kwargs
@@ -535,11 +536,12 @@ class CachedMapper(Mapper[ResultT, FunctionResultT, P]):
         try:
             return self._function_cache_retrieve(inputs)
         except KeyError:
+            # Reminder: If overriding this in a subclass and reimplementing the cache
+            # lookup logic there, must use super(CachedMapper, self) instead of
+            # super() below to avoid double caching,
+            # see https://github.com/inducer/pytato/pull/585.
             return self._function_cache_add(
-                # Intentionally going to Mapper instead of super() to avoid
-                # double caching when subclasses of CachedMapper override rec,
-                # see https://github.com/inducer/pytato/pull/585
-                inputs, Mapper.rec_function_definition(self, expr, *args, **kwargs))
+                inputs, super().rec_function_definition(expr, *args, **kwargs))
 
     def clone_for_callee(
             self, function: FunctionDefinition) -> Self:
@@ -2004,10 +2006,10 @@ class CachedMapAndCopyMapper(CopyMapper):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            return self._cache_add(inputs, Mapper.rec(self, self.map_fn(expr)))
+            # Using super(CachedMapper, self) instead of super() to bypass
+            # CachedMapper.rec and avoid double caching
+            return self._cache_add(inputs,
+                super(CachedMapper, self).rec(self.map_fn(expr)))
 
 # }}}
 
