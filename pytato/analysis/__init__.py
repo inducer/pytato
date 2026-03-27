@@ -977,9 +977,10 @@ class _PerEntryFlopCounter(
             from pytato.scalar_expr import OpFlops, OpFlopsCollector
             op_flops: frozenset[OpFlops] = OpFlopsCollector()(self_nflops)
             if op_flops:
-                op_name = next(iter(op_flops)).op
+                op_names = sorted({of.op for of in op_flops})
+                formatted_ops = ", ".join(f"'{name}'" for name in op_names)
                 raise UndefinedOpFlopCountError(
-                    f"Undefined flop count for operation '{op_name}'.")
+                    f"Undefined flop count for operation(s): {formatted_ops}.")
             else:
                 raise _NonIntegralPerEntryFlopCountError(
                     "Unable to compute an integer-valued per-entry flop count.")
