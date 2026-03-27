@@ -993,7 +993,7 @@ class _PerEntryFlopCounter(
         return self.combine(
             self_nflops,
             *(
-                cast("int", binding_to_nuses[name]) * self.rec(bnd, False)
+                cast("int", binding_to_nuses.get(name, 0)) * self.rec(bnd, False)
                 for name, bnd in sorted(idx_lambda.bindings.items())))
 
     @override
@@ -1190,7 +1190,7 @@ class _UnmaterializedSubexpressionUseCounter(
             {expr: 1} if not is_root else {},
             *(
                 {
-                    ary: cast("int", binding_to_nuses[name]) * nuses
+                    ary: cast("int", binding_to_nuses.get(name, 0)) * nuses
                     for ary, nuses in self.rec(bnd, False).items()}
                 for name, bnd in sorted(idx_lambda.bindings.items())))
 
