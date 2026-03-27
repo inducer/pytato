@@ -118,7 +118,7 @@ class _StatelessReductionOperation(ReductionOperation):
 class SumReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "+"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
@@ -128,7 +128,7 @@ class SumReductionOperation(_StatelessReductionOperation):
 class ProductReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "*"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
@@ -138,7 +138,7 @@ class ProductReductionOperation(_StatelessReductionOperation):
 class MaxReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "max"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
@@ -153,7 +153,7 @@ class MaxReductionOperation(_StatelessReductionOperation):
 class MinReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "min"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
@@ -168,7 +168,7 @@ class MinReductionOperation(_StatelessReductionOperation):
 class AllReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "and"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
@@ -178,7 +178,7 @@ class AllReductionOperation(_StatelessReductionOperation):
 class AnyReductionOperation(_StatelessReductionOperation):
     @override
     @classmethod
-    def scalar_op_name(cls):
+    def scalar_op_name(cls) -> str:
         return "or"
 
     def neutral_element(self, dtype: np.dtype[Any]) -> Any:
