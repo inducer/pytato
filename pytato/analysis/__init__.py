@@ -1016,11 +1016,13 @@ class _PerEntryFlopCounter(
 
     @override
     def map_loopy_call(self, expr: LoopyCall, is_root: bool) -> int:
+        # Shouldn't have loopy calls
         raise AssertionError("Control shouldn't reach here.")
 
     @override
     def map_loopy_call_result(self, expr: LoopyCallResult, is_root: bool) -> int:
-        return 0
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
 
     @override
     def map_distributed_send_ref_holder(
@@ -1071,6 +1073,21 @@ class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
     @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         raise AssertionError("Control shouldn't reach this point.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
 
     @override
     def map_function_definition(self, expr: FunctionDefinition) -> None:
@@ -1215,12 +1232,14 @@ class _UnmaterializedSubexpressionUseCounter(
 
     @override
     def map_loopy_call(self, expr: LoopyCall, is_root: bool) -> dict[Array, int]:
+        # Shouldn't have loopy calls
         raise AssertionError("Control shouldn't reach here.")
 
     @override
     def map_loopy_call_result(
             self, expr: LoopyCallResult, is_root: bool) -> dict[Array, int]:
-        return {}
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
 
     @override
     def map_distributed_send_ref_holder(
@@ -1286,6 +1305,21 @@ class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
     @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         raise AssertionError("Control shouldn't reach this point.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
 
     @override
     def map_function_definition(self, expr: FunctionDefinition) -> None:
