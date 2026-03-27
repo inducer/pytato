@@ -356,15 +356,41 @@ class FlopCounter(FlopCounterBase):
     @override
     def map_power(self, expr: prim.Power) -> ArithmeticExpression:
         if isinstance(expr.exponent, int):
-            if expr.exponent >= 0:
+            # The calculation below is based on the following code (which is an
+            # approximation of what is done in loopy)
+            # def pow(x, n):
+            #     if n == 0: return 1
+            #     if n == 1: return x
+            #     if n == 2: return x*x
+            #     if n < 0:
+            #         x = 1/x
+            #         n = -n
+            #     y = 1
+            #     while n > 1:
+            #         if n % 2:
+            #             y = x * y
+            #         x = x * x
+            #         n = n/2
+            #     return x*y
+            if expr.exponent == 0:
+                return 0
+            elif expr.exponent > 0 and expr.exponent <= 2:
                 return (
-                    expr.exponent * self._get_op_nflops("*")
+                    (expr.exponent - 1) * self._get_op_nflops("*")
                     + self.rec(expr.base))
-            else:
-                return (
-                    self._get_op_nflops("/")
-                    + (-expr.exponent) * self._get_op_nflops("*")
-                    + self.rec(expr.base))
+            nmults = 1
+            remaining_exp = abs(expr.exponent)
+            while remaining_exp > 1:
+                if remaining_exp % 2:
+                    nmults += 1
+                nmults += 1
+                remaining_exp //= 2
+            nflops = (
+                nmults * self._get_op_nflops("*")
+                + self.rec(expr.base))
+            if expr.exponent < 0:
+                nflops += self._get_op_nflops("/")
+            return nflops
         else:
             return (
                 self._get_op_nflops("**")

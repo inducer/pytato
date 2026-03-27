@@ -1003,9 +1003,16 @@ def test_scalar_flop_count():
 
     assert fc(x % 2) == 0
 
-    assert fc(x ** 3) == 3
-    assert fc(x ** (-3)) == 7
+    assert fc(x ** 0) == 0
+    assert fc(x ** 1) == 0
+    # x * x
+    assert fc(x ** 2) == 1
+    # compute x^2, x^4, x^8, x^16, x^32; multiply x^32 * x^16 * x^8 * x^4 * x * 1
+    assert fc(x ** 61) == 5 + 5
+    # divide; compute x^2, x^4, x^8, x^16; multiply x^16 * x^4 * x^2 * 1
+    assert fc(x ** -22) == 4 + 4 + 3
     assert fc(x ** 0.3) == 8
+    assert fc(x ** y) == 8
 
     assert fc(x.lt(y)) == 1
 
