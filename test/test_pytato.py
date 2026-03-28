@@ -1561,6 +1561,23 @@ def test_lower_to_index_lambda():
     assert idx_lambda.expr.index_tuple[4] == Variable("_1")
 
 
+def test_lower_to_index_lambda_flatten_reshape():
+    # Before commit<=577cb39, pytato would generate redundant floor div
+    # and modulo computations. Specifically, in this case we would get:
+    # out[_0] = x[((0 + _0*1) % 40) // 4, ((0 + _0*1) % 4) // 1].
+
+    from pymbolic import parse
+
+    from pytato.array import IndexLambda
+    x = pt.make_placeholder(name="x", dtype=float, shape=(10, 4))
+    idx_lambda = pt.to_index_lambda(x.reshape(-1))
+    assert isinstance(idx_lambda, IndexLambda)
+    assert idx_lambda.expr.index_tuple == (
+        parse("_0 // 4"),
+        parse("_0 % 4"),
+    )
+
+
 def test_reserved_binding_name_patterns():
     from pytato.transform.metadata import BINDING_NAME_RESERVED_PATTERN
 
