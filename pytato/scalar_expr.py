@@ -73,6 +73,7 @@ from pymbolic.mapper.dependency import (
 )
 from pymbolic.mapper.distributor import DistributeMapper as DistributeMapperBase
 from pymbolic.mapper.evaluator import EvaluationMapper as EvaluationMapperBase
+from pymbolic.mapper.flattener import FlattenMapper as FlattenMapperBase
 from pymbolic.mapper.stringifier import StringifyMapper as StringifyMapperBase
 from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
 from pymbolic.typing import Integer
@@ -212,16 +213,18 @@ class EvaluationMapper(EvaluationMapperBase[ResultT]):
 
 
 class DistributeMapper(DistributeMapperBase):
-
     def map_reduce(self, expr: Reduce) -> None:
         # TODO: not trivial to distribute symbolic reduction nodes
         raise NotImplementedError()
 
 
 class TermCollector(TermCollectorBase):
-
     def map_reduce(self, expr: Reduce) -> None:
         raise NotImplementedError()
+
+
+class FlattenMapper(FlattenMapperBase, IdentityMapper[[]]):
+    pass
 
 
 class StringifyMapper(StringifyMapperBase[P]):
