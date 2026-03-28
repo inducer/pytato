@@ -36,7 +36,7 @@ from typing_extensions import Never
 
 import pymbolic.primitives as prim
 from pymbolic import ArithmeticExpression
-from pytools import UniqueNameGenerator
+from pytools import UniqueNameGenerator, product
 
 from pytato.array import (
     AbstractResultWithNamedArrays,
@@ -61,7 +61,7 @@ from pytato.array import (
     _get_einsum_access_descr_to_axis_len,
 )
 from pytato.diagnostic import CannotBeLoweredToIndexLambda
-from pytato.scalar_expr import INT_CLASSES, ScalarExpression
+from pytato.scalar_expr import INT_CLASSES, FlattenMapper, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import (
     Mapper,
@@ -127,13 +127,31 @@ def _generate_index_expressions(
         new_strides = new_strides[::-1]
         old_size_tills = old_size_tills[::-1]
 
-    flattened_index_expn = sum(
+    flattened_index_expn = FlattenMapper()(sum(
         index_var*new_stride
-        for index_var, new_stride in zip(index_vars, new_strides, strict=True))
+        for index_var, new_stride in zip(index_vars, new_strides, strict=True)))
+
+    old_size = product(old_shape)
+
+    def _mod(
+        num: ArithmeticExpression, denom: ArithmeticExpression
+    ) -> ArithmeticExpression:
+        from pymbolic.typing import Integer
+        if isinstance(old_size, Integer) and denom == old_size and denom != 0:
+            return num
+        # Pyright has a point: complex numbers don't support '%'.
+        return num % denom  # pyright: ignore[reportOperatorIssue,reportUnknownVariableType]
+
+    def _floordiv(
+        num: ArithmeticExpression, denom: ArithmeticExpression
+    ) -> ArithmeticExpression:
+        if denom == 1:
+            return num
+        # pyright has a point: complex numbers don't support '//'.
+        return num // denom  # pyright: ignore[reportOperatorIssue,reportUnknownVariableType]
 
     return tuple(
-        # Mypy has a point: complex numbers don't support '//'.
-        (flattened_index_expn % old_size_till) // old_stride  # type: ignore[operator]
+        _floordiv(_mod(flattened_index_expn, old_size_till), old_stride)  # pyright: ignore[reportArgumentType]
         for old_size_till, old_stride in zip(old_size_tills, old_strides, strict=True))
 
 
