@@ -354,6 +354,13 @@ class FlopCounter(FlopCounterBase):
             + self.rec(expr.denominator))
 
     @override
+    def map_remainder(self, expr: prim.Remainder) -> ArithmeticExpression:
+        return (
+            self._get_op_nflops("%")
+            + self.rec(expr.numerator)
+            + self.rec(expr.denominator))
+
+    @override
     def map_power(self, expr: prim.Power) -> ArithmeticExpression:
         if isinstance(expr.exponent, int):
             # The calculation below is based on the following code (which is an
