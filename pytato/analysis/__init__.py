@@ -1441,6 +1441,11 @@ def get_num_flops(
 
     .. note::
 
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
+
+    .. note::
+
         Does not support functions. Function calls must be inlined before calling.
     """
     from pytato.codegen import normalize_outputs
@@ -1475,6 +1480,11 @@ def get_materialized_node_flop_counts(
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
         this function assumes a SIMT-like model of computation in which the per-entry
         cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
 
     .. note::
 
@@ -1518,6 +1528,11 @@ def get_unmaterialized_node_flop_counts(
         For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
         this function assumes a SIMT-like model of computation in which the per-entry
         cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
 
     .. note::
 
