@@ -969,64 +969,68 @@ def test_scalar_flop_count():
     import pymbolic.primitives as prim
     from pymbolic import Variable
 
-    x = Variable("x")
-    y = Variable("y")
+    x = 2*Variable("x")
+    y = 3 + Variable("y")
 
-    assert fc(Variable("f")(x)) == 32
+    assert fc(x) == 1
+    assert fc(y) == 1
 
-    assert fc(x[0]) == 0
+    assert fc(Variable("f")(x)) == 32 + 1
 
-    assert fc(x + 2) == 1
-    assert fc(2 + y) == 1
-    assert fc(x + y) == 1
+    assert fc(x[0]) == 0 + 1
 
-    assert fc(prim.Sum((2, x, y))) == 2
+    assert fc(x + 2) == 1 + 1
+    assert fc(2 + y) == 1 + 1
+    assert fc(x + y) == 1 + 2
 
-    assert fc(x - 2) == 1
-    assert fc(2 - y) == 2
-    assert fc(x - y) == 2
+    assert fc(prim.Sum((2, x, y))) == 2 + 2
 
-    assert fc(x * 2) == 1
-    assert fc(2 * y) == 1
-    assert fc(x * y) == 1
+    assert fc(x - 2) == 1 + 1
+    assert fc(2 - y) == 2 + 1
+    assert fc(x - y) == 2 + 2
 
-    assert fc(prim.Product((2, x, y))) == 2
+    assert fc(x * 2) == 1 + 1
+    assert fc(2 * y) == 1 + 1
+    assert fc(x * y) == 1 + 2
 
-    assert fc(x.or_(y)) == 0
-    assert fc(x.and_(y)) == 0
+    assert fc(prim.Product((2, x, y))) == 2 + 2
 
-    assert fc(x / 2) == 4
-    assert fc(2 / y) == 4
-    assert fc(x / y) == 4
+    assert fc(x.or_(y)) == 0 + 2
+    assert fc(x.and_(y)) == 0 + 2
 
-    assert fc(x // 2) == 4
+    assert fc(x / 2) == 4 + 1
+    assert fc(2 / y) == 4 + 1
+    assert fc(x / y) == 4 + 2
 
-    assert fc(x % 2) == 4
+    assert fc(x // 2) == 4 + 1
+
+    assert fc(x % 2) == 4 + 1
 
     assert fc(x ** 0) == 0
-    assert fc(x ** 1) == 0
+    assert fc(x ** 1) == 0 + 1
     # x * x
-    assert fc(x ** 2) == 1
+    assert fc(x ** 2) == 1 + 1
     # compute x^2, x^4, x^8, x^16, x^32; multiply x^32 * x^16 * x^8 * x^4 * x * 1
-    assert fc(x ** 61) == 5 + 5
+    assert fc(x ** 61) == 5 + 5 + 1
     # divide; compute x^2, x^4, x^8, x^16; multiply x^16 * x^4 * x^2 * 1
-    assert fc(x ** -22) == 4 + 4 + 3
-    assert fc(x ** 0.3) == 8
-    assert fc(x ** y) == 8
+    assert fc(x ** -22) == 4 + 4 + 3 + 1
+    assert fc(x ** 0.3) == 8 + 1
+    assert fc(x ** y) == 8 + 2
 
-    assert fc(x.lt(y)) == 1
+    assert fc(x.lt(y)) == 1 + 2
 
-    assert fc(prim.If(x, x, y)) == 0
+    assert fc(prim.If(x, x, y)) == 0 + 3
 
-    assert fc(prim.Min((2, x, y))) == 2
-    assert fc(prim.Max((2, x, y))) == 2
+    assert fc(prim.Min((2, x, y))) == 2 + 2
+    assert fc(prim.Max((2, x, y))) == 2 + 2
 
     from constantdict import constantdict
 
     from pytato.reductions import SumReductionOperation
     from pytato.scalar_expr import Reduce
 
-    assert fc(Reduce(x, SumReductionOperation(), constantdict({"_0": (0, 10)}))) == 9
+    assert fc(Reduce(x, SumReductionOperation(), constantdict({"_0": (0, 10)}))) \
+        == 9 + 10
 
 
 def test_flop_count():

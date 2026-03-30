@@ -318,8 +318,8 @@ class FlopCounter(FlopCounterBase):
 
     @override
     def map_subscript(self, expr: prim.Subscript) -> ArithmeticExpression:
-        # Assume calculations inside subscripts are performed on non-floats
-        return 0
+        # Assume index calculations are performed on non-floats
+        return self.rec(expr.aggregate)
 
     @override
     def map_sum(self, expr: prim.Sum) -> ArithmeticExpression:  # pyright: ignore[reportIncompatibleMethodOverride]
