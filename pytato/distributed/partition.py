@@ -581,8 +581,8 @@ class _MaterializedArrayCollector(CachedWalkMapper[[]]):
         super().__init__()
         self.materialized_arrays: OrderedSet[Array] = OrderedSet()
 
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
+    def get_cache_key(self, expr: ArrayOrNames) -> ArrayOrNames:
+        return expr
 
     def post_visit(self, expr: Any) -> None:
         from pytato.loopy import LoopyCallResult
