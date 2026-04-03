@@ -820,6 +820,138 @@ def test_large_dag_with_duplicates_count():
         dag, count_duplicates=False)
 
 
+def test_collect_materialized_nodes():
+    from pytato.analysis import collect_materialized_nodes
+    from pytato.tags import ImplStored
+
+    # {{{ inputs are materialized, intermediates are not
+
+    x = pt.make_placeholder("x", (10,))
+    y = pt.make_data_wrapper(np.arange(10))
+    z = x + y
+    expr = 2*z
+
+    result = collect_materialized_nodes(expr)
+    # result is {x, y, expr}
+    assert len(result) == 3
+    assert x in result
+    assert y in result
+    assert z not in result
+
+    # }}}
+
+    # {{{ outputs are materialized if include_outputs=True
+
+    x = pt.make_placeholder("x", (10,))
+    y = pt.make_placeholder("y", (10,))
+    expr = x + y
+
+    result = collect_materialized_nodes(expr)
+    assert expr in result
+
+    result = collect_materialized_nodes(expr, include_outputs=False)
+    assert expr not in result
+
+    # }}}
+
+    # {{{ ImplStored-tagged nodes are materialized
+
+    x = pt.make_placeholder("x", (10,))
+    y = pt.make_placeholder("y", (10,))
+    z = (x + y).tagged(ImplStored())
+    expr = 2*z
+
+    result = collect_materialized_nodes(expr)
+    assert z in result
+
+    # }}}
+
+    # {{{ CSRMatmul is materialized
+
+    elem_values = pt.make_placeholder("elem_values", (8,))
+    elem_col_indices = pt.make_placeholder("elem_col_indices", (8,))
+    row_starts = pt.make_placeholder("row_starts", (9,))
+    mat = pt.make_csr_matrix(
+        shape=(8, 10),
+        elem_values=elem_values,
+        elem_col_indices=elem_col_indices,
+        row_starts=row_starts)
+    vec = pt.make_placeholder("vec", (10,))
+    z = mat @ vec
+    expr = 2*z
+    result = collect_materialized_nodes(expr)
+    # result is {elem_values, elem_col_indices, row_starts, vec, z, expr}
+    assert len(result) == 6
+    assert z in result
+
+    # }}}
+
+    # {{{ LoopyCall bindings and outputs are materialized
+
+    import loopy as lp
+
+    from pytato.loopy import call_loopy
+
+    x = pt.make_placeholder("x", (10, 4), np.float64)
+    y = 2*x
+    knl = lp.make_function(
+            "{[i, j]: 0<=i<10 and 0<=j<4}",
+            """
+            Z[i] = sum(j, Y[i, j])
+            """, name="callee")
+    loopy_result = call_loopy(knl, bindings={"Y": y}, entrypoint="callee")
+    z = loopy_result["Z"]
+    expr = 2*z
+    result = collect_materialized_nodes(expr)
+    # result is {x, y, z, expr}
+    assert len(result) == 4
+    assert y in result
+    assert z in result
+
+    # }}}
+
+    # {{{ Call bindings and FunctionDefinition results are materialized
+
+    def f(a, b):
+        return a + b
+
+    x = pt.make_placeholder("x", (10,), np.float64)
+    y = pt.make_placeholder("y", (10,), np.float64)
+    u = 2*x
+    v = 3*y
+    z = pt.trace_call(f, u, v)
+    func_def = z.call.function
+    expr = 2*z
+
+    result = collect_materialized_nodes(expr)
+    assert u in result
+    assert v in result
+    for ret_expr in func_def.returns.values():
+        assert ret_expr in result
+
+    # Only the top level outputs are affected by include_outputs
+    result = collect_materialized_nodes(expr, include_outputs=False)
+    for ret_expr in func_def.returns.values():
+        assert ret_expr in result
+
+    # }}}
+
+    # {{{ DistributedSendRefHolder materializes send's data
+
+    x = pt.make_placeholder("x", (10,))
+    send_data = 2*x
+    send = pt.make_distributed_send(send_data, dest_rank=1, comm_tag="tag")
+    passthrough = pt.make_placeholder("pt", (10,))
+    send_ref = pt.make_distributed_send_ref_holder(send, passthrough)
+
+    result = collect_materialized_nodes(send_ref)
+    # result is {x, send_data, passthrough, send_ref}
+    assert len(result) == 4
+    assert send_data in result
+
+    # }}}
+
+
 def test_rec_get_user_nodes():
     x1 = pt.make_placeholder("x1", shape=(10, 4))
     x2 = pt.make_placeholder("x2", shape=(10, 4))
