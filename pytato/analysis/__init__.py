@@ -765,10 +765,15 @@ class MaterializedNodeCollector(CachedWalkMapper[[]]):
     def __init__(
             self,
             include_outputs: bool = True,
-            _visited_functions: set[Any] | None = None) -> None:
+            _visited_functions: set[Any] | None = None,
+            _materialized_nodes: OrderedSet[Array] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
+
         self.include_outputs: bool = include_outputs
-        self.materialized_nodes: OrderedSet[Array] = OrderedSet()
+
+        self.materialized_nodes: OrderedSet[Array] = (
+            _materialized_nodes if _materialized_nodes is not None
+            else OrderedSet())
 
     @overload
     def __call__(self, expr: ArrayOrNames) -> None:
@@ -803,7 +808,8 @@ class MaterializedNodeCollector(CachedWalkMapper[[]]):
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
             include_outputs=self.include_outputs,
-            _visited_functions=self._visited_functions)
+            _visited_functions=self._visited_functions,
+            _materialized_nodes=self.materialized_nodes)
 
     @override
     def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
