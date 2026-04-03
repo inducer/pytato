@@ -538,7 +538,7 @@ def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
 
     from pytato.analysis import get_list_of_users, get_num_nodes, get_num_tags_of_type
     materializer = MPMSMaterializer(
-        get_list_of_users(expr), already_materialized_nodes)
+        get_list_of_users(expr), frozenset(already_materialized_nodes))
 
     if isinstance(expr, Array):
         res = materializer(expr).expr

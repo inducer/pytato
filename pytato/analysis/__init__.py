@@ -29,7 +29,7 @@ THE SOFTWARE.
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, overload
 
-from orderedsets import FrozenOrderedSet
+from orderedsets import FrozenOrderedSet, OrderedSet
 from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
@@ -768,7 +768,7 @@ class MaterializedNodeCollector(CachedWalkMapper[[]]):
             _visited_functions: set[Any] | None = None) -> None:
         super().__init__(_visited_functions=_visited_functions)
         self.include_outputs: bool = include_outputs
-        self.materialized_nodes: set[Array] = set()
+        self.materialized_nodes: OrderedSet[Array] = OrderedSet()
 
     @overload
     def __call__(self, expr: ArrayOrNames) -> None:
@@ -833,7 +833,7 @@ class MaterializedNodeCollector(CachedWalkMapper[[]]):
 
 def collect_materialized_nodes(
         expr: ArrayOrNames | FunctionDefinition,
-        include_outputs: bool = True) -> frozenset[Array]:
+        include_outputs: bool = True) -> FrozenOrderedSet[Array]:
     """
     Return the nodes in DAG *expr* that are materialized.
 
@@ -846,7 +846,7 @@ def collect_materialized_nodes(
     """
     mac = MaterializedNodeCollector(include_outputs=include_outputs)
     mac(expr)
-    return frozenset(mac.materialized_nodes)
+    return FrozenOrderedSet(mac.materialized_nodes)
 
 # }}}
 
