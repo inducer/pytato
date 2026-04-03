@@ -807,7 +807,8 @@ class MaterializedNodeCollector(CachedWalkMapper[[]]):
     @override
     def clone_for_callee(self, function: FunctionDefinition) -> Self:
         return type(self)(
-            include_outputs=self.include_outputs,
+            # include_outputs only applies to the top level __call__
+            include_outputs=True,
             _visited_functions=self._visited_functions,
             _materialized_nodes=self.materialized_nodes)
 
