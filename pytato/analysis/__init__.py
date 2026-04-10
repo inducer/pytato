@@ -29,7 +29,7 @@ THE SOFTWARE.
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, overload
 
-from orderedsets import FrozenOrderedSet
+from orderedsets import FrozenOrderedSet, OrderedSet
 from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
@@ -49,7 +49,11 @@ from pytato.array import (
     ShapeType,
     Stack,
 )
+from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import Call, FunctionDefinition, NamedCallResult
+from pytato.loopy import LoopyCall, LoopyCallResult
+from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.tags import ImplStored
 from pytato.transform import (
     ArrayOrNames,
     CachedWalkMapper,
@@ -63,9 +67,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     import pytools.tag
-
-    from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
-    from pytato.loopy import LoopyCall
 
 __doc__ = """
 .. currentmodule:: pytato.analysis
@@ -88,6 +89,9 @@ __doc__ = """
 
 .. autoclass:: TagCountMapper
 .. autofunction:: get_num_tags_of_type
+
+.. autoclass:: MaterializedNodeCollector
+.. autofunction:: collect_materialized_nodes
 """
 
 
@@ -746,6 +750,110 @@ def get_num_tags_of_type(
     tcm = TagCountMapper(tag_types)
 
     return tcm(outputs)
+
+# }}}
+
+
+# {{{ MaterializedNodeCollector
+
+class MaterializedNodeCollector(CachedWalkMapper[[]]):
+    """
+    Return the nodes in a DAG that are materialized.
+
+    See :func:`collect_materialized_nodes` for more details.
+    """
+    def __init__(
+            self,
+            include_outputs: bool = True,
+            _visited_functions: set[Any] | None = None,
+            _materialized_nodes: OrderedSet[Array] | None = None) -> None:
+        super().__init__(_visited_functions=_visited_functions)
+
+        self.include_outputs: bool = include_outputs
+
+        self.materialized_nodes: OrderedSet[Array] = (
+            _materialized_nodes if _materialized_nodes is not None
+            else OrderedSet())
+
+    @overload
+    def __call__(self, expr: ArrayOrNames) -> None:
+        ...
+
+    @overload
+    def __call__(self, expr: FunctionDefinition) -> None:
+        ...
+
+    @override
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            ) -> None:
+        super().__call__(expr)
+
+        if self.include_outputs:
+            if isinstance(expr, DictOfNamedArrays):
+                self.materialized_nodes.update(expr._data.values())
+            elif isinstance(expr, Array):
+                self.materialized_nodes.add(expr)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return expr
+
+    @override
+    def get_function_definition_cache_key(self, expr: FunctionDefinition) -> VisitKeyT:
+        return expr
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        return type(self)(
+            # include_outputs only applies to the top level __call__
+            include_outputs=True,
+            _visited_functions=self._visited_functions,
+            _materialized_nodes=self.materialized_nodes)
+
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if (
+                isinstance(
+                    expr, (
+                        InputArgumentBase,
+                        DistributedRecv,
+                        CSRMatmul,
+                        LoopyCallResult,
+                        NamedCallResult))
+                or (
+                    isinstance(expr, Array)
+                    and expr.tags_of_type(ImplStored))):
+            self.materialized_nodes.add(expr)
+        elif isinstance(expr, DistributedSendRefHolder):
+            self.materialized_nodes.add(expr.send.data)
+        elif isinstance(expr, LoopyCall):
+            for subexpr in expr.bindings.values():
+                if isinstance(subexpr, Array):
+                    self.materialized_nodes.add(subexpr)
+                else:
+                    assert isinstance(subexpr, SCALAR_CLASSES)
+        elif isinstance(expr, Call):
+            self.materialized_nodes.update(expr.bindings.values())
+
+
+def collect_materialized_nodes(
+        expr: ArrayOrNames | FunctionDefinition,
+        include_outputs: bool = True) -> FrozenOrderedSet[Array]:
+    """
+    Return the nodes in DAG *expr* that are materialized.
+
+    The result includes:
+
+    * arrays that are materialized based on their type or usage (inputs,
+      :class:`~pytato.loopy.LoopyCall`'s bindings/results, etc.)
+    * outputs (optionally, controlled by *include_outputs*),
+    * arrays tagged with :class:`~pytato.tags.ImplStored`.
+    """
+    mac = MaterializedNodeCollector(include_outputs=include_outputs)
+    mac(expr)
+    return FrozenOrderedSet(mac.materialized_nodes)
 
 # }}}
 

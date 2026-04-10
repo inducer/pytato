@@ -71,7 +71,6 @@ from collections.abc import Hashable, Mapping, Sequence, Set as AbstractSet
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
-    Any,
     TypeVar,
     cast,
 )
@@ -80,16 +79,13 @@ from constantdict import constantdict
 from orderedsets import FrozenOrderedSet, OrderedSet
 from typing_extensions import Never
 
-from pymbolic.mapper.optimize import optimize_mapper
 from pytools import UniqueNameGenerator, memoize_method
 from pytools.graph import CycleError
 
-from pytato.analysis import DirectPredecessorsGetter
+from pytato.analysis import DirectPredecessorsGetter, collect_materialized_nodes
 from pytato.array import Array, DictOfNamedArrays, Placeholder, make_placeholder
-from pytato.scalar_expr import SCALAR_CLASSES
 from pytato.transform import (
     ArrayOrNames,
-    CachedWalkMapper,
     CombineMapper,
     CopyMapper,
     TransformMapperCache,
@@ -569,41 +565,6 @@ def _calculate_dependency_levels(
 # }}}
 
 
-# {{{  _MaterializedArrayCollector
-
-
-@optimize_mapper(drop_args=True, drop_kwargs=True, inline_get_cache_key=True)
-class _MaterializedArrayCollector(CachedWalkMapper[[]]):
-    """
-    Collects all nodes that have to be materialized during code-generation.
-    """
-    def __init__(self) -> None:
-        super().__init__()
-        self.materialized_arrays: OrderedSet[Array] = OrderedSet()
-
-    def get_cache_key(self, expr: ArrayOrNames) -> int:
-        return id(expr)
-
-    def post_visit(self, expr: Any) -> None:
-        from pytato.loopy import LoopyCallResult
-        from pytato.tags import ImplStored
-
-        if (isinstance(expr, Array) and expr.tags_of_type(ImplStored)):
-            self.materialized_arrays.add(expr)
-
-        if isinstance(expr, LoopyCallResult):
-            self.materialized_arrays.add(expr)
-            from pytato.loopy import LoopyCall
-            assert isinstance(expr._container, LoopyCall)
-            for _, subexpr in sorted(expr._container.bindings.items()):
-                if isinstance(subexpr, Array):
-                    self.materialized_arrays.add(subexpr)
-                else:
-                    assert isinstance(subexpr, SCALAR_CLASSES)
-
-# }}}
-
-
 # {{{ _set_dict_union_mpi
 
 def _set_dict_union_mpi(
@@ -847,9 +808,6 @@ def find_distributed_partition(
 
     # {{{ assign each compulsorily materialized array to a part
 
-    materialized_arrays_collector = _MaterializedArrayCollector()
-    materialized_arrays_collector(outputs)
-
     # The sets of arrays below must have a deterministic order in order to ensure
     # that the resulting partition is also deterministic
 
@@ -865,7 +823,7 @@ def find_distributed_partition(
     # from send *nodes*, but we choose to exclude them in order to simplify the
     # processing below.
     materialized_arrays = (
-        materialized_arrays_collector.materialized_arrays
+        collect_materialized_nodes(outputs, include_outputs=False)
         - received_arrays
         - sent_arrays)
 

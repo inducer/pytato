@@ -40,6 +40,7 @@ from pytato.array import (
     AdvancedIndexInContiguousAxes,
     AdvancedIndexInNoncontiguousAxes,
     Array,
+    ArrayOrScalar,
     AxisPermutation,
     BasicIndex,
     Concatenate,
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
         DistributedSendRefHolder,
     )
     from pytato.function import FunctionDefinition, NamedCallResult
+    from pytato.loopy import LoopyCall, LoopyCallResult
 
 
 __doc__ = """
@@ -101,7 +103,7 @@ class MPMSMaterializerAccumulator:
     (i.e. the expression with tags for materialization applied).
     """
     materialized_predecessors: frozenset[Array]
-    expr: Array
+    expr: ArrayOrNames
 
 
 class MPMSMaterializerCache(
@@ -229,6 +231,7 @@ class MPMSMaterializer(
     def __init__(
             self,
             successors: Mapping[Array, list[ArrayOrNames]],
+            already_materialized_nodes: frozenset[Array],
             _cache: MPMSMaterializerCache | None = None):
         err_on_collision = __debug__
         err_on_created_duplicate = __debug__
@@ -242,6 +245,7 @@ class MPMSMaterializer(
         super().__init__(err_on_collision=err_on_collision, _cache=_cache)
 
         self.successors: Mapping[Array, list[ArrayOrNames]] = successors
+        self.already_materialized_nodes: frozenset[Array] = already_materialized_nodes
 
     @override
     def _cache_add(
@@ -282,46 +286,66 @@ class MPMSMaterializer(
                                   " supported for now.")
 
     def map_index_lambda(self, expr: IndexLambda) -> MPMSMaterializerAccumulator:
-        children_rec = {bnd_name: self.rec(bnd)
+        rec_children = {bnd_name: self.rec(bnd)
                         for bnd_name, bnd in sorted(expr.bindings.items())}
         new_children: Mapping[str, Array] = constantdict({
-            bnd_name: bnd.expr
-            for bnd_name, bnd in children_rec.items()})
-        return _materialize_if_mpms(
-            expr.replace_if_different(bindings=new_children),
-            self.successors[expr],
-            children_rec.values())
+            bnd_name: _verify_is_array(bnd.expr)
+            for bnd_name, bnd in rec_children.items()})
+        new_expr = expr.replace_if_different(bindings=new_children)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                rec_children.values())
 
     def map_stack(self, expr: Stack) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_arrays = tuple(ary.expr for ary in rec_arrays)
-        return _materialize_if_mpms(
-            expr.replace_if_different(arrays=new_arrays),
-            self.successors[expr],
-            rec_arrays)
+        new_expr = expr.replace_if_different(arrays=new_arrays)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                rec_arrays)
 
     def map_concatenate(self, expr: Concatenate) -> MPMSMaterializerAccumulator:
         rec_arrays = [self.rec(ary) for ary in expr.arrays]
         new_arrays = tuple(ary.expr for ary in rec_arrays)
-        return _materialize_if_mpms(
-            expr.replace_if_different(arrays=new_arrays),
-            self.successors[expr],
-            rec_arrays)
+        new_expr = expr.replace_if_different(arrays=new_arrays)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                rec_arrays)
 
     def map_roll(self, expr: Roll) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.successors[expr],
-            (rec_array,))
+        new_expr = expr.replace_if_different(array=rec_array.expr)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                (rec_array,))
 
     def map_axis_permutation(self, expr: AxisPermutation
                              ) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.successors[expr],
-            (rec_array,))
+        new_expr = expr.replace_if_different(array=rec_array.expr)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                (rec_array,))
 
     def _map_index_base(self, expr: IndexBase) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
@@ -337,10 +361,15 @@ class MPMSMaterializer(
             expr.indices
             if _entries_are_identical(new_indices, expr.indices)
             else new_indices)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr, indices=new_indices),
-            self.successors[expr],
-            (rec_array, *tuple(rec_indices.values())))
+        new_expr = expr.replace_if_different(
+            array=rec_array.expr, indices=new_indices)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                (rec_array, *tuple(rec_indices.values())))
 
     def map_basic_index(self, expr: BasicIndex) -> MPMSMaterializerAccumulator:
         return self._map_index_base(expr)
@@ -356,18 +385,26 @@ class MPMSMaterializer(
 
     def map_reshape(self, expr: Reshape) -> MPMSMaterializerAccumulator:
         rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(array=rec_array.expr),
-            self.successors[expr],
-            (rec_array,))
+        new_expr = expr.replace_if_different(array=rec_array.expr)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                (rec_array,))
 
     def map_einsum(self, expr: Einsum) -> MPMSMaterializerAccumulator:
         rec_args = [self.rec(ary) for ary in expr.args]
         new_args = tuple(ary.expr for ary in rec_args)
-        return _materialize_if_mpms(
-            expr.replace_if_different(args=new_args),
-            self.successors[expr],
-            rec_args)
+        new_expr = expr.replace_if_different(args=new_args)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return _materialize_if_mpms(
+                new_expr,
+                self.successors[expr],
+                rec_args)
 
     def map_csr_matmul(self, expr: CSRMatmul) -> MPMSMaterializerAccumulator:
         rec_matrix_elem_values = self.rec(expr.matrix.elem_values)
@@ -385,38 +422,57 @@ class MPMSMaterializer(
         else:
             new_matrix = expr.matrix
         rec_array = self.rec(expr.array)
-        return _materialize_if_mpms(
-            expr.replace_if_different(
-                matrix=new_matrix,
-                array=rec_array.expr),
-            self.successors[expr],
-            (
-                rec_matrix_elem_values,
-                rec_matrix_elem_col_indices,
-                rec_matrix_row_starts,
-                rec_array))
+        new_expr = expr.replace_if_different(
+            matrix=new_matrix,
+            array=rec_array.expr)
+        assert expr in self.already_materialized_nodes
+        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
 
     def map_dict_of_named_arrays(self, expr: DictOfNamedArrays
                                  ) -> MPMSMaterializerAccumulator:
         raise NotImplementedError
 
-    def map_loopy_call_result(self, expr: NamedArray) -> MPMSMaterializerAccumulator:
-        # loopy call result is always materialized
-        return MPMSMaterializerAccumulator(frozenset([expr]), expr)
+    def map_loopy_call(self, expr: LoopyCall) -> MPMSMaterializerAccumulator:
+        rec_bindings = {
+            name: self.rec(subexpr)
+            for name, subexpr in sorted(expr.bindings.items())
+            if isinstance(subexpr, Array)}
+        new_bindings: Mapping[str, ArrayOrScalar] = constantdict({
+            name: (
+                _verify_is_array(rec_bindings[name].expr)
+                if isinstance(subexpr, Array)
+                else subexpr)
+            for name, subexpr in sorted(expr.bindings.items())})
+        new_expr = expr.replace_if_different(bindings=new_bindings)
+        # materialized_predecessors isn't used by map_loopy_call_result, so don't
+        # bother creating it
+        return MPMSMaterializerAccumulator(frozenset(), new_expr)
+
+    def map_loopy_call_result(
+            self, expr: LoopyCallResult) -> MPMSMaterializerAccumulator:
+        rec_container = self.rec(expr._container)
+        new_expr = expr.replace_if_different(_container=rec_container.expr)
+        assert expr in self.already_materialized_nodes
+        return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
 
     def map_distributed_send_ref_holder(self,
                                         expr: DistributedSendRefHolder
                                         ) -> MPMSMaterializerAccumulator:
         rec_send_data = self.rec(expr.send.data)
         rec_passthrough = self.rec(expr.passthrough_data)
-        return MPMSMaterializerAccumulator(
-            rec_passthrough.materialized_predecessors,
-            expr.replace_if_different(
-                send=expr.send.replace_if_different(data=rec_send_data.expr),
-                passthrough_data=rec_passthrough.expr))
+        new_expr = expr.replace_if_different(
+            send=expr.send.replace_if_different(data=rec_send_data.expr),
+            passthrough_data=rec_passthrough.expr)
+        if expr in self.already_materialized_nodes:
+            return MPMSMaterializerAccumulator(frozenset([new_expr]), new_expr)
+        else:
+            return MPMSMaterializerAccumulator(
+                rec_passthrough.materialized_predecessors,
+                new_expr)
 
     def map_distributed_recv(self, expr: DistributedRecv
                              ) -> MPMSMaterializerAccumulator:
+        assert expr in self.already_materialized_nodes
         return MPMSMaterializerAccumulator(frozenset([expr]), expr)
 
     def map_named_call_result(self, expr: NamedCallResult
@@ -474,8 +530,15 @@ def materialize_with_mpms(expr: ArrayOrNamesTc) -> ArrayOrNamesTc:
         ======  ========  =======
 
     """
+    # Some nodes are materialized according to their type or usage rather than by
+    # tag; this can't easily be determined from inside MPMSMaterializer
+    from pytato.analysis import collect_materialized_nodes
+    already_materialized_nodes = collect_materialized_nodes(
+        expr, include_outputs=True)
+
     from pytato.analysis import get_list_of_users, get_num_nodes, get_num_tags_of_type
-    materializer = MPMSMaterializer(get_list_of_users(expr))
+    materializer = MPMSMaterializer(
+        get_list_of_users(expr), frozenset(already_materialized_nodes))
 
     if isinstance(expr, Array):
         res = materializer(expr).expr
