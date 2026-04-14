@@ -18,6 +18,7 @@ distribute*tar.gz
 doc/_build
 
 .mypy_cache
+.venv
 
 *.dot
 *.svg
