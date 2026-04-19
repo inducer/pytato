@@ -183,6 +183,7 @@ ignore = [
     "build",
     "doc/_build",
     "doc/conf.py",
+    ".venv",
 
     # We'll be getting rid of it, no point in fixing it.
     "pytato/raising.py",
