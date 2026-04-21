@@ -87,6 +87,7 @@ from pytato.scalar_expr import (
 from pytato.transform import (
     ArrayOrNames,
     ArrayOrNamesOrFunctionDefTc,
+    CachedMapper,
     CopyMapper,
     Mapper,
     TransformMapperCache,
@@ -516,15 +517,14 @@ class AxisTagAttacher(CopyMapper):
         try:
             return self._cache_retrieve(inputs)
         except KeyError:
-            # Intentionally going to Mapper instead of super() to avoid
-            # double caching when subclasses of CachedMapper override rec,
-            # see https://github.com/inducer/pytato/pull/585
-            result = Mapper.rec(self, expr)
+            # Using super(CachedMapper, self) instead of super() to bypass
+            # CachedMapper.rec and avoid double caching
+            result = super(CachedMapper, self).rec(expr)
             if not isinstance(
                     expr, AbstractResultWithNamedArrays | DistributedSendRefHolder):
                 assert isinstance(expr, Array)
-                # type-ignore reason: passed "ArrayOrNames"; expected "Array"
-                result = self._attach_tags(expr, result)  # type: ignore[arg-type]
+                assert isinstance(result, Array)
+                result = self._attach_tags(expr, result)
             return self._cache_add(inputs, result)
 
     def map_named_call_result(self, expr: NamedCallResult) -> Array:
