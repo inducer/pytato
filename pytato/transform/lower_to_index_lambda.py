@@ -762,7 +762,7 @@ class ToIndexLambdaMixin:
                                 "_in3": rec_array}),
                            axes=expr.axes,
                            var_to_reduction_descr=constantdict({
-                                "_r0": ReductionDescriptor(tags=frozenset())}),
+                                "_r0": ReductionDescriptor()}),
                            tags=expr.tags,
                            non_equality_tags=expr.non_equality_tags)
 
