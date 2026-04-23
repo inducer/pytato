@@ -137,7 +137,7 @@ class Reprifier(Mapper[str, str, [int]]):
             fields = tuple(field for field in fields if field != "axes")
 
         if (isinstance(expr, IndexLambda)
-                and all(redn_descr == ReductionDescriptor(frozenset())
+                and all(redn_descr == ReductionDescriptor()
                         for redn_descr in expr.var_to_reduction_descr.values())):
             # prettify: if trivial 'expr.var_to_reduction_descr' => don't print.
             fields = tuple(field

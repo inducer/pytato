@@ -609,7 +609,7 @@ class ReductionDescriptor(Taggable):
     Records information about a reduction dimension in an
     :class:`~pytato.Array`'.
     """
-    tags: frozenset[Tag]
+    tags: frozenset[Tag] = frozenset()
 
     @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
@@ -1766,7 +1766,7 @@ def einsum(subscripts: str, *operands: Array,
     for descr in index_to_descr.values():
         if (isinstance(descr, EinsumReductionAxis)
                 and descr not in redn_axis_to_redn_descr):
-            redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+            redn_axis_to_redn_descr[descr] = ReductionDescriptor()
 
     # }}}
 
@@ -3271,7 +3271,7 @@ def make_index_lambda(
 
     for redn_var in redn_vars:
         redn_descr = var_to_reduction_descr.get(redn_var,
-                                           ReductionDescriptor(frozenset()))
+                                           ReductionDescriptor())
         if not isinstance(redn_descr, ReductionDescriptor):
             raise TypeError(f"reduction_dim for {redn_var} expected to be"
                             f" of type ReductionDescriptor, got {type(redn_descr)}.")
