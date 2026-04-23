@@ -507,6 +507,11 @@ class AxisTagAttacher(CopyMapper):
                             self.axis_to_tags.get((expr, redn_var), [])
                         )
 
+            if isinstance(expr, CSRMatmul):
+                assert isinstance(result, CSRMatmul)
+                tags = self.axis_to_tags.get((expr, expr.reduction_var), [])
+                result = result.with_tagged_reduction(tags)
+
         # }}}
 
         return result

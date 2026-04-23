@@ -2339,9 +2339,21 @@ class CSRMatmul(SparseMatmul):
     .. attribute:: array
 
         The :class:`Array` to which the sparse matrix is being applied.
+
+    .. attribute:: reduction_var
+
+        The index variable for the per-row reduction.
+
+    .. attribute:: reduction_descr
+
+        The :class:`ReductionDescriptor` for the per-row reduction.
     """
     matrix: CSRMatrix
     array: Array
+    reduction_var: str = "_r0"
+    reduction_descr: ReductionDescriptor = dataclasses.field(
+        kw_only=True,
+        default_factory=ReductionDescriptor)
 
     @property
     @override
@@ -2352,6 +2364,24 @@ class CSRMatmul(SparseMatmul):
     @override
     def _array(self) -> Array:
         return self.array
+
+    def with_tagged_reduction(self, tags: Tag | Iterable[Tag]) -> CSRMatmul:
+        """
+        Returns a copy of *self* with its :class:`ReductionDescriptor`
+        tagged with *tag*.
+        """
+        new_redn_descr = self.reduction_descr.tagged(tags)
+        if new_redn_descr is not self.reduction_descr:
+            return type(self)(
+                matrix=self.matrix,
+                array=self.array,
+                axes=self.axes,
+                reduction_descr=new_redn_descr,
+                tags=self.tags,
+                non_equality_tags=self.non_equality_tags)
+        else:
+            return self
+
 
 # }}}
 
