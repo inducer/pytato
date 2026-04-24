@@ -2,6 +2,7 @@
 .. currentmodule:: pytato.transform.lower_to_index_lambda
 
 .. autofunction:: to_index_lambda
+.. autoclass:: MapAsIndexLambdaMixin
 """
 from __future__ import annotations
 
@@ -28,8 +29,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from constantdict import constantdict
 from typing_extensions import Never
@@ -65,6 +67,8 @@ from pytato.scalar_expr import INT_CLASSES, FlattenMapper, ScalarExpression
 from pytato.tags import AssumeNonNegative
 from pytato.transform import (
     Mapper,
+    P,
+    ResultT,
     _verify_is_array,
 )
 from pytato.utils import normalized_slice_does_not_change_axis
@@ -789,5 +793,65 @@ def to_index_lambda(expr: Array) -> IndexLambda:
     res = ToIndexLambdaMapper()(expr)
     assert isinstance(res, IndexLambda)
     return res
+
+
+class MapAsIndexLambdaMixin(ABC, Generic[ResultT, P]):
+    """
+    Mixin that, where possible, lowers arrays to :class:`~pytato.array.IndexLambda`
+    and calls :meth:`map_as_index_lambda` on them.
+
+    .. automethod:: map_as_index_lambda
+    """
+    @abstractmethod
+    def map_as_index_lambda(
+            self, expr: Array, idx_lambda: IndexLambda,
+            *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        """
+        Map *expr* via its :class:`~pytato.array.IndexLambda` representation
+        *idx_lambda*.
+        """
+
+    def map_index_lambda(
+            self, expr: IndexLambda, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, expr, *args, **kwargs)
+
+    def map_stack(self, expr: Stack, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_roll(self, expr: Roll, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_axis_permutation(
+            self, expr: AxisPermutation, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_basic_index(
+            self, expr: BasicIndex, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_contiguous_advanced_index(
+            self, expr: AdvancedIndexInContiguousAxes,
+            *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_non_contiguous_advanced_index(
+            self, expr: AdvancedIndexInNoncontiguousAxes,
+            *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_reshape(self, expr: Reshape, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_concatenate(
+            self, expr: Concatenate, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_einsum(self, expr: Einsum, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
+    def map_csr_matmul(
+            self, expr: CSRMatmul, *args: P.args, **kwargs: P.kwargs) -> ResultT:
+        return self.map_as_index_lambda(expr, to_index_lambda(expr), *args, **kwargs)
+
 
 # vim:fdm=marker
