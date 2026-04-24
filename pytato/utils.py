@@ -735,4 +735,6 @@ def get_einsum_specification(expr: Einsum) -> str:
                           for i in range(expr.ndim))
 
     return f"{','.join(input_specs)}->{output_spec}"
+
+
 # vim: fdm=marker

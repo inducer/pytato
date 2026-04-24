@@ -27,18 +27,22 @@ THE SOFTWARE.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, overload
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from orderedsets import FrozenOrderedSet, OrderedSet
 from typing_extensions import Never, Self, override
 
 from loopy.tools import LoopyKeyBuilder
 from pymbolic.mapper.optimize import optimize_mapper
+from pytools import product
 
 from pytato.array import (
     Array,
+    ArrayOrScalar,
     Concatenate,
     CSRMatmul,
+    DataWrapper,
     DictOfNamedArrays,
     Einsum,
     IndexBase,
@@ -46,20 +50,29 @@ from pytato.array import (
     IndexRemappingBase,
     InputArgumentBase,
     NamedArray,
+    Placeholder,
     ShapeType,
     Stack,
 )
 from pytato.distributed.nodes import DistributedRecv, DistributedSendRefHolder
 from pytato.function import Call, FunctionDefinition, NamedCallResult
 from pytato.loopy import LoopyCall, LoopyCallResult
-from pytato.scalar_expr import SCALAR_CLASSES
+from pytato.scalar_expr import (
+    SCALAR_CLASSES,
+    FlopCounter as ScalarFlopCounter,
+    InputUseCounter as ScalarInputUseCounter,
+)
 from pytato.tags import ImplStored
 from pytato.transform import (
     ArrayOrNames,
     CachedWalkMapper,
+    CacheKeyT,
     CombineMapper,
     Mapper,
     VisitKeyT,
+)
+from pytato.transform.lower_to_index_lambda import (
+    MapAsIndexLambdaMixin,
 )
 
 
@@ -92,6 +105,13 @@ __doc__ = """
 
 .. autoclass:: MaterializedNodeCollector
 .. autofunction:: collect_materialized_nodes
+
+.. autoclass:: UndefinedOpFlopCountError
+.. autofunction:: get_default_op_name_to_num_flops
+.. autofunction:: get_num_flops
+.. autofunction:: get_materialized_node_flop_counts
+.. autoclass:: UnmaterializedNodeFlopCounts
+.. autofunction:: get_unmaterialized_node_flop_counts
 """
 
 
@@ -885,5 +905,654 @@ class PytatoKeyBuilder(LoopyKeyBuilder):
         self.rec(key_hash, key.get())
 
 # }}}
+
+
+# {{{ flop counting
+
+class UndefinedOpFlopCountError(ValueError):
+    pass
+
+
+class _NonIntegralPerEntryFlopCountError(ValueError):
+    pass
+
+
+class _PerEntryFlopCounter(
+        MapAsIndexLambdaMixin[int, [bool]],
+        CombineMapper[int, Never, [bool]]):
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, int],
+            materialized_nodes: frozenset[Array]) -> None:
+        super().__init__()
+        self.scalar_flop_counter: ScalarFlopCounter = ScalarFlopCounter(
+            op_name_to_num_flops)
+        self.materialized_nodes: frozenset[Array] = materialized_nodes
+
+    @overload
+    def __call__(
+            self,
+            expr: ArrayOrNames,
+            is_root: bool = True,
+            ) -> int:
+        ...
+
+    @overload
+    def __call__(
+            self,
+            expr: FunctionDefinition,
+            is_root: bool = True,
+            ) -> Never:
+        ...
+
+    @override
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            is_root: bool = True,
+            ) -> int:
+        return super().__call__(expr, is_root)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames, is_root: bool) -> CacheKeyT:
+        return expr, is_root
+
+    @override
+    def combine(self, *args: int) -> int:
+        return sum(args)
+
+    @override
+    def map_as_index_lambda(
+            self, expr: Array, idx_lambda: IndexLambda, is_root: bool) -> int:
+        if expr in self.materialized_nodes and not is_root:
+            return 0
+
+        self_nflops = self.scalar_flop_counter(idx_lambda.expr)
+
+        if not isinstance(self_nflops, int):
+            # Restricting to numerical result here because the flop counters that use
+            # this mapper subsequently multiply the result by things that are
+            # potentially arrays (e.g., shape components), and arrays and scalar
+            # expressions are not interoperable
+            from pytato.scalar_expr import OpFlops, OpFlopsCollector
+            op_flops: frozenset[OpFlops] = OpFlopsCollector()(self_nflops)
+            if op_flops:
+                op_names = sorted({of.op for of in op_flops})
+                formatted_ops = ", ".join(f"'{name}'" for name in op_names)
+                raise UndefinedOpFlopCountError(
+                    f"Undefined flop count for operation(s): {formatted_ops}.")
+            else:
+                raise _NonIntegralPerEntryFlopCountError(
+                    "Unable to compute an integer-valued per-entry flop count.")
+
+        binding_to_nuses = ScalarInputUseCounter()(idx_lambda.expr)
+        # self_nflops check above should take care of non-constant use count case
+        assert all(
+            isinstance(nuses, int)
+            for nuses in binding_to_nuses.values())
+
+        return self.combine(
+            self_nflops,
+            *(
+                cast("int", binding_to_nuses.get(name, 0)) * self.rec(bnd, False)
+                for name, bnd in sorted(idx_lambda.bindings.items())))
+
+    @override
+    def map_placeholder(self, expr: Placeholder, is_root: bool) -> int:
+        return 0
+
+    @override
+    def map_data_wrapper(self, expr: DataWrapper, is_root: bool) -> int:
+        return 0
+
+    @override
+    def map_named_array(self, expr: NamedArray, is_root: bool) -> int:
+        assert isinstance(expr._container, DictOfNamedArrays)
+        return self.combine(self.rec(expr._container._data[expr.name], False))
+
+    @override
+    def map_dict_of_named_arrays(self, expr: DictOfNamedArrays, is_root: bool) -> int:
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall, is_root: bool) -> int:
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_loopy_call_result(self, expr: LoopyCallResult, is_root: bool) -> int:
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, is_root: bool) -> int:
+        # Ignore expr.send.data; it's not part of the computation being performed
+        return self.combine(self.rec(expr.passthrough_data, False))
+
+    @override
+    def map_distributed_recv(self, expr: DistributedRecv, is_root: bool) -> int:
+        return 0
+
+    @override
+    def map_call(self, expr: Call, is_root: bool) -> int:
+        # Shouldn't have calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_named_call_result(self, expr: NamedCallResult, is_root: bool) -> int:
+        # Shouldn't have calls
+        raise AssertionError("Control shouldn't reach here.")
+
+
+class MaterializedNodeFlopCounter(CachedWalkMapper[[]]):
+    """
+    Mapper that counts the number of floating point operations of each materialized
+    expression in a DAG.
+
+    .. note::
+
+        This mapper does not descend into functions.
+    """
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, int],
+            materialized_nodes: frozenset[Array],
+            ) -> None:
+        super().__init__()
+        self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
+        self.materialized_nodes: frozenset[Array] = materialized_nodes
+        self.materialized_node_to_nflops: dict[Array, ArrayOrScalar] = {}
+        self._per_entry_flop_counter: _PerEntryFlopCounter = _PerEntryFlopCounter(
+            self.op_name_to_num_flops, self.materialized_nodes)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return expr
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        raise AssertionError("Control shouldn't reach this point.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    @override
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
+
+    @override
+    def map_call(self, expr: Call) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
+
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if expr not in self.materialized_nodes:
+            return
+        assert isinstance(expr, Array)
+        try:
+            nflops_per_entry = self._per_entry_flop_counter(expr)
+        except _NonIntegralPerEntryFlopCountError as e:
+            if isinstance(expr, CSRMatmul):
+                # _PerEntryFlopCounter chokes on CSRMatmul because the row reduction
+                # bounds are data dependent. By handling it here instead we can take
+                # advantage of knowing that the total number of reduction iterations
+                # is len(elem_values). Note: assumes no flops for elem_col_indices
+                # and row_starts as they are integer-valued.
+                nelems = expr.matrix.elem_values.shape[0]
+                nflops_self = (
+                    (
+                        nelems  # multiplies
+                        + nelems - expr.shape[0])  # adds
+                    * product(expr.shape[1:]))
+                nflops_children = (
+                    nelems
+                    * (
+                        self._per_entry_flop_counter(expr.matrix.elem_values)
+                        + self._per_entry_flop_counter(expr.array))
+                    * product(expr.shape[1:]))
+                self.materialized_node_to_nflops[expr] = (
+                    nflops_self + nflops_children)
+            else:
+                raise ValueError(
+                    "Unable to compute a flop count for array of type "
+                    f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
+                    "non-integer-valued.") from e
+        else:
+            self.materialized_node_to_nflops[expr] = (
+                nflops_per_entry
+                * product(expr.shape))
+
+
+class _UnmaterializedSubexpressionUseCounter(
+        MapAsIndexLambdaMixin[dict[Array, int], [bool]],
+        CombineMapper[dict[Array, int], Never, [bool]]):
+    def __init__(
+            self,
+            materialized_nodes: frozenset[Array]) -> None:
+        super().__init__()
+        self.materialized_nodes: frozenset[Array] = materialized_nodes
+
+    @overload
+    def __call__(
+            self,
+            expr: ArrayOrNames,
+            is_root: bool = True,
+            ) -> dict[Array, int]:
+        ...
+
+    @overload
+    def __call__(
+            self,
+            expr: FunctionDefinition,
+            is_root: bool = True,
+            ) -> Never:
+        ...
+
+    @override
+    def __call__(
+            self,
+            expr: ArrayOrNames | FunctionDefinition,
+            is_root: bool = True,
+            ) -> dict[Array, int]:
+        return super().__call__(expr, is_root)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames, is_root: bool) -> CacheKeyT:
+        return expr, is_root
+
+    @override
+    def combine(self, *args: dict[Array, int]) -> dict[Array, int]:
+        result: dict[Array, int] = defaultdict(int)
+        for arg in args:
+            for ary, nuses in arg.items():
+                result[ary] += nuses
+        return result
+
+    @override
+    def map_as_index_lambda(
+            self, expr: Array, idx_lambda: IndexLambda, is_root: bool
+            ) -> dict[Array, int]:
+        if expr in self.materialized_nodes and not is_root:
+            return {}
+
+        binding_to_nuses = ScalarInputUseCounter()(idx_lambda.expr)
+        if any(
+                not isinstance(nuses, int)
+                for nuses in binding_to_nuses.values()):
+            raise ValueError(
+                "Unable to compute integer-valued use counts for the predecessors "
+                f"of array of type '{type(expr).__name__}'.")
+
+        return self.combine(
+            {expr: 1} if not is_root else {},
+            *(
+                {
+                    ary: cast("int", binding_to_nuses.get(name, 0)) * nuses
+                    for ary, nuses in self.rec(bnd, False).items()}
+                for name, bnd in sorted(idx_lambda.bindings.items())))
+
+    @override
+    def map_placeholder(self, expr: Placeholder, is_root: bool) -> dict[Array, int]:
+        return {}
+
+    @override
+    def map_data_wrapper(self, expr: DataWrapper, is_root: bool) -> dict[Array, int]:
+        return {}
+
+    @override
+    def map_named_array(self, expr: NamedArray, is_root: bool) -> dict[Array, int]:
+        assert isinstance(expr._container, DictOfNamedArrays)
+        return self.combine(self.rec(expr._container._data[expr.name], False))
+
+    @override
+    def map_dict_of_named_arrays(
+            self, expr: DictOfNamedArrays, is_root: bool) -> dict[Array, int]:
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall, is_root: bool) -> dict[Array, int]:
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_loopy_call_result(
+            self, expr: LoopyCallResult, is_root: bool) -> dict[Array, int]:
+        # Shouldn't have loopy calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_distributed_send_ref_holder(
+            self, expr: DistributedSendRefHolder, is_root: bool) -> dict[Array, int]:
+        # Ignore expr.send.data; it's not part of the computation being performed
+        return self.combine(self.rec(expr.passthrough_data, False))
+
+    @override
+    def map_distributed_recv(
+            self, expr: DistributedRecv, is_root: bool) -> dict[Array, int]:
+        return {}
+
+    @override
+    def map_call(self, expr: Call, is_root: bool) -> dict[Array, int]:
+        # Shouldn't have calls
+        raise AssertionError("Control shouldn't reach here.")
+
+    @override
+    def map_named_call_result(
+            self, expr: NamedCallResult, is_root: bool) -> dict[Array, int]:
+        # Shouldn't have calls
+        raise AssertionError("Control shouldn't reach here.")
+
+
+@dataclass
+class UnmaterializedNodeFlopCounts:
+    """
+    Floating point operation counts for an unmaterialized node. See
+    :func:`get_unmaterialized_node_flop_counts` for details.
+    """
+    materialized_successor_to_contrib_nflops: dict[Array, ArrayOrScalar]
+    nflops_if_materialized: ArrayOrScalar
+
+
+class UnmaterializedNodeFlopCounter(CachedWalkMapper[[]]):
+    """
+    Mapper that counts the accumulated number of floating point operations that each
+    unmaterialized expression contributes to materialized expressions in the DAG.
+
+    .. note::
+
+        This mapper does not descend into functions.
+    """
+    def __init__(
+            self,
+            op_name_to_num_flops: Mapping[str, int],
+            materialized_nodes: frozenset[Array]) -> None:
+        super().__init__()
+        self.op_name_to_num_flops: Mapping[str, int] = op_name_to_num_flops
+        self.materialized_nodes: frozenset[Array] = materialized_nodes
+        self.unmaterialized_node_to_flop_counts: \
+            dict[Array, UnmaterializedNodeFlopCounts] = {}
+        self._per_entry_flop_counter: _PerEntryFlopCounter = _PerEntryFlopCounter(
+            self.op_name_to_num_flops, self.materialized_nodes)
+        self._use_counter: _UnmaterializedSubexpressionUseCounter = \
+            _UnmaterializedSubexpressionUseCounter(
+                self.materialized_nodes)
+
+    @override
+    def get_cache_key(self, expr: ArrayOrNames) -> VisitKeyT:
+        return expr
+
+    @override
+    def clone_for_callee(self, function: FunctionDefinition) -> Self:
+        raise AssertionError("Control shouldn't reach this point.")
+
+    @override
+    def map_loopy_call(self, expr: LoopyCall) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    def map_loopy_call_result(self, expr: LoopyCallResult) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support loopy calls.")
+
+    @override
+    def map_function_definition(self, expr: FunctionDefinition) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
+
+    @override
+    def map_call(self, expr: Call) -> None:
+        if not self.visit(expr):
+            return
+
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support functions.")
+
+    @override
+    def post_visit(self, expr: ArrayOrNames | FunctionDefinition) -> None:
+        if expr not in self.materialized_nodes:
+            return
+        assert isinstance(expr, Array)
+        try:
+            self._per_entry_flop_counter(expr)
+        except _NonIntegralPerEntryFlopCountError as e:
+            if isinstance(expr, CSRMatmul):
+                # _PerEntryFlopCounter chokes on CSRMatmul because the row reduction
+                # bounds are data dependent. By handling it here instead we can take
+                # advantage of knowing that the total number of reduction iterations
+                # is len(elem_values). Note: assumes no flops for elem_col_indices
+                # and row_starts as they are integer-valued.
+                nelems = expr.matrix.elem_values.shape[0]
+                subexpr_to_nuses_per_elem = self._use_counter.combine(
+                    self._use_counter(expr.matrix.elem_values, is_root=False),
+                    self._use_counter(expr.array, is_root=False))
+                for subexpr, nuses_per_elem in subexpr_to_nuses_per_elem.items():
+                    try:
+                        nflops_per_entry = self._per_entry_flop_counter(
+                            subexpr, is_root=False)
+                    except _NonIntegralPerEntryFlopCountError:
+                        raise ValueError(
+                            "Unable to compute a flop count for array of type "
+                            f"'{type(subexpr).__name__}'; per-entry flop count is "
+                            "unexpectedly non-integer-valued.") from e
+                    if subexpr not in self.unmaterialized_node_to_flop_counts:
+                        nflops_if_materialized = (
+                            nflops_per_entry * product(subexpr.shape))
+                        flop_counts = UnmaterializedNodeFlopCounts(
+                            {}, nflops_if_materialized)
+                        self.unmaterialized_node_to_flop_counts[subexpr] = flop_counts
+                    else:
+                        flop_counts = self.unmaterialized_node_to_flop_counts[subexpr]
+                    assert expr not in \
+                        flop_counts.materialized_successor_to_contrib_nflops
+                    flop_counts.materialized_successor_to_contrib_nflops[expr] = (
+                        nuses_per_elem
+                        * nelems
+                        * nflops_per_entry
+                        * product(expr.shape[1:]))
+            else:
+                raise ValueError(
+                    "Unable to compute a flop count for array of type "
+                    f"'{type(expr).__name__}'; per-entry flop count is unexpectedly "
+                    "non-integer-valued.") from e
+        else:
+            subexpr_to_nuses = self._use_counter(expr)
+            for subexpr, nuses in subexpr_to_nuses.items():
+                nflops_per_entry = self._per_entry_flop_counter(
+                    subexpr, is_root=False)
+                if subexpr not in self.unmaterialized_node_to_flop_counts:
+                    nflops_if_materialized = nflops_per_entry * product(subexpr.shape)
+                    flop_counts = UnmaterializedNodeFlopCounts(
+                        {}, nflops_if_materialized)
+                    self.unmaterialized_node_to_flop_counts[subexpr] = flop_counts
+                else:
+                    flop_counts = self.unmaterialized_node_to_flop_counts[subexpr]
+                assert expr not in flop_counts.materialized_successor_to_contrib_nflops
+                flop_counts.materialized_successor_to_contrib_nflops[expr] = (
+                    nuses
+                    * nflops_per_entry
+                    * product(expr.shape))
+
+
+def get_default_op_name_to_num_flops() -> dict[str, int]:
+    """
+    Returns a mapping from operator name to floating point operation count for
+    operators that are almost always a single flop.
+    """
+    return {
+        "+": 1,
+        "*": 1,
+        "==": 1,
+        "!=": 1,
+        "<": 1,
+        ">": 1,
+        "<=": 1,
+        ">=": 1,
+        "min": 1,
+        "max": 1}
+
+
+def get_num_flops(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> ArrayOrScalar:
+    """
+    Count the total number of floating point operations in the DAG *expr*.
+
+    Counts flops as if emitting a statement at each materialized node (i.e., a node
+    tagged with :class:`pytato.tags.ImplStored`) that computes everything up to
+    (not including) its materialized predecessors. The total flop count is the sum
+    over all materialized nodes.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
+
+    .. note::
+
+        Does not support functions. Function calls must be inlined before calling.
+    """
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+
+    materialized_nodes = collect_materialized_nodes(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = MaterializedNodeFlopCounter(
+        op_name_to_num_flops, frozenset(materialized_nodes))
+    fc(expr)
+
+    return sum(fc.materialized_node_to_nflops.values())
+
+
+def get_materialized_node_flop_counts(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> dict[Array, ArrayOrScalar]:
+    """
+    Returns a dictionary mapping materialized nodes in DAG *expr* to their floating
+    point operation count.
+
+    Counts flops as if emitting a statement at each materialized node (i.e., a node
+    tagged with :class:`pytato.tags.ImplStored`) that computes everything up to
+    (not including) its materialized predecessors.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
+
+    .. note::
+
+        Does not support functions. Function calls must be inlined before calling.
+    """
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+
+    materialized_nodes = collect_materialized_nodes(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = MaterializedNodeFlopCounter(
+        op_name_to_num_flops, frozenset(materialized_nodes))
+    fc(expr)
+
+    return fc.materialized_node_to_nflops
+
+
+def get_unmaterialized_node_flop_counts(
+        expr: ArrayOrNames,
+        op_name_to_num_flops: Mapping[str, int] | None = None,
+    ) -> dict[Array, UnmaterializedNodeFlopCounts]:
+    """
+    Returns a dictionary mapping unmaterialized nodes in DAG *expr* to a
+    :class:`UnmaterializedNodeFlopCounts` containing floating-point operation count
+    information.
+
+    The :class:`UnmaterializedNodeFlopCounts` instance for each unmaterialized node
+    (i.e., a node that can be tagged with :class:`pytato.tags.ImplStored` but isn't)
+    contains `materialized_successor_to_contrib_nflops` and `nflops_if_materialized`
+    attributes. The former is a mapping from each materialized successor of the
+    unmaterialized node to the number of flops the node contributes to evaluating
+    that successor (this includes flops from the predecessors of the unmaterialized
+    node). The latter is the number of flops that would be required to evaluate the
+    unmaterialized node if it was materialized instead.
+
+    .. note::
+
+        For arrays whose index lambda form contains :class:`pymbolic.primitives.If`,
+        this function assumes a SIMT-like model of computation in which the per-entry
+        cost is the sum of the costs of the two branches.
+
+    .. note::
+
+        Calculations for array subscripts are currently assumed to be integer-typed.
+        Any floating point operations contained within will be ignored.
+
+    .. note::
+
+        Does not support functions. Function calls must be inlined before calling.
+    """
+    from pytato.codegen import normalize_outputs
+    expr = normalize_outputs(expr)
+
+    materialized_nodes = collect_materialized_nodes(expr)
+
+    if op_name_to_num_flops is None:
+        op_name_to_num_flops = get_default_op_name_to_num_flops()
+
+    fc = UnmaterializedNodeFlopCounter(
+        op_name_to_num_flops, frozenset(materialized_nodes))
+    fc(expr)
+
+    return fc.unmaterialized_node_to_flop_counts
+
+# }}}
+
 
 # vim: fdm=marker
