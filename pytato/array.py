@@ -609,7 +609,7 @@ class ReductionDescriptor(Taggable):
     Records information about a reduction dimension in an
     :class:`~pytato.Array`'.
     """
-    tags: frozenset[Tag]
+    tags: frozenset[Tag] = frozenset()
 
     @override
     def _with_new_tags(self, tags: frozenset[Tag]) -> ReductionDescriptor:
@@ -1766,7 +1766,7 @@ def einsum(subscripts: str, *operands: Array,
     for descr in index_to_descr.values():
         if (isinstance(descr, EinsumReductionAxis)
                 and descr not in redn_axis_to_redn_descr):
-            redn_axis_to_redn_descr[descr] = ReductionDescriptor(frozenset())
+            redn_axis_to_redn_descr[descr] = ReductionDescriptor()
 
     # }}}
 
@@ -2339,9 +2339,21 @@ class CSRMatmul(SparseMatmul):
     .. attribute:: array
 
         The :class:`Array` to which the sparse matrix is being applied.
+
+    .. attribute:: reduction_var
+
+        The index variable for the per-row reduction.
+
+    .. attribute:: reduction_descr
+
+        The :class:`ReductionDescriptor` for the per-row reduction.
     """
     matrix: CSRMatrix
     array: Array
+    reduction_var: str = "_r0"
+    reduction_descr: ReductionDescriptor = dataclasses.field(
+        kw_only=True,
+        default_factory=ReductionDescriptor)
 
     @property
     @override
@@ -2352,6 +2364,24 @@ class CSRMatmul(SparseMatmul):
     @override
     def _array(self) -> Array:
         return self.array
+
+    def with_tagged_reduction(self, tags: Tag | Iterable[Tag]) -> CSRMatmul:
+        """
+        Returns a copy of *self* with its :class:`ReductionDescriptor`
+        tagged with *tag*.
+        """
+        new_redn_descr = self.reduction_descr.tagged(tags)
+        if new_redn_descr is not self.reduction_descr:
+            return type(self)(
+                matrix=self.matrix,
+                array=self.array,
+                axes=self.axes,
+                reduction_descr=new_redn_descr,
+                tags=self.tags,
+                non_equality_tags=self.non_equality_tags)
+        else:
+            return self
+
 
 # }}}
 
@@ -3271,7 +3301,7 @@ def make_index_lambda(
 
     for redn_var in redn_vars:
         redn_descr = var_to_reduction_descr.get(redn_var,
-                                           ReductionDescriptor(frozenset()))
+                                           ReductionDescriptor())
         if not isinstance(redn_descr, ReductionDescriptor):
             raise TypeError(f"reduction_dim for {redn_var} expected to be"
                             f" of type ReductionDescriptor, got {type(redn_descr)}.")

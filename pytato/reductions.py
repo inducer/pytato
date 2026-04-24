@@ -261,7 +261,7 @@ def _get_var_to_redn_descr(
             idx = f"_r{n_redn_dims}"
             redn_descr = axis_to_reduction_descr.get(
                 idim,
-                ReductionDescriptor(frozenset()))
+                ReductionDescriptor())
             if not isinstance(redn_descr, ReductionDescriptor):
                 raise TypeError(f"'axis_to_reduction_descr[{idim}]': "
                                 "expected an instance of ReductionDescriptor, "
