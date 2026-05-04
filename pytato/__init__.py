@@ -168,6 +168,9 @@ from pytato.transform.dead_code_elimination import eliminate_dead_code
 from pytato.transform.lower_to_index_lambda import to_index_lambda
 from pytato.transform.materialize import materialize_with_mpms
 from pytato.transform.metadata import unify_axes_tags
+from pytato.transform.push_index_to_materialized_nodes import (
+    push_index_to_materialized_nodes,
+)
 from pytato.transform.remove_broadcasts_einsum import rewrite_einsums_with_no_broadcasts
 from pytato.visualization import (
     get_dot_graph,
@@ -275,6 +278,7 @@ __all__ = (
     "ones_like",
     "pad",
     "prod",
+    "push_index_to_materialized_nodes",
     "real",
     "reshape",
     "rewrite_einsums_with_no_broadcasts",
