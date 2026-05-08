@@ -209,7 +209,9 @@ class Array:
 
     def __array_namespace__(self, *, api_version: str | None = None) -> Any:
         import sys
-        return sys.modules[__spec__.parent + ".array_api"]
+        name = __spec__.parent + ".array_api" if __spec__ is not None \
+            else "pytato.array_api"
+        return sys.modules[name]
 
     # }}}
 
