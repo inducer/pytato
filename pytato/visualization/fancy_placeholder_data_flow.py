@@ -128,6 +128,7 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode, Never, []]):
             C99CallOp,
             FullOp,
             LogicalNotOp,
+            TypeCastOp,
             WhereOp,
             index_lambda_to_high_level_op,
         )
@@ -137,7 +138,8 @@ class FancyDotWriter(CachedMapper[_FancyDotWriterNode, Never, []]):
         if isinstance(hlo, FullOp):
             return NoShowNode()
         elif isinstance(hlo,
-                        BinaryOp | C99CallOp | WhereOp | BroadcastOp | LogicalNotOp):
+                        BinaryOp | C99CallOp | WhereOp | BroadcastOp
+                        | LogicalNotOp | TypeCastOp):
             node_id = self.vng("_pt_elem")
 
             node_decl = (f"{node_id}"
