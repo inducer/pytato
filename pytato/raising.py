@@ -116,6 +116,12 @@ class LogicalNotOp(HighLevelOp):
 
 
 @dataclass(frozen=True, eq=True, repr=True)
+class TypeCastOp(HighLevelOp):
+    dtype: np.dtype[Any]
+    x: ArrayOrScalar
+
+
+@dataclass(frozen=True, eq=True, repr=True)
 class ReduceOp(HighLevelOp):
     """
     .. attribute:: axes
@@ -268,6 +274,15 @@ def index_lambda_to_high_level_op(expr: IndexLambda) -> HighLevelOp:
     """
     Returns a :class:`HighLevelOp` corresponding *expr*.
     """
+    if isinstance(expr.expr, TypeCast):
+        try:
+            x, = _as_array_or_scalar((expr.expr.inner_expr,),
+                                     expr.bindings,
+                                     expr.shape)
+            return TypeCastOp(expr.expr.dtype, x)
+        except UnknownIndexLambdaExpr:
+            pass
+
     inner_expr = TypeCastDropper()(expr.expr)
 
     if isinstance(inner_expr, SCALAR_CLASSES):
