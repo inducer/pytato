@@ -1,0 +1,58 @@
+name: Array API Tests
+on:
+    push:
+        branches:
+        - main
+    pull_request:
+    schedule:
+        - cron:  '17 3 * * 0'
+
+concurrency:
+    group: ${{ github.head_ref || github.ref_name }}-array-api
+    cancel-in-progress: true
+
+jobs:
+    array-api-tests:
+        name: Array API Conformance Tests
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+        -   uses: actions/checkout@v4
+        -
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.x'
+        -   name: Install dependencies
+            run: |
+                pip install numpy hypothesis ndindex pytest pytest-json-report
+                pip install git+https://github.com/inducer/constantdict
+                pip install git+https://github.com/inducer/pytools
+                pip install git+https://github.com/inducer/pymbolic
+                pip install git+https://github.com/inducer/loopy
+                pip install -e "."
+        -   name: Clone array-api-tests
+            run: |
+                git clone --depth 1 --recurse-submodules \
+                    https://github.com/data-apis/array-api-tests.git \
+                    /tmp/array-api-tests
+        -   name: Run Array API conformance tests
+            run: |
+                cd /tmp/array-api-tests
+                # Collect expected failures
+                XFAILS=""
+                while IFS= read -r line; do
+                    # Skip comments and blank lines
+                    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+                    XFAILS="$XFAILS --deselect=$line"
+                done < "$GITHUB_WORKSPACE/array-api-tests.xfails.txt"
+
+                ARRAY_API_TESTS_MODULE=pytato.array_api \
+                pytest array_api_tests/ \
+                    --max-examples=50 \
+                    --tb=no \
+                    -q \
+                    $XFAILS \
+                    --ignore=array_api_tests/test_linalg.py \
+                    --ignore=array_api_tests/test_fft.py \
+                    -o "filterwarnings=ignore::DeprecationWarning"
