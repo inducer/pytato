@@ -1478,6 +1478,24 @@
                 }
             }
         ],
+        "./examples/mpi-distributed.py": [
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 41,
+                    "lineCount": 2
+                }
+            },
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 55,
+                    "lineCount": 2
+                }
+            }
+        ],
         "./pytato/__init__.py": [
             {
                 "code": "reportConstantRedefinition",
@@ -9662,6 +9680,14 @@
                 }
             },
             {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 50,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportImplicitOverride",
                 "range": {
                     "startColumn": 12,
@@ -10438,6 +10464,14 @@
                 "range": {
                     "startColumn": 34,
                     "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnreachable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 50,
                     "lineCount": 1
                 }
             },
