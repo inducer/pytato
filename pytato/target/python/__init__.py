@@ -32,6 +32,7 @@ __doc__ = """
 
 .. autoclass:: PythonTarget
 .. autoclass:: BoundPythonProgram
+.. autoclass:: NumpyPythonTarget
 .. autoclass:: JAXPythonTarget
 .. autoclass:: BoundJAXPythonProgram
 """
@@ -194,6 +195,34 @@ class JAXPythonTarget(NumpyLikePythonTarget):
                                      bound_arguments={
                                          name: _process_jax_bnd_arg(arg)
                                          for name, arg in bound_arguments.items()})
+
+# }}}
+
+
+# {{{ numpy target
+
+class NumpyPythonTarget(NumpyLikePythonTarget):
+    """
+    A target that generates code for a python program by offloading array
+    operations to :mod:`numpy`.
+    """
+    @property
+    def numpy_like_module_name(self) -> str:
+        return "numpy"
+
+    @property
+    def numpy_like_module_name_shorthand(self) -> str:
+        return "_pt_np"
+
+    def bind_program(self,
+                     program: str,
+                     entrypoint: str,
+                     expected_arguments: frozenset[str],
+                     bound_arguments: Mapping[str, Any]) -> BoundPythonProgram:
+        return BoundPythonProgram(target=self, program=program,
+                                  entrypoint=entrypoint,
+                                  expected_arguments=expected_arguments,
+                                  bound_arguments=dict(bound_arguments))
 
 # }}}
 

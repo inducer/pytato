@@ -103,6 +103,9 @@ allowed-confusables = [
 "examples/*.py" = ["I002"]
 "test/*.py" = ["S102"]
 "doc/conf.py" = ["S102"]
+# array_api: in-place dunder methods intentionally return Array (not Self);
+# int | float is intentional for Array API compatibility.
+"pytato/array_api.py" = ["PYI034", "PYI041"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]

@@ -171,7 +171,7 @@ LOGICAL_OP_TO_CALL = {BinaryOpType.LOGICAL_OR:  "logical_or",
 
 PYTATO_REDUCTION_TO_NP_REDUCTION: Mapping[type[ReductionOperation], str] = {
     SumReductionOperation: "sum",
-    ProductReductionOperation: "product",
+    ProductReductionOperation: "prod",
     MaxReductionOperation: "max",
     MinReductionOperation: "min",
     AllReductionOperation: "all",
