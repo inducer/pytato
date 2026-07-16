@@ -311,7 +311,7 @@ def call_loopy(translation_unit: lp.TranslationUnit,
 
 # {{{ shape inference
 
-class ShapeInferenceFailure(RuntimeError):  # noqa: N818
+class ShapeInferenceFailure(RuntimeError):  # ruff:ignore[error-suffix-on-exception-name]
     pass
 
 

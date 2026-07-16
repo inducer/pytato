@@ -91,7 +91,7 @@ T = TypeVar("T")
 
 def _can_colorize_output() -> bool:
     try:
-        import pygments  # noqa: F401
+        import pygments  # ruff:ignore[unused-import]
         return True
     except ImportError:
         return False

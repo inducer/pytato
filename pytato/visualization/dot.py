@@ -547,7 +547,7 @@ def _gather_partition_node_information(
         seen_functions: dict[FunctionDefinition, None] = {}
 
         def gather_function_info(f: FunctionDefinition) -> None:
-            key = (part.pid, f)  # noqa: B023
+            key = (part.pid, f)  # ruff:ignore[function-uses-loop-variable]
             if key in part_id_func_to_node_info:
                 return
 
@@ -560,8 +560,8 @@ def _gather_partition_node_information(
             for subfunc in mapper.functions:
                 gather_function_info(subfunc)
 
-            if f not in seen_functions:  # noqa: B023
-                seen_functions[f] = None  # noqa: B023
+            if f not in seen_functions:  # ruff:ignore[function-uses-loop-variable]
+                seen_functions[f] = None  # ruff:ignore[function-uses-loop-variable]
 
         for f in mapper.functions:
             gather_function_info(f)

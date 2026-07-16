@@ -97,7 +97,7 @@ if TYPE_CHECKING:
 if getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # Avoid import unless building docs to avoid creating a hard
     # dependency on pyopencl, when Loopy can run fine without.
-    from pytools.tag import Tag  # noqa: TC001
+    from pytools.tag import Tag  # ruff:ignore[typing-only-first-party-import]
 
 __doc__ = """
 .. autoclass:: PersistentExpressionContext

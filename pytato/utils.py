@@ -200,8 +200,8 @@ def update_bindings_and_get_broadcasted_expr(arr: ArrayOrScalar,
 
 
 def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
-                        op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # noqa:E501
-                        get_result_type: Callable[[ArrayOrScalar, ArrayOrScalar], np.dtype[Any]],  # noqa:E501
+                        op: Callable[[ScalarExpression, ScalarExpression], ScalarExpression],  # ruff:ignore[line-too-long]
+                        get_result_type: Callable[[ArrayOrScalar, ArrayOrScalar], np.dtype[Any]],  # ruff:ignore[line-too-long]
                         *,
                         tags: frozenset[Tag],
                         non_equality_tags: frozenset[Tag],

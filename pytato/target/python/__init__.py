@@ -87,7 +87,7 @@ class BoundPythonProgram(BoundProgram):
         variables_after_execution: dict[str, Any] = {
             "_MODULE_SOURCE_CODE": self.program  # helps pudb
         }
-        exec(self.program, variables_after_execution)  # noqa: S102
+        exec(self.program, variables_after_execution)  # ruff:ignore[exec-builtin]
         assert callable(variables_after_execution[self.entrypoint])
         return variables_after_execution[  # type: ignore[no-any-return]
             self.entrypoint]

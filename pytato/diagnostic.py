@@ -49,27 +49,27 @@ class CannotBroadcastError(ValueError):
     pass
 
 
-class UnknownIndexLambdaExpr(ValueError):  # noqa: N818
+class UnknownIndexLambdaExpr(ValueError):  # ruff:ignore[error-suffix-on-exception-name]
     """
     Raised when the structure :class:`pytato.array.IndexLambda` could not be
     inferred.
     """
 
 
-class InvalidEinsumIndex(ValueError):  # noqa: N818
+class InvalidEinsumIndex(ValueError):  # ruff:ignore[error-suffix-on-exception-name]
     """
     Raised when an einsum index was referred by an invalid value.
     """
 
 
-class NotAReductionAxis(ValueError):  # noqa: N818
+class NotAReductionAxis(ValueError):  # ruff:ignore[error-suffix-on-exception-name]
     """
     Raised when a :class:`pytato.ReductionDescriptor` was referred by an invalid
     value.
     """
 
 
-class CannotBeLoweredToIndexLambda(ValueError):  # noqa: N818
+class CannotBeLoweredToIndexLambda(ValueError):  # ruff:ignore[error-suffix-on-exception-name]
     """
     Raised when a :class:`pytato.Array` was expected to be lowered to an
     :class:`~pytato.array.IndexLambda`, but it cannot be. For ex. a

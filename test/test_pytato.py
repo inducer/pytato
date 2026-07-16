@@ -35,7 +35,7 @@ import numpy as np
 import pytest
 from testlib import RandomDAGContext, make_random_dag
 
-from pyopencl.tools import (  # noqa
+from pyopencl.tools import (  # ruff:ignore[unused-import]
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
@@ -316,7 +316,7 @@ def test_call_loopy_shape_inference():
 
     # {{{ variant 1
 
-    A = pt.make_placeholder(name="x", shape=(20, 37))  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37))  # ruff:ignore[non-lowercase-variable-in-function]
     y = call_loopy(knl, {"A": A})["out"]
     assert are_shapes_equal(y.shape, (4, 3))
 
@@ -326,7 +326,7 @@ def test_call_loopy_shape_inference():
 
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
-    A = pt.make_placeholder(name="x",  # noqa: N806
+    A = pt.make_placeholder(name="x",  # ruff:ignore[non-lowercase-variable-in-function]
                             shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3))
 
     y = call_loopy(knl, {"A": A})["out"]
@@ -650,7 +650,7 @@ def test_repr_array_is_deterministic():
         rdagc = RandomDAGContext(np.random.default_rng(seed=i),
                                  axis_len=axis_len, use_numpy=False)
         dag = make_random_dag(rdagc)
-        assert repr(dag) == repr(dag)  # noqa: PLR0124
+        assert repr(dag) == repr(dag)  # ruff:ignore[comparison-with-itself]
 
 
 def test_empty_dag_count():
@@ -1142,7 +1142,7 @@ def test_created_at():
 
         # res3 and res4 are defined on the same line and should have the same
         # CreatedAt tags.
-        res3 = a+b; res4 = a+b  # noqa: E702
+        res3 = a+b; res4 = a+b  # ruff:ignore[multiple-statements-on-one-line-semicolon]
 
         # {{{ Check that CreatedAt tags are handled correctly for equality/hashing
 
@@ -1348,7 +1348,7 @@ def test_pickling_and_unpickling_is_equal():
 
         def make_dws_placeholder(expr):
             if isinstance(expr, pt.DataWrapper):
-                return pt.make_placeholder(vng("_pt_ph"),  # noqa: B023
+                return pt.make_placeholder(vng("_pt_ph"),  # ruff:ignore[function-uses-loop-variable]
                                            expr.shape, expr.dtype)
             else:
                 return expr
@@ -1678,9 +1678,9 @@ def test_unify_axes_tags_indexlambda():
     assert z_unified.axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()])
     assert z_unified.axes[1].tags_of_type(TestlibTag) == frozenset([BarTag()])
 
-    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()]) # noqa
+    assert z_unified.bindings["_in1"].axes[0].tags_of_type(TestlibTag) == frozenset([BarTag()]) # ruff:ignore[too-few-spaces-before-inline-comment, line-too-long]
 
-    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()]) # noqa
+    assert z_unified.bindings["_in0"].axes[0].tags_of_type(TestlibTag) == frozenset([FooTag()]) # ruff:ignore[too-few-spaces-before-inline-comment, line-too-long]
     assert z_unified.bindings["_in1"].axes[1].tags_of_type(TestlibTag) == frozenset([])
 
 

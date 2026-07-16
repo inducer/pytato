@@ -40,10 +40,12 @@ import loopy as lp
 import pymbolic.primitives as p
 import pyopencl as cl
 import pyopencl.array as cl_array
-import pyopencl.cltypes as cltypes  # noqa
-import pyopencl.tools as cl_tools  # noqa
-from loopy.version import LOOPY_USE_LANGUAGE_VERSION_2018_2  # noqa
-from pyopencl.tools import (  # noqa
+import pyopencl.cltypes as cltypes  # ruff:ignore[unused-import, manual-from-import]
+import pyopencl.tools as cl_tools  # ruff:ignore[unused-import]
+from loopy.version import (
+    LOOPY_USE_LANGUAGE_VERSION_2018_2,  # ruff:ignore[unused-import]
+)
+from pyopencl.tools import (  # ruff:ignore[unused-import]
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
@@ -592,7 +594,7 @@ def test_dict_to_loopy_kernel(ctx_factory: cl.CtxFactory):
 def test_only_deps_as_knl_args():
     # See https://gitlab.tiker.net/inducer/pytato/-/issues/13
     x = pt.make_placeholder(name="x", shape=(10, 4), dtype=float)
-    y = pt.make_placeholder(name="y", shape=(10, 4), dtype=float)  # noqa:F841
+    y = pt.make_placeholder(name="y", shape=(10, 4), dtype=float)  # ruff:ignore[unused-variable]
 
     z = 2*x
     knl = pt.generate_loopy(z).kernel
@@ -986,9 +988,9 @@ def test_einsum_with_parameterized_shapes(ctx_factory: cl.CtxFactory):
     def _get_x_shape(_m, n_):
         return (3*n_+7, )
 
-    A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # noqa: N806
+    A_in = np.random.rand(*_get_a_shape(m_in, n_in))  # ruff:ignore[non-lowercase-variable-in-function]
     x_in = np.random.rand(*_get_x_shape(m_in, n_in))
-    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))  # noqa: N806
+    A = pt.make_data_wrapper(A_in, shape=_get_a_shape(m, n))  # ruff:ignore[non-lowercase-variable-in-function]
     x = pt.make_data_wrapper(x_in, shape=_get_x_shape(m, n))
 
     np_out = np.einsum("ij, j ->  i", A_in, x_in)
@@ -1013,12 +1015,12 @@ def test_csr_matmul(ctx_factory: cl.CtxFactory, case, visualize=False):
     # FD Laplacian operator for interior points
     diags = [np.ones(n-2)/h**2, -2*np.ones(n-2)/h**2, np.ones(n-2)/h**2]
     col_indices = [np.arange(n-2), np.arange(1, n-1), np.arange(2, n)]
-    np_A = np.zeros((n-2, n))  # noqa: N806
+    np_A = np.zeros((n-2, n))  # ruff:ignore[non-lowercase-variable-in-function]
     np_A[np.arange(n-2), col_indices[0]] = diags[0]
     np_A[np.arange(n-2), col_indices[1]] = diags[1]
     np_A[np.arange(n-2), col_indices[2]] = diags[2]
 
-    pt_A = pt.make_csr_matrix(  # noqa: N806
+    pt_A = pt.make_csr_matrix(  # ruff:ignore[non-lowercase-variable-in-function]
         shape=np_A.shape,
         elem_values=pt.make_data_wrapper(np.stack(diags).T.flatten()),
         elem_col_indices=pt.make_data_wrapper(np.stack(col_indices).T.flatten()),
@@ -1093,7 +1095,7 @@ def test_call_loopy_shape_inference1(ctx_factory: cl.CtxFactory):
 
     rng = default_rng()
 
-    A_in = rng.random((20, 37))  # noqa
+    A_in = rng.random((20, 37))  # ruff:ignore[non-lowercase-variable-in-function]
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -1103,7 +1105,7 @@ def test_call_loopy_shape_inference1(ctx_factory: cl.CtxFactory):
             out[ii, jj] = tmp*(ii + jj)
             """, lang_version=(2018, 2))
 
-    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # noqa: N806
+    A = pt.make_placeholder(name="x", shape=(20, 37), dtype=np.float64)  # ruff:ignore[non-lowercase-variable-in-function]
     y_pt = call_loopy(knl, {"A": A})["out"]
 
     _, (out,) = pt.generate_loopy(y_pt)(queue, x=A_in)
@@ -1125,7 +1127,7 @@ def test_call_loopy_shape_inference2(ctx_factory: cl.CtxFactory):
 
     rng = default_rng()
 
-    A_in = rng.random((38, 71))  # noqa
+    A_in = rng.random((38, 71))  # ruff:ignore[non-lowercase-variable-in-function]
 
     knl = lp.make_kernel(
             ["{[i, j]: 0<=i<(2*n + 3*m + 2) and 0<=j<(6*n + 4*m + 3)}",
@@ -1137,7 +1139,7 @@ def test_call_loopy_shape_inference2(ctx_factory: cl.CtxFactory):
 
     n1 = pt.make_size_param("n1")
     n2 = pt.make_size_param("n2")
-    A = pt.make_placeholder(name="x",  # noqa: N806
+    A = pt.make_placeholder(name="x",  # ruff:ignore[non-lowercase-variable-in-function]
                             shape=(4*n1 + 6*n2 + 2, 12*n1 + 8*n2 + 3),
                             dtype=np.float64)
 
@@ -1395,7 +1397,7 @@ def test_advanced_indexing_fuzz(ctx_factory: cl.CtxFactory):
     cq = cl.CommandQueue(ctx)
     rng = default_rng(seed=0)
 
-    NSAMPLES = 50  # noqa: N806
+    NSAMPLES = 50  # ruff:ignore[non-lowercase-variable-in-function]
 
     for i in range(NSAMPLES):
         input_ndim = rng.integers(1, 8)
@@ -2111,7 +2113,7 @@ def test_nested_function_calls(ctx_factory: cl.CtxFactory):
     _, out = prg(cq, x=x_np)
     np.testing.assert_allclose(out["out1"], 3*x_np)
     np.testing.assert_allclose(out["out2"], x_np)
-    ref_tracer = lambda f, *args, identifier: f(*args)  # noqa: E731
+    ref_tracer = lambda f, *args, identifier: f(*args)  # ruff:ignore[lambda-assignment]
 
     def foo(tracer, x, y):
         return 2*x + 3*y
