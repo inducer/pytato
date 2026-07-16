@@ -476,7 +476,7 @@ def _augment_array_dataclass(
     )
 
     exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-    exec(compile(augment_code,  # noqa: S102
+    exec(compile(augment_code,  # ruff:ignore[exec-builtin]
                  f"<dataclass augmentation code for {cls}>", "exec"),
          exec_dict)
 
@@ -1597,7 +1597,7 @@ def _normalize_einsum_out_subscript(subscript: str) -> constantdict[str,
         ['i', 'j', 'k']
         >>> result["i"], result["j"], result["k"]
         (EinsumElementwiseAxis(dim=1), EinsumElementwiseAxis(dim=2), EinsumElementwiseAxis(dim=0))
-    """  # noqa: E501
+    """  # ruff:ignore[line-too-long]
 
     normalized_indices: list[str] = []
     acc = subscript.strip()
@@ -2898,7 +2898,7 @@ def ones(shape: ConvertibleToShape, dtype: Any = float,
 
 # {{{ eye
 
-def eye(N: int, M: int | None = None, k: int = 0,  # noqa: N803
+def eye(N: int, M: int | None = None, k: int = 0,  # ruff:ignore[invalid-argument-name]
         dtype: Any = np.float64) -> Array:
     """
     Returns a 2D-array with ones on the *k*-th diagonal
@@ -2909,7 +2909,7 @@ def eye(N: int, M: int | None = None, k: int = 0,  # noqa: N803
     from pymbolic import parse
 
     if M is None:
-        M = N  # noqa: N806
+        M = N  # ruff:ignore[non-lowercase-variable-in-function]
 
     if M < 0 or N < 0:
         raise ValueError("Negative dimension lengths not allowed.")
@@ -3348,7 +3348,7 @@ def dot(a: ArrayOrScalar, b: ArrayOrScalar) -> ArrayOrScalar:
         return pt.sum(a * b, axis=(a.ndim - 1))
     else:
         idx_stream = (chr(i) for i in range(ord("i"), ord("z")))
-        idx_gen: Callable[[], str] = lambda: next(idx_stream)  # noqa: E731
+        idx_gen: Callable[[], str] = lambda: next(idx_stream)  # ruff:ignore[lambda-assignment]
         a_indices = "".join(idx_gen() for _ in range(a.ndim))
         b_indices = "".join(idx_gen() for _ in range(b.ndim))
         # reduce over second-to-last axis of *b* and last axis of *a*

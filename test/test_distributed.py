@@ -32,7 +32,7 @@ import pytest
 
 import pyopencl as cl
 import pyopencl.array as cla
-from pyopencl.tools import (  # noqa
+from pyopencl.tools import (  # ruff:ignore[unused-import]
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 from pytools.graph import CycleError

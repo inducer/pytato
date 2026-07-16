@@ -2301,7 +2301,7 @@ class DataWrapperDeduplicator(CopyMapper):
             try:
                 from pyopencl import SVMPointer
             except ImportError:
-                SVMPointer = None  # noqa: N806
+                SVMPointer = None  # ruff:ignore[non-lowercase-variable-in-function]
 
             if isinstance(ary, CLArray):
                 base_data = ary.base_data

@@ -146,11 +146,11 @@ class DGDiscr1D:
 
         Signature: ->(n, n)
         """
-        VrT = []  # noqa: N806
+        VrT = []  # ruff:ignore[non-lowercase-variable-in-function]
         for row in np.eye(self.nnodes):
             deriv = ortholegder(row)
             VrT.append(ortholegval(self.ref_nodes, deriv))
-        Vr = np.vstack(VrT).T  # noqa: N806
+        Vr = np.vstack(VrT).T  # ruff:ignore[non-lowercase-variable-in-function]
         return Vr @ la.inv(self.vdm)
 
     @cached_property

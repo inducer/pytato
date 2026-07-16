@@ -74,21 +74,21 @@ extend-select = [
     "SIM",
 ]
 extend-ignore = [
-  "E226",
-  "E241",
-  "E242",
-  "E265",
-  "N802",
-  "E402",
-  "N814",
-  "N817",
+  "missing-whitespace-around-arithmetic-operator",
+  "multiple-spaces-after-comma",
+  "tab-after-comma",
+  "no-space-after-block-comment",
+  "invalid-function-name",
+  "module-import-not-at-top-of-file",
+  "camelcase-imported-as-constant",
+  "camelcase-imported-as-acronym",
   "C90",
-  "RUF067", # no code in __init__ *shrug*
+  "non-empty-init-module",
 
   # numpy random generators---disable for now
-  "NPY002",
-  "TRY004",
-  "TRY300",
+  "numpy-legacy-random",
+  "type-check-without-type-error",
+  "try-consider-else",
 ]
 
 allowed-confusables = [
@@ -97,12 +97,12 @@ allowed-confusables = [
   ]
 
 [tool.ruff.lint.per-file-ignores]
-"examples/advection.py" = ["B023"]
-"test/test_linalg.py" = ["N806"]
-"doc/*.py" = ["I002"]
-"examples/*.py" = ["I002"]
-"test/*.py" = ["S102"]
-"doc/conf.py" = ["S102"]
+"examples/advection.py" = ["function-uses-loop-variable"]
+"test/test_linalg.py" = ["non-lowercase-variable-in-function"]
+"doc/*.py" = ["missing-required-import"]
+"examples/*.py" = ["missing-required-import"]
+"test/*.py" = ["exec-builtin"]
+"doc/conf.py" = ["exec-builtin"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pytools", "pymbolic", "loopy", "pyopencl"]
@@ -175,6 +175,9 @@ reportImportCycles = "none"
 # Local runs now flag this as unnecessary. Downgrading to hint to avoid
 # circular complaints.
 reportUnnecessaryTypeIgnoreComment = "hint"
+
+# covered by ruff
+reportUnusedImport = "none"
 
 pythonVersion = "3.12"
 pythonPlatform = "All"
