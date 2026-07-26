@@ -25,7 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import dataclasses
 from numbers import Number
 from typing import (
@@ -33,13 +32,14 @@ from typing import (
     Any,
 )
 
-import islpy as isl
+import namedisl as nisl
 import numpy as np
 from constantdict import constantdict
 from typing_extensions import override
 
 import loopy as lp
 import pymbolic.primitives as prim
+from loopy.symbolic import pw_aff_to_expr
 from loopy.typing import assert_tuple
 from pytools import memoize_method
 
@@ -315,29 +315,6 @@ class ShapeInferenceFailure(RuntimeError):  # ruff:ignore[error-suffix-on-except
     pass
 
 
-def _get_val_in_bset(bset: isl.BasicSet, idim: int) -> ScalarExpression:
-    """
-    Gets the value of *bset*'s *idim*-th set-dim in terms of it's param-dims.
-
-    .. note::
-
-        Assumes all constraints in *bset* are equality constraints.
-    """
-    from loopy.symbolic import aff_to_expr
-
-    max_val = bset.dim_max(idim)
-
-    assert max_val.is_equal(bset.dim_min(idim))
-
-    if max_val.n_piece() != 1:
-        raise NotImplementedError("Shape inference resulted in a piecewise"
-                                    " result.")
-
-    (_, aff), = max_val.get_pieces()
-
-    return aff_to_expr(aff)
-
-
 def solve_constraints(variables: Sequence[str],
                       parameters: Sequence[str],
                       constraints: Sequence[tuple[ArithmeticExpression,
@@ -355,36 +332,29 @@ def solve_constraints(variables: Sequence[str],
     :returns: A mapping from variable name in *variables* to
         :class:`ScalarExpression` obtained after solving for them.
     """
-    from loopy.symbolic import aff_from_expr
+    if not variables:
+        return {}
 
-    space = isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
-                                        set=variables,
-                                        params=parameters)
+    from loopy.symbolic import pwaff_from_expr
 
-    shape_inference_bset = isl.BasicSet.universe(space)
+    space = nisl.Space.from_names(out=variables, param=parameters)
 
+    shape_inference_set = nisl.Set.universe(space)
+
+    v = nisl.pw_affs_from_domain_space(space)
     for lhs, rhs in constraints:
-        aff = aff_from_expr(space, lhs-rhs)
+        shape_inference_set = shape_inference_set & (
+            pwaff_from_expr(v, lhs)
+            .where("==", pwaff_from_expr(v, rhs)))
 
-        shape_inference_bset = (shape_inference_bset
-                                .add_constraint(isl.Constraint
-                                                .equality_from_aff(aff)))
-
-    if shape_inference_bset.is_empty():
+    if shape_inference_set.is_empty():
         raise ShapeInferenceFailure
 
-    solution = {}
-
-    # {{{ get the value of each unknown variable
-
-    for idim in range(shape_inference_bset.dim(isl.dim_type.set)):
-        arg_name = shape_inference_bset.get_dim_name(isl.dim_type.set, idim)
-        solved_val = _get_val_in_bset(shape_inference_bset, idim)
-        solution[arg_name] = solved_val
-
-    # }}}
-
-    return solution
+    solution = shape_inference_set.as_map([]).as_pw_multi_aff()
+    return {
+        name: pw_aff_to_expr(solution[name])
+        for name in variables
+    }
 
 
 # {{{ shape inference helpers

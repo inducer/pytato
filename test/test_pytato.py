@@ -180,7 +180,7 @@ def test_zero_length_arrays():
     assert y.shape == (0, 4)
 
     knl = pt.generate_loopy(y).kernel
-    assert all(dom.is_empty() for dom in knl.domains if dom.total_dim() != 0)
+    assert all(dom.is_empty() for dom in knl.domains if dom.space.names)
 
 
 def test_concatenate_input_validation():
