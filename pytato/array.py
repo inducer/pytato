@@ -3027,11 +3027,12 @@ def arange(*args: Any, **kwargs: Any) -> Array:
 
 # {{{ comparison operator
 
-def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
-    # https://github.com/python/mypy/issues/3186
+def _compare(
+            x1: ArrayOrScalar,
+            x2: ArrayOrScalar,
+            which: prim.ComparisonOp
+        ) -> Array | bool:
     from pytato import utils
-    # type-ignored because 'broadcast_binary_op' returns Scalar, while
-    # '_compare' returns a bool.
     return utils.broadcast_binary_op(
                             x1, x2,
                             lambda x, y: prim.Comparison(x, which, y),
@@ -3040,7 +3041,7 @@ def _compare(x1: ArrayOrScalar, x2: ArrayOrScalar, which: str) -> Array | bool:
                             non_equality_tags=_get_created_at_tag(stacklevel=2),
                             cast_to_result_dtype=False,
                             is_pow=False,
-                        )  # type: ignore[return-value]
+                        )
 
 
 def equal(x1: ArrayOrScalar, x2: ArrayOrScalar) -> Array | bool:
