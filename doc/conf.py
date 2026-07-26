@@ -28,6 +28,7 @@ intersphinx_mapping = {
     "loopy": ("https://documen.tician.de/loopy/", None),
     "sumpy": ("https://documen.tician.de/sumpy/", None),
     "islpy": ("https://documen.tician.de/islpy/", None),
+    "namedisl": ("https://documen.tician.de/namedisl/", None),
     "jax": ("https://docs.jax.dev/en/latest/", None),
     "mpi4py": ("https://mpi4py.readthedocs.io/en/latest", None),
     "constantdict": ("https://matthiasdiener.github.io/constantdict/", None),
@@ -73,6 +74,8 @@ sphinxconfig_missing_reference_aliases = {
     # pytools
     "lp.TemporaryVariable": "class:loopy.TemporaryVariable",
     "lp.AddressSpace": "class:loopy.AddressSpace",
+    # namedisl
+    "nisl.Set": "class:namedisl.Set",
 }
 
 

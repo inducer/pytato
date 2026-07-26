@@ -376,13 +376,13 @@ def get_reduction_induction_variables(expr: Expression) -> AbstractSet[str]:
 
 
 def is_quasi_affine(expr: Expression) -> bool:
-    import islpy as isl
-    space = isl.Space.create_from_names(
-        isl.DEFAULT_CONTEXT,
-        set=list(get_dependencies(expr)),
+    import namedisl as nisl
+    space = nisl.Space.from_names(
+        param=(),
+        out=list(get_dependencies(expr)),
         )
     try:
-        guarded_pwaff_from_expr(space, expr)
+        guarded_pwaff_from_expr(nisl.pw_affs_from_domain_space(space), expr)
     except ExpressionToAffineConversionError:
         return False
     return True

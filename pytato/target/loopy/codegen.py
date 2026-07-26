@@ -31,7 +31,7 @@ from collections.abc import Iterable, Mapping
 from functools import reduce
 from typing import TYPE_CHECKING, Any, cast
 
-import islpy as isl
+import namedisl as nisl
 import numpy as np
 from constantdict import constantdict
 from typing_extensions import Never, override
@@ -1026,7 +1026,7 @@ def shape_to_scalar_expression(shape: ShapeType,
 def domain_for_shape(dim_names: tuple[str, ...],
          shape: tuple[ScalarExpression, ...],
          reductions: dict[str, tuple[ScalarExpression, ScalarExpression]],
-         ) -> isl.BasicSet:
+         ) -> nisl.Set:
     """Create an :class:`islpy.BasicSet` that expresses an appropriate index domain
     for an array of (potentially symbolic) shape *shape* having reduction
     dimensions *reductions*.
@@ -1059,30 +1059,20 @@ def domain_for_shape(dim_names: tuple[str, ...],
     param_names = sorted(param_names_set)
 
     # Build domain.
-    dom = isl.BasicSet.universe(
-            isl.Space.create_from_names(isl.DEFAULT_CONTEXT,
-            set=set_names,
-            params=param_names))
+    dom = nisl.Set.universe(
+            nisl.Space.from_names(out=set_names, param=param_names))
 
     # Add constraints.
-    from loopy.symbolic import aff_from_expr
-    affs = isl.affs_from_space(dom.space)
+    from loopy.symbolic import pwaff_from_expr
 
+    v = dom.var_pw_affs
     for iname, dim in zip(dim_names, shape, strict=True):
-        dom &= affs[0].le_set(affs[iname])
-        dom &= affs[iname].lt_set(aff_from_expr(dom.space, dim))
+        dom &= v[0].le_set(v[iname])
+        dom &= v[iname].where("<", pwaff_from_expr(v, dim))
 
     for iname, (left, right) in reductions.items():
-        dom &= aff_from_expr(dom.space, left).to_pw_aff().le_set(affs[iname])
-        dom &= affs[iname].lt_set(aff_from_expr(dom.space, right))
-
-    doms = dom.get_basic_sets()
-
-    if len(doms) == 0:
-        # empty set
-        dom = isl.BasicSet.empty(dom.get_space())
-    else:
-        dom, = doms
+        dom &= pwaff_from_expr(v, left).where("<=", v[iname])
+        dom &= v[iname].where("<", pwaff_from_expr(v, right))
 
     return dom
 
