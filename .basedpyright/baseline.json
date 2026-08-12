@@ -4862,14 +4862,6 @@
             {
                 "code": "reportUnknownVariableType",
                 "range": {
-                    "startColumn": 11,
-                    "endColumn": 19,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownVariableType",
-                "range": {
                     "startColumn": 4,
                     "endColumn": 18,
                     "lineCount": 1
@@ -6705,14 +6697,6 @@
             }
         ],
         "./pytato/target/python/numpy_like.py": [
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 15,
-                    "endColumn": 23,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportUnannotatedClassAttribute",
                 "range": {
@@ -8910,14 +8894,6 @@
         ],
         "./test/test_apps.py": [
             {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportMissingTypeArgument",
                 "range": {
                     "startColumn": 24,
@@ -9159,38 +9135,6 @@
             }
         ],
         "./test/test_codegen.py": [
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 34,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 25,
-                    "endColumn": 33,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 26,
-                    "endColumn": 59,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportUnknownMemberType",
                 "range": {
@@ -9619,32 +9563,8 @@
                 "code": "reportUnknownMemberType",
                 "range": {
                     "startColumn": 17,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 17,
                     "endColumn": 27,
                     "lineCount": 3
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 30,
-                    "lineCount": 4
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 31,
-                    "lineCount": 1
                 }
             },
             {
@@ -9653,14 +9573,6 @@
                     "startColumn": 18,
                     "endColumn": 28,
                     "lineCount": 3
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 31,
-                    "lineCount": 4
                 }
             },
             {
@@ -10218,14 +10130,6 @@
         ],
         "./test/test_distributed.py": [
             {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnknownParameterType",
                 "range": {
                     "startColumn": 22,
@@ -10502,14 +10406,6 @@
         ],
         "./test/test_linalg.py": [
             {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnknownMemberType",
                 "range": {
                     "startColumn": 16,
@@ -10527,14 +10423,6 @@
             }
         ],
         "./test/test_pytato.py": [
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportPrivateUsage",
                 "range": {
@@ -10644,14 +10532,6 @@
                 "range": {
                     "startColumn": 41,
                     "endColumn": 52,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 69,
                     "lineCount": 1
                 }
             },
