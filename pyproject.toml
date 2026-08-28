@@ -84,6 +84,7 @@ extend-ignore = [
   "camelcase-imported-as-acronym",
   "C90",
   "non-empty-init-module",
+  "pytest-parameter-with-default-argument",
 
   # numpy random generators---disable for now
   "numpy-legacy-random",

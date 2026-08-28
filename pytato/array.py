@@ -317,7 +317,7 @@ def normalize_shape(
     from numbers import Number
 
     if isinstance(shape, Array | Number):
-        shape = shape,
+        shape = (shape,)
 
     assert isinstance(shape, Sequence)
     return tuple(normalize_shape_component(s) for s in shape)
@@ -476,7 +476,7 @@ def _augment_array_dataclass(
     )
 
     exec_dict = {"cls": cls, "_MODULE_SOURCE_CODE": augment_code}
-    exec(compile(augment_code,  # ruff:ignore[exec-builtin]
+    exec(compile(augment_code,
                  f"<dataclass augmentation code for {cls}>", "exec"),
          exec_dict)
 
@@ -2636,7 +2636,7 @@ def reshape(array: Array, newshape: int | Sequence[int],
     from pytools import product
 
     if isinstance(newshape, INT_CLASSES):
-        newshape = newshape,
+        newshape = (newshape,)
 
     if newshape.count(-1) > 1:
         raise ValueError("can only specify one unknown dimension")
@@ -3445,7 +3445,7 @@ def expand_dims(array: Array, axis: tuple[int, ...] | int) -> Array:
     from pytato.tags import ExpandedDimsReshape
 
     if isinstance(axis, int):
-        axis = axis,
+        axis = (axis,)
 
     output_ndim = array.ndim + len(axis)
 

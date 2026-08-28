@@ -336,7 +336,7 @@ def _do_test_distributed_execution_random_dag(ctx_factory: cl.CtxFactory):
         rdagc_no_comm = RandomDAGContext(np.random.default_rng(seed=seed),
                 axis_len=axis_len, use_numpy=True,
                 additional_generators=[
-                    (comm_fake_prob, lambda rdagc: make_random_dag(rdagc))
+                    (comm_fake_prob, make_random_dag)
                     ])
         res_no_comm_numpy = make_random_dag(rdagc_no_comm)
 

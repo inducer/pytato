@@ -1379,19 +1379,19 @@ def test_adv_indexing_into_zero_long_axes():
     # See https://github.com/inducer/meshmode/issues/321#issuecomment-1105577180
     n = pt.make_size_param("n")
 
+    a = pt.make_placeholder("a", shape=(0, 10))
+    idx = pt.zeros(5, dtype=np.int64)
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(0, 10))
-        idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
+    a = pt.make_placeholder("a", shape=(n-n, 10))
+    idx = pt.zeros(5, dtype=np.int64)
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n, 10))
-        idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
+    a = pt.make_placeholder("a", shape=(n-n-2, 10))
+    idx = pt.zeros(5, dtype=np.int64)
     with pytest.raises(IndexError):
-        a = pt.make_placeholder("a", shape=(n-n-2, 10))
-        idx = pt.zeros(5, dtype=np.int64)
         a[idx]
 
     # {{{ no index error => sanity checks are working fine

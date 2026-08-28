@@ -242,7 +242,7 @@ class AxesTagsEquationCollector(
         self.equations.append((lhs, rhs))
 
     def record_equations_from_axes_tags(self, ary: Array) -> None:
-        """
+        r"""
         Records equations for *ary*\'s axis tags of type :attr:`tag_t`.
         """
         for iaxis, axis in enumerate(ary.axes):

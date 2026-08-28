@@ -602,7 +602,7 @@ def get_num_nodes(
 
 
 class NodeMultiplicityMapper(CachedWalkMapper[[]]):
-    """
+    r"""
     Computes the multiplicity of each unique node in a DAG.
 
     The multiplicity of a node `x` is the number of nodes with distinct `id()`\\ s
