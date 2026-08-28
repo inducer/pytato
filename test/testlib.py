@@ -412,8 +412,7 @@ def make_large_dag_with_duplicates(iterations: int,
         if rng.uniform() > 0.2:
             dup1 = operation(a, value)
             dup2 = operation(a, value)
-            duplicates.append(dup1)
-            duplicates.append(dup2)
+            duplicates.extend((dup1, dup2))
             current = operation(current, dup1)
 
     all_exprs = [current, *duplicates]

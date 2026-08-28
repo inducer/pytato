@@ -29,6 +29,7 @@ THE SOFTWARE.
 """
 
 import itertools
+import math
 import operator
 import sys
 
@@ -675,7 +676,7 @@ def test_binary_math_functions(ctx_factory: cl.CtxFactory, dtype, function_name)
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
 
-    if np.dtype(dtype).kind == "c" and function_name in ["arctan2"]:
+    if np.dtype(dtype).kind == "c" and function_name == "arctan2":
         pytest.skip("Unsupported by loopy.")
 
     from numpy.random import default_rng
@@ -2072,7 +2073,7 @@ def test_function_call(ctx_factory: cl.CtxFactory, visualize=False):
         twice_x_3 = result["twice"]
         thrice_x_3 = result["thrice"]
 
-        return {"foo": 3.14 + twice_x_3,
+        return {"foo": math.pi + twice_x_3,
                 "bar": 4 * thrice_x_3,
                 "baz": 65 * twice_x,
                 "quux": 7 * twice_x_2}

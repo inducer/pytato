@@ -165,7 +165,7 @@ class _PytatoStackSummary:
 
         # Fallback in case we don't find any file that is not in the pytato/
         # directory (should be unlikely).
-        return self.__repr__()
+        return repr(self)
 
     def __repr__(self) -> str:
         return "\n  " + "\n  ".join([str(f) for f in self.frames])

@@ -652,7 +652,7 @@ class TransformMapperCache(CachedMapperCache[CacheExprT, CacheExprT, P]):
 
 
 class TransformMapper(CachedMapper[ArrayOrNames, FunctionDefinition, []]):
-    """Base class for mappers that transform :class:`pytato.array.Array`\\ s into
+    r"""Base class for mappers that transform :class:`pytato.array.Array`\\ s into
     other :class:`pytato.array.Array`\\ s.
 
     Enables certain operations that can only be done if the mapping results are also

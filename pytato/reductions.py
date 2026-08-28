@@ -173,7 +173,7 @@ def _normalize_reduction_axes(
         return (), tuple(range(len(shape)))
 
     if isinstance(reduction_axes, INT_CLASSES):
-        reduction_axes = reduction_axes,
+        reduction_axes = (reduction_axes,)
 
     if not isinstance(reduction_axes, tuple):
         raise TypeError("Reduction axes expected to be of type 'NoneType', 'int'"
