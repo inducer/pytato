@@ -1017,6 +1017,7 @@ def test_idx_lambda_to_hlo():
         C99CallOp,
         FullOp,
         ReduceOp,
+        TypeCastOp,
         index_lambda_to_high_level_op,
     )
     from pytato.reductions import ProductReductionOperation, SumReductionOperation
@@ -1068,6 +1069,8 @@ def test_idx_lambda_to_hlo():
                                                                         (b, a))
     assert (index_lambda_to_high_level_op(pt.broadcast_to(a, (100, 10, 4)))
             == BroadcastOp(a))
+    assert (index_lambda_to_high_level_op(a.astype(np.float32))
+            == TypeCastOp(np.dtype(np.float32), a))
 
     hlo = index_lambda_to_high_level_op(np.nan * a)
     assert isinstance(hlo, BinaryOp)
