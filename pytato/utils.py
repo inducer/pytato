@@ -243,7 +243,7 @@ def broadcast_binary_op(a1: ArrayOrScalar, a2: ArrayOrScalar,
                     and np.issubdtype(array.dtype, np.integer)
                     and not np.issubdtype(result_dtype, np.integer)):
                 expr = TypeCast(result_dtype, expr)
-        elif isinstance(expr, SCALAR_CLASSES):
+        elif isinstance(expr, SCALAR_CLASSES):  # ruff: ignore[collapsible-if]
             # See https://github.com/inducer/pytato/issues/542
             # on why pow() + integers is not typecast to float or complex.
             if not (is_pow
